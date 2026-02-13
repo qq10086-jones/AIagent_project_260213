@@ -1,0 +1,12 @@
+# Obsidian
+**/.obsidian/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+
+# Node / Python
+node_modules/
+__pycache__/
+*.pyc
+.env

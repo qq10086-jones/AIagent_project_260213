@@ -1,0 +1,211 @@
+{
+  "main": {
+    "id": "d9ddd8b4e636434e",
+    "type": "split",
+    "children": [
+      {
+        "id": "983e33bb07a38097",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "99368ea7666f4fce",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Project_OpenClaw_Nexus_v1_2_1.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Project_OpenClaw_Nexus_v1_2_1"
+            }
+          },
+          {
+            "id": "f9faf86fa939759d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Project_OpenClaw_Nexus_v1_2_1.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Project_OpenClaw_Nexus_v1_2_1"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "219cbef94b2ed5c8",
+    "type": "split",
+    "children": [
+      {
+        "id": "635426848a4ec67c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "7ced77876bdda082",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "679ce5bd1485b1bd",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "8bad0b9664d4fcb6",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "410a2d4735591cac",
+    "type": "split",
+    "children": [
+      {
+        "id": "9636ab28a8a4b9de",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "fe5a264d91fa27bd",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Project_OpenClaw_Nexus_v1_2_1.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Project_OpenClaw_Nexus_v1_2_1"
+            }
+          },
+          {
+            "id": "451befc4e0e2c09c",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Project_OpenClaw_Nexus_v1_2_1.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Project_OpenClaw_Nexus_v1_2_1"
+            }
+          },
+          {
+            "id": "0b5d7d35c2bc04cd",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "30139f4112cd6d7e",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "03e3a75b0637dc6a",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Project_OpenClaw_Nexus_v1_2_1.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Project_OpenClaw_Nexus_v1_2_1"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "f9faf86fa939759d",
+  "lastOpenFiles": [
+    "OpenClaw Nexus v1.2.1 落地执行计划（Obsidian）.md",
+    "Project_OpenClaw_Nexus_v1_2_1.md",
+    "Project_OpenClaw_Nexus_v1_2.md",
+    "Project_OpenClaw_Nexus_v1_1.md",
+    "Project_OpenClaw_Nexus.md",
+    "Welcome.md",
+    "File Structure.md"
+  ]
+}

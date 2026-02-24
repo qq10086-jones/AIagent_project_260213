@@ -1,0 +1,68 @@
+{
+  "dummy.echo": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 30
+  },
+  
+  "debug.sleep": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 120
+  },
+
+  "quant.fetch_price": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 30
+  },
+
+  "quant.run_optimized_pipeline": {
+    "kind": "builtin",
+    "default_risk": "medium",
+    "requires_approval": true,
+    "timeout_s": 600
+  },
+
+  "ai.analyze": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 120
+  },
+
+  "media.generate_report_card": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 60
+  },
+
+  "news.daily_report": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 300
+  },
+
+  "github.skills_daily_report": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 300
+  },
+
+  "openclaw.run": {
+    "kind": "http",
+    "requires_approval": true,
+    "default_risk": "high",
+    "http": {
+      "base_url_env": "OPENCLAW_BASE_URL",
+      "path": "/run",
+      "timeout_s": 30
+    }
+  } 
+}

@@ -1,0 +1,18 @@
+=============================================== 
+[INFO] START 02/06/2026 Fri  0:11:57.72 
+[INFO] CWD=E:\quantum\Project_optimized 
+=============================================== 
+[INFO] Latest run_id=2026-02-03__a49c53984e asof=2026-02-03 
+[INFO] Manual fills entry... 
+[INFO] Using latest run_id=2026-02-03__a49c53984e asof=2026-02-03
+Enter fills. Type 'q' at symbol to finish.
+Required: symbol, side(BUY/SELL), qty, price. Optional: fee, tax, venue, external_ref
+symbol (q to quit): Traceback (most recent call last):
+  File "E:\quantum\Project_optimized\manual_fills_entry.py", line 60, in <module>
+    main()
+    ~~~~^^
+  File "E:\quantum\Project_optimized\manual_fills_entry.py", line 26, in main
+    symbol = input("symbol (q to quit): ").strip()
+             ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+^C

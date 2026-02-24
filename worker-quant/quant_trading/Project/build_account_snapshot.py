@@ -1,0 +1,96 @@
+import argparse
+import sqlite3
+from datetime import datetime
+
+def now_iso():
+    return datetime.now().isoformat(timespec="seconds")
+
+def get_prev_snapshot(conn, asof: str):
+    row = conn.execute(
+        "SELECT asof, cash, nav FROM account_snapshots WHERE asof < ? ORDER BY asof DESC LIMIT 1",
+        (asof,)
+    ).fetchone()
+    return row  # (asof, cash, nav) or None
+
+def get_trade_cashflow(conn, run_id: str, asof: str):
+    rows = conn.execute(
+        "SELECT side, qty, price, COALESCE(fee,0), COALESCE(tax,0) FROM fills WHERE run_id=? AND asof=?",
+        (run_id, asof)
+    ).fetchall()
+
+    buy_notional = sell_notional = 0.0
+    fees = tax = 0.0
+    for side, qty, price, fee, tx in rows:
+        side = str(side).upper()
+        qty = float(qty); price = float(price)
+        fee = float(fee); tx = float(tx)
+        fees += fee; tax += tx
+        notional = qty * price
+        if side == "BUY":
+            buy_notional += notional
+        elif side == "SELL":
+            sell_notional += notional
+        else:
+            raise ValueError(f"Unknown side: {side}")
+
+    # net cashflow from trades:
+    # SELL increases cash, BUY decreases cash, fees/tax decrease cash
+    net_trade_cashflow = sell_notional - buy_notional - fees - tax
+    return net_trade_cashflow, fees, tax, buy_notional, sell_notional, len(rows)
+
+def get_positions_value(conn, asof: str):
+    # prefer market_value if present; if null, treat as 0 (dashboard will warn separately)
+    row = conn.execute(
+        "SELECT COALESCE(SUM(COALESCE(market_value, 0)), 0) FROM positions WHERE asof=?",
+        (asof,)
+    ).fetchone()
+    return float(row[0]) if row else 0.0
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--db", default="japan_market.db")
+    ap.add_argument("--run_id", required=True)
+    ap.add_argument("--asof", required=True)  # YYYY-MM-DD
+    ap.add_argument("--initial_cash", type=float, default=0.0, help="Used only if no previous snapshot exists")
+    args = ap.parse_args()
+
+    conn = sqlite3.connect(args.db)
+    try:
+        prev = get_prev_snapshot(conn, args.asof)
+        if prev is None:
+            cash_start = float(args.initial_cash)
+            prev_asof = None
+        else:
+            prev_asof, cash_start, _prev_nav = prev
+            cash_start = float(cash_start)
+
+        net_cf, fees, tax, buy_notional, sell_notional, nfills = get_trade_cashflow(conn, args.run_id, args.asof)
+        cash_end = cash_start + net_cf
+
+        pos_val = get_positions_value(conn, args.asof)
+        nav = cash_end + pos_val
+
+        with conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO account_snapshots(
+                  asof, ts, run_id, cash, positions_value, nav, net_trade_cashflow, fees, tax, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    args.asof, now_iso(), args.run_id,
+                    cash_end, pos_val, nav, net_cf, fees, tax,
+                    f"cash_start={cash_start}; prev_asof={prev_asof}; buy={buy_notional}; sell={sell_notional}; fills={nfills}"
+                )
+            )
+
+        print("✅ account_snapshot saved")
+        print(f"asof={args.asof} run_id={args.run_id}")
+        print(f"cash_start={cash_start:,.0f} net_trade_cf={net_cf:,.0f} cash_end={cash_end:,.0f}")
+        print(f"positions_value={pos_val:,.0f} nav={nav:,.0f}")
+
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    main()

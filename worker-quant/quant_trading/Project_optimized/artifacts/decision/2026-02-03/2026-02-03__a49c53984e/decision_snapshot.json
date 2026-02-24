@@ -1,0 +1,38 @@
+{
+  "run_id": "2026-02-03__a49c53984e",
+  "asof": "2026-02-03",
+  "artifact_dir": "artifacts\\decision\\2026-02-03\\2026-02-03__a49c53984e",
+  "data": {
+    "db_path": "japan_market.db",
+    "db_last_update": "2026-02-04T00:37:52",
+    "price_mode": "yfinance:auto_adjust=True"
+  },
+  "model_outputs": {
+    "reports_dir": "reports",
+    "exported": [
+      "target_weights.csv",
+      "weights_history.csv",
+      "strategy_report.html",
+      "strategy_report_extras.html",
+      "weights_heatmap.html"
+    ],
+    "target_weights_file": "artifacts\\decision\\2026-02-03\\2026-02-03__a49c53984e\\target_weights.csv"
+  },
+  "portfolio": {
+    "mode": "manual",
+    "cash_input": 200000.0,
+    "nav_before": 402196.1027069092,
+    "positions_asof": "2026-02-02"
+  },
+  "orders": {
+    "proposal_file": "artifacts\\decision\\2026-02-03\\2026-02-03__a49c53984e\\orders_proposal.csv",
+    "count": 2,
+    "min_trade_notional": 5000.0,
+    "lot_size": 1,
+    "missing_symbols": [
+      "9433.T",
+      "3382.T"
+    ],
+    "weights_sum_before_norm": 0.5735548858984199
+  }
+}

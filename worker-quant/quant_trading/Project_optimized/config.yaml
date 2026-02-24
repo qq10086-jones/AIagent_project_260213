@@ -1,0 +1,32 @@
+db_path: japan_market.db
+
+update:
+  lookback_days: 730
+  universe_file: null
+
+screener:
+  asof: null
+  top_k: 50
+  min_adv: 20000000
+
+model:
+  start: "2020-01-01"
+  end: null
+  H: 20
+  train_window: 252
+  rebalance_every: 20
+  benchmark_ticker: "1321.T"
+  safe_plot: true
+  output_dir: "reports"
+  exec:
+    initial_capital: 200000
+    lot_size_default: 1
+    fee_bps: 3.0
+    slippage_bps: 0.0
+    impact_k: 0.0
+    max_adv_frac: 1.0
+    cash_rate_daily: 0.0
+
+obsidian:
+  vault: '/app/quant_trading/quantum investment'
+  section: "Quant/Reports"

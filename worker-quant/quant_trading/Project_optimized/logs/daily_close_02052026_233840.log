@@ -1,0 +1,27 @@
+=============================================== 
+[INFO] START 02/05/2026 Thu 23:38:40.53 
+[INFO] CWD=E:\quantum\Project_optimized 
+[INFO] Running: python run_pipeline.py --config config.yaml 
+=============================================== 
+Traceback (most recent call last):
+  File "E:\quantum\Project_optimized\db_update.py", line 184, in <module>
+    update_database(args.db, args.lookback, args.universe)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\quantum\Project_optimized\db_update.py", line 99, in update_database
+    print("\U0001f680 DB updater: start")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'cp932' codec can't encode character '\U0001f680' in position 0: illegal multibyte sequence
+>> python db_update.py --db japan_market.db --lookback 730
+Traceback (most recent call last):
+  File "E:\quantum\Project_optimized\run_pipeline.py", line 115, in <module>
+    main(args.config)
+    ~~~~^^^^^^^^^^^^^
+  File "E:\quantum\Project_optimized\run_pipeline.py", line 41, in main
+    subprocess.check_call(cmd)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "D:\python\Lib\subprocess.py", line 419, in check_call
+    raise CalledProcessError(retcode, cmd)
+subprocess.CalledProcessError: Command '['python', 'db_update.py', '--db', 'japan_market.db', '--lookback', '730']' returned non-zero exit status 1.
+=============================================== 
+[INFO] END 02/05/2026 Thu 23:38:41.12 RC=1 
+=============================================== 

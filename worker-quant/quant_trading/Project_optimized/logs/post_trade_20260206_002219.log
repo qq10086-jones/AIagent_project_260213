@@ -1,0 +1,13 @@
+=============================================== 
+[INFO] START 02/06/2026 Fri  0:22:19.37 
+[INFO] CWD=E:\quantum\Project_optimized 
+=============================================== 
+[INFO] Latest run_id=2026-02-03__a49c53984e asof=2026-02-03 
+[INFO] Manual fills entry... 
+[INFO] Building positions... 
+[OK] Built positions for 2026-02-03 from prev=2026-02-03 using run_id=2026-02-03__a49c53984e
+Positions count: 3
+[WARN] Missing close price for valuation: ['9432']
+[INFO] Writing execution report... 
+✅ Wrote: artifacts\decision\2026-02-03\2026-02-03__a49c53984e\execution_report.md
+✅ Wrote: artifacts\decision\2026-02-03\2026-02-03__a49c53984e\execution_report.csv

@@ -1,0 +1,18 @@
+=============================================== 
+[INFO] START 02/06/2026 Fri  0:15:06.94 
+[INFO] CWD=E:\quantum\Project_optimized 
+=============================================== 
+[INFO] Latest run_id=2026-02-03__a49c53984e asof=2026-02-03 
+[INFO] Manual fills entry... 
+[INFO] Building positions... 
+Traceback (most recent call last):
+  File "E:\quantum\Project_optimized\build_positions.py", line 109, in <module>
+    main()
+    ~~~~^^
+  File "E:\quantum\Project_optimized\build_positions.py", line 33, in main
+    print(f"\u2705 Built positions for {args.asof} from prev={prev_d} using run_id={args.run_id}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'cp932' codec can't encode character '\u2705' in position 0: illegal multibyte sequence
+=============================================== 
+[ERROR] FAILED 02/06/2026 Fri  0:15:43.32 
+=============================================== 

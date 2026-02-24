@@ -1,0 +1,13 @@
+redis
+yfinance
+boto3
+pyyaml
+pandas<3.0.0
+numpy<2.0.0
+plotly
+jinja2
+Pillow
+requests
+beautifulsoup4
+lxml
+matplotlib

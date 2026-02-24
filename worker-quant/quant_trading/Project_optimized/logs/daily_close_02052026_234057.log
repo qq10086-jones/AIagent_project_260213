@@ -1,0 +1,939 @@
+=============================================== 
+[INFO] START 02/05/2026 Thu 23:40:57.08 
+[INFO] CWD=E:\quantum\Project_optimized 
+[INFO] Running: python run_pipeline.py --config config.yaml 
+=============================================== 
+🚀 DB updater: start
+✅ 已更新 27 只股票的基础信息
+📥 Downloading 27 tickers: 2026-02-04 -> 2026-02-05
+📈 4063.T: 已存储 2 条K线数据
+📈 6367.T: 已存储 2 条K线数据
+📈 5020.T: 已存储 2 条K线数据
+📈 8035.T: 已存储 2 条K线数据
+📈 6857.T: 已存储 2 条K线数据
+📈 6146.T: 已存储 2 条K线数据
+📈 6758.T: 已存储 2 条K线数据
+📈 6861.T: 已存储 2 条K线数据
+📈 8058.T: 已存储 2 条K线数据
+📈 8001.T: 已存储 2 条K线数据
+📈 8031.T: 已存储 2 条K线数据
+📈 8002.T: 已存储 2 条K线数据
+📈 8306.T: 已存储 2 条K线数据
+📈 8316.T: 已存储 2 条K线数据
+📈 8766.T: 已存储 2 条K线数据
+📈 8591.T: 已存储 2 条K线数据
+📈 7011.T: 已存储 2 条K线数据
+📈 7012.T: 已存储 2 条K线数据
+📈 7203.T: 已存储 2 条K线数据
+📈 9101.T: 已存储 2 条K线数据
+📈 9432.T: 已存储 2 条K线数据
+📈 2914.T: 已存储 2 条K线数据
+📈 9983.T: 已存储 2 条K线数据
+📈 7974.T: 已存储 2 条K线数据
+📈 4661.T: 已存储 2 条K线数据
+📈 1321.T: 已存储 2 条K线数据
+📈 1570.T: 已存储 2 条K线数据
+✅ Done. Rows upserted: 54. DB=japan_market.db
+E:\quantum\Project_optimized\screener.py:62: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+  ret1 = close.pct_change()
+✅ Screener done: 27 tickers -> selected_tickers.json
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+E:\quantum\Project_optimized\ss6_sqlite.py:239: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+E:\quantum\Project_optimized\ss6_sqlite.py:582: FutureWarning: Series.fillna with 'method' is deprecated and will raise in a future version. Use obj.ffill() or obj.bfill() instead.
+  px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+======================================================================
+🚀 Running optimized backtest (capital-dependent execution + no look-ahead)
+Initial capital: 200,000
+======================================================================
+1) Download data (incl. benchmark 1321.T) ...
+2) Build features/targets (n=27) ...
+3) Walk-forward backtest ...
+Saved: reports\target_weights.csv
+
+📊 Summary
+Final equity: 266,302
+Total return: 33.15%
+Max drawdown: -4.06%
+Reports: reports\strategy_report.html, reports\strategy_report_extras.html, reports\weights_heatmap.html
+
+🛡️ AMD 7900XTX note:
+This script is CPU-only. If your browser/GPU driver is unstable when opening Plotly HTML,
+keep safe_plot=True (default) and avoid opening multiple heavy HTML pages at once.
+E:\quantum\Project_optimized\report_obsidian.py:2: SyntaxWarning: invalid escape sequence '\q'
+  """Publish reports into an Obsidian vault folder.
+✅ Published: E:\quantum\quantum investment\Quant\Reports\2026-02-05\report.md
+>> python db_update.py --db japan_market.db --lookback 730
+>> python screener.py --db japan_market.db --topk 50 --minadv 20000000.0 --out selected_tickers.json --asof 2026-02-05
+>> python ss6_sqlite.py (env-driven)
+>> python report_obsidian.py --vault E:\quantum\quantum investment --report_dir reports --section Quant/Reports --asof 2026-02-05
+=============================================== 
+[INFO] END Thu 02/05/2026 23:41:05.83 RC=0 
+=============================================== 

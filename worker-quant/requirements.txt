@@ -11,3 +11,5 @@ requests
 beautifulsoup4
 lxml
 matplotlib
+psycopg2-binary
+python-dateutil

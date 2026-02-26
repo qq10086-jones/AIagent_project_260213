@@ -393,21 +393,30 @@
 
 ---
 
-## F. 可靠性与安全（Hardening）
+---
 
-### F1. 权限与审计
+## G. 交互层扩展（Interaction Layer）—— 转向 Discord Chat-Ops
 
--  审批操作写入 event_log（不可篡改）
-    
--  对外 API key 管理（env + vault 思路）
-    
--  危险动作双确认（publish/delete）
-    
+### G1. Discord 作为系统唯一“前端” (Headless UI)
+- **目的**：彻底摆脱对 Dashboard 网页的依赖，实现“随时随地、全功能控制”。
+- **功能**：
+    - **双向通信**：Discord 不仅接收通知，还能通过 Bot 下达所有 Orchestrator 支持的指令。
+    - **多模态反馈**：任务生成的量化图表、CSV 报告、截图直接以附件形式发送到频道，而不是仅提供 MinIO 链接。
 
-### F2. 灾备与数据一致性
+### G2. NLP 智能指令解析 (Human-to-Task)
+- **技术路径**：
+    - **Orchestrator 拦截层**：增加 NLP 处理模块，调用 `deepseek-r1:1.5b`。
+    - **意图映射**：
+        - 用户：“帮我看看苹果股价” -> 映射到 `quant.fetch_price(symbol: "AAPL")`。
+        - 用户：“跑一下今天的行情复盘” -> 映射到 `quant.run_optimized_pipeline`。
+        - 用户：“截一下英伟达的新闻网页” -> 映射到 `news.daily_report` 并调用 OpenClaw 截图。
 
--  DB 备份策略
-    
--  MinIO 备份策略
-    
--  Redis 持久化与恢复策略
+### G3. 主动推送与订阅系统
+- **功能**：
+    - **任务订阅**：用户可以订阅特定任务的进度。
+    - **报告聚合**：Worker 完成任务后，Orchestrator 负责将“散落”在 MinIO 的资产打包，构建 Discord Rich Embed 消息推送到用户私聊或频道。
+
+**交付物**
+- `orchestrator/src/nlp/router.js` (NLP 指令路由)
+- `orchestrator/src/notifiers/discord.js` (多模态推送模块)
+- `configs/discord_intents.json` (意图与工具映射表)

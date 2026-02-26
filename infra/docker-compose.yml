@@ -2,37 +2,45 @@ services:
   redis:
     image: redis:7
     ports: ["6379:6379"]
+    networks: ["nexus-net"]
 
   db:
     image: postgres:16
     environment:
       POSTGRES_USER: nexus
-      POSTGRES_PASSWORD: nexus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus}
       POSTGRES_DB: nexus
     ports: ["5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks: ["nexus-net"]
 
   orchestrator:
     build: ../orchestrator
+    container_name: nexus-orchestrator
     environment:
       REDIS_URL: redis://redis:6379
       PGHOST: db
       PGPORT: 5432
       PGUSER: nexus
-      PGPASSWORD: nexus
+      PGPASSWORD: ${POSTGRES_PASSWORD:-nexus}
       PGDATABASE: nexus
       STREAM_TASK: stream:task
       STREAM_RESULT: stream:result
       GROUP_TASK: cg:workers
       GROUP_RESULT: cg:orchestrator
-      VISIBILITY_TIMEOUT_MS: 30000
-      RECLAIM_INTERVAL_MS: 5000
-      STREAM_DLQ: stream:dlq
-      MAX_RECLAIMS: "3"
-      HEARTBEAT_INTERVAL_MS: "10000"
-      TOOL_REGISTRY_PATH: /app/configs/tools.json
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      QWEN_API_KEY: ${QWEN_API_KEY}
+      QWEN_BASE_URL: ${QWEN_BASE_URL}
+      QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}
+      QUANT_LLM_MODEL: ${QUANT_LLM_MODEL}
+      LLM_PROVIDER: ${LLM_PROVIDER:-dashscope}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DASH_SCOPE_API_KEY: ${DASH_SCOPE_API_KEY}
+      AUTO_REPORT_CHANNEL_ID: ${AUTO_REPORT_CHANNEL_ID}
+      AUTO_REPORT_TIMEZONE: ${AUTO_REPORT_TIMEZONE:-Asia/Shanghai}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
     ports:
       - "3000:3000"
     volumes:
@@ -41,119 +49,156 @@ services:
     depends_on:
       - redis
       - db
+      - brain
+    networks: ["nexus-net"]
 
   worker-quant:
     build: ../worker-quant
+    container_name: nexus-worker-quant
     environment:
-      REDIS_URL: redis://redis:6379
-      STREAM_TASK: stream:task
-      STREAM_RESULT: stream:result
-      STREAM_DLQ: stream:dlq
+      PYTHONUNBUFFERED: "1"
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: nexus
+      PGPASSWORD: ${POSTGRES_PASSWORD:-nexus}
+      PGDATABASE: nexus
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      STREAM_TASK: ${STREAM_TASK:-stream:task}
+      STREAM_RESULT: ${STREAM_RESULT:-stream:result}
+      STREAM_DLQ: ${STREAM_DLQ:-stream:dlq}
       GROUP: cg:workers
       CONSUMER: worker-quant-1
-      MAX_RETRIES: "3"
-      HEARTBEAT_INTERVAL_MS: "10000"
-      TOOL_REGISTRY_PATH: /app/configs/tools.json
-      OPENCLAW_BASE_URL: http://openclaw-adapter:18081
-      OLLAMA_BASE_URL: "http://192.168.1.113:11434"
-      QUANT_LLM_MODEL: "deepseek-r1:32b"
-      CODE_LLM_MODEL: "glm-4.7-flash:latest"
-      NEWS_US_UNIVERSE_PATH: "/app/configs/universe_us.json"
-      MINIO_ENDPOINT: "http://minio:9000"
-      MINIO_ACCESS_KEY: "nexus"
-      MINIO_SECRET_KEY: "nexuspassword"
+      OPENCLAW_BASE_URL: http://nexus-openclaw-adapter:18081
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://192.168.1.113:11434}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DASH_SCOPE_API_KEY: ${DASH_SCOPE_API_KEY}
+      QUANT_LLM_MODEL: ${QUANT_LLM_MODEL:-deepseek-r1:1.5b}
+      MINIO_ENDPOINT: http://nexus-minio:9000
+      MINIO_ACCESS_KEY: nexus
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-nexuspassword}
     volumes:
       - ../configs/tools.json:/app/configs/tools.json:ro
       - ../configs/universe_us.json:/app/configs/universe_us.json:ro
     depends_on:
       - redis
+    networks: ["nexus-net"]
+
+  brain:
+    build: ../brain
+    container_name: brain
+    environment:
+      - PGHOST=db
+      - PGPORT=5432
+      - PGUSER=nexus
+      - PGPASSWORD=${POSTGRES_PASSWORD:-nexus}
+      - PGDATABASE=nexus
+      - QWEN_API_KEY=${QWEN_API_KEY}
+      - QWEN_BASE_URL=${QWEN_BASE_URL}
+      - QWEN_MODEL=${QWEN_MODEL:-qwen-plus}
+      - ENABLE_BROWSER_FACTS=${ENABLE_BROWSER_FACTS:-auto}
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - QUANT_LLM_MODEL=${QUANT_LLM_MODEL:-deepseek-r1:1.5b}
+      - LLM_PROVIDER=${LLM_PROVIDER:-dashscope}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DASH_SCOPE_API_KEY=${DASH_SCOPE_API_KEY}
+    ports:
+      - "5005:5000"
+    volumes:
+      - ../brain:/app
+    depends_on:
+      - db
+    networks: ["nexus-net"]
 
   openclaw:
     build:
       context: ../openclaw
       dockerfile: Dockerfile
-      # 如果你的 openclaw Dockerfile 支持 build args，这里可以尝试传入（不支持也不影响构建）
       args:
         OPENCLAW_DOCKER_APT_PACKAGES: "chromium fonts-noto-cjk"
+    container_name: nexus-openclaw
     environment:
       OPENCLAW_GATEWAY_PORT: "18789"
       OPENCLAW_GATEWAY_TOKEN: "dev-openclaw-token"
-
-      # ✅ 不再使用 18790（你之前 openclaw-browser 也用的 18790，但那个服务是错误方向）
-      #    这里改成常见的派生端口：gateway 18789 -> browser control 18791
       OPENCLAW_BROWSER_PORT: "18791"
-
-      OLLAMA_BASE_URL: "http://192.168.1.113:11434"
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
       OLLAMA_API_KEY: "ollama-local"
-      # 不再死锁单一模型，允许 OpenClaw 识别所有已拉取的 Ollama 模型
-      OPENCLAW_CONFIG: '{"agents":{"defaults":{"model":{"primary":"ollama/glm-4.7-flash:latest","fallbacks":["ollama/deepseek-r1:32b"]},"models":{"ollama/glm-4.7-flash:latest":{},"ollama/deepseek-r1:32b":{}}}}}'
+      OPENCLAW_CONFIG_PATH: /app/config/openclaw.json
+    volumes:
+      - ./openclaw.json:/app/config/openclaw.json:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: ["node","openclaw.mjs","gateway","--allow-unconfigured","--bind","lan","--port","18789"]
+    command: ["node","openclaw.mjs","gateway","--allow-unconfigured","--bind","loopback","--port","18789"]
     ports:
       - "18789:18789"
+    networks: ["nexus-net"]
 
   openclaw-adapter:
-    build:
-      context: ./openclaw-adapter
-      dockerfile: Dockerfile
-    image: infra-openclaw-adapter:dev
+    build: ./openclaw-adapter
+    container_name: nexus-openclaw-adapter
     working_dir: /app
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./openclaw-adapter/server.py:/app/server.py
     environment:
-      OPENCLAW_CONTAINER_NAME: infra-openclaw-1
+      OPENCLAW_CONTAINER_NAME: nexus-openclaw
       OPENCLAW_BROWSER_PORT: "18791"
-      OPENCLAW_GATEWAY_HTTP: "http://openclaw:18789/"
-      MINIO_ENDPOINT: "http://minio:9000"
+      OPENCLAW_GATEWAY_HTTP: "http://nexus-openclaw:18789/"
+      MINIO_ENDPOINT: "http://nexus-minio:9000"
       MINIO_ACCESS_KEY: "nexus"
-      MINIO_SECRET_KEY: "nexuspassword"
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-nexuspassword}
     ports:
       - "18081:18081"
     depends_on:
       - openclaw
+    networks: ["nexus-net"]
 
   minio:
     image: minio/minio:latest
+    container_name: nexus-minio
     environment:
       MINIO_ROOT_USER: nexus
-      MINIO_ROOT_PASSWORD: nexuspassword  # 密码最少8位
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-nexuspassword}
     ports:
-      - "9000:9000" # API 端口
-      - "9001:9001" # Web UI 控制台端口
+      - "9000:9000"
+      - "9001:9001"
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
+    networks: ["nexus-net"]
 
   minio-init:
     image: minio/mc:latest
+    container_name: nexus-minio-init
     depends_on:
       - minio
     entrypoint: >
       /bin/sh -c "
       sleep 5;
-      mc alias set myminio http://minio:9000 nexus nexuspassword;
+      mc alias set myminio http://nexus-minio:9000 nexus ${MINIO_SECRET_KEY:-nexuspassword};
       mc mb myminio/nexus-evidence --ignore-existing;
       mc mb myminio/nexus-artifacts --ignore-existing;
       mc mb myminio/nexus-tmp --ignore-existing;
       exit 0;
       "
+    networks: ["nexus-net"]
 
   dashboard:
     image: python:3.11-slim
+    container_name: nexus-dashboard
     working_dir: /app
     volumes:
       - ../ui:/app
     environment:
-      - STREAMLIT_SERVER_PORT=8501
-      - STREAMLIT_SERVER_HEADLESS=true
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_ACCESS_KEY=nexus
-      - MINIO_SECRET_KEY=nexuspassword
-      - MINIO_PUBLIC_URL=http://localhost:9000
-      - QUANT_LLM_MODEL=deepseek-r1:32b
-      - CODE_LLM_MODEL=glm-4.7-flash:latest
+      PYTHONUNBUFFERED: "1"
+      STREAMLIT_SERVER_PORT: "8501"
+      STREAMLIT_SERVER_HEADLESS: "true"
+      MINIO_ENDPOINT: http://nexus-minio:9000
+      MINIO_ACCESS_KEY: nexus
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-nexuspassword}
+      MINIO_PUBLIC_URL: http://localhost:9000
+      QUANT_LLM_MODEL: ${QUANT_LLM_MODEL:-deepseek-r1:32b}
+      CODE_LLM_MODEL: ${CODE_LLM_MODEL:-glm-4.7-flash:latest}
     command: >
       sh -c "pip install -r requirements.txt && streamlit run app.py"
     ports:
@@ -161,7 +206,12 @@ services:
     depends_on:
       - db
       - orchestrator
+    networks: ["nexus-net"]
+
+networks:
+  nexus-net:
+    driver: bridge
 
 volumes:
   pgdata:
-  minio_data: # 新增这行
+  minio_data:

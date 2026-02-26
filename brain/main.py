@@ -1,0 +1,42 @@
+import os
+import time
+from flask import Flask, request, jsonify
+from supervisor import brain_graph
+
+app = Flask(__name__)
+
+@app.route("/run", methods=["POST"])
+def run_brain():
+    data = request.json or {}
+    started_at = time.time()
+    
+    # Run the graph
+    inputs = {
+        "symbol": data.get("symbol", "NVDA"),
+        "run_id": data.get("run_id", "manual"),
+        "mode": data.get("mode", "analysis"), # Default to single analysis
+        "model_preference": data.get("model_preference", "local_small"),
+        "qwen_model": data.get("qwen_model", os.getenv("QWEN_MODEL", "qwen-max")),
+        "facts": [],
+        "candidates": [],
+        "messages": [],
+        "narrative": ""
+    }
+    
+    final_state = brain_graph.invoke(inputs)
+    elapsed_ms = int((time.time() - started_at) * 1000)
+    facts_count = len(final_state.get("facts", []))
+    return jsonify({
+        "ok": True,
+        "narrative": final_state.get("narrative"),
+        "report_markdown": final_state.get("report_markdown"),
+        "report_html_object_key": final_state.get("report_html_object_key"),
+        "facts_count": facts_count,
+        "cost_ledger": {
+            "wall_time_ms": elapsed_ms,
+            "facts_count": facts_count
+        }
+    })
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)

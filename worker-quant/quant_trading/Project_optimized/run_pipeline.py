@@ -68,7 +68,7 @@ def main(cfg_path: str):
     exec_cfg = (model.get("exec") or {})
     output_dir = model.get("output_dir", "reports")
 
-    cmd = ["python", "ss6_sqlite.py"]
+    cmd = ["python", "ss7_sqlite_news_overlay.py"]
     # We pass parameters via env to avoid rewriting ss6 internals too much
     import os
     env = os.environ.copy()

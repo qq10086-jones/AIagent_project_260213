@@ -133,11 +133,37 @@ with tabs[2]:
     """)
     if not assets_df.empty:
         for _, asset in assets_df.iterrows():
-            col1, col2 = st.columns([4, 1])
+            col1, col2, col3 = st.columns([3, 1, 1])
             col1.write(f"**{asset['object_key'].split('/')[-1]}** ({asset['tool_name']})")
             url = get_presigned_url(asset['object_key'])
-            col2.link_button("📂 Open", url)
+            
+            if col2.link_button("📂 Open", url):
+                pass
+            
+            if asset['mime_type'] == 'text/html':
+                if col3.button("👁? Preview", key=f"pre_{asset['task_id']}_{asset['object_key'].split('/')[-1]}"):
+                    # Fetch content for preview
+                    try:
+                        s3 = boto3.client('s3',
+                                          endpoint_url=MINIO_ENDPOINT,
+                                          aws_access_key_id=MINIO_ACCESS_KEY,
+                                          aws_secret_access_key=MINIO_SECRET_KEY)
+                        obj = s3.get_object(Bucket='nexus-artifacts', Key=asset['object_key'])
+                        html_content = obj['Body'].read().decode('utf-8')
+                        st.session_state['preview_content'] = html_content
+                        st.session_state['preview_title'] = asset['object_key']
+                    except Exception as e:
+                        st.error(f"Preview error: {e}")
             st.divider()
+            
+        if 'preview_content' in st.session_state:
+            with st.sidebar:
+                st.markdown(f"### 📄 Preview: {st.session_state['preview_title'].split('/')[-1]}")
+                if st.button("Close Preview"):
+                    del st.session_state['preview_content']
+                    st.rerun()
+                import streamlit.components.v1 as components
+                components.html(st.session_state['preview_content'], height=800, scrolling=True)
     else:
         st.write("Vault is empty.")
 

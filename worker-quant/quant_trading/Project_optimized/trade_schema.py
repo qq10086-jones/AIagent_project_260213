@@ -32,6 +32,41 @@ def connect(db_path: str) -> sqlite3.Connection:
 def ensure_trade_tables(conn: sqlite3.Connection) -> None:
     """Create trade/audit tables if missing. Idempotent."""
 
+    # feature_daily (from Quant Design v1.1)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS feature_daily (
+          asof TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          feature_name TEXT NOT NULL,
+          value REAL,
+          source_fact_ids TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (asof, symbol, feature_name)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_feature_daily_asof ON feature_daily(asof);")
+
+    # account_state (from Quant Design v1.3)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS account_state (
+          asof TEXT PRIMARY KEY,
+          base_ccy TEXT DEFAULT 'JPY',
+          starting_capital REAL,
+          cash_balance REAL,
+          equity REAL,
+          reserved_cash REAL,
+          risk_profile TEXT,
+          max_position_pct REAL,
+          max_daily_turnover_pct REAL,
+          max_adv_pct REAL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
     # decision_runs
     conn.execute(
         """

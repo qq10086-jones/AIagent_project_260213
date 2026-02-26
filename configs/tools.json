@@ -20,6 +20,13 @@
     "timeout_s": 30
   },
 
+  "quant.compute_news_risk_factor": {
+    "kind": "builtin",
+    "default_risk": "medium",
+    "requires_approval": false,
+    "timeout_s": 120
+  },
+
   "quant.run_optimized_pipeline": {
     "kind": "builtin",
     "default_risk": "medium",
@@ -48,11 +55,39 @@
     "timeout_s": 300
   },
 
+  "news.preclose_brief_jp": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 120
+  },
+
+  "news.tdnet_close_flash": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 120
+  },
+
   "github.skills_daily_report": {
     "kind": "builtin",
     "default_risk": "low",
     "requires_approval": false,
     "timeout_s": 300
+  },
+
+  "portfolio.set_account": {
+    "kind": "builtin",
+    "default_risk": "medium",
+    "requires_approval": false,
+    "timeout_s": 30
+  },
+  
+  "portfolio.record_fill": {
+    "kind": "builtin",
+    "default_risk": "medium",
+    "requires_approval": false,
+    "timeout_s": 30
   },
 
   "openclaw.run": {

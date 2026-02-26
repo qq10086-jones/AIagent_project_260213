@@ -144,12 +144,22 @@ def openclaw_browser(cmd: str, args: Dict[str, Any], timeout_s: int = 60) -> Dic
     args: 参数字典（url/...）
     """
     if cmd in ("start", "stop"):
+        if cmd == "start":
+            # Ensure a local automation profile exists; avoids fallback to extension-only profile.
+            ensure_profile_cmd = (
+                "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers "
+                "node openclaw.mjs browser create-profile "
+                "--name openclaw --driver openclaw --json"
+            )
+            docker_exec_sh(OPENCLAW_CONTAINER_NAME, ensure_profile_cmd, timeout_s=20)
+
         sh_cmd = (
             "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers "
-            f"node openclaw.mjs browser {cmd} "
+            "node openclaw.mjs browser "
             "--browser-profile openclaw "
             "--token dev-openclaw-token "
-            "--json"
+            "--json "
+            f"{cmd}"
         )
         
     elif cmd == "open":
@@ -160,9 +170,11 @@ def openclaw_browser(cmd: str, args: Dict[str, Any], timeout_s: int = 60) -> Dic
         safe_url = shlex.quote(url)
         sh_cmd = (
             "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers "
-            f"node openclaw.mjs browser open {safe_url} "
+            "node openclaw.mjs browser "
             "--browser-profile openclaw "
-            "--json"
+            "--token dev-openclaw-token "
+            "--json "
+            f"open {safe_url}"
         )
         
     elif cmd == "navigate":
@@ -173,16 +185,21 @@ def openclaw_browser(cmd: str, args: Dict[str, Any], timeout_s: int = 60) -> Dic
         # 【关键修复】移除未经验证的 targetId 传参，保持和手动测试一致
         sh_cmd = (
             "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers "
-            f"node openclaw.mjs browser navigate {safe_url} "
+            "node openclaw.mjs browser "
             "--browser-profile openclaw "
-            "--json"
+            "--token dev-openclaw-token "
+            "--json "
+            f"navigate {safe_url}"
         )
         
     elif cmd == "screenshot":
         # 【关键修复】不要强校验 targetId，也不要拼接不支持的 --targetId 参数
         sh_cmd = (
             "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers "
-            f"node openclaw.mjs browser screenshot --browser-profile openclaw --json"
+            "node openclaw.mjs browser "
+            "--browser-profile openclaw "
+            "--token dev-openclaw-token "
+            "--json screenshot"
         )
         
     else:

@@ -62,7 +62,8 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
           max_position_pct REAL,
           max_daily_turnover_pct REAL,
           max_adv_pct REAL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """
     )
@@ -121,7 +122,8 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
           fee      REAL,
           tax      REAL,
           venue    TEXT,
-          external_ref TEXT
+          external_ref TEXT,
+          source TEXT
         )
         """
     )
@@ -177,6 +179,16 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cash_ledger_asof ON cash_ledger(asof);")
+
+    # Best-effort schema upgrades for existing DBs.
+    try:
+        conn.execute("ALTER TABLE account_state ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE fills ADD COLUMN source TEXT")
+    except Exception:
+        pass
 
 
 def get_latest_trading_day(conn: sqlite3.Connection) -> Optional[str]:

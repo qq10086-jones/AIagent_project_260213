@@ -17,7 +17,7 @@ DB_CONFIG = {
     "database": "nexus"
 }
 ORCH_URL = "http://orchestrator:3000"
-APPROVAL_TOKEN = "dev-approval-token"
+APPROVAL_TOKEN = os.getenv("APPROVAL_TOKEN", "dev-approval-token")
 
 # MinIO Config
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio:9000")

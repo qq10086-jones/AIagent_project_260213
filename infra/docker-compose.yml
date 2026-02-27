@@ -41,6 +41,7 @@ services:
       AUTO_REPORT_CHANNEL_ID: ${AUTO_REPORT_CHANNEL_ID}
       AUTO_REPORT_TIMEZONE: ${AUTO_REPORT_TIMEZONE:-Asia/Shanghai}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      APPROVAL_TOKEN: ${APPROVAL_TOKEN:-dev-approval-token}
     ports:
       - "3000:3000"
     volumes:
@@ -73,6 +74,8 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       DASH_SCOPE_API_KEY: ${DASH_SCOPE_API_KEY}
+      QWEN_API_KEY: ${QWEN_API_KEY}
+      QWEN_BASE_URL: ${QWEN_BASE_URL}
       QUANT_LLM_MODEL: ${QUANT_LLM_MODEL:-deepseek-r1:1.5b}
       MINIO_ENDPOINT: http://nexus-minio:9000
       MINIO_ACCESS_KEY: nexus
@@ -199,6 +202,7 @@ services:
       MINIO_PUBLIC_URL: http://localhost:9000
       QUANT_LLM_MODEL: ${QUANT_LLM_MODEL:-deepseek-r1:32b}
       CODE_LLM_MODEL: ${CODE_LLM_MODEL:-glm-4.7-flash:latest}
+      APPROVAL_TOKEN: ${APPROVAL_TOKEN:-dev-approval-token}
     command: >
       sh -c "pip install -r requirements.txt && streamlit run app.py"
     ports:

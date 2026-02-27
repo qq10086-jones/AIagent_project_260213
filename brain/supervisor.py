@@ -127,6 +127,26 @@ def _build_grounded_narrative(state: AgentState) -> str:
         f"- browser_evidence_url: {browser_url}",
     ]
 
+    # Normalize headings to avoid encoding artifacts.
+    lines = [
+        f"{symbol} 分析报告",
+        "",
+        "1) 标的概览",
+        f"- symbol: {symbol}",
+        f"- company: {company}",
+        f"- quote_source: {source}",
+        "",
+        "2) 市场事实",
+        f"- latest_price: {price_text}",
+        f"- quote_url: {quote_url}",
+        f"- browser_evidence_url: {browser_url}",
+    ]
+
+    if len(lines) >= 9:
+        lines[0] = f"{symbol} Analysis Report"
+        lines[2] = "1) Overview"
+        lines[7] = "2) Market Facts"
+
     if metrics:
         lines.extend([
             f"- signal: {metrics.get('signal', 'N/A')}",
@@ -140,6 +160,9 @@ def _build_grounded_narrative(state: AgentState) -> str:
         "",
         "3) 最近新闻",
     ])
+
+    if lines:
+        lines[-1] = "3) Recent News"
 
     if news:
         for idx, item in enumerate(news[:5], start=1):
@@ -155,6 +178,10 @@ def _build_grounded_narrative(state: AgentState) -> str:
         "- 以上结论来自已抓取数据、浏览器证据与量化特征计算。",
         "- 已生成模板化完整报告（Markdown/HTML），可在 Discord 作为附件查看。",
     ])
+    if len(lines) >= 4:
+        lines[-3] = "4) Conclusion"
+        lines[-2] = "- Conclusions are based on collected facts, browser evidence, and computed metrics."
+        lines[-1] = "- A full Markdown/HTML report has been generated for Discord attachment."
     return "\n".join(lines)
 
 def call_local_writer(prompt: str) -> str:
@@ -189,6 +216,24 @@ def trigger_tool(tool_name: str, payload: dict, run_id: str):
     if resp.status_code >= 300:
         raise RuntimeError(f"execute-tool failed {resp.status_code}: {resp.text[:200]}")
     return resp.json()
+
+def _extract_tool_payload(state: AgentState, tool_name: str) -> dict:
+    raw = state.get("tool_payload") or {}
+    if not isinstance(raw, dict):
+        return {}
+    allow_map = {
+        "quant.discovery_workflow": {
+            "capital_base_jpy", "capital_base", "max_position_pct", "market",
+            "goal", "risk_profile", "target_return_pct", "horizon_days",
+            "avoid_mega_cap", "prefer_small_mid_cap"
+        },
+        "quant.deep_analysis": {
+            "symbol", "capital_base_jpy", "capital_base", "capital_headroom_pct",
+            "max_position_pct", "mode"
+        },
+    }
+    allowed = allow_map.get(tool_name, set())
+    return {k: v for k, v in raw.items() if k in allowed}
 
 def supervisor_node(state: AgentState):
     """
@@ -240,7 +285,9 @@ def screening_agent_node(state: AgentState):
             
     # Use discovery tool (renamed to batch_score for semantic clarity)
     try:
-        trigger_tool("quant.discovery_workflow", {"run_id": run_id}, run_id)
+        payload = {"run_id": run_id}
+        payload.update(_extract_tool_payload(state, "quant.discovery_workflow"))
+        trigger_tool("quant.discovery_workflow", payload, run_id)
     except Exception as e:
         print(f"Screening trigger failed: {e}")
 
@@ -253,7 +300,10 @@ def quant_agent_node(state: AgentState):
     symbol = state.get('symbol')
     print(f"--- [Agent: Quant] Real-time Analysis for {symbol} ---")
     try:
-        trigger_tool("quant.deep_analysis", {"symbol": symbol, "run_id": run_id}, run_id)
+        payload = {"symbol": symbol, "run_id": run_id}
+        payload.update(_extract_tool_payload(state, "quant.deep_analysis"))
+        payload["symbol"] = payload.get("symbol") or symbol
+        trigger_tool("quant.deep_analysis", payload, run_id)
     except Exception as e:
         return {"facts": state.get("facts", []) + [{"agent": "quant", "data": {"error": str(e)}}]}
     result = poll_for_fact(run_id, "quant", timeout=90)
@@ -299,7 +349,22 @@ def writer_agent_node(state: AgentState):
         if candidates:
             lines = ["# 优质股票推荐报告 (Discovery Report)", ""]
             for idx, c in enumerate(candidates, 1):
-                lines.append(f"{idx}. **{c['symbol']}** | Signal: {c['signal']} | Alpha: {c.get('score',0):.3f} | Risk: {c['risk']}")
+                alpha_val = c.get("score")
+                try:
+                    alpha_text = f"{float(alpha_val):.3f}"
+                except Exception:
+                    alpha_text = "N/A"
+                lines.append(
+                    f"{idx}. **{c.get('symbol', 'N/A')}** | Signal: {c.get('signal', 'N/A')} | "
+                    f"Alpha: {alpha_text} | Risk: {c.get('risk', c.get('risk_state', 'unknown'))}"
+                )
+            plan = screener_fact.get("position_plan") or {}
+            if plan:
+                lines.append("")
+                lines.append("## 建仓规划")
+                lines.append(f"- 目标: {plan.get('goal', 'N/A')}")
+                lines.append(f"- 资金: {plan.get('capital_base_jpy', 'N/A')} JPY")
+                lines.append(f"- 分批节奏: {plan.get('entry_style', 'N/A')}")
             lines.append("\n以上标的经 intelligence 发现并由 ss6_sqlite 专业模型评分验证。")
             grounded = "\n".join(lines)
             

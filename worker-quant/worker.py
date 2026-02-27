@@ -1,9 +1,10 @@
-import os, json, time, subprocess, hashlib, base64, io, re, traceback
+import os, json, time, subprocess, hashlib, base64, io, re, traceback, math, statistics
 import html
 import xml.etree.ElementTree as ET
 from pathlib import Path
 import redis
 import yfinance as yf
+import pandas as pd
 import boto3
 from datetime import datetime, timedelta
 import urllib.request
@@ -14,6 +15,9 @@ from jinja2 import Template
 import uuid
 import psycopg2
 import sqlite3
+from typing import Dict, List, Tuple, Any, Optional
+from collections import Counter
+from email.utils import parsedate_to_datetime
 
 try:
     import matplotlib
@@ -26,8 +30,12 @@ except Exception:
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 STREAM_TASK = os.getenv("STREAM_TASK", "stream:task")
 STREAM_RESULT = os.getenv("STREAM_RESULT", "stream:result")
+STREAM_DLQ = os.getenv("STREAM_DLQ", "stream:dlq")
 GROUP = os.getenv("GROUP", "cg:workers")
 CONSUMER = os.getenv("CONSUMER", "worker-quant-1")
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+VISIBILITY_TIMEOUT_S = int(os.getenv("VISIBILITY_TIMEOUT_S", "300"))
+RECLAIM_INTERVAL_S = int(os.getenv("RECLAIM_INTERVAL_S", "30"))
 
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "nexus")
@@ -41,11 +49,12 @@ OLLAMA_CHAT_API = f"{OLLAMA_BASE}/api/chat"
 # Cloud Provider Configs
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-DASH_SCOPE_API_KEY = os.getenv("DASH_SCOPE_API_KEY", os.getenv("QWEN_API_KEY"))
-DASH_SCOPE_BASE_URL = os.getenv("DASH_SCOPE_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1")
+DASH_SCOPE_API_KEY = os.getenv("DASH_SCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+DASH_SCOPE_BASE_URL = os.getenv("DASH_SCOPE_BASE_URL") or os.getenv("QWEN_BASE_URL") or "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
 QUANT_LLM_MODEL = os.getenv("QUANT_LLM_MODEL", "deepseek-r1:1.5b")
 CODE_LLM_MODEL = os.getenv("CODE_LLM_MODEL", "glm-4.7-flash:latest")
+DISCOVERY_LEARNING_PATH = Path(os.getenv("DISCOVERY_LEARNING_PATH", "/tmp/nexus_discovery_learning.json"))
 
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
@@ -269,6 +278,120 @@ def _img_to_data_uri(path: Path) -> str:
     except Exception:
         return ""
 
+def _calculate_atr(symbol: str, period: int = 14) -> float | None:
+    """Calculate Average True Range (ATR) for a symbol."""
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period="1mo") # Get enough data for 14-day ATR
+        if len(hist) < period + 1:
+            return None
+        
+        # Calculate True Range (TR)
+        high = hist['High']
+        low = hist['Low']
+        close_prev = hist['Close'].shift(1)
+        
+        tr = pd.concat([
+            high - low,
+            (high - close_prev).abs(),
+            (low - close_prev).abs()
+        ], axis=1).max(axis=1)
+        
+        atr = tr.rolling(window=period).mean().iloc[-1]
+        return float(atr)
+    except Exception as e:
+        print(f"[worker] ATR calculation error for {symbol}: {e}")
+        return None
+
+def _get_tick_size(price: float, symbol: str = "") -> float:
+    """Get minimum tick size. Defaulting to TOPIX tick size logic for .T stocks."""
+    if symbol.upper().endswith(".T"):
+        # Simplified TOPIX tick size rules
+        if price <= 1000: return 0.1
+        if price <= 3000: return 0.5
+        if price <= 5000: return 1.0
+        if price <= 10000: return 1.0
+        if price <= 30000: return 5.0
+        if price <= 50000: return 10.0
+        return 10.0
+    else:
+        # Default US/Generic (cent)
+        return 0.01
+
+def _calculate_limit_prices(symbol: str, side: str, close: float, atr: float, ma5: float | None = None) -> dict:
+    """Calculate three levels of limit prices based on r1 strategy."""
+    # 1. ATR clamp
+    atr_min = close * 0.003
+    atr_max = close * 0.08
+    atr_eff = max(atr_min, min(atr_max, atr))
+    
+    # 2. Anchor
+    anchor = close
+    if ma5 is not None:
+        if side.upper() == "BUY":
+            anchor = min(close, ma5)
+        else:
+            anchor = max(close, ma5)
+            
+    tick = _get_tick_size(close, symbol)
+    
+    def _finalize(raw_px, side):
+        # 5. Price safety guard (10%)
+        p_guard = 0.10
+        lower_guard = close * (1 - p_guard)
+        upper_guard = close * (1 + p_guard)
+        clamped = max(lower_guard, min(upper_guard, raw_px))
+        
+        # 6. Tick size alignment
+        if side.upper() == "BUY":
+            return math.floor(clamped / tick) * tick
+        else:
+            return math.ceil(clamped / tick) * tick
+
+    res = {}
+    if side.upper() == "BUY":
+        res["aggressive"] = _finalize(anchor + 0.15 * atr_eff, "BUY")
+        res["balanced"]   = _finalize(anchor - 0.10 * atr_eff, "BUY")
+        res["patient"]    = _finalize(anchor - 0.35 * atr_eff, "BUY")
+    else:
+        res["aggressive"] = _finalize(anchor - 0.15 * atr_eff, "SELL")
+        res["balanced"]   = _finalize(anchor + 0.10 * atr_eff, "SELL")
+        res["patient"]    = _finalize(anchor + 0.35 * atr_eff, "SELL")
+        
+    return res
+
+def calc_limit_price_tool(payload: dict):
+    """Tool: Calculate limit prices for a symbol."""
+    symbol = payload.get("symbol")
+    if not symbol:
+        return {"ok": False, "error": "Symbol is required."}
+    
+    symbol = str(symbol).upper()
+    side = str(payload.get("side", "BUY")).upper()
+    
+    quote = _fetch_quote_facts(symbol)
+    close = quote.get("price")
+    if close is None:
+        return {"ok": False, "error": "Could not fetch current price."}
+    
+    atr = _calculate_atr(symbol) or (close * 0.02) # Fallback to 2% vol
+    
+    # Try to get MA5 from technical metrics
+    metrics = _compute_quant_metrics(symbol)
+    ma5 = None # Existing _compute_quant_metrics doesn't have MA5 specifically yet, maybe add later
+    
+    prices = _calculate_limit_prices(symbol, side, close, atr, ma5)
+    
+    return {
+        "ok": True,
+        "symbol": symbol,
+        "side": side,
+        "current_price": close,
+        "atr_used": atr,
+        "limit_prices": prices,
+        "tick_size": _get_tick_size(close, symbol)
+    }
+
 # --- AI Analysis with Fallback Request ---
 def ai_analyze_report(payload: dict):
     model = payload.get("model") or QUANT_LLM_MODEL
@@ -317,6 +440,7 @@ def _fetch_quote_facts(symbol: str) -> dict:
     company_name = None
     currency = None
     price = None
+    market_cap = None
     source = "yfinance"
     recent_news = []
 
@@ -324,6 +448,7 @@ def _fetch_quote_facts(symbol: str) -> dict:
         info = ticker.info or {}
         company_name = info.get("longName") or info.get("shortName")
         currency = info.get("currency")
+        market_cap = _safe_float(info.get("marketCap"))
     except Exception:
         pass
 
@@ -331,6 +456,7 @@ def _fetch_quote_facts(symbol: str) -> dict:
         fi = ticker.fast_info or {}
         price = _safe_float(fi.get("last_price"))
         currency = currency or fi.get("currency")
+        market_cap = market_cap or _safe_float(fi.get("market_cap"))
     except Exception:
         pass
 
@@ -379,6 +505,7 @@ def _fetch_quote_facts(symbol: str) -> dict:
         "company_name": company_name,
         "price": price,
         "currency": currency,
+        "market_cap": market_cap,
         "prev_close": prev_close,
         "change_pct": change_pct,
         "quote_url": _quote_url(sym),
@@ -395,6 +522,14 @@ def _fetch_ss6_signal(symbol: str) -> dict:
     
     try:
         conn = sqlite3.connect(str(db_path))
+        try:
+            import sys
+            sys.path.insert(0, str(db_path.parent))
+            import trade_schema
+            trade_schema.ensure_trade_tables(conn)
+            sys.path.pop(0)
+        except Exception:
+            pass
         cur = conn.cursor()
         # Try to find the latest order reason for this symbol which often contains the alpha score
         cur.execute(
@@ -575,16 +710,24 @@ def _compute_quant_metrics(symbol: str) -> dict:
         "ss6_signal": ss6
     }
 
-def _fetch_news_from_google_rss(symbol: str, company_name: str | None, max_items: int = 5) -> list[dict]:
+def _fetch_news_from_google_rss(symbol: str, company_name: str | None, max_items: int = 5, lang: str = "en") -> list[dict]:
 
     query_terms = [symbol]
     if company_name:
         query_terms.append(company_name)
-    query_terms.append("stock")
+    if lang != "ja":
+        query_terms.append("stock")
     q = " ".join([x for x in query_terms if x])
     url = "https://news.google.com/rss/search"
+    
+    params = {"q": q, "hl": "en-US", "gl": "US", "ceid": "US:en"}
+    if lang == "ja":
+        params = {"q": q, "hl": "ja", "gl": "JP", "ceid": "JP:ja"}
+    elif lang == "zh":
+        params = {"q": q, "hl": "zh-CN", "gl": "CN", "ceid": "CN:zh-Hans"}
+
     try:
-        resp = requests.get(url, params={"q": q, "hl": "en-US", "gl": "US", "ceid": "US:en"}, timeout=20)
+        resp = requests.get(url, params=params, timeout=20)
         if resp.status_code != 200:
             return []
         root = ET.fromstring(resp.content)
@@ -594,17 +737,95 @@ def _fetch_news_from_google_rss(symbol: str, company_name: str | None, max_items
             link = (item.findtext("link") or "").strip()
             pub = (item.findtext("source") or "").strip()
             pub_date = (item.findtext("pubDate") or "").strip()
+            published_ts = None
+            try:
+                if pub_date:
+                    published_ts = parsedate_to_datetime(pub_date).timestamp()
+            except Exception:
+                published_ts = None
             if title and link:
                 out.append({
                     "title": title,
                     "url": link,
                     "publisher": pub,
                     "published_at": pub_date,
+                    "published_ts": published_ts,
                     "source": "google_news_rss",
                 })
         return out
     except Exception:
         return []
+
+def _parse_article_dt(article: dict) -> Optional[datetime]:
+    if not isinstance(article, dict):
+        return None
+    candidates = [
+        article.get("published_ts"),
+        article.get("providerPublishTime"),
+        article.get("published_at"),
+        article.get("pubDate"),
+        article.get("seendate"),
+        article.get("pubdate"),
+        article.get("date"),
+    ]
+    for v in candidates:
+        if v in (None, ""):
+            continue
+        try:
+            if isinstance(v, (int, float)):
+                return datetime.utcfromtimestamp(float(v))
+            text = str(v).strip()
+            if not text:
+                continue
+            # GDELT format: 20260227T061500Z or 20260227T061500
+            if re.match(r"^\d{8}T\d{6}Z?$", text):
+                fmt = "%Y%m%dT%H%M%SZ" if text.endswith("Z") else "%Y%m%dT%H%M%S"
+                return datetime.strptime(text, fmt)
+            try:
+                return parsedate_to_datetime(text).astimezone().replace(tzinfo=None)
+            except Exception:
+                pass
+            # ISO fallback
+            if "T" in text:
+                return datetime.fromisoformat(text.replace("Z", "+00:00")).replace(tzinfo=None)
+        except Exception:
+            continue
+    return None
+
+def _apply_freshness_policy(articles: List[dict], max_age_hours: float) -> tuple[List[dict], dict]:
+    now_utc = datetime.utcnow()
+    fresh = []
+    dropped_stale = 0
+    dropped_undated = 0
+    ages_h = []
+    for a in articles or []:
+        dt = _parse_article_dt(a)
+        if dt is None:
+            dropped_undated += 1
+            continue
+        age_hours = (now_utc - dt).total_seconds() / 3600.0
+        if age_hours < 0:
+            age_hours = 0.0
+        if age_hours <= max_age_hours:
+            b = dict(a)
+            b["_age_hours"] = age_hours
+            fresh.append(b)
+            ages_h.append(age_hours)
+        else:
+            dropped_stale += 1
+    fresh.sort(key=lambda x: x.get("_age_hours", 1e9))
+    for it in fresh:
+        it.pop("_age_hours", None)
+    stats = {
+        "max_age_hours": max_age_hours,
+        "input_count": len(articles or []),
+        "fresh_count": len(fresh),
+        "dropped_stale": dropped_stale,
+        "dropped_undated": dropped_undated,
+        "freshness_p50_hours": round(statistics.median(ages_h), 2) if ages_h else None,
+        "freshness_max_hours": round(max(ages_h), 2) if ages_h else None,
+    }
+    return fresh, stats
 
 def _fetch_news_from_quote_page(symbol: str, max_items: int = 5) -> list[dict]:
     quote_url = _quote_url(symbol)
@@ -1672,6 +1893,27 @@ def record_fact(run_id, agent, kind, data):
         if conn:
             conn.close()
 
+def record_event(task_id: str, event_type: str, payload: dict | None = None):
+    if not task_id:
+        return
+    conn = None
+    cur = None
+    try:
+        conn = _db_connect()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO event_log (task_id, event_type, payload_json) VALUES (%s, %s, %s)",
+            (task_id, event_type, json.dumps(payload or {})),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"[worker] event_log error: {e}")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
 def record_evidence_link(fact_id: str | None, url: str, screenshot_ref: dict | None, extracted_text: str = ""):
     if not fact_id:
         return
@@ -1702,11 +1944,67 @@ def record_evidence_link(fact_id: str | None, url: str, screenshot_ref: dict | N
 def deep_analysis(payload: dict):
     symbol = str(payload.get("symbol", "NVDA")).upper()
     run_id = payload.get("run_id")
+    
+    # Capital constraints from payload or defaults
+    capital_base = float(payload.get("capital_base_jpy") or payload.get("capital_base") or 400000)
+    headroom = float(payload.get("capital_headroom_pct") or 0.25)
+    max_pos_pct = float(payload.get("max_position_pct") or 0.25)
+    
     quote = _fetch_quote_facts(symbol)
     metrics = _compute_quant_metrics(symbol)
     news = _merge_recent_news(quote, max_items=5)
     quote["recent_news"] = news
     analysis = _grounded_quant_summary(quote)
+    
+    # --- Execution Logic (v1.2.7) ---
+    raw_signal = (metrics.get("signal") or "").upper()
+    side = metrics.get("signal_side") or payload.get("mode")
+    if not side:
+        if "BUY" in raw_signal or "OVERWEIGHT" in raw_signal:
+            side = "BUY"
+        elif "SELL" in raw_signal or "UNDERWEIGHT" in raw_signal:
+            side = "SELL"
+        else:
+            side = "HOLD"
+    
+    side = side.upper()
+    price = quote.get("price")
+    atr = _calculate_atr(symbol) or (price * 0.02 if price else 0)
+    
+    exec_sug = {}
+    if price and side != "HOLD":
+        limit_prices = _calculate_limit_prices(symbol, side, price, atr)
+        
+        # Sizing logic
+        lot_size = 100 if symbol.endswith(".T") else 1
+        max_pos_jpy = capital_base * max_pos_pct
+        budget_jpy = capital_base * (1 + headroom)
+        
+        shares = 0
+        reason = ""
+        if side == "BUY":
+            if price * lot_size > max_pos_jpy:
+                reason = f"Price {price} * lot {lot_size} exceeds max position {max_pos_jpy}"
+            else:
+                lots = math.floor(max_pos_jpy / (price * lot_size))
+                shares = lots * lot_size
+        
+        exec_sug = {
+            "side": side,
+            "urgency": "balanced",
+            "limit_prices": limit_prices,
+            "sizing": {
+                "lot_size": lot_size,
+                "shares": shares,
+                "notional_jpy": shares * price,
+                "reason_if_zero": reason
+            },
+            "constraints": {
+                "capital_base_jpy": capital_base,
+                "max_position_pct": max_pos_pct,
+                "budget_jpy": budget_jpy
+            }
+        }
 
     report_markdown, report_html = _render_quant_template_report(run_id or "manual", quote, metrics, news)
     ts = int(time.time())
@@ -1731,6 +2029,7 @@ def deep_analysis(payload: dict):
             "quote_url": quote.get("quote_url"),
             "recent_news": news,
             "metrics": metrics,
+            "execution_suggestions": exec_sug,
             "summary": analysis,
             "report_markdown": report_markdown,
             "report_md_object_key": md_artifact.get("object_key"),
@@ -1743,11 +2042,12 @@ def deep_analysis(payload: dict):
         "ok": True,
         "symbol": symbol,
         "company_name": quote.get("company_name"),
-        "price": quote.get("price"),
+        "price": price,
         "currency": quote.get("currency"),
         "quote_url": quote.get("quote_url"),
         "recent_news": news,
         "metrics": metrics,
+        "execution_suggestions": exec_sug,
         "analysis": analysis,
         "report_markdown": report_markdown,
         "report_md_object_key": md_artifact.get("object_key"),
@@ -1790,71 +2090,534 @@ def browser_screenshot(payload: dict):
         "artifacts": artifacts,
     }
 
+def _to_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on", "y"}:
+        return True
+    if text in {"0", "false", "no", "off", "n"}:
+        return False
+    return default
+
+def _normalize_risk_profile(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"low", "conservative", "defensive", "稳健", "低风险"}:
+        return "low"
+    if text in {"high", "aggressive", "进取", "高风险"}:
+        return "high"
+    return "medium"
+
+def _infer_goal_profile(goal: str, risk_profile: str) -> dict:
+    g = (goal or "").lower()
+    if any(k in g for k in ["稳", "保本", "低波", "低回撤", "drawdown", "defensive"]):
+        style = "defensive"
+    elif any(k in g for k in ["分红", "股息", "现金流", "income", "dividend"]):
+        style = "income"
+    elif any(k in g for k in ["成长", "增长", "进取", "翻倍", "growth", "alpha"]):
+        style = "growth"
+    else:
+        style = "balanced"
+
+    if style == "defensive":
+        risk = "low"
+    elif style == "growth":
+        risk = "high" if risk_profile == "medium" else risk_profile
+    else:
+        risk = risk_profile
+
+    style_map = {
+        "growth": {"entry_style": "momentum_2_step", "horizon_days": 90},
+        "balanced": {"entry_style": "balanced_3_step", "horizon_days": 120},
+        "income": {"entry_style": "pullback_3_step", "horizon_days": 150},
+        "defensive": {"entry_style": "defensive_3_step", "horizon_days": 180},
+    }
+    out = style_map.get(style, style_map["balanced"]).copy()
+    out["style"] = style
+    out["risk_profile"] = risk
+    return out
+
+def _build_position_plan(
+    candidates: List[dict],
+    capital_base_jpy: float,
+    max_pos_pct: float,
+    goal: str,
+    goal_profile: dict,
+    target_return_pct: Optional[float],
+    horizon_days: int,
+) -> dict:
+    risk = goal_profile.get("risk_profile", "medium")
+    defaults = {
+        "low": {"n": 3, "cash_reserve_pct": 0.20, "entry_steps": [0.35, 0.35, 0.30]},
+        "medium": {"n": 4, "cash_reserve_pct": 0.12, "entry_steps": [0.50, 0.30, 0.20]},
+        "high": {"n": 5, "cash_reserve_pct": 0.08, "entry_steps": [0.60, 0.25, 0.15]},
+    }.get(risk, {"n": 4, "cash_reserve_pct": 0.12, "entry_steps": [0.50, 0.30, 0.20]})
+
+    selected = candidates[: defaults["n"]]
+    if not selected:
+        return {
+            "goal": goal or "balanced growth",
+            "risk_profile": risk,
+            "entry_style": goal_profile.get("entry_style"),
+            "capital_base_jpy": capital_base_jpy,
+            "target_return_pct": target_return_pct,
+            "horizon_days": horizon_days,
+            "positions": [],
+            "cash_reserve_jpy": round(capital_base_jpy, 2),
+            "planned_investment_jpy": 0.0,
+            "estimated_cash_left_jpy": round(capital_base_jpy, 2),
+        }
+
+    investable_pct = max(0.50, 1.0 - defaults["cash_reserve_pct"])
+    max_alloc_per_name = max(0.10, min(float(max_pos_pct), 0.35))
+
+    raw_scores = [max(0.05, float(c.get("selection_score") or c.get("score") or 0.05)) for c in selected]
+    score_sum = sum(raw_scores) or 1.0
+    weights = [min(max_alloc_per_name, investable_pct * s / score_sum) for s in raw_scores]
+
+    assigned = sum(weights)
+    if assigned < investable_pct:
+        room = [max(0.0, max_alloc_per_name - w) for w in weights]
+        room_sum = sum(room)
+        if room_sum > 0:
+            leftover = investable_pct - assigned
+            weights = [w + leftover * (r / room_sum) for w, r in zip(weights, room)]
+
+    steps = defaults["entry_steps"]
+    positions = []
+    total_planned = 0.0
+    for c, w in zip(selected, weights):
+        lot_size = int(c.get("lot_size") or 1)
+        cost_per_lot_jpy = float(c.get("cost_per_lot_jpy") or 0.0)
+        if cost_per_lot_jpy <= 0:
+            continue
+        planned_budget = capital_base_jpy * w
+        lots = int(math.floor(planned_budget / cost_per_lot_jpy))
+        if lots <= 0 and cost_per_lot_jpy <= capital_base_jpy * max_alloc_per_name:
+            lots = 1
+        shares = lots * lot_size
+        planned_cost = lots * cost_per_lot_jpy
+        if shares <= 0 or planned_cost <= 0:
+            continue
+        total_planned += planned_cost
+        positions.append({
+            "symbol": c.get("symbol"),
+            "market": c.get("market"),
+            "weight_pct": round((planned_cost / capital_base_jpy) * 100.0, 2),
+            "planned_budget_jpy": round(planned_budget, 2),
+            "planned_cost_jpy": round(planned_cost, 2),
+            "planned_lots": lots,
+            "planned_shares": shares,
+            "entry_schedule": [
+                {
+                    "stage": idx + 1,
+                    "allocation_pct_of_position": round(pct * 100.0, 2),
+                    "planned_notional_jpy": round(planned_cost * pct, 2),
+                }
+                for idx, pct in enumerate(steps)
+            ],
+            "thesis": f"alpha={round(float(c.get('score') or 0.0), 3)}, affordability={round(float(c.get('affordability_score') or 0.0), 3)}",
+        })
+
+    total_planned = round(total_planned, 2)
+    cash_left = round(max(0.0, capital_base_jpy - total_planned), 2)
+    return {
+        "goal": goal or "balanced growth",
+        "risk_profile": risk,
+        "entry_style": goal_profile.get("entry_style"),
+        "capital_base_jpy": round(capital_base_jpy, 2),
+        "target_return_pct": target_return_pct,
+        "horizon_days": int(horizon_days),
+        "positions": positions,
+        "planned_investment_jpy": total_planned,
+        "cash_reserve_jpy": cash_left,
+        "estimated_cash_left_jpy": cash_left,
+    }
+
+def _load_discovery_learning_store() -> dict:
+    data = _load_json(DISCOVERY_LEARNING_PATH)
+    return data if isinstance(data, dict) else {}
+
+def _save_discovery_learning_store(store: dict):
+    try:
+        DISCOVERY_LEARNING_PATH.parent.mkdir(parents=True, exist_ok=True)
+        DISCOVERY_LEARNING_PATH.write_text(
+            json.dumps(store, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        print(f"[discovery] unable to save learning store: {e}")
+
 def discovery_workflow(payload: dict):
     """
     Stage 3: Screening high-potential stocks based on intelligence.
-    This bridges news discovery with quantitative screening.
+    v1.3.4: Capital+goal driven discovery with adaptive multi-attempt search.
     """
     run_id = payload.get("run_id")
     date_str = payload.get("date") or _now_date_str()
-    
-    # 1. Load watchlists and intelligence
-    wl = _load_watchlists()
-    all_known = wl.get("jp_symbols", []) + wl.get("us_symbols", [])
-    
-    # 2. Trigger a fresh news scan if requested, or use existing facts
-    # For now, we simulate discovery from the internal DB
-    candidates = []
+    market_focus = str(payload.get("market") or os.getenv("NEWS_FOCUS_MARKET", "ALL")).upper()
+    market_focus = market_focus if market_focus in {"JP", "US", "ALL"} else "ALL"
+
+    capital_base_jpy = max(1.0, float(payload.get("capital_base_jpy") or payload.get("capital_base") or 400000))
+    base_max_pos_pct = max(0.10, min(float(payload.get("max_position_pct") or 0.25), 0.65))
+
+    goal_text = str(payload.get("goal") or "").strip()
+    risk_profile = _normalize_risk_profile(payload.get("risk_profile"))
+    goal_profile = _infer_goal_profile(goal_text, risk_profile)
+    target_return_pct = _safe_float(payload.get("target_return_pct"))
+    if target_return_pct is None and goal_text:
+        m_target = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*%", goal_text)
+        if m_target:
+            target_return_pct = _safe_float(m_target.group(1))
+    horizon_days = int(payload.get("horizon_days") or goal_profile.get("horizon_days") or 120)
+
+    prefer_small_mid_cap = _to_bool(payload.get("prefer_small_mid_cap"), default=(capital_base_jpy <= 600000))
+    avoid_mega_cap = _to_bool(payload.get("avoid_mega_cap"), default=prefer_small_mid_cap)
+    auto_evolve = _to_bool(payload.get("auto_evolve"), default=True)
+    auto_expand_market = _to_bool(payload.get("auto_expand_market"), default=True)
+    enable_learning = _to_bool(payload.get("enable_learning"), default=True)
+    max_attempts = int(payload.get("max_attempts") or 4)
+    max_attempts = max(1, min(max_attempts, 6))
+    risk_target_map = {"low": 2, "medium": 3, "high": 4}
+    min_candidates_target = int(payload.get("min_candidates") or risk_target_map.get(goal_profile.get("risk_profile"), 3))
+    min_candidates_target = max(1, min(min_candidates_target, 8))
+
+    print(
+        "[discovery] "
+        f"Market={market_focus} Capital={capital_base_jpy} BaseMaxPosPct={base_max_pos_pct} "
+        f"Goal={goal_text or 'N/A'} Risk={goal_profile.get('risk_profile')} "
+        f"AutoEvolve={auto_evolve} Attempts={max_attempts}"
+    )
+
+    usdjpy = 150.0
     try:
-        db_path = Path("/app/quant_trading/Project_optimized/japan_market.db")
-        if db_path.exists():
-            conn = sqlite3.connect(str(db_path))
-            cur = conn.cursor()
-            # Find symbols with high news sentiment or frequent mentions in the last 24h
-            # This is a placeholder for a more complex SQL query
-            cur.execute("SELECT DISTINCT symbol FROM orders WHERE asof >= ?", (date_str,))
-            rows = cur.fetchall()
-            candidates = [r[0] for r in rows if r[0] in all_known]
-            conn.close()
-    except Exception as e:
-        print(f"Discovery DB Error: {e}")
+        usdjpy_ticker = yf.Ticker("JPY=X")
+        usdjpy = _safe_float(usdjpy_ticker.fast_info.get("last_price")) or 150.0
+    except Exception:
+        pass
 
-    # 3. If no candidates from DB, fallback to top watchlist
-    if not candidates:
-        candidates = all_known[:10]
+    wl = _load_watchlists()
+    jp_list = wl.get("jp_symbols", [])
+    us_list = wl.get("us_symbols", [])
+    ideal_lot_cost_jpy = max(capital_base_jpy * 0.10, 30000.0)
+    base_mega_cap_cutoff_jpy = 2.5e13 if capital_base_jpy <= 600000 else 8.0e13
+    risk_alpha_floor_map = {"low": -0.7, "medium": -1.0, "high": -1.3}
+    base_alpha_floor = risk_alpha_floor_map.get(goal_profile.get("risk_profile"), -1.0)
+    scanned_symbols = set()
 
-    # 4. Perform lightweight screening (Stage 3 & 4)
-    results = []
-    for sym in candidates[:5]: # Limit to top 5 to avoid timeout
-        m = _compute_quant_metrics(sym)
-        if m.get("ok") and m.get("alpha_score", 0) > 1.0:
-            results.append({
+    def _capital_bucket(amount_jpy: float) -> str:
+        if amount_jpy < 300000:
+            return "lt_300k"
+        if amount_jpy < 800000:
+            return "300k_800k"
+        if amount_jpy < 2000000:
+            return "800k_2m"
+        return "ge_2m"
+
+    def _build_universe(market_key: str) -> List[str]:
+        if market_key == "JP":
+            return list(jp_list)
+        if market_key == "US":
+            return list(us_list)
+        if capital_base_jpy <= 600000:
+            return list(jp_list) + list(us_list)
+        merged = []
+        for i in range(max(len(jp_list), len(us_list))):
+            if i < len(jp_list):
+                merged.append(jp_list[i])
+            if i < len(us_list):
+                merged.append(us_list[i])
+        return merged
+
+    def _run_attempt(profile: dict) -> tuple:
+        market_key = str(profile.get("market") or market_focus).upper()
+        market_key = market_key if market_key in {"JP", "US", "ALL"} else market_focus
+        max_pos_pct = max(0.10, min(float(profile.get("max_position_pct") or base_max_pos_pct), 0.65))
+        max_pos_jpy = capital_base_jpy * max_pos_pct
+        alpha_floor = max(-3.0, min(float(profile.get("alpha_floor") or base_alpha_floor), 0.5))
+        avoid_mega_cap_local = bool(profile.get("avoid_mega_cap"))
+        prefer_small_mid_cap_local = bool(profile.get("prefer_small_mid_cap"))
+        mega_cap_cutoff_jpy = float(profile.get("mega_cap_cutoff_jpy") or base_mega_cap_cutoff_jpy)
+
+        universe = _build_universe(market_key)
+        scanned_count = 0
+        results_local = []
+
+        for sym in universe[:120]:
+            scanned_count += 1
+            scanned_symbols.add(sym)
+            quote = _fetch_quote_facts(sym)
+            price = _safe_float(quote.get("price"))
+            if price is None or price <= 0:
+                continue
+
+            is_jp = sym.endswith(".T")
+            lot_size = 100 if is_jp else 1
+            price_jpy = price if is_jp else price * usdjpy
+            cost_per_lot_jpy = price_jpy * lot_size
+            if cost_per_lot_jpy > max_pos_jpy:
+                continue
+
+            market_cap = _safe_float(quote.get("market_cap"))
+            market_cap_jpy = None
+            if market_cap is not None:
+                market_cap_jpy = market_cap if is_jp else market_cap * usdjpy
+                if avoid_mega_cap_local and market_cap_jpy > mega_cap_cutoff_jpy:
+                    continue
+
+            m = _compute_quant_metrics(sym)
+            if not m.get("ok"):
+                continue
+            alpha = _safe_float(m.get("alpha_score"))
+            if alpha is None or alpha < alpha_floor:
+                continue
+
+            affordability = 1.0 - min(
+                1.0,
+                abs(cost_per_lot_jpy - ideal_lot_cost_jpy) / max(ideal_lot_cost_jpy, 1.0),
+            )
+            affordability_score = 0.90 * affordability
+            size_score = 0.0
+            if market_cap_jpy is not None:
+                if market_cap_jpy > 8.0e13:
+                    size_score -= 0.65
+                elif market_cap_jpy > 4.0e13:
+                    size_score -= 0.25
+                elif market_cap_jpy < 6.0e11:
+                    size_score -= 0.10
+                else:
+                    size_score += 0.15
+            if prefer_small_mid_cap_local and market_cap_jpy is not None and market_cap_jpy > 2.0e13:
+                size_score -= 0.20
+            if capital_base_jpy <= 600000 and is_jp:
+                size_score += 0.08
+
+            selection_score = alpha + affordability_score + size_score
+            lots = int(math.floor(max_pos_jpy / cost_per_lot_jpy))
+
+            results_local.append({
                 "symbol": sym,
+                "market": "JP" if is_jp else "US",
                 "signal": m.get("signal"),
-                "score": m.get("alpha_score"),
-                "risk": m.get("risk_state")
+                "score": alpha,
+                "selection_score": selection_score,
+                "risk": m.get("risk_state"),
+                "price_orig": price,
+                "price_jpy": price_jpy,
+                "currency": quote.get("currency"),
+                "lot_size": lot_size,
+                "cost_per_lot_jpy": cost_per_lot_jpy,
+                "market_cap": market_cap,
+                "market_cap_jpy": market_cap_jpy,
+                "affordability_score": affordability_score,
+                "recommended_lots": lots,
+                "recommended_shares": lots * lot_size,
+                "estimated_cost_jpy": lots * cost_per_lot_jpy,
+                "max_position_pct_used": round(max_pos_pct, 4),
+                "alpha_floor_used": round(alpha_floor, 4),
             })
 
-    # Sort by score descending
-    results.sort(key=lambda x: x["score"], reverse=True)
+        results_local.sort(
+            key=lambda x: (x.get("selection_score", -999), x.get("score", -999)),
+            reverse=True,
+        )
+        return results_local[:15], scanned_count, len(universe), market_key, max_pos_pct, alpha_floor
 
-    analysis = f"Discovery complete for {date_str}. Found {len(results)} high-potential candidates."
-    if results:
-        analysis += " Top candidate: " + results[0]["symbol"]
+    import random
 
-    if run_id:
-        record_fact(run_id, "quant", "discovery_result", {
-            "date": date_str,
-            "candidates": results,
-            "summary": analysis
+    base_strategies = {
+        "strict": {
+            "market": market_focus,
+            "max_position_pct": base_max_pos_pct,
+            "alpha_floor": base_alpha_floor,
+            "avoid_mega_cap": avoid_mega_cap,
+            "prefer_small_mid_cap": prefer_small_mid_cap,
+        },
+        "relax_position": {
+            "market": market_focus,
+            "max_position_pct": min(max(base_max_pos_pct, 0.30) + 0.07, 0.45),
+            "alpha_floor": base_alpha_floor - 0.35,
+            "avoid_mega_cap": avoid_mega_cap,
+            "prefer_small_mid_cap": prefer_small_mid_cap,
+        },
+        "broaden_factors": {
+            "market": "ALL" if auto_expand_market and market_focus != "ALL" else market_focus,
+            "max_position_pct": min(max(base_max_pos_pct, 0.35) + 0.10, 0.55),
+            "alpha_floor": base_alpha_floor - 0.75,
+            "avoid_mega_cap": False,
+            "prefer_small_mid_cap": False,
+        },
+        "fallback_wide": {
+            "market": "ALL" if auto_expand_market and market_focus != "ALL" else market_focus,
+            "max_position_pct": min(max(base_max_pos_pct, 0.40) + 0.15, 0.65),
+            "alpha_floor": base_alpha_floor - 1.10,
+            "avoid_mega_cap": False,
+            "prefer_small_mid_cap": False,
+        }
+    }
+
+    learning_key = None
+    learning_store = {}
+    mab_state = {}
+
+    if enable_learning:
+        learning_key = "|".join(["mab_v1", market_focus, goal_profile.get("risk_profile", "medium"), _capital_bucket(capital_base_jpy)])
+        learning_store = _load_discovery_learning_store()
+        mab_state = learning_store.get(learning_key) or {}
+        
+        for s_name in base_strategies.keys():
+            if s_name not in mab_state:
+                mab_state[s_name] = {"alpha": 1.0, "beta": 1.0}
+
+    attempt_profiles = []
+    if enable_learning:
+        sampled_scores = {}
+        for s_name, stats in mab_state.items():
+            if s_name in base_strategies:
+                a = max(1.0, stats.get("alpha", 1.0))
+                b = max(1.0, stats.get("beta", 1.0))
+                sampled_scores[s_name] = random.betavariate(a, b)
+        
+        sorted_strategy_names = sorted(sampled_scores.keys(), key=lambda k: sampled_scores[k], reverse=True)
+        for s_name in sorted_strategy_names:
+            profile = base_strategies[s_name].copy()
+            profile["label"] = s_name
+            attempt_profiles.append(profile)
+    else:
+        for k, v in base_strategies.items():
+            p = v.copy()
+            p["label"] = k
+            attempt_profiles.append(p)
+
+    while len(attempt_profiles) < max_attempts:
+        prev = attempt_profiles[-1]
+        attempt_profiles.append({
+            "label": f"extended_{len(attempt_profiles)+1}",
+            "market": "ALL" if auto_expand_market and market_focus != "ALL" else prev.get("market", market_focus),
+            "max_position_pct": min(float(prev.get("max_position_pct", 0.50)) + 0.05, 0.65),
+            "alpha_floor": max(float(prev.get("alpha_floor", -2.0)) - 0.25, -3.0),
+            "avoid_mega_cap": False,
+            "prefer_small_mid_cap": False,
         })
 
-    return {
+    best_results = []
+    best_attempt_idx = 0
+    best_profile = None
+    best_market = market_focus
+    best_max_pos_pct = base_max_pos_pct
+    selected_alpha_floor = base_alpha_floor
+    attempt_reports = []
+    total_scanned = 0
+    ran_attempts = 0
+
+    for idx, profile in enumerate(attempt_profiles[:max_attempts], start=1):
+        results_try, scanned_count, universe_size, market_used, max_pos_pct_used, alpha_floor_used = _run_attempt(profile)
+        ran_attempts += 1
+        total_scanned += scanned_count
+        attempt_reports.append(
+            {
+                "attempt": idx,
+                "label": profile.get("label", f"attempt_{idx}"),
+                "market": market_used,
+                "max_position_pct": round(max_pos_pct_used, 4),
+                "alpha_floor": round(alpha_floor_used, 4),
+                "avoid_mega_cap": bool(profile.get("avoid_mega_cap")),
+                "prefer_small_mid_cap": bool(profile.get("prefer_small_mid_cap")),
+                "universe_size": universe_size,
+                "scanned_count": scanned_count,
+                "candidate_count": len(results_try),
+            }
+        )
+
+        if len(results_try) > len(best_results):
+            best_results = results_try
+            best_attempt_idx = idx
+            best_profile = profile
+            best_market = market_used
+            best_max_pos_pct = max_pos_pct_used
+            selected_alpha_floor = alpha_floor_used
+
+        if len(results_try) >= min_candidates_target:
+            break
+        if not auto_evolve:
+            break
+
+    results = best_results
+    results.sort(key=lambda x: (x.get("selection_score", -999), x.get("score", -999)), reverse=True)
+    results = results[:15]
+
+    position_plan = _build_position_plan(
+        results,
+        capital_base_jpy=capital_base_jpy,
+        max_pos_pct=best_max_pos_pct,
+        goal=goal_text,
+        goal_profile=goal_profile,
+        target_return_pct=target_return_pct,
+        horizon_days=horizon_days,
+    )
+
+    if enable_learning and learning_key:
+        decay_factor = 0.98
+        for s_name in mab_state:
+            mab_state[s_name]["alpha"] = max(1.0, mab_state[s_name]["alpha"] * decay_factor)
+            mab_state[s_name]["beta"] = max(1.0, mab_state[s_name]["beta"] * decay_factor)
+        
+        if best_profile is not None:
+            used_label = best_profile.get("label")
+            if used_label in mab_state:
+                if len(results) >= min_candidates_target:
+                    mab_state[used_label]["alpha"] += 1.0
+                else:
+                    mab_state[used_label]["beta"] += 1.0
+
+        learning_store[learning_key] = mab_state
+        learning_store["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        _save_discovery_learning_store(learning_store)
+
+    top_candidates_str = ""
+    for idx, c in enumerate(results[:5]):
+        sym = c.get("symbol")
+        score = c.get("selection_score", 0)
+        cost = c.get("estimated_cost_jpy", 0)
+        top_candidates_str += f"- **{sym}**: 综合评分 {score:.2f}，建议配置约 {cost:,.0f} JPY\n"
+
+    profile_label = best_profile.get('label') if best_profile else 'default'
+    summary = (
+        f"🎯 **选股与配置报告 (探索阶段)**\n\n"
+        f"**配置目标**: {goal_text or '稳健增长'} | **资金盘**: {capital_base_jpy:,.0f} JPY | **风险偏好**: {goal_profile.get('risk_profile')}\n\n"
+        f"基于汤普森采样模型，系统经过 {ran_attempts} 轮动态策略探索（最终采用 `{profile_label}` 模式），"
+        f"从 {len(scanned_symbols)} 只基础池股票中筛选出 {len(results)} 只合格标的。\n\n"
+        f"🏆 **核心推荐 Top 5**:\n{top_candidates_str if top_candidates_str else '- 暂无符合严格条件的标的，建议放宽收益预期或扩大资金量。'}\n"
+        f"💡 **仓位推演**: 预计总投资 {position_plan.get('planned_investment_jpy', 0):,.0f} JPY，保留现金流 {position_plan.get('cash_reserve_jpy', 0):,.0f} JPY。"
+    )
+
+    output = {
         "ok": True,
         "date": date_str,
+        "market": best_market if results else market_focus,
+        "capital_base_jpy": capital_base_jpy,
+        "max_position_pct": best_max_pos_pct,
+        "goal": goal_text or "balanced growth",
+        "risk_profile": goal_profile.get("risk_profile"),
+        "horizon_days": horizon_days,
+        "target_return_pct": target_return_pct,
+        "usdjpy_rate": usdjpy,
         "candidates": results,
-        "analysis": analysis
+        "position_plan": position_plan,
+        "search_attempts": attempt_reports,
+        "selected_attempt": best_attempt_idx,
+        "min_candidates_target": min_candidates_target,
+        "auto_evolve": auto_evolve,
+        "auto_expand_market": auto_expand_market,
+        "learning_enabled": enable_learning,
+        "analysis": summary,
     }
+
+    if run_id:
+        record_fact(run_id, "quant", "discovery_result", output)
+    return output
 
 def compute_news_risk_factor(payload: dict):
     """
@@ -2019,6 +2782,14 @@ def portfolio_set_account(payload: dict):
         
     try:
         conn = sqlite3.connect(str(db_path))
+        try:
+            import sys
+            sys.path.insert(0, str(db_path.parent))
+            import trade_schema
+            trade_schema.ensure_trade_tables(conn)
+            sys.path.pop(0)
+        except Exception:
+            pass
         cur = conn.cursor()
         
         # Check if account exists, otherwise insert
@@ -2078,6 +2849,55 @@ def portfolio_record_fill(payload: dict):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+def _quick_news_brief(articles: List[dict], title: str = "市场快讯") -> str:
+    if not articles:
+        return "暂无可用新闻样本，建议等待下一轮抓取。"
+
+    domains = []
+    headlines = []
+    for a in articles:
+        t = str(a.get("title") or "").strip()
+        d = str(a.get("domain") or a.get("publisher") or "unknown").strip().lower()
+        if t:
+            headlines.append(t)
+        if d:
+            domains.append(d)
+
+    domain_top = Counter(domains).most_common(3)
+    top_domains = ", ".join([f"{k}({v})" for k, v in domain_top]) if domain_top else "unknown"
+
+    text_blob = " ".join(headlines).lower()
+    theme_map = {
+        "宏观/利率": ["boj", "fed", "rate", "yield", "inflation", "cpi", "日银", "利率", "通胀"],
+        "业绩/指引": ["earnings", "guidance", "forecast", "profit", "业绩", "财报", "盈利"],
+        "科技/半导体": ["ai", "chip", "semiconductor", "nvidia", "tsmc", "半导体", "芯片"],
+        "汇率/外需": ["yen", "usd/jpy", "dollar", "export", "日元", "汇率", "出口"],
+    }
+    theme_hits = []
+    for theme, keys in theme_map.items():
+        hit = sum(1 for k in keys if k in text_blob)
+        if hit > 0:
+            theme_hits.append((theme, hit))
+    theme_hits.sort(key=lambda x: x[1], reverse=True)
+    themes = "、".join([t for t, _ in theme_hits[:3]]) if theme_hits else "题材分布分散"
+
+    pos_words = ["beat", "surge", "upgrade", "record", "growth", "上调", "增长", "创新高", "超预期"]
+    neg_words = ["miss", "cut", "downgrade", "drop", "risk", "下调", "下跌", "不及预期", "风险"]
+    pos = sum(text_blob.count(w) for w in pos_words)
+    neg = sum(text_blob.count(w) for w in neg_words)
+    if pos > neg:
+        sentiment = "偏多"
+    elif neg > pos:
+        sentiment = "偏空"
+    else:
+        sentiment = "中性"
+
+    return (
+        f"1) {title}主线：{themes}。\n"
+        f"2) 信息源集中度：{top_domains}。\n"
+        f"3) 新闻情绪：{sentiment}（基于标题关键词启发式判断）。"
+    )
+
 def preclose_brief_jp(payload: dict):
     """
     Japanese market pre-close brief (15:15 JST).
@@ -2086,13 +2906,22 @@ def preclose_brief_jp(payload: dict):
     run_id = payload.get("run_id")
     date_str = payload.get("date") or _now_date_str()
     
-    # 1. Fetch fast path news (last 6h)
-    articles = _gdelt_doc_search("japan OR tokyo OR nikkei OR stock", datetime.utcnow() - timedelta(hours=6), datetime.utcnow(), max_records=15)
-    
+    freshness_hours = float(payload.get("freshness_hours", 12))
+
+    # 1. Fetch fast path news (last 6h), then enforce freshness policy.
+    raw_articles = _gdelt_doc_search(
+        "japan OR tokyo OR nikkei OR stock",
+        datetime.utcnow() - timedelta(hours=6),
+        datetime.utcnow(),
+        max_records=20,
+    )
+    articles, freshness = _apply_freshness_policy(raw_articles, max_age_hours=freshness_hours)
+
     if not articles:
-        # Fallback to Google News
-        articles = _fetch_news_from_google_rss("Japan market", "Nikkei", max_items=5)
-        
+        # Fallback to Google News with the same freshness gate.
+        raw_articles = _fetch_news_from_google_rss("日経平均 OR 日本株", "市況 OR ニュース", max_items=10, lang="ja")
+        articles, freshness = _apply_freshness_policy(raw_articles, max_age_hours=freshness_hours)
+
     items_text = ""
     for a in articles[:5]:
         title = a.get('title', 'Unknown')
@@ -2101,16 +2930,32 @@ def preclose_brief_jp(payload: dict):
         items_text += f"- {title} ({domain}) : {url}\n"
 
     if items_text:
-        system = "You are a quantitative news analyst summarizing pre-close market conditions for the Tokyo Stock Exchange. Produce a professional, concise Chinese summary highlighting key market drivers, sentiment, and any notable events from the provided headlines. Make it look like a professional brief."
+        system = (
+            "你是资深日股盘中策略分析师。请基于新闻标题生成中文盘尾情报长分析，结构必须包含："
+            "1) 市场主线(宏观/行业/风格)；2) 情绪与风险偏好；3) 对收盘前30分钟资金行为的推演；"
+            "4) 交易上可执行的关注清单(2-4条)；5) 风险提示。"
+            "要求：专业、具体、逻辑连贯，避免空话，长度约220-450字。"
+        )
         llm_summary = get_llm_response(system, items_text, model=QUANT_LLM_MODEL)
-        summary = f"【15:15 JST 盘尾情报】\n{llm_summary}\n\n【原始快讯】\n{items_text}"
+        if not str(llm_summary or "").strip() or len(str(llm_summary).strip()) < 60:
+            llm_summary = _quick_news_brief(articles[:5], title="盘尾")
+        freshness_line = (
+            f"Freshness<= {int(freshness_hours)}h | fresh={freshness.get('fresh_count', 0)} | "
+            f"dropped_stale={freshness.get('dropped_stale', 0)} | dropped_undated={freshness.get('dropped_undated', 0)}"
+        )
+        summary = f"【15:15 JST 盘尾情报】\n{freshness_line}\n{llm_summary}\n\n【原始快讯】\n{items_text}"
     else:
-        summary = "【15:15 JST 盘尾情报】\n未发现重大近期事件。\n状态：准备接收 action_model 反馈。"
+        summary = (
+            "【15:15 JST 盘尾情报】\n"
+            f"未找到满足 freshness<= {int(freshness_hours)}h 的可用新闻。"
+            f"（剔除过旧: {freshness.get('dropped_stale', 0)}，无时间戳: {freshness.get('dropped_undated', 0)}）"
+        )
 
     result = {
         "ok": True,
         "type": "preclose_brief_jp",
         "date": date_str,
+        "freshness": freshness,
         "analysis": summary
     }
     
@@ -2126,9 +2971,11 @@ def tdnet_close_flash(payload: dict):
     run_id = payload.get("run_id")
     date_str = payload.get("date") or _now_date_str()
     
-    # Placeholder for TDnet scraping logic
-    # We fallback to Google News looking for earnings/announcements
-    articles = _fetch_news_from_google_rss("Japan earnings OR Tokyo announcement", "finance", max_items=5)
+    freshness_hours = float(payload.get("freshness_hours", 24))
+
+    # Placeholder for TDnet scraping logic: use Google News but enforce freshness gate.
+    raw_articles = _fetch_news_from_google_rss("決算 OR 業績修正 OR 株式分割 OR 発表", "日本株", max_items=12, lang="ja")
+    articles, freshness = _apply_freshness_policy(raw_articles, max_age_hours=freshness_hours)
     
     items_text = ""
     for a in articles[:3]:
@@ -2137,16 +2984,32 @@ def tdnet_close_flash(payload: dict):
         items_text += f"- {title} : {url}\n"
         
     if items_text:
-        system = "You are an analyst reviewing post-close corporate announcements for the Tokyo Stock Exchange. Summarize the following headlines in a concise, professional Chinese flash report."
+        system = (
+            "你是日股盘后公告解读分析师。请基于标题输出中文盘后长分析，结构必须包含："
+            "1) 公告类型归因(业绩/回购/并购/监管等)；2) 对次日开盘影响(高/中/低并说明)；"
+            "3) 可能受影响的板块与代表标的；4) 跟踪清单与触发条件；5) 风险提示。"
+            "要求：结论清晰、可执行，长度约220-450字。"
+        )
         llm_summary = get_llm_response(system, items_text, model=QUANT_LLM_MODEL)
-        summary = f"【15:35 JST 盘后闪讯】\n{llm_summary}\n\n【监测到以下公告/新闻】\n{items_text}"
+        if not str(llm_summary or "").strip() or len(str(llm_summary).strip()) < 60:
+            llm_summary = _quick_news_brief(articles[:3], title="盘后")
+        freshness_line = (
+            f"Freshness<= {int(freshness_hours)}h | fresh={freshness.get('fresh_count', 0)} | "
+            f"dropped_stale={freshness.get('dropped_stale', 0)} | dropped_undated={freshness.get('dropped_undated', 0)}"
+        )
+        summary = f"【15:35 JST 盘后闪讯】\n{freshness_line}\n{llm_summary}\n\n【监测到以下公告/新闻】\n{items_text}"
     else:
-        summary = "【15:35 JST 盘后闪讯】\n监测窗口（15:00-15:35）未发现高严重度公告。"
+        summary = (
+            "【15:35 JST 盘后闪讯】\n"
+            f"未找到满足 freshness<= {int(freshness_hours)}h 的公告/新闻。"
+            f"（剔除过旧: {freshness.get('dropped_stale', 0)}，无时间戳: {freshness.get('dropped_undated', 0)}）"
+        )
 
     result = {
         "ok": True,
         "type": "tdnet_close_flash",
         "date": date_str,
+        "freshness": freshness,
         "analysis": summary
     }
     
@@ -2161,6 +3024,7 @@ TOOLS = {
     "quant.deep_analysis": deep_analysis,
     "quant.discovery_workflow": discovery_workflow,
     "quant.compute_news_risk_factor": compute_news_risk_factor,
+    "quant.calc_limit_price": calc_limit_price_tool,
     "quant.run_optimized_pipeline": run_optimized_pipeline,
     "portfolio.set_account": portfolio_set_account,
     "portfolio.record_fill": portfolio_record_fill,
@@ -2175,30 +3039,141 @@ TOOLS = {
 
 def main():
     print("[worker] Ready for multi-model logic.")
-    while True:
+
+    def _parse_payload(raw):
         try:
-            res = r.xreadgroup(GROUP, CONSUMER, streams={STREAM_TASK: ">"}, count=1, block=5000)
-            if not res: continue
-            msg_id, kv = res[0][1][0]
-            obj = dict(kv)
-            task_id = obj.get("task_id")
-            wf_id, step_idx = obj.get("workflow_id"), obj.get("step_index")
-            r.xadd(STREAM_RESULT, {"task_id": task_id, "status": "claimed", "workflow_id": wf_id or "", "step_index": step_idx or ""})
-            
-            tool_name = obj.get("tool_name")
-            payload = json.loads(obj.get("payload", "{}"))
+            return json.loads(raw or "{}")
+        except Exception:
+            return {}
+
+    def _emit_result(task_id, status, output=None, error=None, wf_id="", step_idx=""):
+        msg = {
+            "task_id": str(task_id or ""), 
+            "status": str(status or ""), 
+            "workflow_id": str(wf_id or ""), 
+            "step_index": str(step_idx or "")
+        }
+        if output is not None:
+            msg["output"] = json.dumps(output)
+        if error:
+            msg["error"] = str(error)
+        r.xadd(STREAM_RESULT, msg)
+
+    def _enqueue_retry(task_id, tool_name, run_id, payload, wf_id, step_idx, retry_count):
+        r.xadd(
+            STREAM_TASK,
+            "*",
+            "task_id",
+            str(task_id or ""),
+            "run_id",
+            str(run_id or ""),
+            "tool_name",
+            str(tool_name or ""),
+            "payload",
+            json.dumps(payload or {}),
+            "workflow_id",
+            str(wf_id or ""),
+            "step_index",
+            str(step_idx or ""),
+            "retry_count",
+            str(retry_count or 0),
+        )
+
+    def _send_to_dlq(task_id, tool_name, payload, error, retry_count):
+        r.xadd(
+            STREAM_DLQ,
+            "*",
+            "task_id",
+            str(task_id or ""),
+            "tool_name",
+            str(tool_name or ""),
+            "payload",
+            json.dumps(payload or {}),
+            "error",
+            str(error or ""),
+            "retry_count",
+            str(retry_count or 0),
+            "failed_at",
+            datetime.utcnow().isoformat() + "Z",
+        )
+        record_event(task_id, "task.dlq", {"tool_name": tool_name, "error": str(error), "retry_count": retry_count})
+
+    def _handle_message(msg_id, obj, reclaimed=False):
+        task_id = obj.get("task_id")
+        tool_name = obj.get("tool_name")
+        run_id = obj.get("run_id")
+        wf_id = obj.get("workflow_id") or ""
+        step_idx = obj.get("step_index") or ""
+        retry_count = int(obj.get("retry_count") or 0)
+        payload = _parse_payload(obj.get("payload", "{}"))
+
+        if not task_id or not tool_name:
+            r.xack(STREAM_TASK, GROUP, msg_id)
+            return
+
+        if reclaimed:
+            record_event(task_id, "task.reclaimed", {"task_id": task_id, "consumer": CONSUMER, "message_id": msg_id})
+
+        _emit_result(task_id, "claimed", wf_id=wf_id, step_idx=step_idx)
+
+        try:
             handler = TOOLS.get(tool_name)
+            if not handler:
+                raise RuntimeError(f"Unknown tool: {tool_name}")
             output = handler(payload)
-            
-            # 如果 output 里包含建议升级模型的信号，我们可以特殊处理状态
+            if not isinstance(output, dict):
+                output = {"ok": True, "raw": output}
             status = "succeeded" if output.get("ok", True) else "failed"
-            res_msg = {"task_id": task_id, "status": status, "output": json.dumps(output), "workflow_id": wf_id or "", "step_index": step_idx or ""}
-            r.xadd(STREAM_RESULT, res_msg)
+            _emit_result(task_id, status, output=output, wf_id=wf_id, step_idx=step_idx)
             r.xack(STREAM_TASK, GROUP, msg_id)
         except Exception as e:
-            print(f"[worker] task failed: {e}")
+            err_text = str(e)
+            if retry_count < MAX_RETRIES:
+                _enqueue_retry(task_id, tool_name, run_id, payload, wf_id, step_idx, retry_count + 1)
+                record_event(task_id, "task.retrying", {"error": err_text, "retry_count": retry_count + 1})
+                r.xack(STREAM_TASK, GROUP, msg_id)
+            else:
+                _send_to_dlq(task_id, tool_name, payload, err_text, retry_count)
+                _emit_result(task_id, "failed", error=err_text, wf_id=wf_id, step_idx=step_idx)
+                r.xack(STREAM_TASK, GROUP, msg_id)
+
+    def _reclaim_pending():
+        if not hasattr(r, "xautoclaim"):
+            return []
+        try:
+            res = r.xautoclaim(
+                STREAM_TASK,
+                GROUP,
+                CONSUMER,
+                min_idle_time=VISIBILITY_TIMEOUT_S * 1000,
+                start_id="0-0",
+                count=10,
+            )
+            if not res:
+                return []
+            _next_id, messages = res[0], res[1]
+            return messages or []
+        except Exception as e:
+            print(f"[worker] reclaim failed: {e}")
+            return []
+
+    last_reclaim = 0.0
+    while True:
+        try:
+            now = time.time()
+            if now - last_reclaim >= RECLAIM_INTERVAL_S:
+                for msg_id, kv in _reclaim_pending():
+                    _handle_message(msg_id, dict(kv), reclaimed=True)
+                last_reclaim = now
+
+            res = r.xreadgroup(GROUP, CONSUMER, streams={STREAM_TASK: ">"}, count=1, block=5000)
+            if not res:
+                continue
+            msg_id, kv = res[0][1][0]
+            _handle_message(msg_id, dict(kv), reclaimed=False)
+        except Exception as e:
+            print(f"[worker] task loop failed: {e}")
             traceback.print_exc()
-            if 'task_id' in locals(): r.xadd(STREAM_RESULT, {"task_id": task_id, "status": "failed", "error": str(e)})
         time.sleep(0.1)
 
 if __name__ == "__main__":

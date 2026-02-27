@@ -9,15 +9,31 @@ export function setQwenModel(modelName) {
 const AGENT_TOOLS_SCHEMA = [
   {
     "tool_name": "quant.deep_analysis",
-    "description": "Analyze a specific stock, company, or ticker. Fetches technical indicators, regression models, and news.",
+    "description": "Analyze a specific stock, company, or ticker. Fetches technical indicators, regression models, and news. Can also provide execution/sizing suggestions if capital is provided.",
     "parameters": {
-      "symbol": "The stock ticker symbol to analyze (e.g., 'NVDA', 'AAPL', '9432.T'). If the user provides a company name, convert it to its ticker symbol if possible."
+      "symbol": "The stock ticker symbol to analyze (e.g., 'NVDA', 'AAPL', '9432.T').",
+      "capital_base_jpy": "Optional: User's total capital in JPY for position sizing suggestions (e.g. 400000).",
+      "mode": "Optional: 'buy' or 'sell' to tailor execution advice."
+    }
+  },
+  {
+    "tool_name": "quant.calc_limit_price",
+    "description": "Calculate specific aggressive/balanced/patient limit prices for a trade based on ATR and volatility.",
+    "parameters": {
+      "symbol": "The stock ticker symbol.",
+      "side": "'BUY' or 'SELL'"
     }
   },
   {
     "tool_name": "quant.discovery_workflow",
-    "description": "Recommend stocks, scan for high-potential stocks, or find good investment opportunities based on market news and quantitative models.",
-    "parameters": {}
+    "description": "Recommend stocks or find investment opportunities. Supports capital-constrained filtering, market focus, and goal-oriented position planning.",
+    "parameters": {
+      "capital_base_jpy": "Optional: Filter stocks that fit within this JPY budget (e.g. 400000).",
+      "max_position_pct": "Optional: Max percentage of capital per stock (default 0.25).",
+      "market": "Optional: 'US' for USA, 'JP' for Japan, or 'ALL' for both.",
+      "goal": "Optional: User objective in plain text (e.g. '6个月稳健增值10%' or '追求成长').",
+      "risk_profile": "Optional: 'low' | 'medium' | 'high'."
+    }
   },
   {
     "tool_name": "news.daily_report",
@@ -123,12 +139,17 @@ export async function qwenChat(messages, timeoutMs = 15000) {
   }
 }
 
-export async function parseIntent(userInput) {
+export async function parseIntent(userInput, context = {}) {
   const defaultLang = detectLanguageFallback(userInput || "");
+
+  let systemPrompt = DISPATCHER_SYSTEM_PROMPT;
+  if (context.last_symbol) {
+    systemPrompt += `\n\nCONTEXT: The user was previously discussing symbol: ${context.last_symbol}. If the current input refers to "it", "this", or doesn't specify a symbol but implies an action on the previously discussed stock, use this symbol.`;
+  }
 
   // Pure LLM Copilot Analyzer
   const data = await qwenChat([
-    { role: "system", content: DISPATCHER_SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
     { role: "user", content: userInput },
   ]);
 

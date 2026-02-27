@@ -3,6 +3,8 @@ import Redis from "ioredis";
 import pg from "pg";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { parseIntent, translate, qwenChat, CURRENT_QWEN_MODEL, setQwenModel } from "./nlp/router.js";
 import { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder } from "discord.js";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
@@ -25,10 +27,37 @@ const {
   MINIO_SECRET_KEY = "nexuspassword",
   AUTO_REPORT_CHANNEL_ID,
   AUTO_REPORT_TIMEZONE = "Asia/Shanghai",
+  APPROVAL_TOKEN = "dev-approval-token",
+  TOOLS_CONFIG_PATH = "configs/tools.json",
 } = process.env;
 
 const QWEN_BASE = process.env.QWEN_BASE_URL || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 const QWEN_MODEL = process.env.QWEN_MODEL || "qwen-plus";
+const RE_COMPOSITE_CUE = /(?:\u7136\u540e|\u4e26\u4e14|\u540c\u65f6|\u63a5\u7740|\u968f\u540e|\u53e6\u5916|\u4ee5\u53ca|;|\uff1b|\n)/i;
+const RE_PRECLOSE = /(?:\u76d8\u5c3e|\u76e4\u5c3e|\u6536\u76d8\u524d|\u6536\u76e4\u524d|preclose)/i;
+const RE_POSTCLOSE = /(?:\u76d8\u540e|\u76e4\u5f8c|\u95ea\u8baf|\u9583\u8a0a|tdnet|postclose|post-close)/i;
+const RE_NEWS_DAILY = /(?:\u65e5\u62a5|daily report|\u5e02\u573a\u65b0\u95fb|news report)/i;
+const RE_DISCOVERY_CUE = /(?:\u5efa\u4ed3|\u5efa\u5009|\u4ed3\u4f4d|\u5009\u4f4d|\u9009\u80a1|\u9078\u80a1|\u6a19\u7684|\u6807\u7684|\u627e.*\u6807\u7684|\u5206\u6279|position plan|portfolio plan|discovery|build[- ]?position|entry plan|staged entry|candidates?|stock picks?|find .*stocks?|find .*candidates?|allocation)/i;
+const RE_DISCOVERY_INDEX = /(?:\u5efa\u4ed3|\u5efa\u5009|\u9009\u80a1|\u9078\u80a1|\u6807\u7684|\u6a19\u7684|\u5206\u6279|discovery|position plan|portfolio plan|build[- ]?position|entry plan|staged entry|candidates?|stock picks?|allocation)/i;
+
+function loadToolsConfig() {
+  try {
+    const resolved = path.resolve(TOOLS_CONFIG_PATH);
+    const raw = fs.readFileSync(resolved, "utf-8");
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed ? parsed : {};
+  } catch (err) {
+    console.warn("[orchestrator] tools.json load failed:", err.message);
+    return {};
+  }
+}
+
+const TOOLS_CONFIG = loadToolsConfig();
+const channelMemory = new Map();
+
+function getToolSpec(toolName) {
+  return TOOLS_CONFIG?.[toolName] || {};
+}
 
 const redis = new Redis(REDIS_URL);
 const pool = new pg.Pool({
@@ -57,6 +86,17 @@ const DISCORD_MAX_CONTENT = 1900;
 function makeIdempotencyKey(run_id, tool_name, payload = {}) {
   const raw = `${run_id}|${tool_name}|${JSON.stringify(payload)}`;
   return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 48);
+}
+
+async function recordEvent(task_id, event_type, payload = {}) {
+  try {
+    await pool.query(
+      "INSERT INTO event_log(task_id, event_type, payload_json) VALUES ($1,$2,$3)",
+      [task_id, event_type, JSON.stringify(payload || {})]
+    );
+  } catch (err) {
+    console.warn(`[orchestrator] event_log insert failed (${event_type}):`, err.message);
+  }
 }
 
 function parseOutputField(rawOutput) {
@@ -128,6 +168,7 @@ async function readS3ObjectBuffer(bucket, key) {
 function bindTaskToContext(task_id, context, tool_name) {
   if (!context) return;
   if (!context.pendingTaskIds) context.pendingTaskIds = new Set();
+  if (!Number.isFinite(context.totalTaskCount) || context.totalTaskCount <= 0) context.totalTaskCount = 1;
   context.pendingTaskIds.add(task_id);
   runToContext.set(context.run_id, context);
   taskToContext.set(task_id, {
@@ -137,6 +178,7 @@ function bindTaskToContext(task_id, context, tool_name) {
     run_id: context.run_id,
     closeRunOnTaskResult: Boolean(context.closeRunOnTaskResult),
     pendingTaskIds: context.pendingTaskIds,
+    totalTaskCount: context.totalTaskCount || 1,
     tool_name: tool_name || context.tool_name || "unknown",
   });
 }
@@ -174,8 +216,8 @@ async function callQwenChat(messages) {
 
 async function upsertTask(task) {
   await pool.query(
-    `INSERT INTO tasks(task_id, tool_name, status, risk_level, payload_json, run_id, idempotency_key)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
+    `INSERT INTO tasks(task_id, tool_name, status, risk_level, payload_json, run_id, idempotency_key, workflow_id, step_index)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      ON CONFLICT (task_id) DO UPDATE SET status=EXCLUDED.status, updated_at=NOW()`,
     [
       task.task_id,
@@ -185,13 +227,18 @@ async function upsertTask(task) {
       JSON.stringify(task.payload),
       task.run_id,
       task.idempotency_key || null,
+      task.workflow_id || null,
+      Number.isFinite(task.step_index) ? task.step_index : null,
     ]
   );
 }
 
-async function enqueueTask({ tool_name, payload, run_id, risk_level = "low", idempotency_key, context }) {
+async function enqueueTask({ tool_name, payload, run_id, risk_level = null, idempotency_key, context }) {
   const fullPayload = { ...(payload || {}), run_id };
   const idem = idempotency_key || makeIdempotencyKey(run_id, tool_name, fullPayload);
+  const spec = getToolSpec(tool_name);
+  const finalRisk = risk_level || spec?.default_risk || "low";
+  const requiresApproval = Boolean(spec?.requires_approval);
 
   const existing = await pool.query("SELECT task_id FROM tasks WHERE idempotency_key=$1 LIMIT 1", [idem]);
   if (existing.rows.length > 0) {
@@ -204,28 +251,279 @@ async function enqueueTask({ tool_name, payload, run_id, risk_level = "low", ide
   await upsertTask({
     task_id,
     tool_name,
-    status: "queued",
-    risk_level,
+    status: requiresApproval ? "waiting_approval" : "queued",
+    risk_level: finalRisk,
     payload: fullPayload,
     run_id,
     idempotency_key: idem,
+    workflow_id: payload?.workflow_id,
+    step_index: payload?.step_index,
   });
 
-  await redis.xadd(
-    STREAM_TASK,
-    "*",
-    "task_id",
-    task_id,
-    "run_id",
-    run_id,
-    "tool_name",
-    tool_name,
-    "payload",
-    JSON.stringify(fullPayload)
-  );
+  await recordEvent(task_id, "task.created", { tool_name, run_id, risk_level: finalRisk });
+  if (requiresApproval) {
+    await recordEvent(task_id, "approval.requested", { tool_name, run_id });
+  } else {
+    await redis.xadd(
+      STREAM_TASK,
+      "*",
+      "task_id",
+      task_id,
+      "run_id",
+      run_id,
+      "tool_name",
+      tool_name,
+      "payload",
+      JSON.stringify(fullPayload),
+      "workflow_id",
+      payload?.workflow_id || "",
+      "step_index",
+      Number.isFinite(payload?.step_index) ? String(payload.step_index) : ""
+    );
+  }
 
   bindTaskToContext(task_id, context, tool_name);
-  return { task_id, deduplicated: false };
+  return { task_id, deduplicated: false, waiting_approval: requiresApproval };
+}
+
+async function enqueueWorkflow({ name, steps, run_id, context = null }) {
+  const normalizedSteps = Array.isArray(steps) ? steps.filter(s => s && s.tool_name) : [];
+  if (normalizedSteps.length === 0) {
+    return { ok: false, error: "No valid steps." };
+  }
+
+  const workflow_id = uuidv4();
+  await pool.query(
+    `INSERT INTO workflows(workflow_id, name, definition_json)
+     VALUES ($1,$2,$3)`,
+    [workflow_id, String(name || "chat-workflow"), JSON.stringify({ steps: normalizedSteps })]
+  );
+
+  if (context) {
+    context.totalTaskCount = normalizedSteps.length;
+    context.completedTaskCount = 0;
+  }
+
+  const tasks = [];
+  for (let i = 0; i < normalizedSteps.length; i++) {
+    const step = normalizedSteps[i];
+    const payload = { ...(step.payload || {}), workflow_id, step_index: i };
+    const enq = await enqueueTask({
+      tool_name: step.tool_name,
+      payload,
+      run_id,
+      risk_level: step.risk_level,
+      idempotency_key: makeIdempotencyKey(run_id, step.tool_name, payload),
+      context,
+    });
+    tasks.push({ task_id: enq.task_id, tool_name: step.tool_name, waiting_approval: enq.waiting_approval });
+  }
+  return { ok: true, workflow_id, run_id, tasks };
+}
+
+function hasCompositeCue(text) {
+  const s = String(text || "");
+  return RE_COMPOSITE_CUE.test(s);
+}
+
+function splitCompositeClauses(text) {
+  const s = String(text || "")
+    .replace(/[；;]/g, "|")
+    .replace(/\n+/g, "|")
+    .replace(/(?:\u7136\u540e|\u4e26\u4e14|\u540c\u65f6|\u63a5\u7740|\u968f\u540e|\u53e6\u5916|\u4ee5\u53ca)/g, "|");
+  return s
+    .split("|")
+    .map(x => x.trim())
+    .filter(x => x.length >= 2);
+}
+
+function fallbackRouteClause(clause) {
+  const raw = String(clause || "").trim();
+  const lower = raw.toLowerCase();
+  if (!raw) return null;
+
+  if (RE_PRECLOSE.test(raw) || lower.includes("pre-close")) {
+    return { tool_name: "news.preclose_brief_jp", payload: {} };
+  }
+  if (RE_POSTCLOSE.test(raw)) {
+    return { tool_name: "news.tdnet_close_flash", payload: {} };
+  }
+  if (RE_NEWS_DAILY.test(raw) || (lower.includes("news") && lower.includes("report"))) {
+    return { tool_name: "news.daily_report", payload: {} };
+  }
+  if (hasDiscoveryCue(raw)) {
+    return { tool_name: "quant.discovery_workflow", payload: buildDiscoveryPayloadFromText(raw) };
+  }
+  if (/设置.*资金|设置.*本金|set.*capital|set account/i.test(raw)) {
+    const m = raw.match(/([0-9]+(?:\.[0-9]+)?)/);
+    const capital = m ? Number(m[1]) : null;
+    if (capital) return { tool_name: "portfolio.set_account", payload: { starting_capital: capital, ccy: /usd/i.test(raw) ? "USD" : "JPY" } };
+  }
+  return null;
+}
+
+function hasDiscoveryCue(text) {
+  const s = String(text || "");
+  return RE_DISCOVERY_CUE.test(s);
+}
+
+function parseCapitalJpy(text) {
+  const s = String(text || "");
+  let m = s.match(/([0-9]+(?:\.[0-9]+)?)\s*(?:w|W|万)/);
+  if (m) return Math.round(Number(m[1]) * 10000);
+  m = s.match(/([0-9]{2,9}(?:\.[0-9]+)?)\s*(?:日元|円|JPY)/i);
+  if (m) return Math.round(Number(m[1]));
+  return null;
+}
+
+function extractGoalText(text) {
+  const s = String(text || "").trim();
+  if (!s) return "";
+  const m1 = s.match(/(?:\u76ee\u6807)[:\uff1a]?\s*([^\uff0c\u3002\uff1b;\n]+)/);
+  if (m1 && m1[1]) return `目标${m1[1].trim()}`;
+  const m2 = s.match(/([0-9]{1,2}\s*(?:\u4e2a\u6708|\u500b\u6708|\u6708)[^\uff0c\u3002\uff1b;\n]{0,40}?[0-9]{1,2}(?:\.[0-9]+)?\s*%[^\uff0c\u3002\uff1b;\n]{0,20})/);
+  if (m2 && m2[1]) return m2[1].trim();
+  return "";
+}
+
+function buildDiscoveryPayloadFromText(text) {
+  const s = String(text || "").trim();
+  const payload = {};
+
+  const capital = parseCapitalJpy(s);
+  if (capital && Number.isFinite(capital) && capital > 0) {
+    payload.capital_base_jpy = capital;
+  }
+
+  if (/(?:\u4f4e\u98ce\u9669|\u4f4e\u98a8\u96aa|\u7a33\u5065|\u7a69\u5065|\u4fdd\u5b88|conservative|low risk)/i.test(s)) {
+    payload.risk_profile = "low";
+  } else if (/(?:\u9ad8\u98ce\u9669|\u9ad8\u98a8\u96aa|\u6fc0\u8fdb|\u6fc0\u9032|\u8fdb\u53d6|\u9032\u53d6|aggressive|high risk)/i.test(s)) {
+    payload.risk_profile = "high";
+  } else if (/(?:\u4e2d\u98ce\u9669|\u4e2d\u98a8\u96aa|\u5e73\u8861|balanced|medium risk)/i.test(s)) {
+    payload.risk_profile = "medium";
+  }
+
+  const jp = /(?:\bJP\b|\u65e5\u80a1|\u65e5\u672c|\u4e1c\u4eac|\u6771\u4eac)/i.test(s);
+  const us = /(?:\bUS\b|\u7f8e\u80a1|\u7f8e\u56fd|\u7f8e\u570b)/i.test(s);
+  if (jp && us) payload.market = "ALL";
+  else if (jp) payload.market = "JP";
+  else if (us) payload.market = "US";
+
+  const mMonth = s.match(/([0-9]{1,2})\s*(?:\u4e2a\u6708|\u500b\u6708|\u6708)/);
+  if (mMonth) payload.horizon_days = Number(mMonth[1]) * 30;
+
+  const mRet = s.match(/([0-9]{1,2}(?:\.[0-9]+)?)\s*%/);
+  if (mRet) payload.target_return_pct = Number(mRet[1]);
+
+  const goalText = extractGoalText(s);
+  if (goalText) {
+    payload.goal = goalText;
+  } else if (/(?:\u76ee\u6807|\u589e\u503c|\u56de\u62a5|\u6536\u76ca|\u5efa\u4ed3\u8ba1\u5212|\u5efa\u5009\u8a08\u5283|\u5206\u6279)/.test(s)) {
+    payload.goal = s.slice(0, 120);
+  }
+  return payload;
+}
+
+function extractRuleBasedStepsFromText(text) {
+  const s = String(text || "");
+  const out = [];
+  const add = (idx, tool_name, payload = {}) => {
+    if (idx < 0) return;
+    out.push({ idx, tool_name, payload });
+  };
+
+  const idxPre = s.search(RE_PRECLOSE);
+  add(idxPre, "news.preclose_brief_jp", {});
+
+  const idxPost = s.search(RE_POSTCLOSE);
+  add(idxPost, "news.tdnet_close_flash", {});
+
+  const idxDaily = s.search(RE_NEWS_DAILY);
+  add(idxDaily, "news.daily_report", {});
+
+  const idxDisc = hasDiscoveryCue(s)
+    ? s.search(RE_DISCOVERY_INDEX)
+    : -1;
+  if (idxDisc >= 0) {
+    add(idxDisc, "quant.discovery_workflow", buildDiscoveryPayloadFromText(s));
+  }
+
+  out.sort((a, b) => a.idx - b.idx);
+  return out.map(({ tool_name, payload }) => ({ tool_name, payload }));
+}
+
+async function planCompositeWorkflowFromText(userInput, memory = {}) {
+  const ruleSteps = extractRuleBasedStepsFromText(userInput);
+  // If rule-based detector already finds multiple tasks, use it directly for stability.
+  if (ruleSteps.length >= 2) {
+    return {
+      name: `chat-composite-${Date.now()}`,
+      steps: ruleSteps,
+    };
+  }
+
+  if (!hasCompositeCue(userInput)) return null;
+  const clauses = splitCompositeClauses(userInput);
+  if (clauses.length < 2) return null;
+
+  const steps = [];
+  const seen = new Set();
+  const pushStep = (step) => {
+    if (!step?.tool_name) return;
+    const key = `${step.tool_name}|${JSON.stringify(step.payload || {})}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    steps.push({ tool_name: step.tool_name, payload: step.payload || {} });
+  };
+  const localMemory = { ...(memory || {}) };
+  for (const clause of clauses) {
+    let intent = null;
+    try {
+      intent = await parseIntent(clause, localMemory);
+    } catch {
+      intent = null;
+    }
+    if (intent?.payload?.symbol) localMemory.last_symbol = intent.payload.symbol;
+    if (intent?.requires_tools && intent?.tool_name && intent?.confidence >= 0.55) {
+      pushStep({
+        tool_name: intent.tool_name,
+        payload: intent.payload || {},
+      });
+      continue;
+    }
+
+    const fallback = fallbackRouteClause(clause);
+    if (fallback?.tool_name) {
+      pushStep({
+        tool_name: fallback.tool_name,
+        payload: fallback.payload || {},
+      });
+    }
+  }
+
+  for (const step of ruleSteps) {
+    pushStep(step);
+  }
+
+  if (steps.length < 2) return null;
+  return {
+    name: `chat-composite-${Date.now()}`,
+    steps,
+  };
+}
+
+function detectLanguageQuick(text) {
+  const s = String(text || "");
+  if (/[\u4e00-\u9fff]/.test(s)) return "zh";
+  if (/[\u3040-\u30ff]/.test(s)) return "ja";
+  return "en";
+}
+
+function summarizeOutputBrief(output) {
+  if (!output || typeof output !== "object") return "Done";
+  const raw = output.analysis || output.summary || output.message || output.stdout || output.raw || "Done";
+  const oneLine = String(raw).replace(/\s+/g, " ").trim();
+  return oneLine.slice(0, 120);
 }
 
 async function callBrainWithRetry(payload, retries = 2) {
@@ -401,8 +699,52 @@ discord.on("messageCreate", async msg => {
       input_text: userInput,
     });
 
-    const intent = await parseIntent(userInput);
+    const memory = channelMemory.get(msg.channelId) || {};
+    const compositePlan = await planCompositeWorkflowFromText(userInput, memory);
+    if (compositePlan) {
+      const lang = detectLanguageQuick(userInput);
+      const context = {
+        channelId: msg.channel.id,
+        startTime: Date.now(),
+        lang,
+        run_id,
+        closeRunOnTaskResult: true,
+        totalTaskCount: compositePlan.steps.length,
+        completedTaskCount: 0,
+      };
+      runToContext.set(run_id, context);
+      await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["running", run_id]);
+
+      const planningText = await translate(
+        `识别到复合指令，已拆分为 ${compositePlan.steps.length} 个子任务，开始执行。`,
+        lang
+      );
+      await msg.reply(`[NEXUS] ${planningText}`);
+
+      const wf = await enqueueWorkflow({
+        name: compositePlan.name,
+        steps: compositePlan.steps,
+        run_id,
+        context,
+      });
+      if (!wf?.ok) {
+        throw new Error(wf?.error || "Failed to enqueue workflow.");
+      }
+
+      const stepNames = compositePlan.steps.map((s, i) => `${i + 1}.${s.tool_name}`).join(" | ");
+      const enqText = await translate(`工作流已创建。run_id=${run_id}。步骤: ${stepNames}`, lang);
+      await msg.reply(`[NEXUS] ${enqText}`);
+      return;
+    }
+
+    const intent = await parseIntent(userInput, memory);
     const lang = intent.language || "zh";
+
+    // Update memory if a symbol was found
+    if (intent.payload && intent.payload.symbol) {
+      memory.last_symbol = intent.payload.symbol;
+      channelMemory.set(msg.channelId, memory);
+    }
 
     let model_preference = "local_small";
     if (rawInput.includes("@api")) model_preference = "api";
@@ -410,7 +752,7 @@ discord.on("messageCreate", async msg => {
 
     // 1. CHAT MODE: If intent analyzer suggests chat or no tools are required
     if (intent.mode_suggested === "chat" || !intent.requires_tools || intent.confidence < 0.6 || !intent.tool_name) {
-      if (model_preference === "api" && process.env.QWEN_API_KEY) {
+      if (process.env.QWEN_API_KEY || model_preference === "api") {
         const reply = await callQwenChat([{ role: "user", content: userInput }]);
         await replyChunked(msg, reply || "I didn't understand that.");
       } else {
@@ -456,6 +798,8 @@ discord.on("messageCreate", async msg => {
         run_id,
         model_preference,
         mode: mode,
+        tool_name: intent.tool_name,
+        tool_payload: intent.payload || {},
         qwen_model: CURRENT_QWEN_MODEL
       });
 
@@ -501,6 +845,11 @@ discord.on("messageCreate", async msg => {
         const fallback = await translate("任务完成，但未生成正文报告。", lang);
         await replyChunked(msg, `[NEXUS] ${fallback}`);
       }
+
+      const elapsedSec = ((Date.now() - context.startTime) / 1000).toFixed(1);
+      const doneRaw = `任务已完成。run_id=${run_id}，耗时=${elapsedSec}s`;
+      const doneText = await translate(doneRaw, lang);
+      await msg.reply(`[NEXUS] ${doneText}`);
     } else {
       const actionMap = {
         "news.daily_report": "正在生成全市场新闻日报，请稍候...",
@@ -551,12 +900,19 @@ async function startResultConsumer() {
 
           if (status === "claimed") {
             await pool.query("UPDATE tasks SET status=$1, updated_at=NOW() WHERE task_id=$2", ["running", task_id]);
+            await recordEvent(task_id, "task.claimed", { task_id });
           } else {
             await pool.query("UPDATE tasks SET status=$1, updated_at=NOW() WHERE task_id=$2", [status, task_id]);
+            if (status === "succeeded") {
+              await recordEvent(task_id, "task.succeeded", { task_id });
+            } else if (status === "failed") {
+              await recordEvent(task_id, "task.failed", { task_id });
+            }
 
             const ctx = taskToContext.get(task_id);
             if (ctx) {
               const channel = await discord.channels.fetch(ctx.channelId).catch(() => null);
+              if (!Array.isArray(ctx.resultItems)) ctx.resultItems = [];
               if (channel && typeof channel.send === "function") {
                 const duration = ((Date.now() - ctx.startTime) / 1000).toFixed(1);
                 const lang = ctx.lang || "zh";
@@ -602,11 +958,39 @@ async function startResultConsumer() {
                 await channel.send({ embeds: [embed], files: attachments });
               }
 
+              ctx.resultItems.push({
+                tool: ctx.tool_name,
+                status,
+                summary: summarizeOutputBrief(output),
+              });
+
               taskToContext.delete(task_id);
               if (ctx.pendingTaskIds) {
                 ctx.pendingTaskIds.delete(task_id);
+                const total = Number(ctx.totalTaskCount || 1);
+                const done = Math.max(0, total - ctx.pendingTaskIds.size);
+                if (total > 1 && channel && typeof channel.send === "function") {
+                  const progressRaw = `任务进度：${done}/${total}（run_id=${ctx.run_id}）`;
+                  const progressText = await translate(progressRaw, ctx.lang || "zh");
+                  await channel.send(`[NEXUS] ${progressText}`);
+                }
                 if (ctx.pendingTaskIds.size === 0 && ctx.closeRunOnTaskResult) {
                   await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", [status === "succeeded" ? "completed" : "failed", ctx.run_id]).catch(() => {});
+                  if (channel && typeof channel.send === "function" && total > 1) {
+                    const lines = (ctx.resultItems || []).map((it, idx) => {
+                      const okMark = it.status === "succeeded" ? "OK" : "FAIL";
+                      return `${idx + 1}. [${okMark}] ${it.tool}: ${it.summary}`;
+                    });
+                    const summaryBlock = lines.length ? lines.join("\n") : "No task details.";
+                    await channel.send(`[NEXUS] 任务总览（run_id=${ctx.run_id}）\n${summaryBlock}`);
+                  }
+                  const doneRaw = status === "succeeded"
+                    ? `本轮任务已全部完成。run_id=${ctx.run_id}`
+                    : `本轮任务已结束，但存在失败任务。run_id=${ctx.run_id}`;
+                  const doneText = await translate(doneRaw, ctx.lang || "zh");
+                  if (channel && typeof channel.send === "function") {
+                    await channel.send(`[NEXUS] ${doneText}`);
+                  }
                   runToContext.delete(ctx.run_id);
                 }
               }
@@ -638,6 +1022,21 @@ const app = express();
 app.use(express.json());
 app.get("/health", (_, res) => res.send("ok"));
 
+app.post("/debug/plan", async (req, res) => {
+  try {
+    const message = String(req.body?.message || "");
+    const composite = await planCompositeWorkflowFromText(message, {});
+    return res.json({
+      ok: true,
+      hasCompositeCue: hasCompositeCue(message),
+      ruleSteps: extractRuleBasedStepsFromText(message),
+      composite,
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || "debug plan failed" });
+  }
+});
+
 app.post("/execute-tool", async (req, res) => {
   const { tool_name, payload, run_id } = req.body;
   if (!tool_name || !run_id) {
@@ -666,6 +1065,88 @@ app.post("/execute-tool", async (req, res) => {
   return res.json({ ok: true, task_id: queued.task_id, deduplicated: queued.deduplicated });
 });
 
+app.post("/tasks/:task_id/approve", async (req, res) => {
+  const token = req.header("X-Approval-Token") || "";
+  if (token !== APPROVAL_TOKEN) {
+    return res.status(403).json({ ok: false, error: "invalid approval token" });
+  }
+
+  const task_id = req.params.task_id;
+  const row = await pool.query(
+    "SELECT task_id, tool_name, payload_json, run_id, status, workflow_id, step_index FROM tasks WHERE task_id=$1",
+    [task_id]
+  );
+  if (row.rows.length === 0) {
+    return res.status(404).json({ ok: false, error: "task not found" });
+  }
+  const task = row.rows[0];
+  if (task.status !== "waiting_approval") {
+    return res.status(409).json({ ok: false, error: `task status is ${task.status}` });
+  }
+
+  await pool.query("UPDATE tasks SET status=$1, updated_at=NOW() WHERE task_id=$2", ["queued", task_id]);
+  await recordEvent(task_id, "approval.approved", { task_id });
+
+  let payload = {};
+  try {
+    payload = JSON.parse(task.payload_json || "{}");
+  } catch {
+    payload = {};
+  }
+
+  await redis.xadd(
+    STREAM_TASK,
+    "*",
+    "task_id",
+    task_id,
+    "run_id",
+    task.run_id || "",
+    "tool_name",
+    task.tool_name,
+    "payload",
+    JSON.stringify(payload),
+    "workflow_id",
+    task.workflow_id || "",
+    "step_index",
+    Number.isFinite(task.step_index) ? String(task.step_index) : ""
+  );
+
+  return res.json({ ok: true, task_id });
+});
+
+app.post("/workflows", async (req, res) => {
+  const { name, definition } = req.body || {};
+  const steps = definition?.steps;
+  if (!name || !Array.isArray(steps) || steps.length === 0) {
+    return res.status(400).json({ ok: false, error: "name and definition.steps are required" });
+  }
+
+  const run_id = uuidv4();
+
+  await ensureRun(run_id, {
+    client_msg_id: `workflow-${run_id}`,
+    user_id: "workflow",
+    status: "running",
+    input_text: `workflow:${name}`,
+  });
+
+  try {
+    const wf = await enqueueWorkflow({
+      name: String(name),
+      steps,
+      run_id,
+      context: null,
+    });
+    if (!wf?.ok) {
+      return res.status(500).json({ ok: false, error: wf?.error || "workflow enqueue failed" });
+    }
+    return res.json({ ok: true, workflow_id: wf.workflow_id, run_id, tasks: wf.tasks });
+  } catch (err) {
+    await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["failed", run_id]).catch(() => {});
+    return res.status(500).json({ ok: false, error: err.message || "workflow enqueue error" });
+  }
+});
+
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
   const run_id = uuidv4();
@@ -681,6 +1162,31 @@ app.post("/chat", async (req, res) => {
     return res.status(500).json({ ok: false, error: `Failed to initialize run: ${e.message}` });
   }
 
+  const compositePlan = await planCompositeWorkflowFromText(message || "", {});
+
+  if (compositePlan) {
+    try {
+      await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["running", run_id]);
+      const wf = await enqueueWorkflow({
+        name: compositePlan.name,
+        steps: compositePlan.steps,
+        run_id,
+        context: null,
+      });
+      if (!wf?.ok) throw new Error(wf?.error || "workflow enqueue failed");
+      return res.json({
+        ok: true,
+        mode: "workflow",
+        workflow_id: wf.workflow_id,
+        run_id,
+        tasks: wf.tasks,
+      });
+    } catch (e) {
+      await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["failed", run_id]).catch(() => {});
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+
   const intent = await parseIntent(message || "");
 
   if (intent.confidence > 0.6 && intent.tool_name) {
@@ -689,6 +1195,9 @@ app.post("/chat", async (req, res) => {
       const brainData = await callBrainWithRetry({
         symbol: intent.payload.symbol || "unknown",
         run_id,
+        mode: intent.tool_name === "quant.discovery_workflow" ? "discovery" : "analysis",
+        tool_name: intent.tool_name,
+        tool_payload: intent.payload || {},
         model_preference: "local_small",
         qwen_model: CURRENT_QWEN_MODEL
       });
@@ -715,6 +1224,12 @@ app.post("/chat", async (req, res) => {
 });
 
 async function main() {
+  try {
+    await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS workflow_id TEXT");
+    await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS step_index INT");
+  } catch (err) {
+    console.warn("[orchestrator] schema ensure failed:", err.message);
+  }
   try {
     await redis.xgroup("CREATE", STREAM_TASK, GROUP_TASK, "$", "MKSTREAM");
   } catch {}

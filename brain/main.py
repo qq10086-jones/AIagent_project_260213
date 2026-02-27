@@ -12,10 +12,12 @@ def run_brain():
     
     # Run the graph
     inputs = {
-        "symbol": data.get("symbol", "NVDA"),
+        "symbol": data.get("symbol", "unknown"),
         "run_id": data.get("run_id", "manual"),
         "mode": data.get("mode", "analysis"), # Default to single analysis
         "model_preference": data.get("model_preference", "local_small"),
+        "tool_name": data.get("tool_name"),
+        "tool_payload": data.get("tool_payload") or {},
         "qwen_model": data.get("qwen_model", os.getenv("QWEN_MODEL", "qwen-max")),
         "facts": [],
         "candidates": [],

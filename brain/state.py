@@ -11,6 +11,8 @@ class AgentState(TypedDict):
     symbol: str
     mode: str # 'analysis' for specific ticker, 'discovery' for market scan
     model_preference: str # 'local_small', 'local_large', 'api'
+    tool_name: NotRequired[str]
+    tool_payload: NotRequired[Dict]
     qwen_model: NotRequired[str]
     report_markdown: NotRequired[str]
     report_html_object_key: NotRequired[str]

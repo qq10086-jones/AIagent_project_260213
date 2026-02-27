@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS fills (
   fee REAL DEFAULT 0,
   tax REAL DEFAULT 0,
   venue TEXT DEFAULT 'SBI',
-  external_ref TEXT               -- e.g. 約定番号
+  external_ref TEXT,              -- e.g. 約定番号
+  source TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_fills_run ON fills(run_id);
 CREATE INDEX IF NOT EXISTS idx_fills_asof ON fills(asof);

@@ -14,6 +14,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 3. 拷贝所有代码
+ARG CACHEBUST=1
 COPY . .
 
 # 启动

@@ -18,10 +18,9 @@ echo [OK] Docker 已就绪。
 :: 2. 检查 Ollama (宿主机运行模式)
 curl -s http://127.0.0.1:11434/api/tags >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [WARN] 宿主机 Ollama 未响应，尝试拉起...
-    start ollama serve
-    echo 等待 Ollama 初始化...
-    timeout /t 5 >nul
+    echo [INFO] 宿主机 Ollama 未启动或未安装。
+    echo [INFO] 如果您已配置使用 Qwen/DashScope 等线上模型，可以忽略此提示。
+    echo [INFO] 如需本地模型，请手动启动 Ollama。
 ) else (
     echo [OK] Ollama 服务运行中。
 )

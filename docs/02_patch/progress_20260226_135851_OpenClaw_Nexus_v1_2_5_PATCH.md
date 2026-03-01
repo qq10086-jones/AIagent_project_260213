@@ -2,7 +2,7 @@
 
 - Patch Time: 2026-02-26 13:58:51
 - Version: `OpenClaw_Nexus_v1_2_5_PATCH`
-- Baseline: `docs/progress_20260226_120858_OpenClaw_Nexus_v1_2_4.md`
+- Baseline: `docs/03_feature_development/progress_reports/progress_20260226_120858_OpenClaw_Nexus_v1_2_4.md`
 
 ## Patch Goal
 

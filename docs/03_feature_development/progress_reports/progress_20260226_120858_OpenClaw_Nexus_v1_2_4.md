@@ -2,8 +2,8 @@
 
 - 报告时间: 2026-02-26 12:08:58
 - 项目版本: `OpenClaw_Nexus_v1_2_4`
-- 基线文档: `AIagent_project/Project_OpenClaw_Nexus_v1_2_3_MAS.md`
-- 后续补丁: `docs/progress_20260226_135851_OpenClaw_Nexus_v1_2_5_PATCH.md`
+- 基线文档: `docs/90_archive/legacy_workspace/AIagent_project/Project_OpenClaw_Nexus_v1_2_3_MAS.md`
+- 后续补丁: `docs/02_patch/progress_20260226_135851_OpenClaw_Nexus_v1_2_5_PATCH.md`
 
 ## 本次里程碑结论
 

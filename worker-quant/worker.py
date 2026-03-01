@@ -9,7 +9,7 @@ import boto3
 from datetime import datetime, timedelta
 import urllib.request
 import urllib.error
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageStat
 import requests
 from jinja2 import Template
 import uuid
@@ -43,8 +43,9 @@ MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "nexuspassword")
 
 # --- LLM Config ---
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower() # ollama, openai, dashscope, gemini
-OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://192.168.1.113:11434")
+OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
 OLLAMA_CHAT_API = f"{OLLAMA_BASE}/api/chat"
+OLLAMA_GENERATE_API = f"{OLLAMA_BASE}/api/generate"
 
 # Cloud Provider Configs
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -71,7 +72,7 @@ def get_llm_response(system: str, user: str, model: str | None = None, provider:
             model = m_name
 
     if prov == "ollama":
-        data = json.dumps({
+        chat_data = json.dumps({
             "model": model,
             "messages": [
                 {"role": "system", "content": system},
@@ -79,12 +80,31 @@ def get_llm_response(system: str, user: str, model: str | None = None, provider:
             ],
             "stream": False
         }).encode("utf-8")
-        req = urllib.request.Request(OLLAMA_CHAT_API, data=data, method="POST")
+        req = urllib.request.Request(OLLAMA_CHAT_API, data=chat_data, method="POST")
         req.add_header("Content-Type", "application/json")
         try:
             with urllib.request.urlopen(req, timeout=timeout_s) as resp:
                 raw_res = json.loads(resp.read().decode("utf-8"))
                 return raw_res.get("message", {}).get("content", "")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                # Compatibility fallback for Ollama versions without /api/chat.
+                gen_data = json.dumps({
+                    "model": model,
+                    "prompt": f"System:\n{system}\n\nUser:\n{user}",
+                    "stream": False
+                }).encode("utf-8")
+                gen_req = urllib.request.Request(OLLAMA_GENERATE_API, data=gen_data, method="POST")
+                gen_req.add_header("Content-Type", "application/json")
+                try:
+                    with urllib.request.urlopen(gen_req, timeout=timeout_s) as gen_resp:
+                        gen_res = json.loads(gen_resp.read().decode("utf-8"))
+                        return gen_res.get("response", "")
+                except Exception as gen_err:
+                    print(f"[LLM] Ollama generate fallback error: {gen_err}")
+                    return ""
+            print(f"[LLM] Ollama HTTP error: {e}")
+            return ""
         except Exception as e:
             print(f"[LLM] Ollama error: {e}")
             return ""
@@ -100,7 +120,8 @@ def get_llm_response(system: str, user: str, model: str | None = None, provider:
 
         if not api_key:
             print(f"[LLM] Provider {prov} requested but API key is missing.")
-            return ""
+            print("[LLM] Falling back to Ollama due to missing cloud API key...")
+            return get_llm_response(system, user, model=model, provider="ollama", timeout_s=timeout_s)
 
         url = f"{base_url.rstrip('/')}/chat/completions"
         payload = {
@@ -125,7 +146,7 @@ def get_llm_response(system: str, user: str, model: str | None = None, provider:
             # Fallback to Ollama if it's not the primary
             if prov != "ollama":
                 print("[LLM] Falling back to Ollama...")
-                return get_llm_response(system, user, provider="ollama")
+                return get_llm_response(system, user, model=model, provider="ollama", timeout_s=timeout_s)
             return ""
     
     return ""
@@ -395,15 +416,20 @@ def calc_limit_price_tool(payload: dict):
 # --- AI Analysis with Fallback Request ---
 def ai_analyze_report(payload: dict):
     model = payload.get("model") or QUANT_LLM_MODEL
+    direct_prompt = str(payload.get("prompt") or "").strip()
     report_path = Path("/app/quant_trading/Project_optimized/reports/strategy_report.html")
     
     content = "Summary of backtest results unavailable."
     if report_path.exists():
         with open(report_path, "r", encoding="utf-8") as f:
-            content = f.read()[:6000] # 上下文控制
+            content = f.read()[:2500]
 
-    system = "You are a senior quantitative analyst. Provide 3 sharp insights based on the HTML report provided."
-    user = f"Here is the report content:\n{content}"
+    if direct_prompt:
+        system = "You are a concise financial AI assistant."
+        user = direct_prompt
+    else:
+        system = "You are a senior quantitative analyst. Provide 3 sharp insights based on the HTML report provided."
+        user = f"Here is the report content:\n{content}"
     
     analysis = get_llm_response(system, user, model=model)
     if analysis:
@@ -413,7 +439,7 @@ def ai_analyze_report(payload: dict):
 
 
 def fetch_stock_price(payload: dict):
-    symbol = str(payload.get("symbol", "NVDA")).upper()
+    symbol = _normalize_symbol_for_lookup(payload.get("symbol", "NVDA"))
     quote = _fetch_quote_facts(symbol)
     return {"symbol": symbol, "price": quote.get("price"), "ts": time.time(), "company_name": quote.get("company_name")}
 
@@ -422,6 +448,17 @@ def _quote_url(symbol: str) -> str:
     if sym.endswith(".T"):
         return f"https://finance.yahoo.co.jp/quote/{sym}"
     return f"https://finance.yahoo.com/quote/{sym}"
+
+def _normalize_symbol_for_lookup(symbol: str) -> str:
+    sym = str(symbol or "").upper().strip()
+    # Most JP cash equities are 4-digit codes; normalize to Yahoo JP suffix.
+    if re.fullmatch(r"\d{4}", sym):
+        return f"{sym}.T"
+    return sym
+
+def _infer_market_from_symbol(symbol: str) -> str:
+    sym = _normalize_symbol_for_lookup(symbol)
+    return "JP" if sym.endswith(".T") else "US"
 
 def _safe_float(v):
     try:
@@ -435,7 +472,7 @@ def _safe_float(v):
         return None
 
 def _fetch_quote_facts(symbol: str) -> dict:
-    sym = str(symbol or "").upper()
+    sym = _normalize_symbol_for_lookup(symbol)
     ticker = yf.Ticker(sym)
     company_name = None
     currency = None
@@ -560,7 +597,7 @@ def _fetch_ss6_signal(symbol: str) -> dict:
     return {"found": False}
 
 def _compute_quant_metrics(symbol: str) -> dict:
-    sym = str(symbol or "").upper()
+    sym = _normalize_symbol_for_lookup(symbol)
     ticker = yf.Ticker(sym)
     
     # NEW: Fetch professional signal first
@@ -1382,15 +1419,67 @@ def _openclaw_run(op: str, args: dict):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-def _openclaw_capture_urls(urls: list[str], full_page: bool = True, max_shots: int = 3):
+def _is_probably_blank_image(bucket: str, object_key: str) -> bool:
+    """
+    Heuristic blank-image detector for archived screenshots.
+    Returns True only when image is very likely a near-solid frame.
+    """
+    try:
+        s3 = get_s3_client()
+        obj = s3.get_object(Bucket=bucket, Key=object_key)
+        data = obj["Body"].read()
+        if not data:
+            return True
+        img = Image.open(io.BytesIO(data)).convert("L")
+        # Downsample for fast stats while keeping global luminance structure.
+        img = img.resize((256, 256))
+        stat = ImageStat.Stat(img)
+        stddev = float(stat.stddev[0]) if stat.stddev else 0.0
+        hist = img.histogram()
+        total = float(sum(hist) or 1.0)
+        very_bright = float(sum(hist[245:])) / total
+        very_dark = float(sum(hist[:10])) / total
+        # Very low variance + dominated by bright/dark pixels => likely blank.
+        if stddev < 2.2 and (very_bright > 0.985 or very_dark > 0.985):
+            return True
+        return False
+    except Exception:
+        # Fail open: keep artifact when detector cannot verify.
+        return False
+
+def _openclaw_capture_urls(
+    urls: list[str],
+    full_page: bool = True,
+    max_shots: int = 3,
+    stats_out: Optional[dict] = None,
+):
     artifacts = []
+    stats = {
+        "requested": len(urls or []),
+        "attempted": 0,
+        "archived_ok": 0,
+        "blank_filtered": 0,
+        "kept": 0,
+        "start_ok": None,
+        "skipped_reason": "",
+    }
+    if isinstance(stats_out, dict):
+        stats_out.clear()
+        stats_out.update(stats)
     if not urls:
         return artifacts
     urls = urls[:max_shots]
     start = _openclaw_run("browser.start", {})
     if not start.get("ok", False):
+        stats["start_ok"] = False
+        stats["skipped_reason"] = str(start.get("error") or "browser_start_failed")
+        if isinstance(stats_out, dict):
+            stats_out.clear()
+            stats_out.update(stats)
         return artifacts
+    stats["start_ok"] = True
     for u in urls:
+        stats["attempted"] += 1
         _openclaw_run("browser.open", {"url": u})
         shot = _openclaw_run("browser.screenshot", {"fullPage": full_page})
         path = None
@@ -1401,13 +1490,24 @@ def _openclaw_capture_urls(urls: list[str], full_page: bool = True, max_shots: i
         if path:
             archived = _openclaw_run("artifact.archive", {"path": path})
             if archived.get("ok"):
+                stats["archived_ok"] += 1
+                bucket = archived.get("bucket", "nexus-evidence")
+                object_key = archived.get("object_key")
+                if object_key and _is_probably_blank_image(bucket, object_key):
+                    stats["blank_filtered"] += 1
+                    continue
                 artifacts.append({
                     "name": f"browser_screenshot_{len(artifacts)+1}.png",
-                    "object_key": archived.get("object_key"),
+                    "bucket": bucket,
+                    "object_key": object_key,
                     "sha256": archived.get("sha256"),
                     "size": 0,
                     "mime": "image/png",
                 })
+    stats["kept"] = len(artifacts)
+    if isinstance(stats_out, dict):
+        stats_out.clear()
+        stats_out.update(stats)
     return artifacts
 
 def _make_report_card(title: str, subtitle: str, stats: list[str], out_path: Path):
@@ -1596,69 +1696,226 @@ def news_daily_report(payload: dict):
 <html lang="zh">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Daily Market News Report {{ date }}</title>
   <style>
-    body { font-family: Arial, Helvetica, sans-serif; margin: 24px; color: #111; }
-    h1 { margin-bottom: 6px; }
-    .meta { color: #555; margin-bottom: 18px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; }
-    .item { margin-bottom: 12px; }
-    .item-title { font-weight: bold; }
-    .tag { display: inline-block; padding: 2px 6px; background: #eef; margin-right: 6px; border-radius: 4px; font-size: 12px; }
-    .small { color: #666; font-size: 12px; }
-    img { max-width: 100%; }
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --brand: #0b6f5f;
+      --chip: #e8f4ef;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", Arial, sans-serif;
+      background: linear-gradient(160deg, #f2f8f7 0%, var(--bg) 45%, #eef2ff 100%);
+      color: var(--ink);
+    }
+    .wrap {
+      max-width: 1180px;
+      margin: 28px auto;
+      padding: 0 14px 28px;
+    }
+    .hero {
+      background: radial-gradient(1200px 280px at 10% -20%, #32c3a6 0%, #0b6f5f 55%, #134e4a 100%);
+      color: #f8fafc;
+      border-radius: 16px;
+      padding: 20px 22px;
+      box-shadow: 0 14px 34px rgba(11, 111, 95, 0.24);
+    }
+    .hero h1 {
+      margin: 0 0 8px;
+      letter-spacing: .2px;
+      font-size: 27px;
+      line-height: 1.2;
+    }
+    .hero .meta {
+      color: #dff7f0;
+      font-size: 14px;
+      opacity: .95;
+    }
+    .chips {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.25);
+      font-size: 12px;
+      color: #f8fafc;
+    }
+    .grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 1.35fr .9fr;
+      gap: 14px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 5px 14px rgba(15, 23, 42, .05);
+    }
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      color: #0f172a;
+    }
+    .summary-list {
+      margin: 0;
+      padding-left: 18px;
+    }
+    .summary-list li {
+      margin: 6px 0;
+      line-height: 1.45;
+    }
+    .highlight {
+      border-top: 1px dashed var(--line);
+      padding-top: 12px;
+      margin-top: 12px;
+    }
+    .item {
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .item:last-child {
+      border-bottom: 0;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    .item-title {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.4;
+      margin-bottom: 6px;
+    }
+    .item-title a {
+      color: #0f172a;
+      text-decoration: none;
+    }
+    .item-title a:hover {
+      color: #0b6f5f;
+      text-decoration: underline;
+    }
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      margin-right: 6px;
+      margin-top: 6px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: #116149;
+      border: 1px solid #cbe9de;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .charts img {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+    .all-items {
+      margin-top: 14px;
+    }
+    .all-items ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .all-items li {
+      margin-bottom: 10px;
+      line-height: 1.45;
+    }
+    @media (max-width: 960px) {
+      .grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 23px; }
+    }
   </style>
 </head>
 <body>
-  <h1>Daily Market News Report</h1>
-  <div class="meta">Date: {{ date }} | Items: {{ items|length }} | Lookback: {{ lookback_hours }}h</div>
-  <div class="grid">
-    <div class="card">
-      <h3>Summary</h3>
-      {% if summary_lines %}
-        <ul>
-          {% for s in summary_lines %}
-            <li>{{ s }}</li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <div class="small">No summary generated.</div>
-      {% endif %}
-      <h3>Highlights</h3>
-      {% for it in items[:10] %}
-      <div class="item">
-        <div class="item-title"><a href="{{ it.url }}">{{ it.title }}</a></div>
-        <div class="small">{{ it.source }} | {{ it.seendate }} | {{ it.lang }}</div>
-        {% if it.tickers %}
-          <div>
-            {% for t in it.tickers %}
-              <span class="tag">{{ t }}</span>
-            {% endfor %}
-          </div>
-        {% endif %}
-        {% if it.snippet %}
-          <div class="small">{{ it.snippet }}</div>
-        {% endif %}
+  <div class="wrap">
+    <section class="hero">
+      <h1>NEXUS Daily Market News</h1>
+      <div class="meta">Date: {{ date }} | Items: {{ items|length }} | Lookback: {{ lookback_hours }}h</div>
+      <div class="chips">
+        <span class="chip">Auto-Collected</span>
+        <span class="chip">Freshness-Aware</span>
+        <span class="chip">Ticker-Tagged</span>
       </div>
-      {% endfor %}
-    </div>
-    <div class="card">
-      <h3>Charts</h3>
-      {% if charts.tickers %}<img src="{{ charts.tickers }}" />{% endif %}
-      {% if charts.sources %}<img src="{{ charts.sources }}" />{% endif %}
-    </div>
-  </div>
-  <div class="card" style="margin-top:16px;">
-    <h3>All Items</h3>
-    <ol>
-      {% for it in items %}
-        <li class="item">
-          <div class="item-title"><a href="{{ it.url }}">{{ it.title }}</a></div>
-          <div class="small">{{ it.source }} | {{ it.seendate }} | {{ it.lang }}</div>
-        </li>
-      {% endfor %}
-    </ol>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h3>Summary</h3>
+        {% if summary_lines %}
+          <ul class="summary-list">
+            {% for s in summary_lines %}
+              <li>{{ s }}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="small">No summary generated.</div>
+        {% endif %}
+
+        <div class="highlight">
+          <h3>Top Highlights</h3>
+          {% for it in items[:10] %}
+          <div class="item">
+            <div class="item-title"><a href="{{ it.url }}" target="_blank" rel="noreferrer">{{ it.title }}</a></div>
+            <div class="small">{{ it.source }} | {{ it.seendate }} | {{ it.lang }}</div>
+            {% if it.tickers %}
+              <div>
+                {% for t in it.tickers %}
+                  <span class="tag">{{ t }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
+            {% if it.snippet %}
+              <div class="small" style="margin-top:6px;">{{ it.snippet }}</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <aside class="card charts">
+        <h3>Visual Snapshot</h3>
+        {% if charts.tickers %}<img src="{{ charts.tickers }}" alt="Ticker Mentions" />{% endif %}
+        {% if charts.sources %}<img src="{{ charts.sources }}" alt="Source Mentions" />{% endif %}
+        {% if not charts.tickers and not charts.sources %}
+          <div class="small">No chart data available.</div>
+        {% endif %}
+      </aside>
+    </section>
+
+    <section class="card all-items">
+      <h3>All Collected Items</h3>
+      <ol>
+        {% for it in items %}
+          <li>
+            <div class="item-title"><a href="{{ it.url }}" target="_blank" rel="noreferrer">{{ it.title }}</a></div>
+            <div class="small">{{ it.source }} | {{ it.seendate }} | {{ it.lang }}</div>
+          </li>
+        {% endfor %}
+      </ol>
+    </section>
   </div>
 </body>
 </html>
@@ -1698,6 +1955,370 @@ def news_daily_report(payload: dict):
         "artifacts": artifacts,
         "analysis": summary_text,
     }
+
+def _get_current_positions_from_fills(max_symbols: int = 20) -> list[dict]:
+    db_path = Path("/app/quant_trading/Project_optimized/japan_market.db")
+    if not db_path.exists():
+        return []
+    conn = None
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                UPPER(symbol) AS symbol,
+                SUM(CASE WHEN UPPER(side)='BUY' THEN qty ELSE -qty END) AS net_qty
+            FROM fills
+            GROUP BY UPPER(symbol)
+            HAVING net_qty > 0
+            ORDER BY net_qty DESC
+            LIMIT ?
+            """,
+            (max_symbols,),
+        )
+        out = []
+        for row in cur.fetchall() or []:
+            sym = _normalize_symbol_for_lookup(row[0])
+            qty = _safe_float(row[1]) or 0.0
+            if sym and qty > 0:
+                out.append({
+                    "symbol": sym,
+                    "net_qty": qty,
+                    "market": _infer_market_from_symbol(sym),
+                })
+        return out
+    except Exception:
+        return []
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+def _get_account_state_snapshot() -> dict:
+    db_path = Path("/app/quant_trading/Project_optimized/japan_market.db")
+    if not db_path.exists():
+        return {}
+    conn = None
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT starting_capital, base_ccy
+            FROM account_state
+            ORDER BY created_at DESC
+            LIMIT 1
+            """
+        )
+        row = cur.fetchone()
+        if not row:
+            return {}
+        return {
+            "starting_capital": _safe_float(row[0]),
+            "base_ccy": str(row[1] or "JPY").upper().strip(),
+        }
+    except Exception:
+        return {}
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+def _score_hot_article(item: dict, lookback_hours: int, trusted_publishers: list[str], hot_keywords: list[str]) -> float:
+    title = str(item.get("title") or "").lower()
+    source = str(item.get("source") or item.get("publisher") or "").lower()
+    dt = _parse_article_dt(item)
+    age_h = lookback_hours
+    if dt is not None:
+        age_h = max(0.0, (datetime.utcnow() - dt).total_seconds() / 3600.0)
+    recency = max(0.0, 1.0 - (age_h / max(1.0, float(lookback_hours))))
+    src_score = 1.0 if any(p in source for p in trusted_publishers) else 0.4
+    kw_hits = sum(1 for k in hot_keywords if k in title)
+    kw_score = min(1.0, kw_hits / 4.0)
+    return round(100.0 * (0.55 * recency + 0.25 * src_score + 0.20 * kw_score), 2)
+
+def news_active_hot_search(payload: dict):
+    run_id = payload.get("run_id")
+    lookback_hours = int(payload.get("lookback_hours", 24))
+    top_n = int(payload.get("top_n", 8))
+    top_n = max(5, min(top_n, 10))
+    include_positions = _to_bool(payload.get("include_positions"), default=True)
+    date_str = payload.get("date") or _now_date_str()
+
+    trusted_publishers = [
+        "reuters", "bloomberg", "nikkei", "ft", "financial times", "wsj",
+        "marketwatch", "yahoo", "cnbc", "investing.com"
+    ]
+    hot_keywords = [
+        "earnings", "guidance", "fed", "fomc", "inflation", "cpi", "rate",
+        "yield", "ai", "semiconductor", "chip", "layoff", "buyback",
+        "并购", "财报", "加息", "降息", "日银", "boj", "业绩"
+    ]
+
+    end_dt = datetime.utcnow()
+    start_dt = end_dt - timedelta(hours=lookback_hours)
+
+    seed_queries = [
+        "global stock market OR macro OR inflation OR central bank OR rate decision OR guidance",
+        "Middle East OR Ukraine OR conflict OR oil OR crude OR sanctions AND stock market",
+        "AI OR semiconductor OR chip OR Nvidia OR TSMC OR Microsoft OR OpenAI",
+        "Nikkei OR TOPIX OR Japan stocks OR BOJ OR yen",
+    ]
+
+    raw_items = []
+    for q in seed_queries:
+        arts = _gdelt_doc_search(q, start_dt, end_dt, max_records=80)
+        for art in arts:
+            if not isinstance(art, dict):
+                continue
+            title = str(art.get("title") or "").strip()
+            url = str(art.get("url") or "").strip()
+            if not title or not url:
+                continue
+            raw_items.append({
+                "title": title,
+                "url": url,
+                "source": str(art.get("source") or art.get("domain") or "gdelt").strip(),
+                "seendate": str(art.get("seendate") or art.get("pubdate") or "").strip(),
+                "publisher": str(art.get("source") or art.get("domain") or "gdelt").strip(),
+            })
+
+    # Broaden sources to avoid channel lock-in
+    for n in _fetch_news_from_google_rss("global market", "finance economy geopolitics", max_items=40, lang="en"):
+        raw_items.append({
+            "title": str(n.get("title") or "").strip(),
+            "url": str(n.get("url") or "").strip(),
+            "source": str(n.get("publisher") or "google_news").strip(),
+            "published_at": str(n.get("published_at") or "").strip(),
+            "published_ts": n.get("published_ts"),
+            "publisher": str(n.get("publisher") or "").strip(),
+        })
+    for n in _fetch_news_from_google_rss("world economy", "energy oil rates geopolitics", max_items=25, lang="zh"):
+        raw_items.append({
+            "title": str(n.get("title") or "").strip(),
+            "url": str(n.get("url") or "").strip(),
+            "source": str(n.get("publisher") or "google_news_zh").strip(),
+            "published_at": str(n.get("published_at") or "").strip(),
+            "published_ts": n.get("published_ts"),
+            "publisher": str(n.get("publisher") or "").strip(),
+        })
+    for n in _fetch_news_from_google_rss("日本株", "ニュース", max_items=20, lang="ja"):
+        raw_items.append({
+            "title": str(n.get("title") or "").strip(),
+            "url": str(n.get("url") or "").strip(),
+            "source": str(n.get("publisher") or "google_news_ja").strip(),
+            "published_at": str(n.get("published_at") or "").strip(),
+            "published_ts": n.get("published_ts"),
+            "publisher": str(n.get("publisher") or "").strip(),
+        })
+
+    dedup = []
+    seen = set()
+    for it in raw_items:
+        t = str(it.get("title") or "").strip()
+        u = str(it.get("url") or "").strip()
+        if not t or not u:
+            continue
+        key = (t.lower(), u.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        dedup.append(it)
+
+    fresh_items, fresh_stats = _apply_freshness_policy(dedup, max_age_hours=float(lookback_hours))
+    scored = []
+    for it in fresh_items:
+        hotness = _score_hot_article(it, lookback_hours, trusted_publishers, hot_keywords)
+        row = dict(it)
+        row["hotness"] = hotness
+        scored.append(row)
+    scored.sort(key=lambda x: (x.get("hotness", 0), str(x.get("seendate") or x.get("published_at") or "")), reverse=True)
+    hot_news = scored[:top_n]
+
+    # Position-linked news
+    position_news = []
+    positions = _get_current_positions_from_fills(max_symbols=12) if include_positions else []
+    for p in positions:
+        sym = p.get("symbol")
+        if not sym:
+            continue
+        quote = _fetch_quote_facts(sym)
+        company_name = str(quote.get("company_name") or "").strip()
+        merged = _merge_recent_news(quote, max_items=6)
+        # Extra global fetch for holdings: improves recall beyond fixed channels.
+        pos_query = f"{sym} OR {company_name or sym} stock OR earnings OR guidance OR outlook"
+        for art in _gdelt_doc_search(pos_query, start_dt, end_dt, max_records=30):
+            if not isinstance(art, dict):
+                continue
+            t = str(art.get("title") or "").strip()
+            u = str(art.get("url") or "").strip()
+            if not t or not u:
+                continue
+            merged.append({
+                "title": t,
+                "url": u,
+                "publisher": str(art.get("source") or art.get("domain") or "gdelt").strip(),
+                "published_at": str(art.get("seendate") or art.get("pubdate") or "").strip(),
+                "source": "gdelt_holding",
+            })
+        merged.extend(_fetch_news_from_google_rss(sym, company_name, max_items=6, lang="en"))
+        merged.extend(_fetch_news_from_google_rss(sym, company_name, max_items=4, lang="ja"))
+        merged_fresh, _ = _apply_freshness_policy(merged, max_age_hours=float(lookback_hours))
+        if not merged_fresh:
+            # Holdings-first fallback: widen freshness window when 24h has no usable articles.
+            merged_fresh, _ = _apply_freshness_policy(merged, max_age_hours=float(max(72, lookback_hours)))
+        for n in merged_fresh[:4]:
+            title = str(n.get("title") or "").strip()
+            url = str(n.get("url") or "").strip()
+            if not title or not url:
+                continue
+            row = {
+                "symbol": sym,
+                "net_qty": p.get("net_qty"),
+                "title": title,
+                "url": url,
+                "publisher": str(n.get("publisher") or n.get("source") or "").strip(),
+                "published_at": str(n.get("published_at") or ""),
+                "published_ts": n.get("published_ts"),
+            }
+            row["hotness"] = _score_hot_article(row, lookback_hours, trusted_publishers, hot_keywords)
+            position_news.append(row)
+
+    # Dedup position news
+    pos_seen = set()
+    pos_out = []
+    for n in sorted(position_news, key=lambda x: x.get("hotness", 0), reverse=True):
+        key = (str(n.get("symbol") or ""), str(n.get("title") or "").lower(), str(n.get("url") or "").lower())
+        if key in pos_seen:
+            continue
+        pos_seen.add(key)
+        pos_out.append(n)
+        if len(pos_out) >= top_n:
+            break
+
+    all_titles_blob = " ".join([str(x.get("title") or "").lower() for x in hot_news + pos_out])
+    risk_kw = ["conflict", "war", "missile", "attack", "sanction", "strike", "中东", "冲突", "袭击", "制裁", "战争"]
+    oil_kw = ["oil", "crude", "brent", "wti", "gas", "lng", "原油", "油价", "天然气"]
+    safe_kw = ["defensive", "utilities", "telecom", "dividend", "防御", "公用事业", "通信", "高股息"]
+    growth_kw = ["ai", "semiconductor", "chip", "cloud", "gpu", "人工智能", "半导体", "芯片"]
+
+    risk_hits = sum(1 for k in risk_kw if k in all_titles_blob)
+    oil_hits = sum(1 for k in oil_kw if k in all_titles_blob)
+    safe_hits = sum(1 for k in safe_kw if k in all_titles_blob)
+    growth_hits = sum(1 for k in growth_kw if k in all_titles_blob)
+    avg_hot = round(sum(float(x.get("hotness") or 0.0) for x in hot_news) / max(1, len(hot_news)), 2)
+
+    if risk_hits >= 3 or (risk_hits >= 2 and oil_hits >= 1):
+        risk_level = "high"
+        market_view = "偏风险厌恶，指数层面以防守为主。"
+    elif risk_hits >= 1 or oil_hits >= 1:
+        risk_level = "medium"
+        market_view = "情绪中性偏谨慎，盘中可能出现快速切换。"
+    else:
+        risk_level = "low"
+        market_view = "外部冲击有限，可维持结构性轮动。"
+
+    preferred = ["高股息", "公用事业", "通信", "军工/能源链"] if risk_level != "low" else ["科技成长", "景气改善链"]
+    avoid = ["高估值高波动小盘题材"] if risk_level != "low" else ["纯防御过度拥挤标的"]
+    watch_signals = [
+        "WTI/Brent 夜盘方向与波动率",
+        "美元/日元（USDJPY）与美债收益率",
+        "日经期货开盘缺口与前30分钟成交量"
+    ]
+    action_plan = [
+        "开盘前先看风险指标，再决定是否降仓位。",
+        "若油价和避险资产同步走强，优先防御仓位。",
+        "避免追高，采用分批与回撤确认后再加仓。"
+    ]
+
+    next_day_advice = {
+        "risk_level": risk_level,
+        "market_view": market_view,
+        "preferred_themes": preferred,
+        "avoid_themes": avoid,
+        "action_plan": action_plan,
+        "watch_signals": watch_signals,
+        "confidence_hint": {
+            "avg_hotness": avg_hot,
+            "risk_hits": risk_hits,
+            "oil_hits": oil_hits,
+            "safe_hits": safe_hits,
+            "growth_hits": growth_hits,
+        },
+    }
+
+    analysis_lines = [
+        f"主动热点扫描完成：窗口={lookback_hours}h，热点候选={len(fresh_items)}，输出Top{len(hot_news)}。",
+        f"持仓关联新闻：持仓标的={len(positions)}，输出Top{len(pos_out)}。",
+        f"次日风险级别：{risk_level.upper()} | 平均热度：{avg_hot}",
+        f"市场判断：{market_view}",
+        "建议动作：",
+        f"1) {action_plan[0]}",
+        f"2) {action_plan[1]}",
+        f"3) {action_plan[2]}",
+        f"优先关注：{', '.join(preferred)}",
+        f"回避方向：{', '.join(avoid)}",
+    ]
+    if pos_out:
+        analysis_lines.append("持仓相关（优先关注）:")
+        for idx, it in enumerate(pos_out[:5], start=1):
+            analysis_lines.append(
+                f"P{idx}. [{it.get('symbol')}|热度{it.get('hotness')}] {it.get('title')} ({it.get('publisher')})"
+            )
+    for idx, it in enumerate(hot_news[:5], start=1):
+        analysis_lines.append(f"{idx}. [热度{it.get('hotness')}] {it.get('title')} ({it.get('source')})")
+
+    artifacts = []
+    capture_stats = {}
+    try:
+        capture_urls = [it.get("url") for it in hot_news[:2] if str(it.get("url") or "").startswith("http")]
+        if capture_urls:
+            artifacts.extend(
+                _openclaw_capture_urls(
+                    capture_urls,
+                    full_page=False,
+                    max_shots=2,
+                    stats_out=capture_stats,
+                )
+            )
+    except Exception:
+        pass
+
+    result = {
+        "ok": True,
+        "type": "active_hot_news",
+        "date": date_str,
+        "lookback_hours": lookback_hours,
+        "freshness": fresh_stats,
+        "hot_news": hot_news,
+        "position_news": pos_out,
+        "positions": positions,
+        "artifacts": artifacts,
+        "artifact_capture_stats": capture_stats,
+        "next_day_advice": next_day_advice,
+        "analysis": "\n".join(analysis_lines),
+        "summary": f"24h热点Top{len(hot_news)} + 持仓相关Top{len(pos_out)}",
+    }
+
+    if run_id:
+        record_fact(
+            run_id,
+            "news",
+            "active_hot_search",
+            {
+                "lookback_hours": lookback_hours,
+                "hot_count": len(hot_news),
+                "position_count": len(pos_out),
+                "positions": positions,
+                "artifact_capture_stats": capture_stats,
+            },
+        )
+    return result
 
 def github_skills_daily_report(payload: dict):
     date_str = payload.get("date") or _now_date_str()
@@ -1942,7 +2563,7 @@ def record_evidence_link(fact_id: str | None, url: str, screenshot_ref: dict | N
             conn.close()
 
 def deep_analysis(payload: dict):
-    symbol = str(payload.get("symbol", "NVDA")).upper()
+    symbol = _normalize_symbol_for_lookup(payload.get("symbol", "NVDA"))
     run_id = payload.get("run_id")
     
     # Capital constraints from payload or defaults
@@ -2257,10 +2878,32 @@ def discovery_workflow(payload: dict):
     """
     run_id = payload.get("run_id")
     date_str = payload.get("date") or _now_date_str()
-    market_focus = str(payload.get("market") or os.getenv("NEWS_FOCUS_MARKET", "ALL")).upper()
+
+    requested_market = str(payload.get("market") or "").upper().strip()
+    market_explicit = requested_market in {"JP", "US", "ALL"}
+    market_focus = requested_market if market_explicit else str(os.getenv("NEWS_FOCUS_MARKET", "ALL")).upper().strip()
     market_focus = market_focus if market_focus in {"JP", "US", "ALL"} else "ALL"
 
-    capital_base_jpy = max(1.0, float(payload.get("capital_base_jpy") or payload.get("capital_base") or 400000))
+    positions_snapshot = _get_current_positions_from_fills(max_symbols=12)
+    if not market_explicit and positions_snapshot:
+        mk_counter = Counter([str(p.get("market") or "").upper() for p in positions_snapshot if p.get("market")])
+        if mk_counter.get("JP", 0) > 0 and mk_counter.get("US", 0) == 0:
+            market_focus = "JP"
+        elif mk_counter.get("US", 0) > 0 and mk_counter.get("JP", 0) == 0:
+            market_focus = "US"
+
+    account_snapshot = _get_account_state_snapshot()
+    account_capital = _safe_float(account_snapshot.get("starting_capital"))
+    account_ccy = str(account_snapshot.get("base_ccy") or "JPY").upper()
+
+    capital_raw = payload.get("capital_base_jpy")
+    capital_input_ccy = "JPY"
+    if capital_raw is None:
+        capital_raw = payload.get("capital_base")
+    if capital_raw is None and account_capital:
+        capital_raw = account_capital
+        capital_input_ccy = account_ccy if account_ccy in {"JPY", "USD"} else "JPY"
+
     base_max_pos_pct = max(0.10, min(float(payload.get("max_position_pct") or 0.25), 0.65))
 
     goal_text = str(payload.get("goal") or "").strip()
@@ -2273,10 +2916,24 @@ def discovery_workflow(payload: dict):
             target_return_pct = _safe_float(m_target.group(1))
     horizon_days = int(payload.get("horizon_days") or goal_profile.get("horizon_days") or 120)
 
+    usdjpy = 150.0
+    try:
+        usdjpy_ticker = yf.Ticker("JPY=X")
+        usdjpy = _safe_float(usdjpy_ticker.fast_info.get("last_price")) or 150.0
+    except Exception:
+        pass
+
+    capital_base_jpy = max(1.0, float(capital_raw or 400000))
+    if capital_input_ccy == "USD":
+        capital_base_jpy = capital_base_jpy * usdjpy
+
     prefer_small_mid_cap = _to_bool(payload.get("prefer_small_mid_cap"), default=(capital_base_jpy <= 600000))
     avoid_mega_cap = _to_bool(payload.get("avoid_mega_cap"), default=prefer_small_mid_cap)
     auto_evolve = _to_bool(payload.get("auto_evolve"), default=True)
-    auto_expand_market = _to_bool(payload.get("auto_expand_market"), default=True)
+    auto_expand_default = not market_explicit and (market_focus == "ALL")
+    if not market_explicit and positions_snapshot and market_focus in {"JP", "US"}:
+        auto_expand_default = False
+    auto_expand_market = _to_bool(payload.get("auto_expand_market"), default=auto_expand_default)
     enable_learning = _to_bool(payload.get("enable_learning"), default=True)
     max_attempts = int(payload.get("max_attempts") or 4)
     max_attempts = max(1, min(max_attempts, 6))
@@ -2286,17 +2943,11 @@ def discovery_workflow(payload: dict):
 
     print(
         "[discovery] "
-        f"Market={market_focus} Capital={capital_base_jpy} BaseMaxPosPct={base_max_pos_pct} "
+        f"Market={market_focus} ExplicitMarket={market_explicit} AutoExpand={auto_expand_market} "
+        f"CapitalJPY={capital_base_jpy:.2f} InputCCY={capital_input_ccy} BaseMaxPosPct={base_max_pos_pct} "
         f"Goal={goal_text or 'N/A'} Risk={goal_profile.get('risk_profile')} "
         f"AutoEvolve={auto_evolve} Attempts={max_attempts}"
     )
-
-    usdjpy = 150.0
-    try:
-        usdjpy_ticker = yf.Ticker("JPY=X")
-        usdjpy = _safe_float(usdjpy_ticker.fast_info.get("last_price")) or 150.0
-    except Exception:
-        pass
 
     wl = _load_watchlists()
     jp_list = wl.get("jp_symbols", [])
@@ -2597,7 +3248,10 @@ def discovery_workflow(payload: dict):
         "ok": True,
         "date": date_str,
         "market": best_market if results else market_focus,
+        "market_explicit": market_explicit,
         "capital_base_jpy": capital_base_jpy,
+        "capital_input_ccy": capital_input_ccy,
+        "account_base_ccy": account_ccy if account_ccy in {"JPY", "USD"} else "JPY",
         "max_position_pct": best_max_pos_pct,
         "goal": goal_text or "balanced growth",
         "risk_profile": goal_profile.get("risk_profile"),
@@ -2815,7 +3469,7 @@ def portfolio_set_account(payload: dict):
 
 def portfolio_record_fill(payload: dict):
     """Record a manual stock purchase/sell."""
-    symbol = payload.get("symbol", "").upper()
+    symbol = _normalize_symbol_for_lookup(payload.get("symbol", ""))
     side = payload.get("side", "BUY").upper()
     qty = float(payload.get("qty", 0))
     price = float(payload.get("price", 0))
@@ -2848,6 +3502,126 @@ def portfolio_record_fill(payload: dict):
         return {"ok": True, "message": f"Recorded {side} of {qty} shares of {symbol} at {price}."}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+def web_search_and_browse(payload: dict):
+    query = str(payload.get("query") or payload.get("text") or payload.get("question") or "").strip()
+    if not query:
+        return {"ok": False, "error": "missing query"}
+
+    def _is_weather_query(q: str) -> bool:
+        ql = q.lower()
+        return any(k in ql for k in ["weather", "temperature", "forecast", "天气", "天気"])
+
+    def _extract_weather_location(q: str) -> str:
+        cleaned = re.sub(r"(today|now|current|weather|forecast|temperature|今天|现在|天气|天気)", " ", q, flags=re.I)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.-")
+        return cleaned or "Tokyo"
+
+    def _fetch_weather_summary(location: str):
+        try:
+            g = requests.get(
+                "https://geocoding-api.open-meteo.com/v1/search",
+                params={"name": location, "count": 1, "language": "en", "format": "json"},
+                timeout=12,
+            )
+            g.raise_for_status()
+            arr = (g.json() or {}).get("results") or []
+            if not arr:
+                return None
+            first = arr[0]
+            lat = first.get("latitude")
+            lon = first.get("longitude")
+            name = first.get("name") or location
+            country = first.get("country") or ""
+            w = requests.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": lat,
+                    "longitude": lon,
+                    "current": "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code",
+                    "timezone": "auto",
+                },
+                timeout=12,
+            )
+            w.raise_for_status()
+            cur = (w.json() or {}).get("current") or {}
+            brief = (
+                f"{name}, {country}: temp={cur.get('temperature_2m')}C, "
+                f"feels={cur.get('apparent_temperature')}C, humidity={cur.get('relative_humidity_2m')}%, "
+                f"wind={cur.get('wind_speed_10m')}km/h, weather_code={cur.get('weather_code')}"
+            )
+            return {
+                "title": f"Current Weather - {name}",
+                "body": brief,
+                "href": "https://open-meteo.com/",
+                "capture_url": f"https://wttr.in/{requests.utils.quote(name)}?lang=zh-cn",
+            }
+        except Exception:
+            return None
+
+    def _search_via_ddg_html(q: str, max_results: int = 5):
+        items = []
+        try:
+            resp = requests.get(
+                "https://duckduckgo.com/html/",
+                params={"q": q},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            from bs4 import BeautifulSoup  # type: ignore
+            soup = BeautifulSoup(resp.text, "lxml")
+            rows = soup.select(".result")
+            for row in rows:
+                a = row.select_one(".result__a")
+                if not a:
+                    continue
+                title = a.get_text(" ", strip=True)
+                href = a.get("href") or ""
+                snippet_node = row.select_one(".result__snippet")
+                body = snippet_node.get_text(" ", strip=True) if snippet_node else ""
+                if title or body or href:
+                    items.append({"title": title, "body": body, "href": href, "capture_url": href})
+                if len(items) >= max_results:
+                    break
+        except Exception:
+            return []
+        return items
+
+    items = []
+    if _is_weather_query(query):
+        weather_item = _fetch_weather_summary(_extract_weather_location(query))
+        if weather_item:
+            items.append(weather_item)
+
+    items.extend(_search_via_ddg_html(query, max_results=5))
+    if not items:
+        return {"ok": False, "error": "Search failed or returned no results.", "extracted_text": ""}
+
+    snippets = []
+    for i, res in enumerate(items[:6]):
+        title = str(res.get("title") or "")
+        body = str(res.get("body") or "")
+        href = str(res.get("href") or "")
+        snippets.append(f"[{i+1}] {title}\n{body}\nSource: {href}\n")
+
+    capture_urls = []
+    for it in items:
+        u = str(it.get("capture_url") or "")
+        if u and u not in capture_urls and u.startswith(("http://", "https://")):
+            capture_urls.append(u)
+    artifacts = _openclaw_capture_urls(capture_urls[:2], full_page=False, max_shots=2) if capture_urls else []
+
+    extracted_text = "\n".join(snippets)
+    return {
+        "ok": True,
+        "query": query,
+        "extracted_text": extracted_text,
+        "snippets": snippets,
+        "artifacts": artifacts,
+        "used_openclaw": bool(artifacts),
+        "summary": f"Found {len(snippets)} search results for '{query}'."
+    }
 
 def _quick_news_brief(articles: List[dict], title: str = "市场快讯") -> str:
     if not articles:
@@ -3032,9 +3806,11 @@ TOOLS = {
     "ai.analyze": ai_analyze_report,
     "media.generate_report_card": generate_report_card,
     "news.daily_report": news_daily_report,
+    "news.active_hot_search": news_active_hot_search,
     "news.preclose_brief_jp": preclose_brief_jp,
     "news.tdnet_close_flash": tdnet_close_flash,
     "github.skills_daily_report": github_skills_daily_report,
+    "web.search_and_browse": web_search_and_browse,
 }
 
 def main():
@@ -3062,39 +3838,28 @@ def main():
     def _enqueue_retry(task_id, tool_name, run_id, payload, wf_id, step_idx, retry_count):
         r.xadd(
             STREAM_TASK,
-            "*",
-            "task_id",
-            str(task_id or ""),
-            "run_id",
-            str(run_id or ""),
-            "tool_name",
-            str(tool_name or ""),
-            "payload",
-            json.dumps(payload or {}),
-            "workflow_id",
-            str(wf_id or ""),
-            "step_index",
-            str(step_idx or ""),
-            "retry_count",
-            str(retry_count or 0),
+            {
+                "task_id": str(task_id or ""),
+                "run_id": str(run_id or ""),
+                "tool_name": str(tool_name or ""),
+                "payload": json.dumps(payload or {}),
+                "workflow_id": str(wf_id or ""),
+                "step_index": str(step_idx or ""),
+                "retry_count": str(retry_count or 0),
+            },
         )
 
     def _send_to_dlq(task_id, tool_name, payload, error, retry_count):
         r.xadd(
             STREAM_DLQ,
-            "*",
-            "task_id",
-            str(task_id or ""),
-            "tool_name",
-            str(tool_name or ""),
-            "payload",
-            json.dumps(payload or {}),
-            "error",
-            str(error or ""),
-            "retry_count",
-            str(retry_count or 0),
-            "failed_at",
-            datetime.utcnow().isoformat() + "Z",
+            {
+                "task_id": str(task_id or ""),
+                "tool_name": str(tool_name or ""),
+                "payload": json.dumps(payload or {}),
+                "error": str(error or ""),
+                "retry_count": str(retry_count or 0),
+                "failed_at": datetime.utcnow().isoformat() + "Z",
+            },
         )
         record_event(task_id, "task.dlq", {"tool_name": tool_name, "error": str(error), "retry_count": retry_count})
 

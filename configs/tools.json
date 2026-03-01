@@ -90,6 +90,27 @@
     "timeout_s": 30
   },
 
+  "coding.patch": {
+    "kind": "builtin",
+    "default_risk": "high",
+    "requires_approval": false,
+    "timeout_s": 120
+  },
+
+  "coding.execute": {
+    "kind": "builtin",
+    "default_risk": "high",
+    "requires_approval": true,
+    "timeout_s": 120
+  },
+
+  "coding.delegate": {
+    "kind": "builtin",
+    "default_risk": "high",
+    "requires_approval": true,
+    "timeout_s": 900
+  },
+
   "openclaw.run": {
     "kind": "http",
     "requires_approval": true,

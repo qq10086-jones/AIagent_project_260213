@@ -19,9 +19,10 @@ def run_brain():
         "tool_name": data.get("tool_name"),
         "tool_payload": data.get("tool_payload") or {},
         "qwen_model": data.get("qwen_model", os.getenv("QWEN_MODEL", "qwen-max")),
-        "facts": [],
-        "candidates": [],
-        "messages": [],
+        "local_model": data.get("local_model", os.getenv("QUANT_LLM_MODEL", "deepseek-r1:1.5b")),
+        "facts": data.get("facts") if isinstance(data.get("facts"), list) else [],
+        "candidates": data.get("candidates") if isinstance(data.get("candidates"), list) else [],
+        "messages": data.get("messages") if isinstance(data.get("messages"), list) else [],
         "narrative": ""
     }
     

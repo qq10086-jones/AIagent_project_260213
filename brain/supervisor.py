@@ -7,11 +7,12 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from state import AgentState
 
-ORCHESTRATOR_URL = "http://nexus-orchestrator:3000"
+ORCHESTRATOR_URL = "http://orchestrator:3000"
 # --- LLM Config ---
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "dashscope").lower()
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
 OLLAMA_CHAT_API = f"{OLLAMA_BASE_URL}/api/chat"
+OLLAMA_GENERATE_API = f"{OLLAMA_BASE_URL}/api/generate"
 LOCAL_WRITER_MODEL = os.getenv("QUANT_LLM_MODEL", "deepseek-r1:1.5b")
 QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen-max")
 
@@ -23,39 +24,50 @@ def get_db_conn():
         database=os.getenv("PGDATABASE", "nexus")
     )
 
-def poll_for_fact(run_id, agent_name, timeout=120):
-    """Wait for a specific agent to write a result into the DB."""
-    start_time = time.time()
-    print(f"[Brain] Polling for {agent_name} results (run_id: {run_id})...")
-    while time.time() - start_time < timeout:
-        try:
-            conn = get_db_conn()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT payload_json FROM fact_items WHERE run_id = %s AND agent_name = %s ORDER BY created_at DESC LIMIT 1",
-                (run_id, agent_name),
-            )
-            row = cur.fetchone()
-            cur.close()
-            conn.close()
-            if row:
-                print(f"[Brain] Found results for {agent_name}!")
-                payload = row[0]
-                if isinstance(payload, dict):
-                    return payload
-                try:
-                    return json.loads(payload)
-                except Exception:
-                    return {"raw": str(payload)}
-        except Exception as e:
-            print(f"[Brain] DB polling error for {agent_name}: {e}")
-        time.sleep(5)
-    print(f"[Brain] Timeout waiting for {agent_name}")
-    return None
+def poll_for_fact(run_id, agent_name, timeout=120, tool_name=None):
+        """Wait for a specific agent (and optionally a specific tool) to write a result into the DB."""
+        start_time = time.time()
+        print(f"[Brain] Polling for {agent_name} {tool_name or ''} results (run_id: {run_id})...")
+        while time.time() - start_time < timeout:
+            try:
+                conn = get_db_conn()
+                cur = conn.cursor()
+                if tool_name:
+                    # payload_json contains tool_name
+                    cur.execute(
+                        "SELECT payload_json FROM fact_items WHERE run_id = %s AND agent_name = %s AND payload_json::text LIKE %s ORDER BY created_at DESC LIMIT 1",
+                        (run_id, agent_name, f'%"{tool_name}"%'),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT payload_json FROM fact_items WHERE run_id = %s AND agent_name = %s ORDER BY created_at DESC LIMIT 1",
+                        (run_id, agent_name),
+                    )
+                row = cur.fetchone()
+                cur.close()
+                conn.close()
+                if row:
+                    payload = row[0]
+                    if isinstance(payload, dict):
+                        return payload
+                    try:
+                        return json.loads(payload)
+                    except Exception:
+                        return {"raw": str(payload)}
+            except Exception as e:
+                print(f"DB Poll error: {e}")
+            time.sleep(2)
+        return None
 
 def get_llm(state: AgentState = None):
     """Returns a LangChain-compatible LLM based on LLM_PROVIDER."""
+    model_preference = str((state or {}).get("model_preference", "")).lower()
+    if model_preference in ["local_small", "local_large"]:
+        return None
+
     prov = LLM_PROVIDER
+    if model_preference == "api" and prov == "ollama":
+        prov = "dashscope" if os.getenv("QWEN_API_KEY") else "openai"
     if prov == "ollama":
         # Using ChatOpenAI with Ollama's OpenAI-compatible endpoint if available, 
         # or just fallback to the manual call_local_writer in writer_agent_node.
@@ -185,16 +197,31 @@ def _build_grounded_narrative(state: AgentState) -> str:
     return "\n".join(lines)
 
 def call_local_writer(prompt: str) -> str:
+    return call_local_writer_with_model(prompt, LOCAL_WRITER_MODEL)
+
+def call_local_writer_with_model(prompt: str, model_name: str) -> str:
     try:
         resp = requests.post(
             OLLAMA_CHAT_API,
             json={
-                "model": LOCAL_WRITER_MODEL,
+                "model": model_name or LOCAL_WRITER_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
             },
             timeout=90,
         )
+        if resp.status_code == 404:
+            gen_resp = requests.post(
+                OLLAMA_GENERATE_API,
+                json={
+                    "model": model_name or LOCAL_WRITER_MODEL,
+                    "prompt": prompt,
+                    "stream": False,
+                },
+                timeout=90,
+            )
+            data = gen_resp.json()
+            return data.get("response", "").strip()
         data = resp.json()
         return data.get("message", {}).get("content", "").strip()
     except Exception as e:
@@ -235,15 +262,101 @@ def _extract_tool_payload(state: AgentState, tool_name: str) -> dict:
     allowed = allow_map.get(tool_name, set())
     return {k: v for k, v in raw.items() if k in allowed}
 
+def coder_agent_node(state: AgentState):
+    """
+    Coding Agent: Handles autonomous code modification and execution.
+    Interacts via orchestrator's /execute-tool and worker-coder.
+    """
+    run_id = state.get('run_id')
+    
+    # Robustly extract task prompt from messages
+    task_prompt = "Fix bugs in the codebase."
+    if state.get('messages'):
+        last_msg = state.get('messages')[-1]
+        if isinstance(last_msg, dict):
+            task_prompt = last_msg.get('content', task_prompt)
+        else:
+            task_prompt = getattr(last_msg, 'content', task_prompt)
+            
+    print(f"--- [Agent: Coder] Starting Task: {task_prompt[:50]}... ---")
+    
+    try:
+        prompt = f"""
+        You are a senior developer. Task: {task_prompt}
+        Generate a SEARCH/REPLACE block for the fix.
+        Format:
+        FILE: [relative_path]
+        <<<<<<< SEARCH
+        [lines]
+        =======
+        [lines]
+        >>>>>>> REPLACE
+        
+        Then suggest a test command.
+        COMMAND: [cmd]
+        """
+        
+        llm_response = call_local_writer_with_model(prompt, state.get("local_model", LOCAL_WRITER_MODEL))
+        
+        # Robust extraction
+        import re
+        
+        file_path = None
+        file_match = re.search(r"(?:FILE|File|Target File):\s*([^\s\n\r]+)", llm_response)
+        if file_match:
+            file_path = file_match.group(1).strip()
+            
+        edit_blocks = []
+        matches = re.findall(r"(<<<<<<< SEARCH[\s\S]+?>{6,7}\s*REPLACE)", llm_response)
+        if matches:
+            edit_blocks = matches
+            
+        cmd = None
+        cmd_match = re.search(r"(?:COMMAND|Command|Test Command):\s*(.+)", llm_response)
+        if cmd_match:
+            cmd = cmd_match.group(1).strip()
+            
+        results = []
+        if file_path and edit_blocks:
+            full_patch = "\n\n".join(edit_blocks)
+            print(f"[Coder] Triggering patch for {file_path}")
+            trigger_tool("coding.patch", {
+                "file_path": file_path,
+                "edit_block": full_patch
+            }, run_id)
+            patch_result = poll_for_fact(run_id, "coder", timeout=60, tool_name="coding.patch")
+            if patch_result:
+                results.append(patch_result.get("output", {}))
+            
+        if cmd:
+            print(f"[Coder] Triggering test command: {cmd}")
+            trigger_tool("coding.execute", {
+                "command": cmd
+            }, run_id)
+            cmd_result = poll_for_fact(run_id, "coder", timeout=15, tool_name="coding.execute")
+            if cmd_result:
+                results.append(cmd_result.get("output", {}))
+            
+        if not results:
+            print(f"[Coder] Warning: No actions extracted from LLM response. Content: {llm_response[:100]}...")
+            
+        return {"facts": state.get("facts", []) + [{"agent": "coder", "data": {"results": results, "llm_raw": llm_response, "parsed": {"file": file_path, "blocks_count": len(edit_blocks), "cmd": cmd}}}]}
+    except Exception as e:
+        print(f"[Brain] Coder agent failed: {e}")
+        return {"facts": state.get("facts", []) + [{"agent": "coder", "data": {"error": str(e)}}]}
+
 def supervisor_node(state: AgentState):
     """
     Core Logic: Task Decomposition & Routing.
-    This is where OpenClaw Nexus decides which agent takes which tool.
     """
     mode = state.get("mode", "analysis")
     existing = [f['agent'] for f in state.get('facts', [])]
     
-    if mode == "discovery":
+    if mode == "coding":
+        if "coder" not in existing:
+            return {"next_step": "coder"}
+        return {"next_step": "writer"}
+    elif mode == "discovery":
         # Discovery Workflow Pipeline: Intel -> Screening -> Report
         if "intel" not in existing:
             return {"next_step": "discovery"}
@@ -401,6 +514,14 @@ def writer_agent_node(state: AgentState):
         except Exception as e:
             print(f"[Brain] LLM writer failed, fallback to raw grounded text: {e}")
 
+    local_model = state.get("local_model", LOCAL_WRITER_MODEL)
+    local_content = call_local_writer_with_model(prompt, local_model)
+    if local_content:
+        out = {"narrative": local_content}
+        if report_markdown: out["report_markdown"] = report_markdown
+        if report_html_object_key: out["report_html_object_key"] = report_html_object_key
+        return out
+
     out = {"narrative": grounded}
     if report_markdown: out["report_markdown"] = report_markdown
     if report_html_object_key: out["report_html_object_key"] = report_html_object_key
@@ -410,6 +531,7 @@ def writer_agent_node(state: AgentState):
 # Re-build Graph
 builder = StateGraph(AgentState)
 builder.add_node("supervisor", supervisor_node)
+builder.add_node("coder", coder_agent_node)
 builder.add_node("discovery", discovery_agent_node)
 builder.add_node("screening", screening_agent_node)
 builder.add_node("quant", quant_agent_node)
@@ -420,6 +542,7 @@ builder.set_entry_point("supervisor")
 
 # Route based on next_step
 builder.add_conditional_edges("supervisor", lambda x: x["next_step"], {
+    "coder": "coder",
     "discovery": "discovery",
     "screening": "screening",
     "quant": "quant",
@@ -427,6 +550,7 @@ builder.add_conditional_edges("supervisor", lambda x: x["next_step"], {
     "writer": "writer"
 })
 
+builder.add_edge("coder", "supervisor")
 builder.add_edge("discovery", "supervisor")
 builder.add_edge("screening", "supervisor")
 builder.add_edge("quant", "supervisor")

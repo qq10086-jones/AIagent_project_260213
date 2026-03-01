@@ -1,0 +1,5 @@
+<<<<<<< SEARCH
+console.log("old");
+=======
+console.log("new");
+>>>>>>> REPLACE

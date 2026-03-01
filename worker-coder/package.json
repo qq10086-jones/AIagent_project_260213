@@ -1,0 +1,14 @@
+{
+  "name": "worker-coder",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node worker.js",
+    "test:adapter": "node tests/codex_adapter.test.js"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1",
+    "pg": "^8.11.5",
+    "uuid": "^9.0.1"
+  }
+}

@@ -10,3 +10,15 @@ node_modules/
 __pycache__/
 *.pyc
 .env
+
+# Local secrets and runtime artifacts
+**/.codex/
+**/auth.json
+discord_bot_token.txt
+artifacts/runs/
+backup_20260301*/
+coder_test/
+__write_test*.txt
+*.log
+.env*
+

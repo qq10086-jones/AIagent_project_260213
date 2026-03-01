@@ -20,7 +20,9 @@ services:
     build: ../orchestrator
     container_name: nexus-orchestrator
     environment:
+      WORKSPACE_ROOT: /workspace
       REDIS_URL: redis://redis:6379
+      STREAM_TASK_CODING: stream:task:coding
       PGHOST: db
       PGPORT: 5432
       PGUSER: nexus
@@ -47,10 +49,35 @@ services:
     volumes:
       - ../configs/tools.json:/app/configs/tools.json:ro
       - ../orchestrator/src:/app/src
+      - ..:/workspace
     depends_on:
       - redis
       - db
       - brain
+    networks: ["nexus-net"]
+
+  worker-coder:
+    build: ../worker-coder
+    container_name: nexus-worker-coder
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - STREAM_TASK=stream:task:coding
+      - GROUP_TASK=cg:workers:coding
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CODEX_BIN=${CODEX_BIN:-codex}
+      - CODEX_SANDBOX=${CODEX_SANDBOX:-workspace-write}
+      - PGHOST=db
+      - PGPORT=5432
+      - PGUSER=nexus
+      - PGPASSWORD=${POSTGRES_PASSWORD:-nexus}
+      - PGDATABASE=nexus
+      - WORKSPACE_ROOT=/workspace
+    volumes:
+      - ..:/workspace
+      - C:/Users/jones/.codex/auth.json:/root/.codex/auth.json:ro
+    depends_on:
+      - redis
+      - db
     networks: ["nexus-net"]
 
   worker-quant:
@@ -70,7 +97,7 @@ services:
       GROUP: cg:workers
       CONSUMER: worker-quant-1
       OPENCLAW_BASE_URL: http://nexus-openclaw-adapter:18081
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://192.168.1.113:11434}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       DASH_SCOPE_API_KEY: ${DASH_SCOPE_API_KEY}
@@ -91,6 +118,7 @@ services:
     build: ../brain
     container_name: brain
     environment:
+      - WORKSPACE_ROOT=/workspace
       - PGHOST=db
       - PGPORT=5432
       - PGUSER=nexus
@@ -109,6 +137,7 @@ services:
       - "5005:5000"
     volumes:
       - ../brain:/app
+      - ..:/workspace
     depends_on:
       - db
     networks: ["nexus-net"]

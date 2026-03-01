@@ -66,3 +66,10 @@
 - **P0-5 Completed**: Added log/artifact redaction in `worker-coder/coding_service.js`; expanded `.gitignore` for local auth/runtime secret artifacts.
 - **P0-5 Validation**: secrets scan executed for tracked files + staged diff; result `tracked_hits=0`, `staged_hits=0`.
 - **Remaining**: Container-level E2E/canary validation (Day1 16h-24h / Day2) not yet executed in this update.
+
+## vNext P0 Closure (2026-03-02)
+- **E2E A/B/C Completed**: low-risk auto-run, high-risk approval gate, approve-resume, reject-terminate all verified via orchestrator `/execute-tool` + approval APIs.
+- **Model Switch Verified**: `coding.delegate` executed successfully with both `minimax-m2.5` and `gpt-5.3`.
+- **Fallback Verified**: when OpenCode is unavailable, delegation falls back to Codex and records `diagnostics.fallback_from=opencode`.
+- **Metrics (current E2E batch)**: total 5, success 4, expected reject-fail 1, high-risk gate hit 3/3, non-high-risk auto-run success 2/2.
+- **Runtime Note**: OpenCode CLI compatibility issue on Alpine was resolved by moving `worker-coder` base image to Debian slim (`node:20-bookworm-slim`).

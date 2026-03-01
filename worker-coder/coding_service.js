@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import { applyEditBlocks } from './patch_manager.js';
 import { v4 as uuidv4 } from 'uuid';
 import { runCodexTask } from './adapters/codex_adapter.js';
+import { runOpenCodeTask } from './adapters/opencode_adapter.js';
 
 /**
  * Service to handle all coding-related business logic.
@@ -102,17 +103,20 @@ export const CodingService = {
             run_id,
             task_id,
             max_runtime_s = 600,
-            codex_command = null
+            codex_command = null,
+            opencode_command = null,
         } = params;
 
-        const selectedProvider = provider === "auto" ? "codex" : provider;
-        if (selectedProvider !== "codex") {
+        const providerRequested = String(provider || "auto").toLowerCase();
+        const supportedProviders = new Set(["auto", "opencode", "codex"]);
+        if (!supportedProviders.has(providerRequested)) {
             return {
                 ok: false,
-                error: `Unsupported provider '${selectedProvider}' in current Phase 1. Use codex/auto.`,
-                diagnostics: { error_code: "E_PROVIDER_UNAVAILABLE" }
+                error: `Unsupported provider '${providerRequested}'. Use auto/opencode/codex.`,
+                diagnostics: { error_code: "E_PROVIDER_UNAVAILABLE", provider_requested: providerRequested }
             };
         }
+        const preferredProvider = providerRequested === "auto" ? "opencode" : providerRequested;
 
         const runDir = path.join(workspaceRoot, 'artifacts', 'runs', run_id || 'default');
         const taskDir = path.join(runDir, `task_${task_id || 'unknown'}`);
@@ -125,29 +129,52 @@ export const CodingService = {
 
         const baselineFiles = await getGitStatusFiles(workspaceRoot);
         const started = new Date().toISOString();
-        const result = await runCodexTask({
-            workspaceRoot,
-            taskPrompt: task_prompt,
-            model,
-            maxRuntimeS: max_runtime_s,
-            codexCommand: codex_command,
-        });
+        const runByProvider = async (providerName) => {
+            if (providerName === "opencode") {
+                return runOpenCodeTask({
+                    workspaceRoot,
+                    taskPrompt: task_prompt,
+                    model,
+                    maxRuntimeS: max_runtime_s,
+                    opencodeCommand: opencode_command,
+                });
+            }
+            return runCodexTask({
+                workspaceRoot,
+                taskPrompt: task_prompt,
+                model,
+                maxRuntimeS: max_runtime_s,
+                codexCommand: codex_command,
+            });
+        };
+
+        let result = await runByProvider(preferredProvider);
+        let fallbackFrom = null;
+        if (
+            preferredProvider === "opencode" &&
+            String(result?.diagnostics?.error_code || "") === "E_PROVIDER_UNAVAILABLE"
+        ) {
+            fallbackFrom = "opencode";
+            result = await runByProvider("codex");
+        }
 
         const stdoutPath = path.join(taskDir, `delegate_stdout_${Date.now()}.log`);
         const stderrPath = path.join(taskDir, `delegate_stderr_${Date.now()}.log`);
+        const redactedStdout = redactSensitiveText(result.stdout || "");
+        const redactedStderr = redactSensitiveText(result.stderr || "");
         try {
-            fs.writeFileSync(stdoutPath, result.stdout || "", "utf8");
-            fs.writeFileSync(stderrPath, result.stderr || "", "utf8");
+            fs.writeFileSync(stdoutPath, redactedStdout, "utf8");
+            fs.writeFileSync(stderrPath, redactedStderr, "utf8");
         } catch {}
 
         const gitSummary = await gatherGitSummary(workspaceRoot, taskDir, baselineFiles);
         const summary = {
             ok: !!result.ok,
-            provider_used: result.provider_used || "codex",
+            provider_used: result.provider_used || preferredProvider,
             model_used: result.model_used || null,
             summary: result.ok
-                ? "Codex delegation finished."
-                : `Codex delegation failed: ${result.error || "unknown error"}`,
+                ? `${result.provider_used || preferredProvider} delegation finished.`
+                : `${result.provider_used || preferredProvider} delegation failed: ${result.error || "unknown error"}`,
             files_changed: gitSummary.filesChanged,
             diff_stats: gitSummary.diffStats,
             test_result: "skipped",
@@ -162,11 +189,14 @@ export const CodingService = {
             },
             diagnostics: {
                 ...(result.diagnostics || {}),
+                provider_requested: providerRequested,
+                fallback_from: fallbackFrom,
                 parse_error: false,
                 truncated: false,
             },
-            error: result.error || null,
+            error: redactSensitiveText(result.error || "") || null,
             command_used: result.command_used || null,
+            command_source: result.command_source || "unknown",
             started_at: started,
             finished_at: new Date().toISOString(),
         };
@@ -174,7 +204,7 @@ export const CodingService = {
         try {
             const timelinePath = path.join(runDir, 'timeline.md');
             const status = summary.ok ? "PASS" : "FAIL";
-            const line = `- ${new Date().toISOString()} | task: ${task_id || 'unknown'} | Delegated: ${selectedProvider} | STATUS: ${status}\n`;
+            const line = `- ${new Date().toISOString()} | task: ${task_id || 'unknown'} | Delegated: ${summary.provider_used} (requested=${providerRequested}${fallbackFrom ? `,fallback_from=${fallbackFrom}` : ""}) | STATUS: ${status}\n`;
             fs.appendFileSync(timelinePath, line);
         } catch {}
 
@@ -303,4 +333,21 @@ async function getGitStatusFiles(workspaceRoot) {
         }
     }
     return files;
+}
+
+function redactSensitiveText(value) {
+    let text = String(value || "");
+    if (!text) return text;
+    const rules = [
+        { re: /\bsk-[A-Za-z0-9_-]{20,}\b/g, to: "[REDACTED_OPENAI_KEY]" },
+        { re: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, to: "[REDACTED_GITHUB_TOKEN]" },
+        { re: /\bAIza[0-9A-Za-z\-_]{20,}\b/g, to: "[REDACTED_GOOGLE_API_KEY]" },
+        { re: /\bAKIA[0-9A-Z]{16}\b/g, to: "[REDACTED_AWS_ACCESS_KEY]" },
+        { re: /\b(?:xoxb|xoxp|xoxa|xoxr)-[A-Za-z0-9-]{10,}\b/g, to: "[REDACTED_SLACK_TOKEN]" },
+        { re: /\b(token|api[_-]?key|secret|password)\s*[:=]\s*['"]?[A-Za-z0-9_\-\/+=.]{8,}['"]?/gi, to: "$1=[REDACTED]" },
+    ];
+    for (const rule of rules) {
+        text = text.replace(rule.re, rule.to);
+    }
+    return text;
 }

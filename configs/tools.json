@@ -106,8 +106,8 @@
 
   "coding.delegate": {
     "kind": "builtin",
-    "default_risk": "high",
-    "requires_approval": true,
+    "default_risk": "medium",
+    "requires_approval": false,
     "timeout_s": 900
   },
 

@@ -54,3 +54,15 @@
 - **Refine Prompting**: Optimize the Coder Agent's prompts to reduce "SEARCH block not found" errors by enforcing exact context preservation.
 - **Ops Improvement**: Add explicit docs/CLI helper for approval flow (`/tasks/:task_id/approve`) and optional auto-approval policy for trusted environments.
 - **Coder-Centric Skill Fabric**: Standardize skill prefixes (`/coder:`, future `/ui:`, `/db:`) to keep Coder as the primary orchestrator while enabling multi-skill expansion.
+
+## vNext P0 Go-Live (Execution Update)
+- **P0-1 Completed**: Added `worker-coder/adapters/opencode_adapter.js` with standardized adapter fields and unified error codes (`E_PROVIDER_UNAVAILABLE`, `E_TIMEOUT`, `E_APPLY_FAILED`, `E_INTERNAL`).
+- **P0-2 Completed**: `worker-coder/coding_service.js` now routes `provider=auto -> opencode`, with fallback to `codex` only when OpenCode is unavailable; model passthrough and command source are recorded.
+- **P0-2 Completed**: `worker-coder/worker.js` now passes through `opencode_command` payload for delegated execution.
+- **P0-3 Completed**: `/coder` default payload switched to `provider=opencode`, default model `minimax-m2.5`, with explicit `@gpt-5.3` override support.
+- **P0-3 Completed**: Coder result rendering remains on dedicated coder template (`formatCodingDelegateResult`), no quant fallback text path.
+- **P0-4 Completed**: `configs/tools.json` aligned to risk-based approval baseline (`coding.delegate` no blanket approval in config).
+- **P0-4 Completed**: `infra/docker-compose.yml` added `CODER_PROVIDER_DEFAULT`, `CODER_MODEL_DEFAULT`, and `OPENCODE_BIN` env wiring.
+- **P0-5 Completed**: Added log/artifact redaction in `worker-coder/coding_service.js`; expanded `.gitignore` for local auth/runtime secret artifacts.
+- **P0-5 Validation**: secrets scan executed for tracked files + staged diff; result `tracked_hits=0`, `staged_hits=0`.
+- **Remaining**: Container-level E2E/canary validation (Day1 16h-24h / Day2) not yet executed in this update.

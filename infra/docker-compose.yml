@@ -44,6 +44,8 @@ services:
       AUTO_REPORT_TIMEZONE: ${AUTO_REPORT_TIMEZONE:-Asia/Shanghai}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       APPROVAL_TOKEN: ${APPROVAL_TOKEN:-dev-approval-token}
+      CODER_PROVIDER_DEFAULT: ${CODER_PROVIDER_DEFAULT:-opencode}
+      CODER_MODEL_DEFAULT: ${CODER_MODEL_DEFAULT:-minimax-m2.5}
     ports:
       - "3000:3000"
     volumes:
@@ -66,6 +68,9 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CODEX_BIN=${CODEX_BIN:-codex}
       - CODEX_SANDBOX=${CODEX_SANDBOX:-workspace-write}
+      - OPENCODE_BIN=${OPENCODE_BIN:-opencode}
+      - CODER_PROVIDER_DEFAULT=${CODER_PROVIDER_DEFAULT:-opencode}
+      - CODER_MODEL_DEFAULT=${CODER_MODEL_DEFAULT:-minimax-m2.5}
       - PGHOST=db
       - PGPORT=5432
       - PGUSER=nexus

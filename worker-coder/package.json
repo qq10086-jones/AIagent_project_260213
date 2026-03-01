@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node worker.js",
-    "test:adapter": "node tests/codex_adapter.test.js"
+    "test:adapter": "node tests/codex_adapter.test.js && node tests/opencode_adapter.test.js"
   },
   "dependencies": {
     "ioredis": "^5.4.1",

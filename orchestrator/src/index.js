@@ -35,6 +35,8 @@ const {
 
 const QWEN_BASE = process.env.QWEN_BASE_URL || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 const QWEN_MODEL = process.env.QWEN_MODEL || "qwen-plus";
+const CODER_PROVIDER_DEFAULT = String(process.env.CODER_PROVIDER_DEFAULT || "opencode").toLowerCase();
+const CODER_MODEL_DEFAULT = String(process.env.CODER_MODEL_DEFAULT || "minimax-m2.5");
 const DEFAULT_LOCAL_MODEL = process.env.QUANT_LLM_MODEL || "deepseek-r1:32b";
 let CURRENT_LOCAL_MODEL = DEFAULT_LOCAL_MODEL;
 let FORCE_LOCAL_LLM = false;
@@ -450,7 +452,11 @@ function analyzeCodingDelegateRisk(payload = {}) {
   if (Array.isArray(payload?.codex_command) && payload.codex_command.length > 0) {
     reasons.push("custom_delegate_command");
   }
-  if (String(payload?.provider || "").toLowerCase() === "claude_code") {
+  if (Array.isArray(payload?.opencode_command) && payload.opencode_command.length > 0) {
+    reasons.push("custom_delegate_command");
+  }
+  const provider = String(payload?.provider || "").toLowerCase();
+  if (provider && !["opencode", "codex", "auto"].includes(provider)) {
     reasons.push("non_default_provider");
   }
 
@@ -883,6 +889,27 @@ function formatCodingDelegateResult(output, status, streamError = "", runId = ""
   return lines.join("\n").slice(0, 1024);
 }
 
+function parseCoderDelegateOptions(rawText) {
+  const text = String(rawText || "");
+  let cleaned = text;
+  let model = null;
+
+  if (/@gpt-5\.3\b/i.test(cleaned) || /\bmodel\s*=\s*gpt-5\.3\b/i.test(cleaned)) {
+    model = "gpt-5.3";
+    cleaned = cleaned.replace(/@gpt-5\.3\b/gi, " ").replace(/\bmodel\s*=\s*gpt-5\.3\b/gi, " ");
+  } else if (/@minimax\b/i.test(cleaned) || /\bmodel\s*=\s*minimax-m2\.5\b/i.test(cleaned)) {
+    model = "minimax-m2.5";
+    cleaned = cleaned.replace(/@minimax\b/gi, " ").replace(/\bmodel\s*=\s*minimax-m2\.5\b/gi, " ");
+  }
+
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+  return {
+    taskPrompt: cleaned,
+    provider: CODER_PROVIDER_DEFAULT,
+    model: model || CODER_MODEL_DEFAULT,
+  };
+}
+
 async function callBrainWithRetry(payload, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
@@ -1123,7 +1150,10 @@ discord.on("messageCreate", async msg => {
     return;
   }
 
-  const effectiveInput = isCoderDirective ? coderTask : rawInput;
+  const coderOptions = isCoderDirective
+    ? parseCoderDelegateOptions(coderTask)
+    : null;
+  const effectiveInput = isCoderDirective ? coderOptions.taskPrompt : rawInput;
   const userInput = effectiveInput.replace(/@api\b/gi, "").replace(/@32b\b/gi, "").trim();
   if (!userInput) return;
 
@@ -1167,14 +1197,15 @@ discord.on("messageCreate", async msg => {
         tool_name: "coding.delegate",
         payload: {
           task_prompt: userInput,
-          provider: "auto",
-          model: null,
+          provider: coderOptions?.provider || CODER_PROVIDER_DEFAULT,
+          model: coderOptions?.model || CODER_MODEL_DEFAULT,
           max_runtime_s: 900,
         },
         run_id,
         idempotency_key: makeIdempotencyKey(run_id, "coding.delegate", {
           task_prompt: userInput,
-          provider: "auto",
+          provider: coderOptions?.provider || CODER_PROVIDER_DEFAULT,
+          model: coderOptions?.model || CODER_MODEL_DEFAULT,
         }),
         context,
       });

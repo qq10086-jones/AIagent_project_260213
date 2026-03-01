@@ -13,12 +13,17 @@ __pycache__/
 
 # Local secrets and runtime artifacts
 **/.codex/
+**/.opencode/
 **/auth.json
 discord_bot_token.txt
 artifacts/runs/
+artifacts/logs/
 backup_20260301*/
 coder_test/
 __write_test*.txt
 *.log
 .env*
+*.pem
+*.key
+*credentials*.json
 

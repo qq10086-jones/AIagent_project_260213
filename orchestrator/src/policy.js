@@ -6,7 +6,17 @@ import path from "path";
  * Responsible for risk scoring and approval gate decisions.
  */
 
-const CAPABILITY_REGISTRY_PATH = path.join(process.cwd(), "configs", "capability_registry.json");
+const CAPABILITY_REGISTRY_CANDIDATES = [
+  path.join(process.cwd(), "configs", "registry", "capability_registry.json"),
+  path.join(process.cwd(), "configs", "capability_registry.json"),
+];
+
+function resolveRegistryPath() {
+  for (const p of CAPABILITY_REGISTRY_CANDIDATES) {
+    if (fs.existsSync(p)) return p;
+  }
+  return CAPABILITY_REGISTRY_CANDIDATES[0];
+}
 
 export function analyzeTaskRisk(tool_name, payload) {
   const prompt = String(payload?.task_prompt || payload?.prompt || "");
@@ -26,7 +36,8 @@ export function analyzeTaskRisk(tool_name, payload) {
 
   // 2. Registry-based Path Checks
   try {
-    const registry = JSON.parse(fs.readFileSync(CAPABILITY_REGISTRY_PATH, "utf8"));
+    const registryPath = resolveRegistryPath();
+    const registry = JSON.parse(fs.readFileSync(registryPath, "utf8"));
     const codingPolicy = registry.project_types?.coding_task?.policy;
     
     if (codingPolicy?.manual_approve_paths) {

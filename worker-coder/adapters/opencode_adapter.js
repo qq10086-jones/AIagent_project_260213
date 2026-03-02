@@ -7,7 +7,7 @@ function runProcess({ command, args = [], cwd, timeoutMs = 600000, stdinText = "
       cwd,
       env: process.env,
       stdio: ["pipe", "pipe", "pipe"],
-      shell: true, // Use shell for better path resolution
+      shell: false,
     });
 
     let stdout = "";
@@ -88,10 +88,14 @@ export function buildOpenCodeInvocation({
 function mapErrorCode({ proc, command }) {
   if (proc.timedOut) return "E_TIMEOUT";
   const stderrText = String(proc.stderr || "");
-  const commandNotFound = stderrText.includes("ENOENT");
+  const lower = stderrText.toLowerCase();
+  const commandNotFound =
+    stderrText.includes("ENOENT") ||
+    lower.includes("not recognized as an internal or external command") ||
+    lower.includes("command not found");
   if (commandNotFound) return "E_PROVIDER_UNAVAILABLE";
   if (!proc.ok && /(apply|patch).*(fail|error)/i.test(stderrText)) return "E_APPLY_FAILED";
-  if (!proc.ok) return "E_PROVIDER_UNAVAILABLE";
+  if (!proc.ok) return "E_EXEC_FAILED";
   return null;
 }
 

@@ -1,0 +1,11 @@
+{
+  "suite_id": "webapp_crm_v0",
+  "commands": [
+    "node --version",
+    "npm --version"
+  ],
+  "required_reports": [
+    "verification.json",
+    "run_manifest.json"
+  ]
+}

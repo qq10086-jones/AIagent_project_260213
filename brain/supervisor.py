@@ -6,15 +6,23 @@ import psycopg2
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from state import AgentState
+from runtime_config import (
+    LLM_PROVIDER_DEFAULT,
+    OLLAMA_BASE_URL_DEFAULT,
+    LOCAL_MODEL_DEFAULT,
+    QWEN_MODEL_DEFAULT,
+    QWEN_BASE_URL_DEFAULT,
+    LLM_TIMEOUT_SEC_DEFAULT,
+)
 
 ORCHESTRATOR_URL = "http://orchestrator:3000"
 # --- LLM Config ---
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "dashscope").lower()
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+LLM_PROVIDER = LLM_PROVIDER_DEFAULT
+OLLAMA_BASE_URL = OLLAMA_BASE_URL_DEFAULT
 OLLAMA_CHAT_API = f"{OLLAMA_BASE_URL}/api/chat"
 OLLAMA_GENERATE_API = f"{OLLAMA_BASE_URL}/api/generate"
-LOCAL_WRITER_MODEL = os.getenv("QUANT_LLM_MODEL", "deepseek-r1:1.5b")
-QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen-max")
+LOCAL_WRITER_MODEL = LOCAL_MODEL_DEFAULT
+QWEN_MODEL = QWEN_MODEL_DEFAULT
 
 def get_db_conn():
     return psycopg2.connect(
@@ -76,7 +84,7 @@ def get_llm(state: AgentState = None):
     
     if prov in ["dashscope", "openai"]:
         api_key = os.getenv("QWEN_API_KEY") if prov == "dashscope" else os.getenv("OPENAI_API_KEY")
-        base_url = os.getenv("QWEN_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1") if prov == "dashscope" else os.getenv("OPENAI_BASE_URL")
+        base_url = QWEN_BASE_URL_DEFAULT if prov == "dashscope" else os.getenv("OPENAI_BASE_URL")
         
         default_model = QWEN_MODEL if prov == "dashscope" else os.getenv("OPENAI_MODEL", "gpt-4o")
         model = state.get("qwen_model", default_model) if state else default_model
@@ -88,7 +96,7 @@ def get_llm(state: AgentState = None):
             api_key=api_key,
             base_url=base_url,
             model=model,
-            timeout=60
+            timeout=LLM_TIMEOUT_SEC_DEFAULT
         )
     return None
 

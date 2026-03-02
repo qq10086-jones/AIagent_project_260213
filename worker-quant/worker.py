@@ -27,11 +27,35 @@ try:
 except Exception:
     plt = None
 
+
+def _load_runtime_config() -> tuple[dict, str | None]:
+    candidates = [
+        str(os.getenv("RUNTIME_CONFIG_PATH", "")).strip(),
+        str(Path.cwd() / "configs" / "runtime" / "runtime_defaults.json"),
+        str(Path.cwd().parent / "configs" / "runtime" / "runtime_defaults.json"),
+        "/workspace/configs/runtime/runtime_defaults.json",
+    ]
+    for p in candidates:
+        if not p:
+            continue
+        try:
+            fp = Path(p)
+            if fp.exists():
+                return json.loads(fp.read_text(encoding="utf-8")), str(fp)
+        except Exception:
+            continue
+    return {}, None
+
+
+RUNTIME_CONFIG, RUNTIME_CONFIG_PATH_LOADED = _load_runtime_config()
+RUNTIME_QUANT = (RUNTIME_CONFIG or {}).get("worker_quant", {})
+RUNTIME_STREAMS = (RUNTIME_CONFIG or {}).get("streams", {})
+
 # --- Env Config ---
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 STREAM_TASK = os.getenv("STREAM_TASK", "stream:task")
 STREAM_RESULT = os.getenv("STREAM_RESULT", "stream:result")
-STREAM_DLQ = os.getenv("STREAM_DLQ", "stream:dlq")
+STREAM_DLQ = os.getenv("STREAM_DLQ", RUNTIME_STREAMS.get("task_dlq", "stream:dlq"))
 GROUP = os.getenv("GROUP", "cg:workers")
 CONSUMER = os.getenv("CONSUMER", "worker-quant-1")
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
@@ -43,24 +67,32 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "nexus")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "nexuspassword")
 
 # --- LLM Config ---
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower() # ollama, openai, dashscope, gemini
-OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", RUNTIME_QUANT.get("llm_provider", "ollama")).lower() # ollama, openai, dashscope, gemini
+OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", RUNTIME_QUANT.get("ollama_base_url", "http://host.docker.internal:11434"))
 OLLAMA_CHAT_API = f"{OLLAMA_BASE}/api/chat"
 OLLAMA_GENERATE_API = f"{OLLAMA_BASE}/api/generate"
 
 # Cloud Provider Configs
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", RUNTIME_QUANT.get("openai_base_url", "https://api.openai.com/v1"))
 DASH_SCOPE_API_KEY = os.getenv("DASH_SCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
-DASH_SCOPE_BASE_URL = os.getenv("DASH_SCOPE_BASE_URL") or os.getenv("QWEN_BASE_URL") or "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+DASH_SCOPE_BASE_URL = (
+    os.getenv("DASH_SCOPE_BASE_URL")
+    or os.getenv("QWEN_BASE_URL")
+    or RUNTIME_QUANT.get("dash_scope_base_url", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1")
+)
 
-QUANT_LLM_MODEL = os.getenv("QUANT_LLM_MODEL", "deepseek-r1:1.5b")
-CODE_LLM_MODEL = os.getenv("CODE_LLM_MODEL", "glm-4.7-flash:latest")
+QUANT_LLM_MODEL = os.getenv("QUANT_LLM_MODEL", RUNTIME_QUANT.get("quant_llm_model", "deepseek-r1:1.5b"))
+CODE_LLM_MODEL = os.getenv("CODE_LLM_MODEL", RUNTIME_QUANT.get("code_llm_model", "glm-4.7-flash:latest"))
 DISCOVERY_LEARNING_PATH = Path(os.getenv("DISCOVERY_LEARNING_PATH", "/tmp/nexus_discovery_learning.json"))
-LLM_TIMEOUT_S = int(os.getenv("LLM_TIMEOUT_S", "25"))
+LLM_TIMEOUT_S = int(os.getenv("LLM_TIMEOUT_S", str(RUNTIME_QUANT.get("llm_timeout_s", 25))))
 DISCOVERY_TIME_BUDGET_S = int(os.getenv("DISCOVERY_TIME_BUDGET_S", "75"))
 DISCOVERY_QUICK_UNIVERSE_CAP = int(os.getenv("DISCOVERY_QUICK_UNIVERSE_CAP", "28"))
 DISCOVERY_FULL_UNIVERSE_CAP = int(os.getenv("DISCOVERY_FULL_UNIVERSE_CAP", "120"))
+print(
+    f"[runtime-config] path={RUNTIME_CONFIG_PATH_LOADED} llm_provider={LLM_PROVIDER} "
+    f"quant_model={QUANT_LLM_MODEL} code_model={CODE_LLM_MODEL} timeout_s={LLM_TIMEOUT_S}"
+)
 
 r = redis.from_url(REDIS_URL, decode_responses=True)
 

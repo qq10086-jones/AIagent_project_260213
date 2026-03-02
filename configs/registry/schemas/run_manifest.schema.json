@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Nexus Run Manifest",
+  "type": "object",
+  "required": [
+    "workflow_run_id",
+    "run_id",
+    "workflow_id",
+    "project_type",
+    "status",
+    "generated_at",
+    "steps",
+    "checkpoints"
+  ],
+  "properties": {
+    "workflow_run_id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "workflow_id": { "type": "string" },
+    "project_type": { "type": "string" },
+    "status": { "type": "string", "enum": ["succeeded", "failed"] },
+    "generated_at": { "type": "string" },
+    "required_artifacts": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "artifact_coverage": { "type": "object" },
+    "step_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step_index", "step_id", "task_id", "artifacts"],
+        "properties": {
+          "step_index": { "type": "integer" },
+          "step_id": { "type": "string" },
+          "task_id": { "type": "string" },
+          "artifacts": {
+            "type": "array",
+            "items": { "type": "object" }
+          }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "checkpoints": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "reasons": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

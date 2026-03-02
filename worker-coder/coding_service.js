@@ -37,10 +37,15 @@ export const CodingService = {
 
                 // 3. Optional Auto-commit
                 if (fs.existsSync(path.join(workspaceRoot, '.git'))) {
-                    exec(`git add "${file_path}" && git commit -m "coding_agent: task ${task_id || 'unknown'} - updated ${file_path}"`, 
-                         { cwd: workspaceRoot }, (err) => {
-                        if (err) console.warn("[CodingService] Auto-commit skipped/failed:", err.message);
-                    });
+                    const unmerged = await execCapture("git diff --name-only --diff-filter=U", workspaceRoot);
+                    if (unmerged.ok && unmerged.stdout.trim()) {
+                        console.warn("[CodingService] Auto-commit skipped: unresolved merge conflicts present.");
+                    } else {
+                        exec(`git add "${file_path}" && git commit -m "coding_agent: task ${task_id || 'unknown'} - updated ${file_path}"`,
+                             { cwd: workspaceRoot }, (err) => {
+                            if (err) console.warn("[CodingService] Auto-commit skipped/failed:", err.message);
+                        });
+                    }
                 }
             } catch (fsErr) {
                 console.error("[CodingService] Artifact logging failed:", fsErr.message);

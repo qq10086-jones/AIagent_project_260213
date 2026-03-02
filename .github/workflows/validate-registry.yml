@@ -1,0 +1,32 @@
+name: Validate Registry
+
+on:
+  pull_request:
+    paths:
+      - "configs/registry/**"
+      - "orchestrator/src/registry.js"
+      - "orchestrator/scripts/validate_registry.js"
+  push:
+    branches: [main]
+    paths:
+      - "configs/registry/**"
+      - "orchestrator/src/registry.js"
+      - "orchestrator/scripts/validate_registry.js"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orchestrator
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install deps
+        run: npm ci
+      - name: Validate registry
+        run: npm run validate:registry

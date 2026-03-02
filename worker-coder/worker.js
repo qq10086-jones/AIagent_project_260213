@@ -2,6 +2,7 @@ import Redis from "ioredis";
 import pg from "pg";
 import { v4 as uuidv4 } from "uuid";
 import { CodingService } from "./coding_service.js";
+import { loadRuntimeConfig } from "./runtime_config.js";
 
 const {
   REDIS_URL = "redis://localhost:6379",
@@ -17,6 +18,14 @@ const STREAM_TASK = process.env.STREAM_TASK || "stream:task:coding";
 const STREAM_RESULT = "stream:result";
 const GROUP = process.env.GROUP_TASK || "cg:workers:coding";
 const CONSUMER = `coder-${uuidv4().slice(0, 8)}`;
+const RUNTIME = loadRuntimeConfig();
+const RUNTIME_CODER = RUNTIME.config?.worker_coder || {};
+const DEFAULT_PROVIDER = String(process.env.CODER_PROVIDER_DEFAULT || RUNTIME_CODER.provider_default || "auto").toLowerCase();
+const DEFAULT_MODEL = String(process.env.CODER_MODEL_DEFAULT || RUNTIME_CODER.model_default || "");
+const GLOBAL_TASK_TIMEOUT_MS = Math.max(30000, Number(process.env.CODER_GLOBAL_TASK_TIMEOUT_MS || RUNTIME_CODER.global_task_timeout_ms || 900000));
+console.log(
+  `[runtime-config] path=${RUNTIME.path || "none"} provider_default=${DEFAULT_PROVIDER} model_default=${DEFAULT_MODEL || "none"} global_timeout_ms=${GLOBAL_TASK_TIMEOUT_MS}`
+);
 
 const redis = new Redis(REDIS_URL);
 const pool = new pg.Pool({
@@ -26,6 +35,54 @@ const pool = new pg.Pool({
   password: PGPASSWORD,
   database: PGDATABASE,
 });
+
+const ALLOWED_CMD_PREFIXES = new Set([
+  "python",
+  "pytest",
+  "npm",
+  "node",
+  "git",
+  "ls",
+  "cat",
+  "echo",
+  "pwd",
+  "grep",
+  "rg",
+  "fd",
+  "ruff",
+  "black",
+]);
+
+function splitCommandChain(command) {
+  return String(command || "")
+    .split("&&")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function validateExecuteCommand(command) {
+  const raw = String(command || "").trim();
+  if (!raw) return { ok: false, error: "Command blocked: empty command." };
+  // Only allow chained commands through "&&". Block other shell-control/meta chars.
+  if (/[;|><`$(){}[\]\\*?~\n\r]/.test(raw)) {
+    return { ok: false, error: "Command blocked: forbidden shell meta-character detected." };
+  }
+  // Reject a standalone '&' that is not part of a "&&" chain.
+  if (/(^|[^&])&([^&]|$)/.test(raw)) {
+    return { ok: false, error: "Command blocked: unsupported '&' operator." };
+  }
+  const segments = splitCommandChain(raw);
+  if (segments.length === 0) {
+    return { ok: false, error: "Command blocked: empty command segment." };
+  }
+  for (const segment of segments) {
+    const cmdPrefix = segment.trim().split(/\s+/)[0];
+    if (!ALLOWED_CMD_PREFIXES.has(cmdPrefix)) {
+      return { ok: false, error: `Command blocked: '${cmdPrefix}' is not whitelisted.` };
+    }
+  }
+  return { ok: true };
+}
 
 async function emitResult(task_id, status, output, error) {
   const msg = { task_id, status };
@@ -78,18 +135,9 @@ async function processTask(msgId, task) {
       isSuccess = result.success;
       if (!isSuccess) error = result.message;
     } else if (tool_name === "coding.execute") {
-      // Security Check (Worker Side)
-      const command = payload.command || "";
-      const allowedPrefixes = ["python", "pytest", "npm", "node", "git", "ls", "cat", "echo", "pwd", "grep", "rg", "fd", "ruff", "black"];
-      const cmdPrefix = command.trim().split(/\s+/)[0];
-      const forbiddenChars = [";", "|", ">", "<", "&", "$", "(", ")", "`", "\\", "*", "?", "[", "]", "{", "}", "~"];
-      
-      if (!allowedPrefixes.includes(cmdPrefix)) {
-        throw new Error(`Command blocked: '${cmdPrefix}' is not whitelisted.`);
-      }
-      if (forbiddenChars.some(char => command.includes(char))) {
-        throw new Error("Command blocked: forbidden shell meta-character detected.");
-      }
+      const command = String(payload.command || "").trim();
+      const checked = validateExecuteCommand(command);
+      if (!checked.ok) throw new Error(checked.error);
 
       const result = await CodingService.executeCommand({
         workspaceRoot: WORKSPACE_ROOT,
@@ -104,8 +152,8 @@ async function processTask(msgId, task) {
       const result = await CodingService.delegateTask({
         workspaceRoot: WORKSPACE_ROOT,
         task_prompt: payload.task_prompt || payload.prompt,
-        provider: payload.provider || "auto",
-        model: payload.model || null,
+        provider: payload.provider || DEFAULT_PROVIDER,
+        model: payload.model || DEFAULT_MODEL || null,
         run_id,
         task_id,
         max_runtime_s: payload.max_runtime_s || 600,
@@ -157,7 +205,7 @@ async function main() {
           if (task.tool_name && task.tool_name.startsWith("coding.")) {
             console.log(`[worker] Processing task ${task.task_id} (${task.tool_name})...`);
             try {
-              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("GLOBAL_TASK_TIMEOUT")), 900000));
+              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("GLOBAL_TASK_TIMEOUT")), GLOBAL_TASK_TIMEOUT_MS));
               await Promise.race([processTask(id, task), timeoutPromise]);
               // After processTask finishes, it should have already called emitResult and xack inside.
               console.log(`[worker] Successfully processed and acknowledged task ${task.task_id}`);

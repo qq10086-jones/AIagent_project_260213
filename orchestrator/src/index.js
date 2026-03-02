@@ -13,6 +13,12 @@ import cron from "node-cron";
 
 import { analyzeTaskRisk } from "./policy.js";
 import { handleExecuteTool, handleApproveTask } from "./ingress.js";
+import {
+  getDefaultRegistryPath,
+  loadRegistryOrThrow,
+  validateTaskInputAgainstRegistry,
+} from "./registry.js";
+import { createWorkflowEngine } from "./workflow_engine.js";
 
 const {
   REDIS_URL,
@@ -34,13 +40,56 @@ const {
   AUTO_REPORT_TIMEZONE = "Asia/Shanghai",
   APPROVAL_TOKEN = "dev-approval-token",
   TOOLS_CONFIG_PATH = "configs/tools.json",
+  REGISTRY_PATH = "",
+  RESUME_TOKEN_SECRET = "dev-resume-secret",
+  RESUME_TOKEN_TTL_SEC = "86400",
+  WORKSPACE_ROOT = "/workspace",
+  STREAM_TASK_DLQ = "stream:task:dlq",
+  TASK_RUNNING_TIMEOUT_SEC = "900",
+  TASK_WATCHDOG_INTERVAL_SEC = "30",
+  TASK_TIMEOUT_AUTO_DLQ = "1",
+  RUNTIME_CONFIG_PATH = "configs/runtime/runtime_defaults.json",
+  RELEASE_PACK_ARCHIVE_TO_MINIO = "1",
+  RELEASE_PACK_BUCKET = "nexus-artifacts",
 } = process.env;
 
-const QWEN_BASE = process.env.QWEN_BASE_URL || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-const QWEN_MODEL = process.env.QWEN_MODEL || "qwen-plus";
-const CODER_PROVIDER_DEFAULT = String(process.env.CODER_PROVIDER_DEFAULT || "opencode").toLowerCase();
-const CODER_MODEL_DEFAULT = String(process.env.CODER_MODEL_DEFAULT || "minimax-m2.5");
-const DEFAULT_LOCAL_MODEL = process.env.QUANT_LLM_MODEL || "deepseek-r1:32b";
+function loadRuntimeConfig() {
+  const candidates = [
+    String(RUNTIME_CONFIG_PATH || "").trim(),
+    path.resolve("configs/runtime/runtime_defaults.json"),
+    path.resolve("../configs/runtime/runtime_defaults.json"),
+  ].filter(Boolean);
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        const raw = fs.readFileSync(p, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return { config: parsed, path: p };
+        }
+      }
+    } catch (err) {
+      console.warn(`[runtime-config] failed to load '${p}': ${err.message}`);
+    }
+  }
+  return { config: {}, path: null };
+}
+
+const RUNTIME_CONFIG_LOADED = loadRuntimeConfig();
+const RUNTIME_CONFIG = RUNTIME_CONFIG_LOADED.config || {};
+const RUNTIME_ORCH = RUNTIME_CONFIG.orchestrator || {};
+const RUNTIME_WATCHDOG = RUNTIME_CONFIG.watchdog || {};
+const RUNTIME_STREAMS = RUNTIME_CONFIG.streams || {};
+
+const QWEN_BASE = process.env.QWEN_BASE_URL || RUNTIME_ORCH.qwen_base_url || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+const QWEN_MODEL = process.env.QWEN_MODEL || RUNTIME_ORCH.qwen_model || "qwen-plus";
+const CODER_PROVIDER_DEFAULT = String(process.env.CODER_PROVIDER_DEFAULT || RUNTIME_ORCH.coder_provider_default || "opencode").toLowerCase();
+const CODER_MODEL_DEFAULT = String(process.env.CODER_MODEL_DEFAULT || RUNTIME_ORCH.coder_model_default || "minimax-m2.5");
+const DEFAULT_LOCAL_MODEL = process.env.QUANT_LLM_MODEL || RUNTIME_ORCH.quant_llm_model || "deepseek-r1:32b";
+const RESOLVED_STREAM_TASK_DLQ = String(STREAM_TASK_DLQ || RUNTIME_STREAMS.task_dlq || "stream:task:dlq");
+const RESOLVED_TASK_RUNNING_TIMEOUT_SEC = Number(TASK_RUNNING_TIMEOUT_SEC || RUNTIME_WATCHDOG.running_timeout_sec || 900);
+const RESOLVED_TASK_WATCHDOG_INTERVAL_SEC = Number(TASK_WATCHDOG_INTERVAL_SEC || RUNTIME_WATCHDOG.interval_sec || 30);
+const RESOLVED_TASK_TIMEOUT_AUTO_DLQ = String(TASK_TIMEOUT_AUTO_DLQ || (RUNTIME_WATCHDOG.auto_dlq ? "1" : "0")) !== "0";
 let CURRENT_LOCAL_MODEL = DEFAULT_LOCAL_MODEL;
 let FORCE_LOCAL_LLM = false;
 const RE_COMPOSITE_CUE = /(?:\u7136\u540e|\u4e26\u4e14|\u540c\u65f6|\u63a5\u7740|\u968f\u540e|\u53e6\u5916|\u4ee5\u53ca|;|\uff1b|\n)/i;
@@ -65,6 +114,10 @@ function loadToolsConfig() {
 }
 
 const TOOLS_CONFIG = loadToolsConfig();
+const REGISTRY_CONFIG_PATH = REGISTRY_PATH && String(REGISTRY_PATH).trim()
+  ? String(REGISTRY_PATH).trim()
+  : getDefaultRegistryPath();
+const REGISTRY = loadRegistryOrThrow(REGISTRY_CONFIG_PATH);
 const channelMemory = new Map();
 
 export function getToolSpec(toolName) {
@@ -118,6 +171,60 @@ function parseOutputField(rawOutput) {
   } catch {
     return { raw: String(rawOutput) };
   }
+}
+
+function normalizeErrorCode(status, errorCode, output) {
+  const raw = String(errorCode || "").trim();
+  if (raw) return raw;
+  if (status === "succeeded") return null;
+  const fromOutput = String(output?.error_code || output?.code || "").trim();
+  if (fromOutput) return fromOutput;
+  if (status === "failed") return "TASK_FAILED";
+  if (status === "aborted") return "TASK_ABORTED";
+  return "TASK_ERROR";
+}
+
+function normalizeResultPayload(status, output, errorCode) {
+  const safe = output && typeof output === "object" ? output : { raw: String(output || "") };
+  return {
+    ok: status === "succeeded",
+    status,
+    error_code: errorCode || null,
+    output: safe,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function listFilesRecursive(rootDir, maxFiles = 400) {
+  if (!rootDir || !fs.existsSync(rootDir)) return [];
+  const out = [];
+  const stack = [rootDir];
+  while (stack.length > 0 && out.length < maxFiles) {
+    const cur = stack.pop();
+    let ents = [];
+    try {
+      ents = fs.readdirSync(cur, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const ent of ents) {
+      const full = path.join(cur, ent.name);
+      if (ent.isDirectory()) {
+        stack.push(full);
+      } else if (ent.isFile()) {
+        try {
+          const st = fs.statSync(full);
+          out.push({
+            path: full.replace(/\\/g, "/"),
+            bytes: st.size,
+            mtime: st.mtime.toISOString(),
+          });
+        } catch {}
+      }
+      if (out.length >= maxFiles) break;
+    }
+  }
+  return out.sort((a, b) => String(a.path).localeCompare(String(b.path)));
 }
 
 function splitForDiscord(text, maxLen = DISCORD_MAX_CONTENT) {
@@ -456,6 +563,17 @@ async function enqueueTask({ tool_name, payload, run_id, risk_level = null, idem
   const fullPayload = { ...(payload || {}), run_id };
   const idem = idempotency_key || makeIdempotencyKey(run_id, tool_name, fullPayload);
   const spec = getToolSpec(tool_name);
+
+  const regCheck = validateTaskInputAgainstRegistry({
+    registry: REGISTRY,
+    tool_name,
+    payload: fullPayload,
+  });
+  if (!regCheck.ok) {
+    const err = new Error(`REGISTRY_INVALID: ${regCheck.errors.join("; ")}`);
+    err.code = "REGISTRY_INVALID";
+    throw err;
+  }
   
   const risk = analyzeTaskRisk(tool_name, fullPayload);
   const finalRisk = risk_level || risk.risk_level || spec?.default_risk || "low";
@@ -551,6 +669,24 @@ async function enqueueWorkflow({ name, steps, run_id, context = null }) {
   }
   return { ok: true, workflow_id, run_id, tasks };
 }
+
+const workflowEngine = createWorkflowEngine({
+  pool,
+  registry: REGISTRY,
+  enqueueTask,
+  recordEvent,
+  makeIdempotencyKey,
+  resumeTokenSecret: String(RESUME_TOKEN_SECRET || "dev-resume-secret"),
+  resumeTokenTtlSec: Number(RESUME_TOKEN_TTL_SEC || 86400),
+  workspaceRoot: String(WORKSPACE_ROOT || "/workspace"),
+  minio: {
+    enabled: String(RELEASE_PACK_ARCHIVE_TO_MINIO || "1") !== "0",
+    bucket: String(RELEASE_PACK_BUCKET || "nexus-artifacts"),
+    endpoint: String(MINIO_ENDPOINT || "http://nexus-minio:9000"),
+    accessKey: String(MINIO_ACCESS_KEY || "nexus"),
+    secretKey: String(MINIO_SECRET_KEY || "nexuspassword"),
+  },
+});
 
 function hasCompositeCue(text) {
   const s = String(text || "");
@@ -1511,7 +1647,10 @@ discord.on("messageCreate", async msg => {
         }
       } else {
         const fallback = await translate("任务完成，但未生成正文报告。", lang);
-        await replyChunked(msg, `[NEXUS] ${fallback}`);
+        await replyChunked(
+          msg,
+          `[NEXUS] ${fallback}\nrun_id=${run_id}\nstatus_api=/runs/${run_id}/status\ntimeline_api=/runs/${run_id}/timeline`
+        );
       }
 
       const elapsedSec = ((Date.now() - context.startTime) / 1000).toFixed(1);
@@ -1644,17 +1783,32 @@ async function startResultConsumer() {
           if (status === "claimed") {
             await pool.query("UPDATE tasks SET status=$1, updated_at=NOW() WHERE task_id=$2", ["running", task_id]);
             await recordEvent(task_id, "task.claimed", { task_id });
+            await workflowEngine.handleTaskClaimed(task_id).catch((err) => {
+              console.warn(`[workflow] handleTaskClaimed failed: ${err.message}`);
+            });
           } else {
             // Task finished (succeeded/failed/aborted)
+            const normalizedErrorCode = normalizeErrorCode(status, streamError || null, output || {});
+            const normalizedResult = normalizeResultPayload(status, output || {}, normalizedErrorCode);
             await pool.query(
               "UPDATE tasks SET status=$1, result_json=$2, error_code=$3, updated_at=NOW() WHERE task_id=$4",
-              [status, JSON.stringify(output || {}), streamError || null, task_id]
+              [status, JSON.stringify(normalizedResult), normalizedErrorCode, task_id]
             );
             if (status === "succeeded") {
               await recordEvent(task_id, "task.succeeded", { task_id });
             } else if (status === "failed") {
-              await recordEvent(task_id, "task.failed", { task_id });
+              await recordEvent(task_id, "task.failed", { task_id, error_code: normalizedErrorCode });
             }
+            await workflowEngine
+              .handleTaskTerminal({
+                task_id,
+                status,
+                output: output || {},
+                error_code: normalizedErrorCode,
+              })
+              .catch((err) => {
+                console.warn(`[workflow] handleTaskTerminal failed: ${err.message}`);
+              });
 
             const ctx = taskToContext.get(task_id);
             if (ctx) {
@@ -1822,9 +1976,106 @@ ${searchData}
   }
 }
 
+async function startTaskWatchdog() {
+  const intervalMs = Math.max(5000, Number(RESOLVED_TASK_WATCHDOG_INTERVAL_SEC || 30) * 1000);
+  const timeoutSec = Math.max(60, Number(RESOLVED_TASK_RUNNING_TIMEOUT_SEC || 900));
+  const autoDlq = Boolean(RESOLVED_TASK_TIMEOUT_AUTO_DLQ);
+  console.log(`[watchdog] enabled interval=${intervalMs}ms running_timeout=${timeoutSec}s auto_dlq=${autoDlq}`);
+
+  while (true) {
+    try {
+      const staleRunning = await pool.query(
+        `SELECT task_id, run_id, tool_name, payload_json, workflow_id, step_index
+         FROM tasks
+         WHERE status='running'
+           AND updated_at < NOW() - ($1::int * INTERVAL '1 second')
+         ORDER BY updated_at ASC
+         LIMIT 50`,
+        [timeoutSec]
+      );
+
+      for (const row of staleRunning.rows) {
+        const timeoutError = "TASK_TIMEOUT";
+        const timeoutPayload = normalizeResultPayload(
+          "failed",
+          { error: `task timeout after ${timeoutSec}s`, watchdog: true },
+          timeoutError
+        );
+        await pool.query(
+          "UPDATE tasks SET status='failed', error_code=$2, result_json=$3, updated_at=NOW() WHERE task_id=$1 AND status='running'",
+          [row.task_id, timeoutError, JSON.stringify(timeoutPayload)]
+        );
+        await recordEvent(row.task_id, "task.timeout", {
+          task_id: row.task_id,
+          run_id: row.run_id,
+          timeout_sec: timeoutSec,
+          tool_name: row.tool_name,
+        });
+
+        if (autoDlq) {
+          await redis.xadd(
+            RESOLVED_STREAM_TASK_DLQ,
+            "*",
+            "task_id",
+            row.task_id,
+            "run_id",
+            row.run_id || "",
+            "tool_name",
+            row.tool_name || "",
+            "payload",
+            row.payload_json || "{}",
+            "error_code",
+            timeoutError
+          );
+          await recordEvent(row.task_id, "task.dlq.enqueued", {
+            stream: RESOLVED_STREAM_TASK_DLQ,
+            reason: timeoutError,
+          });
+        }
+
+        await workflowEngine
+          .handleTaskTerminal({
+            task_id: row.task_id,
+            status: "failed",
+            output: { error: `task timeout after ${timeoutSec}s`, watchdog: true },
+            error_code: timeoutError,
+          })
+          .catch((err) => {
+            console.warn(`[watchdog] workflow timeout propagation failed: ${err.message}`);
+          });
+      }
+    } catch (err) {
+      console.warn(`[watchdog] loop error: ${err.message}`);
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+
 const app = express();
 app.use(express.json());
 app.get("/health", (_, res) => res.send("ok"));
+app.get("/runtime/config", (_, res) => {
+  return res.json({
+    ok: true,
+    runtime_config_path: RUNTIME_CONFIG_LOADED.path || null,
+    resolved: {
+      qwen_base_url: QWEN_BASE,
+      qwen_model: QWEN_MODEL,
+      coder_provider_default: CODER_PROVIDER_DEFAULT,
+      coder_model_default: CODER_MODEL_DEFAULT,
+      quant_llm_model: DEFAULT_LOCAL_MODEL,
+      stream_task_dlq: RESOLVED_STREAM_TASK_DLQ,
+      task_running_timeout_sec: RESOLVED_TASK_RUNNING_TIMEOUT_SEC,
+      task_watchdog_interval_sec: RESOLVED_TASK_WATCHDOG_INTERVAL_SEC,
+      task_timeout_auto_dlq: RESOLVED_TASK_TIMEOUT_AUTO_DLQ,
+    },
+    source_priority: [
+      "environment variables",
+      "runtime_defaults.json",
+      "hardcoded fallback",
+    ],
+  });
+});
 
 app.post("/debug/plan", async (req, res) => {
   try {
@@ -1890,6 +2141,9 @@ app.post("/tasks/:task_id/approve", async (req, res) => {
 
   await pool.query("UPDATE tasks SET status=$1, updated_at=NOW() WHERE task_id=$2", ["queued", task_id]);
   await recordEvent(task_id, "approval.approved", { task_id });
+  await workflowEngine.handleTaskApproved(task_id).catch((err) => {
+    console.warn(`[workflow] handleTaskApproved failed: ${err.message}`);
+  });
 
   let payload = {};
   try {
@@ -1926,6 +2180,7 @@ app.post("/tasks/:task_id/reject", async (req, res) => {
   }
 
   const task_id = req.params.task_id;
+  const reason = String(req.body?.reason || "").trim();
   const row = await pool.query(
     "SELECT task_id, tool_name, run_id, status FROM tasks WHERE task_id=$1",
     [task_id]
@@ -1938,8 +2193,21 @@ app.post("/tasks/:task_id/reject", async (req, res) => {
     return res.status(409).json({ ok: false, error: `task status is ${task.status}` });
   }
 
-  await pool.query("UPDATE tasks SET status=$1, updated_at=NOW() WHERE task_id=$2", ["failed", task_id]);
-  await recordEvent(task_id, "approval.rejected", { task_id });
+  await pool.query(
+    "UPDATE tasks SET status=$1, error_code=$3, result_json=$4, updated_at=NOW() WHERE task_id=$2",
+    [
+      "failed",
+      task_id,
+      "APPROVAL_REJECTED",
+      JSON.stringify(
+        normalizeResultPayload("failed", { rejected: true, reason, approval: "rejected" }, "APPROVAL_REJECTED")
+      ),
+    ]
+  );
+  await recordEvent(task_id, "approval.rejected", { task_id, reason });
+  await workflowEngine.handleTaskRejected(task_id, reason).catch((err) => {
+    console.warn(`[workflow] handleTaskRejected failed: ${err.message}`);
+  });
 
   const ctx = taskToContext.get(task_id);
   if (ctx) {
@@ -1995,6 +2263,339 @@ app.post("/workflows", async (req, res) => {
     await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["failed", run_id]).catch(() => {});
     return res.status(500).json({ ok: false, error: err.message || "workflow enqueue error" });
   }
+});
+
+app.post("/workflow-runs/start", async (req, res) => {
+  const workflow_id = String(req.body?.workflow_id || "").trim();
+  const project_type = String(req.body?.project_type || "").trim();
+  const input = req.body?.input && typeof req.body.input === "object" ? req.body.input : {};
+  const run_id = String(req.body?.run_id || uuidv4()).trim();
+  if (!workflow_id) {
+    return res.status(400).json({ ok: false, error: "workflow_id is required" });
+  }
+
+  try {
+    await ensureRun(run_id, {
+      client_msg_id: `workflow-run-${run_id}`,
+      user_id: "workflow",
+      status: "running",
+      input_text: `workflow_run:${workflow_id}`,
+    });
+    const started = await workflowEngine.startWorkflowRun({
+      workflow_id,
+      project_type: project_type || undefined,
+      run_id,
+      input,
+      context: null,
+    });
+    return res.json({ ok: true, ...started });
+  } catch (err) {
+    const code = String(err?.code || "");
+    const badReq = ["WORKFLOW_NOT_FOUND", "PROJECT_TYPE_NOT_FOUND", "WORKFLOW_PROJECT_TYPE_MISMATCH", "WORKFLOW_EMPTY"].includes(code);
+    return res.status(badReq ? 400 : 500).json({ ok: false, error: err.message || "workflow run start failed", error_code: code || undefined });
+  }
+});
+
+app.get("/workflow-runs/:workflow_run_id", async (req, res) => {
+  const workflow_run_id = req.params.workflow_run_id;
+  try {
+    const state = await workflowEngine.getWorkflowRunStatus(workflow_run_id);
+    if (!state) return res.status(404).json({ ok: false, error: "workflow_run not found" });
+    return res.json({ ok: true, ...state });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || "workflow run query failed" });
+  }
+});
+
+app.post("/workflow-runs/:workflow_run_id/resume-token", async (req, res) => {
+  const workflow_run_id = req.params.workflow_run_id;
+  try {
+    const issued = await workflowEngine.issueResumeToken(workflow_run_id);
+    return res.json({ ok: true, workflow_run_id, ...issued });
+  } catch (err) {
+    const code = String(err?.code || "");
+    const badReq = code === "WORKFLOW_RUN_NOT_FOUND" || code === "RESUME_INVALID";
+    return res.status(badReq ? 400 : 500).json({ ok: false, error: err.message || "issue resume token failed", error_code: code || undefined });
+  }
+});
+
+app.post("/workflow-runs/:workflow_run_id/resume", async (req, res) => {
+  const workflow_run_id = req.params.workflow_run_id;
+  const resume_token = String(req.body?.resume_token || "").trim();
+  if (!resume_token) return res.status(400).json({ ok: false, error: "resume_token is required", error_code: "RESUME_INVALID" });
+  try {
+    const resumed = await workflowEngine.resumeFromToken(workflow_run_id, resume_token, null);
+    return res.json(resumed);
+  } catch (err) {
+    const code = String(err?.code || "");
+    const badReq = code === "WORKFLOW_RUN_NOT_FOUND" || code === "RESUME_INVALID";
+    return res.status(badReq ? 400 : 500).json({ ok: false, error: err.message || "resume failed", error_code: code || undefined });
+  }
+});
+
+app.get("/workflow-runs/:workflow_run_id/validate-pack", async (req, res) => {
+  const workflow_run_id = req.params.workflow_run_id;
+  try {
+    const result = await workflowEngine.validateRunArtifactPack(workflow_run_id);
+    return res.json({ ok: true, validation: result });
+  } catch (err) {
+    const code = String(err?.code || "");
+    const badReq = code === "WORKFLOW_RUN_NOT_FOUND";
+    return res.status(badReq ? 404 : 500).json({
+      ok: false,
+      error: err.message || "artifact pack validate failed",
+      error_code: code || undefined,
+    });
+  }
+});
+
+app.post("/workflow-runs/:workflow_run_id/archive-pack", async (req, res) => {
+  const workflow_run_id = req.params.workflow_run_id;
+  try {
+    const result = await workflowEngine.archiveRunArtifactPack(workflow_run_id);
+    return res.json(result);
+  } catch (err) {
+    const code = String(err?.code || "");
+    const badReq = code === "WORKFLOW_RUN_NOT_FOUND" || code === "ARTIFACT_INCOMPLETE";
+    return res.status(badReq ? 400 : 500).json({
+      ok: false,
+      error: err.message || "archive pack failed",
+      error_code: code || undefined,
+    });
+  }
+});
+
+app.get("/runs/:run_id/status", async (req, res) => {
+  const run_id = req.params.run_id;
+  try {
+    const runRes = await pool.query("SELECT * FROM runs WHERE run_id=$1", [run_id]);
+    if (runRes.rows.length === 0) return res.status(404).json({ ok: false, error: "run not found" });
+    const run = runRes.rows[0];
+    const tasksRes = await pool.query(
+      `SELECT task_id, tool_name, status, error_code, updated_at
+       FROM tasks
+       WHERE run_id=$1
+       ORDER BY created_at ASC`,
+      [run_id]
+    );
+    const counts = { queued: 0, running: 0, waiting_approval: 0, succeeded: 0, failed: 0, other: 0 };
+    for (const t of tasksRes.rows) {
+      const s = String(t.status || "");
+      if (counts[s] !== undefined) counts[s] += 1;
+      else counts.other += 1;
+    }
+    return res.json({
+      ok: true,
+      run: {
+        run_id: run.run_id,
+        status: run.status,
+        created_at: run.created_at,
+        input_text: run.input_text,
+      },
+      counts,
+      tasks: tasksRes.rows,
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || "run status query failed" });
+  }
+});
+
+app.get("/runs/:run_id/timeline", async (req, res) => {
+  const run_id = req.params.run_id;
+  try {
+    const tasksRes = await pool.query(
+      "SELECT task_id, tool_name, status, error_code, created_at, updated_at FROM tasks WHERE run_id=$1 ORDER BY created_at ASC",
+      [run_id]
+    );
+    if (tasksRes.rows.length === 0) return res.status(404).json({ ok: false, error: "run not found" });
+    const taskIds = tasksRes.rows.map((r) => r.task_id);
+    const evRes = await pool.query(
+      "SELECT task_id, event_type, payload_json, ts FROM event_log WHERE task_id = ANY($1::text[]) ORDER BY ts ASC",
+      [taskIds]
+    );
+    return res.json({
+      ok: true,
+      run_id,
+      tasks: tasksRes.rows,
+      events: evRes.rows,
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || "timeline query failed" });
+  }
+});
+
+app.get("/runs/:run_id/artifacts", async (req, res) => {
+  const run_id = req.params.run_id;
+  try {
+    const releaseDir = path.join(WORKSPACE_ROOT, "artifacts", "release", run_id);
+    const runtimeDir = path.join(WORKSPACE_ROOT, "artifacts", "runs", run_id);
+    return res.json({
+      ok: true,
+      run_id,
+      roots: {
+        release: releaseDir.replace(/\\/g, "/"),
+        runtime: runtimeDir.replace(/\\/g, "/"),
+      },
+      release_files: listFilesRecursive(releaseDir),
+      runtime_files: listFilesRecursive(runtimeDir),
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || "artifacts query failed" });
+  }
+});
+
+app.get("/approvals/pending", async (req, res) => {
+  const limit = Math.max(1, Math.min(Number(req.query.limit || 50), 200));
+  try {
+    const rows = await pool.query(
+      `SELECT task_id, run_id, tool_name, risk_level, error_code, payload_json, created_at, updated_at
+       FROM tasks
+       WHERE status='waiting_approval'
+       ORDER BY created_at ASC
+       LIMIT $1`,
+      [limit]
+    );
+    return res.json({ ok: true, count: rows.rows.length, tasks: rows.rows });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || "pending approval query failed" });
+  }
+});
+
+app.get("/ui/approvals", async (_, res) => {
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NEXUS Approvals</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --ink: #172033;
+      --muted: #5b6780;
+      --ok: #0e9f6e;
+      --danger: #d14343;
+      --line: #d7dfeb;
+      --accent: #1f6feb;
+    }
+    body {
+      margin: 0; padding: 24px; background: radial-gradient(1200px 500px at 10% -10%, #deebff, transparent), var(--bg);
+      color: var(--ink); font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: 0.2px; }
+    .sub { color: var(--muted); margin-bottom: 18px; }
+    .toolbar { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; margin-bottom: 14px; }
+    .inp, .btn, textarea {
+      border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fff;
+    }
+    .btn { cursor: pointer; font-weight: 600; }
+    .btn.refresh { background: #eef4ff; border-color: #c9dafc; color: #1f4da0; }
+    .btn.approve { background: #e7f7f0; border-color: #b9ead7; color: #106a47; }
+    .btn.reject { background: #fdeaea; border-color: #f4c5c5; color: #8b1f1f; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px;
+      box-shadow: 0 6px 18px rgba(24,39,75,0.06);
+    }
+    .head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+    .task { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #102448; }
+    .meta { color: var(--muted); font-size: 13px; }
+    pre {
+      background: #f8faff; border: 1px solid #e3e9f7; border-radius: 10px; padding: 10px; overflow: auto;
+      font-size: 12px; line-height: 1.45; color: #243450;
+    }
+    .row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; margin-top: 8px; }
+    .status { margin-bottom: 12px; color: #234; font-size: 13px; }
+    @media (max-width: 820px) {
+      .toolbar { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Approval Console</h1>
+    <div class="sub">Review waiting tasks and execute approve/reject with reason.</div>
+    <div class="toolbar">
+      <input id="token" class="inp" placeholder="Approval token (X-Approval-Token)" value="" />
+      <input id="limit" class="inp" type="number" min="1" max="200" value="30" />
+      <button class="btn refresh" onclick="loadTasks()">Refresh</button>
+    </div>
+    <div id="status" class="status">Loading...</div>
+    <div id="list"></div>
+  </div>
+<script>
+async function loadTasks() {
+  const limit = Math.max(1, Math.min(Number(document.getElementById('limit').value || 30), 200));
+  const st = document.getElementById('status');
+  const list = document.getElementById('list');
+  st.textContent = 'Loading pending approvals...';
+  list.innerHTML = '';
+  try {
+    const resp = await fetch('/approvals/pending?limit=' + limit);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'failed');
+    st.textContent = 'Pending: ' + data.count;
+    if (!data.tasks || data.tasks.length === 0) {
+      list.innerHTML = '<div class="card">No pending approval tasks.</div>';
+      return;
+    }
+    for (const t of data.tasks) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      const payload = String(t.payload_json || '{}');
+      el.innerHTML = '<div class="head">'
+        + '<div class="task">' + t.task_id + '</div>'
+        + '<div class="meta">' + (t.tool_name || '-') + ' | risk=' + (t.risk_level || '-') + ' | run=' + (t.run_id || '-') + '</div>'
+        + '</div>'
+        + '<pre>' + payload.replace(/[<>&]/g, (m) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[m])) + '</pre>'
+        + '<div class="row">'
+        + '<textarea id="reason-' + t.task_id + '" rows="2" placeholder="Reject reason (required for reject)"></textarea>'
+        + '<button class="btn approve" onclick="approveTask(\\'' + t.task_id + '\\')">Approve</button>'
+        + '<button class="btn reject" onclick="rejectTask(\\'' + t.task_id + '\\')">Reject</button>'
+        + '</div>';
+      list.appendChild(el);
+    }
+  } catch (err) {
+    st.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function approveTask(taskId) {
+  const token = document.getElementById('token').value.trim();
+  if (!token) { alert('token required'); return; }
+  const resp = await fetch('/tasks/' + encodeURIComponent(taskId) + '/approve', {
+    method: 'POST',
+    headers: { 'X-Approval-Token': token, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  const data = await resp.json();
+  if (!data.ok) { alert('approve failed: ' + (data.error || 'unknown')); return; }
+  await loadTasks();
+}
+
+async function rejectTask(taskId) {
+  const token = document.getElementById('token').value.trim();
+  if (!token) { alert('token required'); return; }
+  const reason = document.getElementById('reason-' + taskId).value.trim();
+  if (!reason) { alert('reject reason required'); return; }
+  const resp = await fetch('/tasks/' + encodeURIComponent(taskId) + '/reject', {
+    method: 'POST',
+    headers: { 'X-Approval-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
+  const data = await resp.json();
+  if (!data.ok) { alert('reject failed: ' + (data.error || 'unknown')); return; }
+  await loadTasks();
+}
+
+loadTasks();
+</script>
+</body>
+</html>`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
 });
 
 app.post("/chat", async (req, res) => {
@@ -2173,6 +2774,66 @@ async function main() {
   try {
     await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS workflow_id TEXT");
     await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS step_index INT");
+    await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS result_json TEXT");
+    await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS error_code TEXT");
+
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS workflow_runs(
+        workflow_run_id TEXT PRIMARY KEY,
+        run_id TEXT,
+        workflow_id TEXT NOT NULL,
+        project_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        current_step_index INT NOT NULL DEFAULT 0,
+        last_checkpoint_id TEXT,
+        resume_token TEXT,
+        input_json TEXT NOT NULL DEFAULT '{}',
+        error_code TEXT,
+        error_message TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`
+    );
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS workflow_steps(
+        id BIGSERIAL PRIMARY KEY,
+        workflow_run_id TEXT NOT NULL,
+        step_index INT NOT NULL,
+        step_id TEXT NOT NULL,
+        role_name TEXT,
+        tool_name TEXT,
+        gate_name TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        task_id TEXT,
+        risk_level TEXT,
+        approval_required BOOLEAN NOT NULL DEFAULT FALSE,
+        approval_reasons_json TEXT NOT NULL DEFAULT '[]',
+        checkpoint_id TEXT,
+        result_json TEXT,
+        error_code TEXT,
+        started_at TIMESTAMPTZ,
+        ended_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(workflow_run_id, step_index)
+      )`
+    );
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS workflow_checkpoints(
+        checkpoint_id TEXT PRIMARY KEY,
+        workflow_run_id TEXT NOT NULL,
+        step_index INT NOT NULL,
+        step_id TEXT NOT NULL,
+        task_id TEXT,
+        workspace_hash TEXT NOT NULL,
+        artifact_refs_json TEXT NOT NULL DEFAULT '[]',
+        checkpoint_json TEXT NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`
+    );
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_workflow_runs_run_id ON workflow_runs(run_id)");
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_workflow_steps_run ON workflow_steps(workflow_run_id, step_index)");
+    await pool.query("CREATE INDEX IF NOT EXISTS idx_workflow_cp_run ON workflow_checkpoints(workflow_run_id, step_index)");
 
     // --- Learning System Tables ---
     await pool.query(`CREATE TABLE IF NOT EXISTS projects(project_id TEXT PRIMARY KEY, name TEXT, profile_json TEXT, updated_at TIMESTAMPTZ DEFAULT NOW())`);
@@ -2191,6 +2852,7 @@ async function main() {
   } catch {}
 
   startResultConsumer();
+  startTaskWatchdog();
   app.listen(3000, () => console.log("Orchestrator listening on :3000"));
 }
 

@@ -1,0 +1,139 @@
+{
+  "version": "1.4.0",
+  "project_types": {
+    "coding_task": {
+      "default_worker": "worker-coder",
+      "default_workflow": "coding_team_v0",
+      "risk_profile": "dynamic",
+      "acceptance_suite": "webapp_crm_v0",
+      "policy": {
+        "auto_approve_paths": ["docs/*", "test/*", "*.md"],
+        "manual_approve_paths": ["infra/*", "configs/*", ".env*"]
+      },
+      "required_artifacts": ["diff", "plan", "tests", "run_summary"]
+    },
+    "webapp_crm": {
+      "default_worker": "worker-coder",
+      "default_workflow": "coding_team_v0",
+      "risk_profile": "medium",
+      "acceptance_suite": "webapp_crm_v0",
+      "required_artifacts": ["spec", "arch", "diff", "verification", "run_manifest"]
+    },
+    "quant_execution": {
+      "default_worker": "worker-quant",
+      "risk_profile": "medium",
+      "required_artifacts": ["risk_report", "plan", "execution_log"]
+    }
+  },
+  "roles": {
+    "pm": {
+      "tools": ["coding.delegate"],
+      "description": "Product/spec generation and scope control."
+    },
+    "architect": {
+      "tools": ["coding.delegate"],
+      "description": "Architecture and risk planning."
+    },
+    "frontend": {
+      "tools": ["coding.delegate", "coding.patch", "coding.execute"],
+      "description": "Frontend implementation and verification."
+    },
+    "backend": {
+      "tools": ["coding.delegate", "coding.patch", "coding.execute"],
+      "description": "Backend implementation and verification."
+    },
+    "qa": {
+      "tools": ["coding.execute", "coding.delegate"],
+      "description": "Acceptance verification and test execution."
+    },
+    "quant_analyst": {
+      "tools": ["quant.fetch_price", "quant.compute_news_risk_factor"]
+    },
+    "senior_coder": {
+      "tools": ["coding.delegate", "coding.patch", "coding.execute"]
+    },
+    "infra_ops": {
+      "tools": ["openclaw.run"]
+    }
+  },
+  "tools": {
+    "dummy.echo": { "kind": "builtin", "params": {} },
+    "debug.sleep": { "kind": "builtin", "params": {} },
+    "quant.fetch_price": {
+      "kind": "builtin",
+      "params": {
+        "properties": {
+          "symbol": { "type": "string" }
+        },
+        "required": []
+      }
+    },
+    "quant.deep_analysis": { "kind": "builtin", "params": {} },
+    "quant.discovery_workflow": { "kind": "builtin", "params": {} },
+    "quant.compute_news_risk_factor": { "kind": "builtin", "params": {} },
+    "quant.calc_limit_price": { "kind": "builtin", "params": {} },
+    "quant.run_optimized_pipeline": { "kind": "builtin", "params": {} },
+    "ai.analyze": { "kind": "builtin", "params": {} },
+    "media.generate_report_card": { "kind": "builtin", "params": {} },
+    "news.daily_report": { "kind": "builtin", "params": {} },
+    "news.active_hot_search": { "kind": "builtin", "params": {} },
+    "news.preclose_brief_jp": { "kind": "builtin", "params": {} },
+    "news.tdnet_close_flash": { "kind": "builtin", "params": {} },
+    "github.skills_daily_report": { "kind": "builtin", "params": {} },
+    "portfolio.set_account": { "kind": "builtin", "params": {} },
+    "portfolio.record_fill": { "kind": "builtin", "params": {} },
+    "web.search_and_browse": { "kind": "builtin", "params": {} },
+    "browser.screenshot": { "kind": "builtin", "params": {} },
+    "coding.patch": {
+      "kind": "builtin",
+      "params": {
+        "properties": {
+          "file_path": { "type": "string" },
+          "edit_block": { "type": "string" }
+        },
+        "required": ["file_path", "edit_block"]
+      }
+    },
+    "coding.execute": {
+      "kind": "builtin",
+      "params": {
+        "properties": {
+          "command": { "type": "string" }
+        },
+        "required": ["command"]
+      }
+    },
+    "coding.delegate": {
+      "kind": "builtin",
+      "params": {
+        "properties": {
+          "task_prompt": { "type": "string" },
+          "prompt": { "type": "string" },
+          "provider": { "type": "string" },
+          "model": { "type": "string" }
+        },
+        "required": []
+      }
+    },
+    "openclaw.run": { "kind": "http", "params": {} }
+  },
+  "workflows": {
+    "coding_team_v0": {
+      "project_type": "webapp_crm",
+      "steps": [
+        { "id": "pm_spec", "role": "pm", "tool": "coding.delegate", "gate": "low" },
+        { "id": "arch_design", "role": "architect", "tool": "coding.delegate", "gate": "policy" },
+        { "id": "impl_fe", "role": "frontend", "tool": "coding.delegate", "gate": "policy" },
+        { "id": "impl_be", "role": "backend", "tool": "coding.delegate", "gate": "policy" },
+        { "id": "qa_verify", "role": "qa", "tool": "coding.execute", "gate": "acceptance" },
+        { "id": "release_pack", "role": "qa", "tool": "coding.delegate", "gate": "finalize" }
+      ]
+    }
+  },
+  "acceptance_suites": {
+    "webapp_crm_v0": {
+      "commands": ["node --version", "npm --version"],
+      "required_reports": ["verification.json", "run_manifest.json"]
+    }
+  }
+}

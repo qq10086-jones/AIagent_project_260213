@@ -46,10 +46,14 @@ services:
       APPROVAL_TOKEN: ${APPROVAL_TOKEN:-dev-approval-token}
       CODER_PROVIDER_DEFAULT: ${CODER_PROVIDER_DEFAULT:-opencode}
       CODER_MODEL_DEFAULT: ${CODER_MODEL_DEFAULT:-minimax-m2.5}
+      RUNTIME_CONFIG_PATH: /app/configs/runtime/runtime_defaults.json
     ports:
       - "3000:3000"
     volumes:
       - ../configs/tools.json:/app/configs/tools.json:ro
+      - ../configs/capability_registry.json:/app/configs/capability_registry.json:ro
+      - ../configs/registry:/app/configs/registry:ro
+      - ../configs/runtime:/app/configs/runtime:ro
       - ../orchestrator/src:/app/src
       - ..:/workspace
     depends_on:
@@ -71,6 +75,7 @@ services:
       - OPENCODE_BIN=${OPENCODE_BIN:-opencode}
       - CODER_PROVIDER_DEFAULT=${CODER_PROVIDER_DEFAULT:-opencode}
       - CODER_MODEL_DEFAULT=${CODER_MODEL_DEFAULT:-minimax-m2.5}
+      - RUNTIME_CONFIG_PATH=/workspace/configs/runtime/runtime_defaults.json
       - PGHOST=db
       - PGPORT=5432
       - PGUSER=nexus
@@ -79,6 +84,7 @@ services:
       - WORKSPACE_ROOT=/workspace
     volumes:
       - ..:/workspace
+      - ../configs/runtime:/app/configs/runtime:ro
       # - C:/Users/jones/.codex/auth.json:/root/.codex/auth.json:ro
     depends_on:
       - redis
@@ -109,12 +115,14 @@ services:
       QWEN_API_KEY: ${QWEN_API_KEY}
       QWEN_BASE_URL: ${QWEN_BASE_URL}
       QUANT_LLM_MODEL: ${QUANT_LLM_MODEL:-deepseek-r1:1.5b}
+      RUNTIME_CONFIG_PATH: /workspace/configs/runtime/runtime_defaults.json
       MINIO_ENDPOINT: http://nexus-minio:9000
       MINIO_ACCESS_KEY: nexus
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-nexuspassword}
     volumes:
       - ../configs/tools.json:/app/configs/tools.json:ro
       - ../configs/universe_us.json:/app/configs/universe_us.json:ro
+      - ../configs/runtime:/app/configs/runtime:ro
     depends_on:
       - redis
     networks: ["nexus-net"]
@@ -138,11 +146,13 @@ services:
       - LLM_PROVIDER=${LLM_PROVIDER:-dashscope}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DASH_SCOPE_API_KEY=${DASH_SCOPE_API_KEY}
+      - RUNTIME_CONFIG_PATH=/workspace/configs/runtime/runtime_defaults.json
     ports:
       - "5005:5000"
     volumes:
       - ../brain:/app
       - ..:/workspace
+      - ../configs/runtime:/app/configs/runtime:ro
     depends_on:
       - db
     networks: ["nexus-net"]

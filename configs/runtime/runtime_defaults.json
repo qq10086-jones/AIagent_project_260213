@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "orchestrator": {
+    "qwen_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    "qwen_model": "qwen-plus",
+    "coder_provider_default": "opencode",
+    "coder_model_default": "minimax-m2.5",
+    "quant_llm_model": "deepseek-r1:32b",
+    "approval_token_default": "dev-approval-token"
+  },
+  "brain": {
+    "llm_provider": "dashscope",
+    "qwen_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    "qwen_model": "qwen-plus",
+    "quant_llm_model": "deepseek-r1:1.5b",
+    "ollama_base_url": "http://host.docker.internal:11434",
+    "llm_timeout_sec": 60
+  },
+  "worker_coder": {
+    "provider_default": "opencode",
+    "model_default": "minimax-m2.5",
+    "global_task_timeout_ms": 900000
+  },
+  "worker_quant": {
+    "llm_provider": "ollama",
+    "quant_llm_model": "deepseek-r1:1.5b",
+    "code_llm_model": "glm-4.7-flash:latest",
+    "dash_scope_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    "openai_base_url": "https://api.openai.com/v1",
+    "ollama_base_url": "http://host.docker.internal:11434",
+    "llm_timeout_s": 25
+  },
+  "watchdog": {
+    "running_timeout_sec": 900,
+    "interval_sec": 30,
+    "auto_dlq": true
+  },
+  "streams": {
+    "task_dlq": "stream:task:dlq"
+  }
+}

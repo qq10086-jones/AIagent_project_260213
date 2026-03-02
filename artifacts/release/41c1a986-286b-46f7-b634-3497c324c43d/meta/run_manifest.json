@@ -1,0 +1,17 @@
+﻿{
+    "steps":  [
+
+              ],
+    "generated_at":  "2026-03-03T00:18:45.7875464+09:00",
+    "step_artifacts":  [
+
+                       ],
+    "workflow_run_id":  "8872e8f4-d405-42d1-86b1-85ada1e66a2d",
+    "status":  "succeeded",
+    "run_id":  "41c1a986-286b-46f7-b634-3497c324c43d",
+    "workflow_id":  "coding_team_v0",
+    "project_type":  "webapp_crm",
+    "checkpoints":  [
+
+                    ]
+}

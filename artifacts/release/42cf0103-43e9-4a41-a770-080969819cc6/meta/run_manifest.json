@@ -1,0 +1,174 @@
+{
+  "workflow_run_id": "8aa1e8a5-6cfd-4c65-a810-2b926ccb4237",
+  "run_id": "42cf0103-43e9-4a41-a770-080969819cc6",
+  "workflow_id": "coding_team_v0",
+  "project_type": "webapp_crm",
+  "status": "succeeded",
+  "generated_at": "2026-03-02T16:05:05.893Z",
+  "required_artifacts": [
+    "spec",
+    "arch",
+    "diff",
+    "verification",
+    "run_manifest"
+  ],
+  "artifact_coverage": {
+    "spec": true,
+    "arch": true,
+    "diff": true,
+    "verification": true,
+    "run_summary": true,
+    "run_manifest": true
+  },
+  "step_artifacts": [
+    {
+      "step_index": 0,
+      "step_id": "pm_spec",
+      "task_id": "afa5496c-bb0b-4c10-b4ca-e1d35de60190",
+      "artifacts": []
+    },
+    {
+      "step_index": 1,
+      "step_id": "arch_design",
+      "task_id": "1afbd769-2503-4192-85c1-1ba8987cf132",
+      "artifacts": []
+    },
+    {
+      "step_index": 2,
+      "step_id": "impl_fe",
+      "task_id": "88354b26-5187-41a5-858b-ede8f47aecc1",
+      "artifacts": []
+    },
+    {
+      "step_index": 3,
+      "step_id": "impl_be",
+      "task_id": "83561517-1409-4d8b-b5ec-957b3ad28c21",
+      "artifacts": []
+    },
+    {
+      "step_index": 4,
+      "step_id": "qa_verify",
+      "task_id": "38e7ee6b-e2fc-46fe-949a-841cf15abf41",
+      "artifacts": []
+    },
+    {
+      "step_index": 5,
+      "step_id": "release_pack",
+      "task_id": "3f473616-6f5c-4b56-8a41-b3de7acfd337",
+      "artifacts": []
+    }
+  ],
+  "steps": [
+    {
+      "step_index": 0,
+      "step_id": "pm_spec",
+      "role_name": "pm",
+      "tool_name": "coding.delegate",
+      "gate_name": "low",
+      "task_id": "afa5496c-bb0b-4c10-b4ca-e1d35de60190",
+      "status": "succeeded",
+      "checkpoint_id": "f37c8da4-b5d2-4e85-b678-329f388e231c",
+      "error_code": null
+    },
+    {
+      "step_index": 1,
+      "step_id": "arch_design",
+      "role_name": "architect",
+      "tool_name": "coding.delegate",
+      "gate_name": "policy",
+      "task_id": "1afbd769-2503-4192-85c1-1ba8987cf132",
+      "status": "succeeded",
+      "checkpoint_id": "dfcbf5a4-7926-4892-aa56-e5992efd2e16",
+      "error_code": null
+    },
+    {
+      "step_index": 2,
+      "step_id": "impl_fe",
+      "role_name": "frontend",
+      "tool_name": "coding.delegate",
+      "gate_name": "policy",
+      "task_id": "88354b26-5187-41a5-858b-ede8f47aecc1",
+      "status": "succeeded",
+      "checkpoint_id": "fa670a7f-a841-4f36-bc8d-10ffb89e5996",
+      "error_code": null
+    },
+    {
+      "step_index": 3,
+      "step_id": "impl_be",
+      "role_name": "backend",
+      "tool_name": "coding.delegate",
+      "gate_name": "policy",
+      "task_id": "83561517-1409-4d8b-b5ec-957b3ad28c21",
+      "status": "succeeded",
+      "checkpoint_id": "f63a9e28-021a-43cf-9b4b-a5e556eafe7f",
+      "error_code": null
+    },
+    {
+      "step_index": 4,
+      "step_id": "qa_verify",
+      "role_name": "qa",
+      "tool_name": "coding.execute",
+      "gate_name": "acceptance",
+      "task_id": "38e7ee6b-e2fc-46fe-949a-841cf15abf41",
+      "status": "succeeded",
+      "checkpoint_id": "73c9e658-d79c-4285-a297-a0564a359ff9",
+      "error_code": null
+    },
+    {
+      "step_index": 5,
+      "step_id": "release_pack",
+      "role_name": "qa",
+      "tool_name": "coding.delegate",
+      "gate_name": "finalize",
+      "task_id": "3f473616-6f5c-4b56-8a41-b3de7acfd337",
+      "status": "succeeded",
+      "checkpoint_id": "84633628-429e-4fb6-8f87-5f6b321a7c63",
+      "error_code": null
+    }
+  ],
+  "checkpoints": [
+    {
+      "checkpoint_id": "f37c8da4-b5d2-4e85-b678-329f388e231c",
+      "step_index": 0,
+      "step_id": "pm_spec",
+      "task_id": "afa5496c-bb0b-4c10-b4ca-e1d35de60190",
+      "workspace_hash": "91b27ffd6e992fd0ec251fb7adf8232e9039381486f11749116459a29c34420d"
+    },
+    {
+      "checkpoint_id": "dfcbf5a4-7926-4892-aa56-e5992efd2e16",
+      "step_index": 1,
+      "step_id": "arch_design",
+      "task_id": "1afbd769-2503-4192-85c1-1ba8987cf132",
+      "workspace_hash": "de88d72ef8139fe1cc69c07716827743173b25cd9ca5c001aec0816b71fb5757"
+    },
+    {
+      "checkpoint_id": "fa670a7f-a841-4f36-bc8d-10ffb89e5996",
+      "step_index": 2,
+      "step_id": "impl_fe",
+      "task_id": "88354b26-5187-41a5-858b-ede8f47aecc1",
+      "workspace_hash": "54b75263534e59e4fbc541fec7dab9ef5f85748f41ddafa15b2d990cc3a426ee"
+    },
+    {
+      "checkpoint_id": "f63a9e28-021a-43cf-9b4b-a5e556eafe7f",
+      "step_index": 3,
+      "step_id": "impl_be",
+      "task_id": "83561517-1409-4d8b-b5ec-957b3ad28c21",
+      "workspace_hash": "f84f467d5e94e126ebca72236c0efd449906faae68940009d32ca7189ab3e314"
+    },
+    {
+      "checkpoint_id": "73c9e658-d79c-4285-a297-a0564a359ff9",
+      "step_index": 4,
+      "step_id": "qa_verify",
+      "task_id": "38e7ee6b-e2fc-46fe-949a-841cf15abf41",
+      "workspace_hash": "eab2fa2131c1bb5d76631a487f202da69d41bf6242fdff8471d56c377716534d"
+    },
+    {
+      "checkpoint_id": "84633628-429e-4fb6-8f87-5f6b321a7c63",
+      "step_index": 5,
+      "step_id": "release_pack",
+      "task_id": "3f473616-6f5c-4b56-8a41-b3de7acfd337",
+      "workspace_hash": "b0b2b185f60734c3ff5619f34407f69984c3ead1182a5b67f91894586539a27c"
+    }
+  ],
+  "reasons": []
+}

@@ -1,0 +1,19 @@
+{
+  "policy_id": "coding_task_v0",
+  "risk_levels": {
+    "low": {
+      "description": "Workspace-local, non-sensitive changes."
+    },
+    "medium": {
+      "description": "Execution and code changes requiring logs and tests."
+    },
+    "high": {
+      "description": "Infra/secrets/destructive actions requiring approval."
+    }
+  },
+  "manual_approve_paths": [
+    "infra/*",
+    "configs/*",
+    ".env*"
+  ]
+}

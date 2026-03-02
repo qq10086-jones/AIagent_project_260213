@@ -102,3 +102,249 @@
 - **Still Open**:
   1. `/chat` can still return generic `unknown Analysis Report` while discovery task continues/completes later (response aggregation timing mismatch).
   2. Historical `news.daily_report` long-running tasks still exist and need timeout/degrade governance.
+
+## v1.4 Coding Team First (Kickoff Update — 2026-03-02 23:30 JST)
+- **Execution Focus Shift Confirmed**: aligned to `docs/01_design/system/260302/*` with core objective "autonomous Coding Team pipeline" (PM/Architect/FE/BE/QA), not generic multi-agent expansion.
+- **T1 Delivered (Registry Schema + Baseline Registry)**:
+  - Added `configs/registry/capability_registry.json`.
+  - Added `configs/registry/schemas/capability_registry.schema.json`.
+  - Added workflow/policy/acceptance seeds:
+    - `configs/registry/workflows/coding_team_v0.json`
+    - `configs/registry/acceptance/webapp_crm_v0.json`
+    - `configs/registry/policy/coding_task_v0.json`
+- **T2 Delivered (Validator CLI + CI Hook)**:
+  - Added `orchestrator/scripts/validate_registry.js`.
+  - Added npm script: `npm run validate:registry`.
+  - Added CI workflow: `.github/workflows/validate-registry.yml`.
+  - Local validation passed: `registry valid` (project_types=3, roles=8, tools=23, workflows=1).
+- **T3 Delivered (Runtime Fail-Fast Registry Loading)**:
+  - Added orchestrator registry module: `orchestrator/src/registry.js`.
+  - Orchestrator now loads/validates registry on startup (invalid registry blocks boot).
+- **T4 Partial Delivered (Task Submission Runtime Validation)**:
+  - `enqueueTask(...)` now validates `tool/project_type/workflow/role/params` against registry before queueing.
+  - Invalid payloads now fail with `REGISTRY_INVALID`.
+- **Compatibility/Infra Wiring**:
+  - Mounted `configs/registry` into orchestrator container (`infra/docker-compose.yml`).
+  - `policy.js` now supports new registry path (`configs/registry/...`) with backward fallback.
+- **Regression Smoke Passed After Integration**:
+  - `quant.fetch_price` -> `succeeded`
+  - `coding.patch` -> `succeeded`
+  - Task status/result persistence remained healthy.
+
+### v1.4 Current Step
+- **Completed**: T1, T2, T3, T4 (partial by runtime validation core).
+- **In Progress Next**: EPIC 2 workflow shell minimum path (T6/T7/T8/T9/T10/T11/T12).
+- **Blockers**: none hard-blocking; main remaining work is implementation depth, not environment readiness.
+
+## v1.4 Coding Team First (Workflow Shell Update — 2026-03-02)
+- **T6 Delivered (Sequential Workflow Runner)**:
+  - Added deterministic workflow shell engine: `orchestrator/src/workflow_engine.js`.
+  - New start API: `POST /workflow-runs/start` (registry workflow based, first step dispatch).
+- **T7 Delivered (Step State Machine + Persistence)**:
+  - Added DB tables: `workflow_runs`, `workflow_steps`, `workflow_checkpoints` (in both `infra/init.sql` and orchestrator runtime ensure).
+  - Step statuses now persisted through `pending/queued/waiting_approval/running/succeeded/failed`.
+  - Result consumer now syncs step state on `claimed` and terminal events.
+- **T8 Delivered (Checkpoint per Step)**:
+  - On each successful step, engine writes `checkpoint_id` + `workspace_hash` + `artifact_refs`.
+  - `workflow_runs.last_checkpoint_id` and step `checkpoint_id` are updated.
+- **T9 Delivered (Resume Token issue/verify)**:
+  - Added HMAC signed resume token (`RESUME_TOKEN_SECRET`, `RESUME_TOKEN_TTL_SEC`).
+  - APIs:
+    - `POST /workflow-runs/:workflow_run_id/resume-token`
+    - `POST /workflow-runs/:workflow_run_id/resume`
+  - Invalid/mismatch/expired token returns `error_code=RESUME_INVALID`.
+- **T10 Delivered (Policy Gate for each Step)**:
+  - Every step now executes risk check before dispatch.
+  - Policy audit event persisted (`policy.gate.checked`) with reasons/risk/approval requirement.
+- **T11 Delivered (Approval Gate backend close-loop)**:
+  - `approve` now updates workflow step state (`queued`) for waiting-approval steps.
+  - `reject` supports `reason`, persists rejection result, and closes workflow run as failed with `APPROVAL_REJECTED`.
+- **T12 Delivered (Acceptance Gate integration)**:
+  - For acceptance-gated steps, engine auto injects acceptance suite commands from registry into `coding.execute`.
+  - Acceptance command failure now fails current step and workflow run.
+
+### Current Step (after update)
+- **Completed**: T1-T12 baseline contract and workflow-shell closure.
+- **Next Focus**: EPIC 3 deepening (`coding_team_v0` role outputs/artifact richness) and EPIC 4 pack validator hardening.
+
+### Runtime Validation (2026-03-02)
+- `POST /workflow-runs/start` succeeded:
+  - `workflow_run_id=7bfefc4f-2b0b-4b5e-8c3d-14fcb4acd9ec`
+  - first step `pm_spec` dispatched with `task_id=674e8705-f533-43f7-92a9-feaefee88912`
+  - workflow steps persisted with deterministic `step_index` timeline.
+- Policy/Approval gate closed-loop verified with high-risk prompt:
+  - `workflow_run_id=ba6625d8-6fa6-4d0a-99f3-336bd3e8b678`
+  - first step entered `waiting_approval` (`risk_level=high`).
+  - reject API with reason transitioned run to `failed` and step `error_code=APPROVAL_REJECTED`.
+- Resume API invalid-path check:
+  - `POST /workflow-runs/:id/resume-token` returns `RESUME_INVALID` when no checkpoint exists.
+
+## v1.4 Continuation (T13-T18/T22-T24 bridge — 2026-03-02)
+- **Test Re-run Status**:
+  - workflow shell APIs re-tested after restart; `/workflow-runs/start` and `/workflow-runs/:id` stable.
+  - approval reject close-loop re-tested (`APPROVAL_REJECTED` persisted to run + step).
+- **Bug Fixed During Re-test**:
+  - fixed SQL placeholder mismatch in `workflow_engine.failWorkflowRun(...)` that caused:
+    - `could not determine data type of parameter $3`
+  - regression check after fix: reject path no longer emits the error.
+- **T15-T18 (Role Output Contract) Partial Hardening**:
+  - workflow step payload now carries:
+    - `artifact_root`
+    - `expected_artifacts`
+    - role/step specific structured `task_prompt` contract (PM/Architect/FE/BE/QA/Release).
+  - acceptance step payload now includes acceptance context for deterministic verification.
+- **T22-T24 Baseline Started (Artifact Pack skeleton)**:
+  - on workflow success path, orchestrator now attempts release-pack generation:
+    - `artifacts/release/<run_id>/meta/run_manifest.json`
+    - `artifacts/release/<run_id>/summary/run_summary.md`
+  - added baseline completeness checks and `ARTIFACT_INCOMPLETE` fail conversion.
+- **Open Validation Gap**:
+  - full success-path artifact-pack generation still needs one clean end-to-end successful `coding_team_v0` run to finalize proof.
+
+## v1.4 Governance Update (T26-T31 backend closure — 2026-03-02)
+- **T26 (result_json + error_code normalization) Delivered**:
+  - task terminal write path now normalizes result payload to structured envelope:
+    - `ok/status/error_code/output/updated_at`
+  - reject path also uses normalized result schema.
+- **T27/T28 (Timeline + Artifacts query) Delivered**:
+  - Added APIs:
+    - `GET /runs/:run_id/status`
+    - `GET /runs/:run_id/timeline`
+    - `GET /runs/:run_id/artifacts`
+  - Added pending-approval list API:
+    - `GET /approvals/pending?limit=...`
+- **T30 (unknown response degradation mitigation) Delivered (backend side)**:
+  - When brain-controlled run has no body report, reply now includes:
+    - `run_id`
+    - `status_api=/runs/:run_id/status`
+    - `timeline_api=/runs/:run_id/timeline`
+- **T31 (timeout + DLQ guardrail) Delivered**:
+  - Added watchdog loop for stale `running` tasks (`TASK_RUNNING_TIMEOUT_SEC`).
+  - Timeout behavior:
+    - mark task `failed` with `error_code=TASK_TIMEOUT`
+    - append `task.timeout` event
+    - enqueue to DLQ stream (`stream:task:dlq`) and append `task.dlq.enqueued`
+    - propagate failure to workflow step/run.
+- **Runtime Test Evidence**:
+  - Injected stale running task: `447917b4-8273-4a6e-891e-a7856ada97bb`
+  - Post-watchdog status: `failed / TASK_TIMEOUT`
+  - DLQ length increased from `4 -> 5`
+  - event_log contains: `task.timeout`, `task.dlq.enqueued`
+
+## v1.4 Config Consistency Update (T32 partial — 2026-03-03)
+- Added unified runtime config file:
+  - `configs/runtime/runtime_defaults.json`
+- Orchestrator now resolves key runtime settings by precedence:
+  1. Environment variables
+  2. `runtime_defaults.json`
+  3. Hardcoded fallback
+- Added runtime introspection API:
+  - `GET /runtime/config`
+- Infra wiring updated:
+  - `infra/docker-compose.yml` mounts `../configs/runtime:/app/configs/runtime:ro`
+  - `RUNTIME_CONFIG_PATH=/app/configs/runtime/runtime_defaults.json`
+- Boot validation:
+  - `/runtime/config` returns loaded path and resolved values
+  - startup log confirms watchdog resolved config values
+- Remaining for full T32 closure:
+  - align the same runtime config source across brain/worker processes (currently orchestrator-first rollout).
+
+## v1.4 Closure Extension (T29 + T32 full-chain — 2026-03-03)
+- **T29 Delivered (Approval UI minimum usable)**:
+  - Added built-in approval console page:
+    - `GET /ui/approvals`
+  - UI supports:
+    - list pending approvals
+    - approve action
+    - reject with mandatory reason
+  - Backend API integration uses existing:
+    - `GET /approvals/pending`
+    - `POST /tasks/:task_id/approve`
+    - `POST /tasks/:task_id/reject`
+- **T32 Delivered (runtime config unified across services)**:
+  - Added shared config source:
+    - `configs/runtime/runtime_defaults.json`
+  - Brain integrated:
+    - `brain/runtime_config.py`
+    - `GET /runtime/config` in brain service
+  - Worker-coder integrated:
+    - `worker-coder/runtime_config.js`
+    - provider/model/global timeout defaults sourced from runtime config
+  - Worker-quant integrated:
+    - runtime config load at startup for provider/model/base-url/timeout defaults
+  - Compose integrated:
+    - `RUNTIME_CONFIG_PATH` wired for orchestrator/brain/worker-coder/worker-quant
+    - runtime config mount added where needed
+- **Cross-service Validation Evidence**:
+  - `orchestrator /runtime/config` returns resolved path + effective values.
+  - `brain /runtime/config` returns resolved qwen/local model defaults.
+  - `worker-coder` startup log prints runtime config path and resolved provider/model/timeout.
+  - `worker-quant` startup log prints runtime config path and resolved provider/model/timeout.
+
+## v1.4 Artifact Validator Update (T24 + T25 — 2026-03-03)
+- **T24 Delivered (artifact_pack_validator module)**:
+  - Added validator module:
+    - `orchestrator/src/artifact_pack_validator.js`
+  - Validation scope:
+    - manifest/summary existence
+    - manifest schema minimum fields
+    - run/manifest id consistency
+    - step success completeness
+    - checkpoint count sanity
+    - required artifact coverage check by project_type
+- **T25 Delivered (finalize gate integration)**:
+  - `workflow_engine` now uses validator during release-pack generation.
+  - If validator fails, workflow finalization converts to:
+    - `status=failed`
+    - `error_code=ARTIFACT_INCOMPLETE`
+  - Added inspection API:
+    - `GET /workflow-runs/:workflow_run_id/validate-pack`
+- **Runtime verification**:
+  - Existing running workflow run validation returned structured failure reasons when pack missing.
+  - Missing workflow run returns `WORKFLOW_RUN_NOT_FOUND` with HTTP 404.
+
+## v1.4 Artifact Pack Schema Update (T22 + T23 partial — 2026-03-03)
+- **T22 Delivered (run_manifest schema file)**:
+  - Added:
+    - `configs/registry/schemas/run_manifest.schema.json`
+  - schema includes:
+    - run/workflow identity fields
+    - steps/checkpoints
+    - step_artifacts
+    - artifact coverage metadata
+- **T23 Delivered (release_pack aggregation + persistence/index)**:
+  - `workflow_engine` manifest now includes `step_artifacts` aggregated from checkpoint artifact refs.
+  - release pack local files + step artifact refs are now indexed into `assets` table for run-level lookup.
+  - validator now checks `step_artifacts` presence and step count consistency.
+  - release pack now supports MinIO archive + DB index through:
+    - automatic archive on finalize success path
+    - manual archive API: `POST /workflow-runs/:workflow_run_id/archive-pack`
+  - validation evidence (synthetic fixture run):
+    - MinIO object keys returned for manifest/summary
+    - `assets` table contains both `release_pack_local` and `release_pack_minio` entries for the workflow run.
+
+## v1.4 End-to-End Runthrough Fixes (Full-chain green — 2026-03-03)
+- **Worker-coder execute gate fix**:
+  - `coding.execute` command validator now supports controlled `&&` command chains (segment-level whitelist) instead of blanket-blocking `&`.
+  - keeps shell meta-char blocking for high-risk operators.
+- **OpenCode adapter hard fix**:
+  - `worker-coder/adapters/opencode_adapter.js` switched to `spawn(..., shell:false)`.
+  - fixed multiline prompt being misinterpreted by shell as separate commands.
+- **Provider fallback semantics fix**:
+  - OpenCode adapter non-provider failures now return `E_EXEC_FAILED` (not `E_PROVIDER_UNAVAILABLE`), preventing false fallback to codex auth-missing path.
+- **Acceptance suite runtime fit update**:
+  - `webapp_crm_v0` acceptance commands changed to:
+    - `node --version`
+    - `npm --version`
+  - updated in:
+    - `configs/registry/capability_registry.json`
+    - `configs/registry/acceptance/webapp_crm_v0.json`
+- **End-to-end validation result**:
+  - workflow run:
+    - `workflow_run_id=8aa1e8a5-6cfd-4c65-a810-2b926ccb4237`
+    - `run_id=42cf0103-43e9-4a41-a770-080969819cc6`
+  - final status:
+    - workflow `succeeded`
+    - steps `pm_spec/arch_design/impl_fe/impl_be/qa_verify/release_pack` all `succeeded`
+  - acceptance step output:
+    - `stdout: v20.20.0 / 10.8.2`

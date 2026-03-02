@@ -79,7 +79,7 @@ services:
       - WORKSPACE_ROOT=/workspace
     volumes:
       - ..:/workspace
-      - C:/Users/jones/.codex/auth.json:/root/.codex/auth.json:ro
+      # - C:/Users/jones/.codex/auth.json:/root/.codex/auth.json:ro
     depends_on:
       - redis
       - db

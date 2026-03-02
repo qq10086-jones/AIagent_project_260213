@@ -1,0 +1,9 @@
+{
+  "run_id": "canary-high-risk-1772412345",
+  "tool_name": "coding.delegate",
+  "payload": {
+    "prompt": "Add a comment to infra/docker-compose.yml saying '# Verified by Canary'",
+    "provider": "opencode",
+    "model": "qwen-plus"
+  }
+}

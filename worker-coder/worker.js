@@ -103,7 +103,7 @@ async function processTask(msgId, task) {
     } else if (tool_name === "coding.delegate") {
       const result = await CodingService.delegateTask({
         workspaceRoot: WORKSPACE_ROOT,
-        task_prompt: payload.task_prompt,
+        task_prompt: payload.task_prompt || payload.prompt,
         provider: payload.provider || "auto",
         model: payload.model || null,
         run_id,
@@ -126,7 +126,7 @@ async function processTask(msgId, task) {
   } catch (err) {
     console.error(`[worker] Task failed:`, err);
     await writeFact(run_id, "coder", { tool_name, error: err.message, success: false });
-    await emitResult(task_id, "failed", null, err.message);
+    await emitResult(task_id, "failed", { error: err.message, plan: "failed_during_execution" }, err.message);
   }
 
   await redis.xack(STREAM_TASK, GROUP, msgId);
@@ -155,16 +155,22 @@ async function main() {
           }
           
           if (task.tool_name && task.tool_name.startsWith("coding.")) {
-            await processTask(id, task);
+            console.log(`[worker] Processing task ${task.task_id} (${task.tool_name})...`);
+            try {
+              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("GLOBAL_TASK_TIMEOUT")), 900000));
+              await Promise.race([processTask(id, task), timeoutPromise]);
+              // After processTask finishes, it should have already called emitResult and xack inside.
+              console.log(`[worker] Successfully processed and acknowledged task ${task.task_id}`);
+            } catch (err) {
+              console.error(`[worker] Critical error processing task ${task.task_id}:`, err.message);
+              await emitResult(task.task_id, "failed", { error: err.message }, err.message);
+              await redis.xack(STREAM_TASK, GROUP, id);
+            }
           } else {
-            // Not a coding task, leave it for other workers. (Wait, if we use a shared group, we shouldn't XACK, but XREADGROUP consumes it... 
-            // In a real multi-worker setup, we should have topic-based queues. For now, we put it back or we don't XACK so another consumer picks it up?
-            // Actually, if we don't XACK, it stays pending for THIS consumer.
-            // Let's acknowledge it and put it back? No, let's assume for Phase 2 we use the same architecture. 
-            // Wait, worker-quant also consumes STREAM_TASK and does `if not handler: r.xack(...)`. This means the first worker to grab a task consumes it, even if it can't handle it!
-            // I need to fix this by letting worker-coder only consume if it's a coding tool.
-            // But `xreadgroup` already assigned it to this consumer. 
-            // Let's just re-enqueue it or change the routing in Orchestrator!)
+            // NOT a coding task. In a shared queue model, we MUST acknowledge it so it doesn't stay pending for US.
+            // Ideally, Orchestrator should only send relevant tasks to this stream.
+            console.warn(`[worker] Received non-coding task ${task.task_id} (${task.tool_name}), acknowledging and skipping.`);
+            await redis.xack(STREAM_TASK, GROUP, id);
           }
         }
       }

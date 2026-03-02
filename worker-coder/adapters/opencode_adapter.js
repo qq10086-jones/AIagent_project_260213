@@ -2,11 +2,12 @@ import { spawn } from "child_process";
 
 function runProcess({ command, args = [], cwd, timeoutMs = 600000, stdinText = "" }) {
   return new Promise((resolve) => {
+    console.log(`[opencode] Executing: ${command} ${args.join(" ")} (timeout: ${timeoutMs}ms)`);
     const child = spawn(command, args, {
       cwd,
       env: process.env,
       stdio: ["pipe", "pipe", "pipe"],
-      shell: false,
+      shell: true, // Use shell for better path resolution
     });
 
     let stdout = "";

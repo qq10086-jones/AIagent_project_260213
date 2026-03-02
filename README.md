@@ -1,5 +1,7 @@
 # OpenClaw Nexus Daily Reports (Project Snapshot)
 
+**Status:** ✅ Nexus v1.3.0-P0 is live and stable (as of 2026-03-02)
+
 This repo contains an OpenClaw-based control plane with daily report pipelines for:
 - Market news (multi-language sources with CN summary)
 - GitHub agent skills discovery

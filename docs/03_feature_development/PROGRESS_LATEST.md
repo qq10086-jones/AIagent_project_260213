@@ -1,4 +1,4 @@
-# Feature Progress Latest Snapshot
+﻿# Feature Progress Latest Snapshot
 
 ## Date
 2026-03-01
@@ -73,3 +73,32 @@
 - **Fallback Verified**: when OpenCode is unavailable, delegation falls back to Codex and records `diagnostics.fallback_from=opencode`.
 - **Metrics (current E2E batch)**: total 5, success 4, expected reject-fail 1, high-risk gate hit 3/3, non-high-risk auto-run success 2/2.
 - **Runtime Note**: OpenCode CLI compatibility issue on Alpine was resolved by moving `worker-coder` base image to Debian slim (`node:20-bookworm-slim`).
+
+## Night Update (2026-03-02)
+- **Quant Report UX Upgraded**: `news.tdnet_close_flash` now outputs structured bullets and includes source links in Discord + HTML artifacts.
+- **Run Command Reliability**: explicit `/run <tool_name> [json_payload]` entry added in orchestrator to avoid intent-route misses.
+- **Config Hotfix**: DashScope endpoint normalized to `compatible-mode/v1`; services rebuilt and restarted.
+- **Open Issue Recorded**: command `40W JPY capital, how to operate tomorrow? currently no position` returns `Qwen API error 404 Not Found` in some path(s); pending unified endpoint/config tracing.
+
+### Pending (News System)
+1. Add media-home/channel backup links when direct article URLs are unavailable.
+2. Add source credibility labels in report rendering (official media/aggregator/forum).
+
+### Pending (Project)
+1. Continue `worker-quant/worker.py` cleanup to reduce legacy overlap risk.
+2. Standardize output contract across news tools (bullets + links + artifacts).
+3. Run canary regression for `/coder`, `/run news.tdnet_close_flash`, and approval workflows.
+4. Improve dashboard visibility for `tasks.result_json` key fields.
+
+## Late Night Continuation (2026-03-02 18:40 JST)
+- **Discovery Fast-Path Added**: capital/no-position/next-day operation prompts now enforce quick discovery payload (`quick_mode`, `time_budget_s=75`, `max_attempts=2`, `min_candidates=2`).
+- **Brain Payload Pass-through Fixed**: `brain/supervisor.py` allowlist now keeps quick fields; screening step auto-applies quick defaults for capital-driven discovery requests.
+- **Discovery Pre-step Short-Circuit**: for fast discovery runs, `news.daily_report` pre-step is skipped to reduce blocking risk.
+- **Worker Runtime Guardrails Added**: `worker-quant` discovery now has explicit time budget and early-stop behavior; LLM timeout is configurable and tightened for risk-scoring calls.
+- **Validation Result**:
+  - Qwen 404 path no longer directly surfaces in tested flow.
+  - Latest `tasks.payload_json` confirmed quick fields are now present.
+  - Worker logs confirmed `Quick=True` execution path.
+- **Still Open**:
+  1. `/chat` can still return generic `unknown Analysis Report` while discovery task continues/completes later (response aggregation timing mismatch).
+  2. Historical `news.daily_report` long-running tasks still exist and need timeout/degrade governance.

@@ -9,6 +9,7 @@ import boto3
 from datetime import datetime, timedelta
 import urllib.request
 import urllib.error
+import urllib.parse
 from PIL import Image, ImageDraw, ImageStat
 import requests
 from jinja2 import Template
@@ -56,13 +57,19 @@ DASH_SCOPE_BASE_URL = os.getenv("DASH_SCOPE_BASE_URL") or os.getenv("QWEN_BASE_U
 QUANT_LLM_MODEL = os.getenv("QUANT_LLM_MODEL", "deepseek-r1:1.5b")
 CODE_LLM_MODEL = os.getenv("CODE_LLM_MODEL", "glm-4.7-flash:latest")
 DISCOVERY_LEARNING_PATH = Path(os.getenv("DISCOVERY_LEARNING_PATH", "/tmp/nexus_discovery_learning.json"))
+LLM_TIMEOUT_S = int(os.getenv("LLM_TIMEOUT_S", "25"))
+DISCOVERY_TIME_BUDGET_S = int(os.getenv("DISCOVERY_TIME_BUDGET_S", "75"))
+DISCOVERY_QUICK_UNIVERSE_CAP = int(os.getenv("DISCOVERY_QUICK_UNIVERSE_CAP", "28"))
+DISCOVERY_FULL_UNIVERSE_CAP = int(os.getenv("DISCOVERY_FULL_UNIVERSE_CAP", "120"))
 
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
-def get_llm_response(system: str, user: str, model: str | None = None, provider: str | None = None, timeout_s: int = 120) -> str:
+def get_llm_response(system: str, user: str, model: str | None = None, provider: str | None = None, timeout_s: int | None = None) -> str:
     """Unified LLM client supporting multiple providers."""
     prov = (provider or LLM_PROVIDER).lower()
     model = model or QUANT_LLM_MODEL
+    timeout_s = int(timeout_s or LLM_TIMEOUT_S)
+    timeout_s = max(5, min(timeout_s, 180))
     
     # Strip provider prefix if present (e.g. "ollama/deepseek-r1:1.5b")
     if isinstance(model, str) and "/" in model:
@@ -121,7 +128,7 @@ def get_llm_response(system: str, user: str, model: str | None = None, provider:
         if not api_key:
             print(f"[LLM] Provider {prov} requested but API key is missing.")
             print("[LLM] Falling back to Ollama due to missing cloud API key...")
-            return get_llm_response(system, user, model=model, provider="ollama", timeout_s=timeout_s)
+            return get_llm_response(system, user, model=model, provider="ollama", timeout_s=min(timeout_s, 25))
 
         url = f"{base_url.rstrip('/')}/chat/completions"
         payload = {
@@ -146,7 +153,7 @@ def get_llm_response(system: str, user: str, model: str | None = None, provider:
             # Fallback to Ollama if it's not the primary
             if prov != "ollama":
                 print("[LLM] Falling back to Ollama...")
-                return get_llm_response(system, user, model=model, provider="ollama", timeout_s=timeout_s)
+                return get_llm_response(system, user, model=model, provider="ollama", timeout_s=min(timeout_s, 25))
             return ""
     
     return ""
@@ -747,7 +754,104 @@ def _compute_quant_metrics(symbol: str) -> dict:
         "ss6_signal": ss6
     }
 
-def _fetch_news_from_google_rss(symbol: str, company_name: str | None, max_items: int = 5, lang: str = "en") -> list[dict]:
+def _extract_direct_url_from_google_link(link: str) -> str:
+    """
+    Try fast extraction from known query params used by Google News redirect links.
+    """
+    try:
+        parsed = urllib.parse.urlparse(str(link or ""))
+        if not parsed.scheme or not parsed.netloc:
+            return ""
+        q = urllib.parse.parse_qs(parsed.query or "")
+        for key in ("url", "u", "q"):
+            vals = q.get(key) or []
+            if vals:
+                cand = urllib.parse.unquote(str(vals[0]).strip())
+                if cand.startswith(("http://", "https://")):
+                    return cand
+    except Exception:
+        return ""
+    return ""
+
+def _resolve_google_news_link(link: str, timeout_s: int = 8) -> str:
+    """
+    Resolve a Google News RSS URL to a direct publisher URL when possible.
+    Fail-safe: return input link.
+    """
+    src = str(link or "").strip()
+    if not src:
+        return src
+    if "news.google." not in src:
+        return src
+
+    extracted = _extract_direct_url_from_google_link(src)
+    if extracted:
+        return extracted
+
+    try:
+        # Google RSS links usually 30x to publisher URL. requests will follow redirects.
+        resp = requests.get(
+            src,
+            timeout=timeout_s,
+            allow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; NexusBot/1.0)"},
+        )
+        final_url = str(getattr(resp, "url", "") or "").strip()
+        if final_url and "news.google." not in final_url:
+            return final_url
+    except Exception:
+        pass
+    return src
+
+def _search_direct_url_by_title(title: str, publisher: str = "", timeout_s: int = 10) -> str:
+    """
+    Fallback resolver: search by headline and publisher, return first likely direct source URL.
+    """
+    t = str(title or "").strip()
+    p = str(publisher or "").strip()
+    if not t:
+        return ""
+    query = f"\"{t[:140]}\" {p}".strip()
+    try:
+        resp = requests.get(
+            "https://duckduckgo.com/html/",
+            params={"q": query},
+            timeout=timeout_s,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; NexusBot/1.0)"},
+        )
+        if resp.status_code != 200:
+            return ""
+        text = resp.text or ""
+        # DuckDuckGo redirect style: /l/?uddg=<url-encoded>
+        candidates = re.findall(r'href=\"(?:https?:)?//duckduckgo\\.com/l/\\?[^\"#]*?uddg=([^\"&]+)', text)
+        candidates += re.findall(r'href=\"/l/\\?[^\"#]*?uddg=([^\"&]+)', text)
+        for c in candidates:
+            u = urllib.parse.unquote(str(c))
+            if not u.startswith(("http://", "https://")):
+                continue
+            low = u.lower()
+            if "news.google." in low or "duckduckgo.com" in low:
+                continue
+            if any(x in low for x in ["google.com", "gstatic.com", "doubleclick.net"]):
+                continue
+            return u
+    except Exception:
+        return ""
+    return ""
+
+def _build_article_search_url(title: str, publisher: str = "") -> str:
+    q = f"{str(title or '').strip()} {str(publisher or '').strip()}".strip()
+    if not q:
+        return ""
+    return "https://www.google.com/search?q=" + urllib.parse.quote_plus(q)
+
+def _fetch_news_from_google_rss(
+    symbol: str,
+    company_name: str | None,
+    max_items: int = 5,
+    lang: str = "en",
+    resolve_original_links: bool = False,
+) -> list[dict]:
 
     query_terms = [symbol]
     if company_name:
@@ -769,6 +873,7 @@ def _fetch_news_from_google_rss(symbol: str, company_name: str | None, max_items
             return []
         root = ET.fromstring(resp.content)
         out = []
+        resolve_cache = {}
         for item in root.findall(".//item")[:max_items]:
             title = (item.findtext("title") or "").strip()
             link = (item.findtext("link") or "").strip()
@@ -781,13 +886,22 @@ def _fetch_news_from_google_rss(symbol: str, company_name: str | None, max_items
             except Exception:
                 published_ts = None
             if title and link:
+                final_link = link
+                if resolve_original_links:
+                    if link in resolve_cache:
+                        final_link = resolve_cache[link]
+                    else:
+                        final_link = _resolve_google_news_link(link)
+                        resolve_cache[link] = final_link
                 out.append({
                     "title": title,
-                    "url": link,
+                    "url": final_link,
+                    "url_google": link,
                     "publisher": pub,
                     "published_at": pub_date,
                     "published_ts": published_ts,
                     "source": "google_news_rss",
+                    "via_google_redirect": bool(final_link and final_link != link),
                 })
         return out
     except Exception:
@@ -2935,18 +3049,30 @@ def discovery_workflow(payload: dict):
         auto_expand_default = False
     auto_expand_market = _to_bool(payload.get("auto_expand_market"), default=auto_expand_default)
     enable_learning = _to_bool(payload.get("enable_learning"), default=True)
+    quick_mode = _to_bool(payload.get("quick_mode"), default=False)
+    default_budget = DISCOVERY_TIME_BUDGET_S if quick_mode else max(DISCOVERY_TIME_BUDGET_S * 2, 120)
+    time_budget_s = int(payload.get("time_budget_s") or default_budget)
+    time_budget_s = max(20, min(time_budget_s, 600))
+    started_at = time.time()
+
     max_attempts = int(payload.get("max_attempts") or 4)
     max_attempts = max(1, min(max_attempts, 6))
     risk_target_map = {"low": 2, "medium": 3, "high": 4}
     min_candidates_target = int(payload.get("min_candidates") or risk_target_map.get(goal_profile.get("risk_profile"), 3))
     min_candidates_target = max(1, min(min_candidates_target, 8))
+    if quick_mode:
+        max_attempts = min(max_attempts, 2)
+        min_candidates_target = min(min_candidates_target, 2)
+
+    def _deadline_reached() -> bool:
+        return (time.time() - started_at) >= time_budget_s
 
     print(
         "[discovery] "
         f"Market={market_focus} ExplicitMarket={market_explicit} AutoExpand={auto_expand_market} "
         f"CapitalJPY={capital_base_jpy:.2f} InputCCY={capital_input_ccy} BaseMaxPosPct={base_max_pos_pct} "
         f"Goal={goal_text or 'N/A'} Risk={goal_profile.get('risk_profile')} "
-        f"AutoEvolve={auto_evolve} Attempts={max_attempts}"
+        f"AutoEvolve={auto_evolve} Attempts={max_attempts} Quick={quick_mode} BudgetS={time_budget_s}"
     )
 
     wl = _load_watchlists()
@@ -2972,15 +3098,40 @@ def discovery_workflow(payload: dict):
             return list(jp_list)
         if market_key == "US":
             return list(us_list)
-        if capital_base_jpy <= 600000:
-            return list(jp_list) + list(us_list)
-        merged = []
-        for i in range(max(len(jp_list), len(us_list))):
-            if i < len(jp_list):
-                merged.append(jp_list[i])
-            if i < len(us_list):
-                merged.append(us_list[i])
-        return merged
+        
+        # Only mix markets if no explicit market was requested or if explicitly set to ALL
+        if market_focus == "ALL" or not market_explicit:
+            if capital_base_jpy <= 600000:
+                return list(jp_list) + list(us_list)
+            
+            merged = []
+            for i in range(max(len(jp_list), len(us_list))):
+                if i < len(jp_list):
+                    merged.append(jp_list[i])
+                if i < len(us_list):
+                    merged.append(us_list[i])
+            return merged
+        
+        # Fallback to focused market if defined, else empty
+        return list(jp_list) if market_focus == "JP" else list(us_list) if market_focus == "US" else []
+
+    # --- Integration: Macro News Factor & Historical Memory ---
+    print("[discovery] Retrieving historical news facts for context...")
+    historical_bias = 0.0
+    try:
+        # Search for recent macro facts from dedicated news tools
+        recent_facts = query_facts(fact_type="macro_sentiment_impact", limit=3)
+        for f in recent_facts:
+            data = f.get("payload_json", {}).get("data", {})
+            historical_bias += float(data.get("sentiment", 0.0)) * 0.8
+        print(f"[discovery] Historical Sentiment Bias: {historical_bias:+.2f}")
+    except: pass
+
+    print("[discovery] Computing live macro news risk factor...")
+    macro_risk = compute_news_risk_factor({"symbol": "^N225" if market_focus == "JP" else "^GSPC", "run_id": run_id, "date": date_str})
+    news_sentiment_bias = macro_risk.get("scores", {}).get("sentiment", 0.0) + historical_bias
+    news_risk_z = macro_risk.get("effective_news_risk_z", 0.0)
+    print(f"[discovery] Final Combined News Factor: Sentiment={news_sentiment_bias}, Risk_Z={news_risk_z}")
 
     def _run_attempt(profile: dict) -> tuple:
         market_key = str(profile.get("market") or market_focus).upper()
@@ -2996,7 +3147,18 @@ def discovery_workflow(payload: dict):
         scanned_count = 0
         results_local = []
 
-        for sym in universe[:120]:
+        universe_cap = DISCOVERY_QUICK_UNIVERSE_CAP if quick_mode else DISCOVERY_FULL_UNIVERSE_CAP
+        for sym in universe[:universe_cap]:
+            if _deadline_reached():
+                break
+            is_jp = str(sym).upper().endswith(".T")
+            
+            # --- PHYSICAL BLOCKADE ---
+            if market_key == "JP" and not is_jp:
+                continue # Skip US stocks if we explicitly want JP
+            if market_key == "US" and is_jp:
+                continue # Skip JP stocks if we explicitly want US
+
             scanned_count += 1
             scanned_symbols.add(sym)
             quote = _fetch_quote_facts(sym)
@@ -3021,7 +3183,13 @@ def discovery_workflow(payload: dict):
             m = _compute_quant_metrics(sym)
             if not m.get("ok"):
                 continue
+            
+            # --- APPLY NEWS FACTOR BIAS ---
+            # Sentiment adds to alpha, Risk_Z penalizes it
             alpha = _safe_float(m.get("alpha_score"))
+            if alpha is not None:
+                alpha = alpha + (news_sentiment_bias * 1.5) - (news_risk_z * 0.5)
+            
             if alpha is None or alpha < alpha_floor:
                 continue
 
@@ -3164,6 +3332,9 @@ def discovery_workflow(payload: dict):
     ran_attempts = 0
 
     for idx, profile in enumerate(attempt_profiles[:max_attempts], start=1):
+        if _deadline_reached():
+            print(f"[discovery] Time budget reached before attempt {idx}, stopping early.")
+            break
         results_try, scanned_count, universe_size, market_used, max_pos_pct_used, alpha_floor_used = _run_attempt(profile)
         ran_attempts += 1
         total_scanned += scanned_count
@@ -3236,11 +3407,13 @@ def discovery_workflow(payload: dict):
 
     profile_label = best_profile.get('label') if best_profile else 'default'
     summary = (
-        f"🎯 **选股与配置报告 (探索阶段)**\n\n"
-        f"**配置目标**: {goal_text or '稳健增长'} | **资金盘**: {capital_base_jpy:,.0f} JPY | **风险偏好**: {goal_profile.get('risk_profile')}\n\n"
-        f"基于汤普森采样模型，系统经过 {ran_attempts} 轮动态策略探索（最终采用 `{profile_label}` 模式），"
-        f"从 {len(scanned_symbols)} 只基础池股票中筛选出 {len(results)} 只合格标的。\n\n"
-        f"🏆 **核心推荐 Top 5**:\n{top_candidates_str if top_candidates_str else '- 暂无符合严格条件的标的，建议放宽收益预期或扩大资金量。'}\n"
+        f"🎯 **选股与配置报告 (新闻因子集成版)**\n\n"
+        f"**配置目标**: {goal_text or '稳健增长'} | **资金盘**: {capital_base_jpy:,.0f} JPY\n"
+        f"**市场偏置**: 情绪评分 {news_sentiment_bias:+.2f} | 风险因子 {news_risk_z:.2f}\n\n"
+        f"基于当前地缘政治（重点关注美国/中东）与市场情绪分析，系统完成了 {ran_attempts} 轮动态策略探索。"
+        f"由于新闻因子判定当前环境为 {'偏多' if news_sentiment_bias > 0.2 else '偏空' if news_sentiment_bias < -0.2 else '震荡'}，"
+        f"已自动对选股池进行了权重修正。\n\n"
+        f"🏆 **核心推荐 Top 5**:\n{top_candidates_str if top_candidates_str else '- 暂无符合严格条件的标的。'}\n"
         f"💡 **仓位推演**: 预计总投资 {position_plan.get('planned_investment_jpy', 0):,.0f} JPY，保留现金流 {position_plan.get('cash_reserve_jpy', 0):,.0f} JPY。"
     )
 
@@ -3265,6 +3438,9 @@ def discovery_workflow(payload: dict):
         "min_candidates_target": min_candidates_target,
         "auto_evolve": auto_evolve,
         "auto_expand_market": auto_expand_market,
+        "quick_mode": quick_mode,
+        "time_budget_s": time_budget_s,
+        "elapsed_s": round(time.time() - started_at, 2),
         "learning_enabled": enable_learning,
         "analysis": summary,
     }
@@ -3341,7 +3517,7 @@ def compute_news_risk_factor(payload: dict):
     sentiment, uncertainty, severity = 0.0, 0.2, 0.1
     
     try:
-        response = get_llm_response(system_prompt, news_text, model=QUANT_LLM_MODEL)
+        response = get_llm_response(system_prompt, news_text, model=QUANT_LLM_MODEL, timeout_s=min(18, LLM_TIMEOUT_S))
         if response:
             import re
             json_match = re.search(r"\{[\s\S]*\}", response)
@@ -3625,51 +3801,52 @@ def web_search_and_browse(payload: dict):
 
 def _quick_news_brief(articles: List[dict], title: str = "市场快讯") -> str:
     if not articles:
-        return "暂无可用新闻样本，建议等待下一轮抓取。"
+        return "暂无可用新闻样本。"
+
+    # --- Deduplication by title similarity ---
+    unique_articles = []
+    seen_titles = set()
+    for a in articles:
+        t = str(a.get("title") or "").strip()
+        # Extract main core of the title (first 15 chars) to find hourly updates
+        core = t[:15]
+        if core in seen_titles: continue
+        seen_titles.add(core)
+        unique_articles.append(a)
+    
+    articles = unique_articles[:5]
+    if not articles: return "未找到非重复的有效新闻。"
 
     domains = []
     headlines = []
     for a in articles:
         t = str(a.get("title") or "").strip()
         d = str(a.get("domain") or a.get("publisher") or "unknown").strip().lower()
-        if t:
-            headlines.append(t)
-        if d:
-            domains.append(d)
+        headlines.append(t)
+        domains.append(d)
 
     domain_top = Counter(domains).most_common(3)
-    top_domains = ", ".join([f"{k}({v})" for k, v in domain_top]) if domain_top else "unknown"
+    top_domains = ", ".join([f"{k}({v})" for k, v in domain_top])
 
     text_blob = " ".join(headlines).lower()
     theme_map = {
         "宏观/利率": ["boj", "fed", "rate", "yield", "inflation", "cpi", "日银", "利率", "通胀"],
         "业绩/指引": ["earnings", "guidance", "forecast", "profit", "业绩", "财报", "盈利"],
         "科技/半导体": ["ai", "chip", "semiconductor", "nvidia", "tsmc", "半导体", "芯片"],
-        "汇率/外需": ["yen", "usd/jpy", "dollar", "export", "日元", "汇率", "出口"],
+        "地缘/政策": ["middle east", "israel", "iran", "us policy", "election", "中东", "美国政策", "地缘"],
     }
+    
     theme_hits = []
     for theme, keys in theme_map.items():
         hit = sum(1 for k in keys if k in text_blob)
-        if hit > 0:
-            theme_hits.append((theme, hit))
+        if hit > 0: theme_hits.append((theme, hit))
+    
     theme_hits.sort(key=lambda x: x[1], reverse=True)
-    themes = "、".join([t for t, _ in theme_hits[:3]]) if theme_hits else "题材分布分散"
-
-    pos_words = ["beat", "surge", "upgrade", "record", "growth", "上调", "增长", "创新高", "超预期"]
-    neg_words = ["miss", "cut", "downgrade", "drop", "risk", "下调", "下跌", "不及预期", "风险"]
-    pos = sum(text_blob.count(w) for w in pos_words)
-    neg = sum(text_blob.count(w) for w in neg_words)
-    if pos > neg:
-        sentiment = "偏多"
-    elif neg > pos:
-        sentiment = "偏空"
-    else:
-        sentiment = "中性"
+    themes = "、".join([t for t, _ in theme_hits[:3]]) if theme_hits else "目前主要受盘面指数波动驱动，暂无明显板块主线"
 
     return (
-        f"1) {title}主线：{themes}。\n"
-        f"2) 信息源集中度：{top_domains}。\n"
-        f"3) 新闻情绪：{sentiment}（基于标题关键词启发式判断）。"
+        f"1) {title}特征：{themes}。\n"
+        f"2) 关键来源：{top_domains}。"
     )
 
 def preclose_brief_jp(payload: dict):
@@ -3683,11 +3860,16 @@ def preclose_brief_jp(payload: dict):
     freshness_hours = float(payload.get("freshness_hours", 12))
 
     # 1. Fetch fast path news (last 6h), then enforce freshness policy.
+    # Use a more sophisticated query including geopolitics and major macro themes
+    search_query = (
+        "(japan OR tokyo OR nikkei) AND "
+        "(geopolitics OR 'middle east' OR israel OR iran OR fed OR inflation OR 'us policy')"
+    )
     raw_articles = _gdelt_doc_search(
-        "japan OR tokyo OR nikkei OR stock",
-        datetime.utcnow() - timedelta(hours=6),
+        search_query,
+        datetime.utcnow() - timedelta(hours=12), # Wider window for depth
         datetime.utcnow(),
-        max_records=20,
+        max_records=30,
     )
     articles, freshness = _apply_freshness_policy(raw_articles, max_age_hours=freshness_hours)
 
@@ -3740,57 +3922,240 @@ def preclose_brief_jp(payload: dict):
 
 def tdnet_close_flash(payload: dict):
     """
-    Japanese market post-close flash (15:35 JST) focusing on TDnet announcements.
+    Japanese market post-close flash (15:35 JST) with structured output and source links.
     """
     run_id = payload.get("run_id")
     date_str = payload.get("date") or _now_date_str()
-    
     freshness_hours = float(payload.get("freshness_hours", 24))
 
-    # Placeholder for TDnet scraping logic: use Google News but enforce freshness gate.
-    raw_articles = _fetch_news_from_google_rss("決算 OR 業績修正 OR 株式分割 OR 発表", "日本株", max_items=12, lang="ja")
-    articles, freshness = _apply_freshness_policy(raw_articles, max_age_hours=freshness_hours)
-    
-    items_text = ""
-    for a in articles[:3]:
-        title = a.get('title', 'Unknown')
-        url = a.get('url', '')
-        items_text += f"- {title} : {url}\n"
-        
-    if items_text:
-        system = (
-            "你是日股盘后公告解读分析师。请基于标题输出中文盘后长分析，结构必须包含："
-            "1) 公告类型归因(业绩/回购/并购/监管等)；2) 对次日开盘影响(高/中/低并说明)；"
-            "3) 可能受影响的板块与代表标的；4) 跟踪清单与触发条件；5) 风险提示。"
-            "要求：结论清晰、可执行，长度约220-450字。"
+    search_query = "決算 OR 発表 OR 地政学 OR 原油 OR 利下げ"
+    raw_google = _fetch_news_from_google_rss(
+        search_query,
+        "日本株 OR 日経",
+        max_items=15,
+        lang="ja",
+        resolve_original_links=True,
+    )
+    raw_gdelt = []
+    try:
+        gdelt_rows = _gdelt_doc_search(
+            "japan OR nikkei OR tdnet OR earnings OR guidance OR oil OR geopolitics",
+            datetime.utcnow() - timedelta(hours=max(12, int(freshness_hours))),
+            datetime.utcnow(),
+            max_records=25,
         )
-        llm_summary = get_llm_response(system, items_text, model=QUANT_LLM_MODEL)
-        if not str(llm_summary or "").strip() or len(str(llm_summary).strip()) < 60:
-            llm_summary = _quick_news_brief(articles[:3], title="盘后")
-        freshness_line = (
-            f"Freshness<= {int(freshness_hours)}h | fresh={freshness.get('fresh_count', 0)} | "
-            f"dropped_stale={freshness.get('dropped_stale', 0)} | dropped_undated={freshness.get('dropped_undated', 0)}"
-        )
-        summary = f"【15:35 JST 盘后闪讯】\n{freshness_line}\n{llm_summary}\n\n【监测到以下公告/新闻】\n{items_text}"
-    else:
-        summary = (
-            "【15:35 JST 盘后闪讯】\n"
-            f"未找到满足 freshness<= {int(freshness_hours)}h 的公告/新闻。"
-            f"（剔除过旧: {freshness.get('dropped_stale', 0)}，无时间戳: {freshness.get('dropped_undated', 0)}）"
-        )
+        for g in gdelt_rows:
+            title = str(g.get("title") or "").strip()
+            url = str(g.get("url") or "").strip()
+            if not title or not url:
+                continue
+            raw_gdelt.append({
+                "title": title,
+                "url": url,
+                "publisher": str(g.get("domain") or g.get("source") or "").strip(),
+                "published_at": str(g.get("seendate") or g.get("pubdate") or "").strip(),
+                "source": "gdelt",
+            })
+    except Exception:
+        raw_gdelt = []
 
-    result = {
-        "ok": True,
-        "type": "tdnet_close_flash",
-        "date": date_str,
-        "freshness": freshness,
-        "analysis": summary
-    }
-    
+    # Prefer direct-source links from GDELT, then merge Google RSS as fallback.
+    merged_raw = []
+    seen = set()
+    for row in (raw_gdelt + raw_google):
+        t = str(row.get("title") or "").strip().lower()
+        u = str(row.get("url") or "").strip().lower()
+        if not t or not u:
+            continue
+        key = (t, u)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged_raw.append(row)
+
+    articles, freshness = _apply_freshness_policy(merged_raw, max_age_hours=freshness_hours)
+    # Ranking: direct links first, then newer items first.
+    def _rank_tdnet_item(it: dict):
+        is_google = "news.google." in str(it.get("url") or "").lower()
+        dt = _parse_article_dt(it)
+        ts = dt.timestamp() if dt is not None else 0.0
+        return (1 if is_google else 0, -ts)
+    articles.sort(key=_rank_tdnet_item)
+
+    if not articles:
+        return {"ok": True, "analysis": "【15:35 JST 盘后】未发现满足时效性的关键资讯。"}
+
+    # Build LLM input from recent items.
+    focus_items = articles[:10]
+    items_text = "\n".join([f"- {a.get('title', 'Unknown')} : {a.get('url', '')}" for a in focus_items])
+
+    system = (
+        "你是一位顶尖量化分析师。请对盘后资讯输出深度研判。\n"
+        "输出必须包含：\n"
+        "1. [REPORT] （中文深度分析，至少120字）\n"
+        "2. [FACTS] {\"sentiment\": -1~1, \"geo_risk\": 0~1, \"key_sectors\": [\"行业1\", \"行业2\"]}"
+    )
+    llm_raw = get_llm_response(system, items_text, model=QUANT_LLM_MODEL)
+
+    report_text = ""
+    fact_data = {"sentiment": 0.0, "geo_risk": 0.2, "key_sectors": []}
+    degraded = False
+
+    try:
+        raw = str(llm_raw or "")
+        m_report = re.search(r"\[REPORT\]\s*(.*?)(?:\n\s*\[FACTS\]|\Z)", raw, flags=re.S)
+        if m_report:
+            report_text = m_report.group(1).strip()
+
+        m_facts = re.search(r"\[FACTS\]\s*(\{[\s\S]*?\})", raw, flags=re.S)
+        if m_facts:
+            parsed = json.loads(m_facts.group(1))
+            if isinstance(parsed, dict):
+                fact_data.update(parsed)
+    except Exception:
+        pass
+
+    # Deterministic fallback when LLM report is unavailable/too short.
+    if not report_text or len(report_text) < 80:
+        degraded = True
+        headlines = [str(a.get("title") or "").strip() for a in focus_items[:8]]
+        merged = " ".join(headlines).lower()
+        pos_hits = sum(merged.count(k) for k in ["上调", "增长", "超预期", "回购", "利好", "beat", "upgrade"])
+        neg_hits = sum(merged.count(k) for k in ["下调", "下滑", "亏损", "风险", "预警", "miss", "downgrade"])
+        geo_hits = sum(merged.count(k) for k in ["地缘", "中东", "冲突", "油价", "israel", "iran", "middle east"])
+
+        denom = max(1, pos_hits + neg_hits)
+        sentiment = max(-1.0, min(1.0, (pos_hits - neg_hits) / denom))
+        geo_risk = max(0.0, min(1.0, 0.15 + 0.12 * geo_hits + 0.05 * neg_hits))
+        fact_data["sentiment"] = round(float(sentiment), 2)
+        fact_data["geo_risk"] = round(float(geo_risk), 2)
+        report_text = _quick_news_brief(focus_items[:8], title="盘后")
+
+    # Normalize facts for rendering.
+    sentiment = max(-1.0, min(1.0, float(fact_data.get("sentiment", 0.0))))
+    geo_risk = max(0.0, min(1.0, float(fact_data.get("geo_risk", 0.2))))
+    sectors = fact_data.get("key_sectors")
+    if not isinstance(sectors, list):
+        sectors = []
+    sector_text = "、".join([str(x).strip() for x in sectors if str(x).strip()][:3]) or "待观察"
+    sentiment_label = "偏多" if sentiment > 0.2 else ("偏空" if sentiment < -0.2 else "中性")
+
+    # Convert long report into concise bullet points for Discord readability.
+    split_parts = re.split(r"[。\n；;!?！？]+", str(report_text))
+    bullets = [p.strip() for p in split_parts if p.strip()]
+    bullets = bullets[:3] if bullets else [str(report_text).strip()[:120]]
+
+    # Preserve traceable source links.
+    source_items = []
+    for a in focus_items:
+        title = str(a.get("title") or "Unknown").strip()
+        url = str(a.get("url") or "").strip()
+        publisher = str(a.get("publisher") or "").strip()
+        if not url.startswith(("http://", "https://")):
+            continue
+        google_url = url
+        resolved_mode = "direct"
+        # If still a Google News proxy URL, try a search-based direct-link fallback.
+        if "news.google." in url.lower():
+            guessed = _search_direct_url_by_title(title, publisher)
+            if guessed:
+                url = guessed
+                resolved_mode = "resolved"
+            else:
+                # UX fallback: provide one-click search link to reach the original article.
+                fallback_search = _build_article_search_url(title, publisher)
+                if fallback_search:
+                    url = fallback_search
+                    resolved_mode = "search"
+        source_items.append({
+            "title": title,
+            "url": url,
+            "publisher": publisher,
+            "url_google": google_url,
+            "resolved_mode": resolved_mode,
+        })
+    source_items = source_items[:5]
+
+    source_lines = []
+    for idx, s in enumerate(source_items[:3], start=1):
+        short_title = s["title"][:56] + ("..." if len(s["title"]) > 56 else "")
+        tag = ""
+        if s.get("resolved_mode") == "search":
+            tag = " [原文检索]"
+        elif s.get("resolved_mode") == "direct":
+            tag = " [直链]"
+        source_lines.append(f"{idx}) {short_title}{tag}\n{s['url']}")
+    sources_block = "\n".join(source_lines) if source_lines else "暂无可用原文链接"
+
     if run_id:
-        record_fact(run_id, "news", "tdnet_flash", result)
-        
-    return result
+        record_fact(run_id, "news", "macro_sentiment_impact", {"data": {"sentiment": sentiment, "geo_risk": geo_risk, "key_sectors": sectors}, "source": "tdnet"})
+
+    card_data = {
+        "title": "盘后研判报告",
+        "subtitle": f"日本市场 | {date_str}",
+        "metrics": [
+            {"label": "情绪评分", "value": f"{sentiment:+.2f}"},
+            {"label": "地缘风险", "value": f"{geo_risk*100:.0f}%"},
+            {"label": "资讯新鲜度", "value": f"{freshness.get('fresh_count', 0)}条"},
+        ],
+        "highlights": str(report_text)[:500],
+        "footer": "OpenClaw Nexus Quant Intelligence",
+    }
+    report_card = generate_report_card(card_data)
+
+    safe_date = re.sub(r"[^0-9A-Za-z_.-]+", "_", str(date_str))
+    html_path = Path(f"/tmp/tdnet_close_flash_{safe_date}_{int(time.time())}.html")
+    list_html = "".join([f"<li><a href='{html.escape(s['url'])}' target='_blank'>{html.escape(s['title'])}</a></li>" for s in source_items])
+    html_doc = f"""<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>TDnet Close Flash {html.escape(str(date_str))}</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; line-height: 1.6; color: #1f2937; }}
+    h1 {{ margin: 0 0 8px; }}
+    .meta {{ color: #6b7280; margin-bottom: 12px; }}
+    .card {{ background: #f8fafc; padding: 14px; border-radius: 8px; margin-bottom: 12px; }}
+  </style>
+</head>
+<body>
+  <h1>TDnet 盘后闪讯</h1>
+  <div class="meta">Date: {html.escape(str(date_str))} | Fresh={int(freshness.get("fresh_count", 0))}</div>
+  <div class="card"><strong>重点结论</strong><br>{'<br>'.join([html.escape(x) for x in bullets])}</div>
+  <div class="card"><strong>风险温度</strong><br>情绪={sentiment:+.2f}（{sentiment_label}） | 地缘风险={geo_risk:.2f} | 关注方向={html.escape(sector_text)}</div>
+  <div class="card"><strong>深度分析全文</strong><br>{html.escape(str(report_text)).replace(chr(10), '<br>')}</div>
+  <div class="card"><strong>原文链接</strong><ol>{list_html}</ol></div>
+</body>
+</html>"""
+    html_path.write_text(html_doc, encoding="utf-8")
+
+    artifacts = [archive_file(html_path)]
+    if isinstance(report_card, dict) and isinstance(report_card.get("artifacts"), list):
+        artifacts.extend([a for a in report_card.get("artifacts", []) if isinstance(a, dict)])
+
+    mode_note = "（AI深度研判暂不可用，已降级为规则分析）\n" if degraded else ""
+    summary = (
+        "【15:35 JST 盘后深度研判】\n\n"
+        "【重点结论】\n"
+        f"- {bullets[0] if len(bullets) > 0 else '暂无'}\n"
+        f"- {bullets[1] if len(bullets) > 1 else '暂无'}\n"
+        f"- {bullets[2] if len(bullets) > 2 else '暂无'}\n\n"
+        "【风险温度】\n"
+        f"- 情绪: {sentiment:+.2f} ({sentiment_label})\n"
+        f"- 地缘风险: {geo_risk:.2f}\n"
+        f"- 关注方向: {sector_text}\n\n"
+        f"{mode_note}"
+        "【原文链接 Top3】\n"
+        f"{sources_block}"
+    )
+
+    return {
+        "ok": True,
+        "analysis": summary[:1800],
+        "artifacts": artifacts,
+        "source_links": source_items,
+        "facts": {"sentiment": sentiment, "geo_risk": geo_risk, "key_sectors": sectors, "degraded": degraded},
+    }
 
 TOOLS = {
     "dummy.echo": lambda p: p,
@@ -3921,6 +4286,14 @@ def main():
         except Exception as e:
             print(f"[worker] reclaim failed: {e}")
             return []
+
+    # --- Ensure Consumer Group exists ---
+    try:
+        r.xgroup_create(STREAM_TASK, GROUP, id="0", mkstream=True)
+    except Exception: pass # Already exists
+    try:
+        r.xgroup_create(STREAM_TASK_CODING, GROUP, id="0", mkstream=True)
+    except Exception: pass
 
     last_reclaim = 0.0
     while True:

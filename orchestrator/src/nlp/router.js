@@ -103,8 +103,9 @@ ${JSON.stringify(AGENT_TOOLS_SCHEMA, null, 2)}
 Instructions:
 1. Understand the user's intent.
 2. If the user is asking a general question, seeking an explanation, or chatting without explicitly requesting data fetching, market scanning, or analysis, set "mode_suggested": "chat" and "requires_tools": false.
-3. If the user explicitly asks to run an analysis, scan the market, fetch news, or execute a task, set "mode_suggested": "run", "requires_tools": true, and select the EXACT "tool_name" from the available tools.
-3.1 If the user asks about geopolitical impact on markets (e.g. Middle East tensions impact on Japan stocks and next trading day suggestions), you MUST set requires_tools=true and choose either "news.active_hot_search" or "quant.discovery_workflow".
+3. If the user explicitly asks to run an analysis, scan the market, fetch news, or execute a task, set "mode_suggested": "run", "requires_tools": true, and select the SINGLE most appropriate "tool_name".
+3.1 If the user asks about geopolitical impact AND stock suggestions/position planning (e.g. "Middle East impact on JP stocks with 400k capital"), you MUST select "quant.discovery_workflow" ONLY.
+3.2 DETECTION RULE: If the input contains "日本", "日股", "日元", "JPY", or a 4-digit code ending in ".T", you MUST set "payload": { "market": "JP" }. Never output "ALL" or "US" when Japan is the primary focus.
 4. Extract necessary parameters into "payload".
 
 Output STRICTLY in valid JSON format representing a TaskSpec:
@@ -128,35 +129,44 @@ function detectLanguageFallback(text) {
   return "en";
 }
 
-export async function qwenChat(messages, timeoutMs = 15000) {
+export async function qwenChat(messages, timeoutMs = 60000) {
   const QWEN_KEY = process.env.QWEN_API_KEY;
   if (!QWEN_KEY) return null;
+  const baseRaw = String(QWEN_BASE || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1").replace(/\/+$/, "");
+  const candidates = [...new Set([
+    baseRaw,
+    baseRaw.replace(/\/v1$/i, "/compatible-mode/v1"),
+    baseRaw.replace(/\/compatible-mode\/v1$/i, "/v1"),
+  ])].filter(x => /^https?:\/\//i.test(x));
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(`${QWEN_BASE}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${QWEN_KEY}` },
-      body: JSON.stringify({ 
-        model: CURRENT_QWEN_MODEL, 
-        messages: messages,
-        temperature: 0.1 // Low temp for more deterministic routing
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      console.error(`Qwen Dispatcher Error: ${response.status} ${response.statusText} ${errText}`);
-      return null;
+  for (const base of candidates) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(`${base}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${QWEN_KEY}` },
+        body: JSON.stringify({
+          model: CURRENT_QWEN_MODEL,
+          messages: messages,
+          temperature: 0.1 // Low temp for more deterministic routing
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        console.error(`Qwen Dispatcher Error: ${response.status} ${response.statusText} ${errText}`);
+        if (response.status === 404) continue;
+        return null;
+      }
+      return await response.json();
+    } catch (e) {
+      console.error("Qwen Dispatcher Error:", e);
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return await response.json();
-  } catch (e) {
-    console.error("Qwen Dispatcher Error:", e);
-    return null;
-  } finally {
-    clearTimeout(timeoutId);
   }
+  return null;
 }
 
 export async function parseIntent(userInput, context = {}) {

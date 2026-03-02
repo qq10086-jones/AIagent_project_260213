@@ -252,7 +252,9 @@ def _extract_tool_payload(state: AgentState, tool_name: str) -> dict:
         "quant.discovery_workflow": {
             "capital_base_jpy", "capital_base", "max_position_pct", "market",
             "goal", "risk_profile", "target_return_pct", "horizon_days",
-            "avoid_mega_cap", "prefer_small_mid_cap"
+            "avoid_mega_cap", "prefer_small_mid_cap", "quick_mode",
+            "time_budget_s", "max_attempts", "min_candidates",
+            "auto_evolve", "auto_expand_market", "enable_learning"
         },
         "quant.deep_analysis": {
             "symbol", "capital_base_jpy", "capital_base", "capital_headroom_pct",
@@ -375,6 +377,13 @@ def supervisor_node(state: AgentState):
 def discovery_agent_node(state: AgentState):
     """Stage 1: Intelligence Discovery (Macro/Global News)."""
     run_id = state.get('run_id')
+    discovery_payload = _extract_tool_payload(state, "quant.discovery_workflow")
+    is_fast_discovery = bool(discovery_payload.get("quick_mode")) or (
+        "capital_base_jpy" in discovery_payload and state.get("mode") == "discovery"
+    )
+    if is_fast_discovery:
+        return {"facts": state.get("facts", []) + [{"agent": "intel", "data": {"skipped": True, "reason": "quick_mode"}}]}
+
     print(f"--- [Agent: Intelligence] Gathering Market Data ---")
     try:
         trigger_tool("news.daily_report", {"run_id": run_id, "lookback_hours": 24}, run_id)
@@ -400,6 +409,11 @@ def screening_agent_node(state: AgentState):
     try:
         payload = {"run_id": run_id}
         payload.update(_extract_tool_payload(state, "quant.discovery_workflow"))
+        if "capital_base_jpy" in payload and "quick_mode" not in payload:
+            payload["quick_mode"] = True
+            payload["time_budget_s"] = min(int(payload.get("time_budget_s") or 75), 75)
+            payload["max_attempts"] = min(int(payload.get("max_attempts") or 2), 2)
+            payload["min_candidates"] = min(int(payload.get("min_candidates") or 2), 2)
         trigger_tool("quant.discovery_workflow", payload, run_id)
     except Exception as e:
         print(f"Screening trigger failed: {e}")

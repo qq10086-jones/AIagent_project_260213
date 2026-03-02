@@ -11,6 +11,9 @@ import { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder } from "disc
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import cron from "node-cron";
 
+import { analyzeTaskRisk } from "./policy.js";
+import { handleExecuteTool, handleApproveTask } from "./ingress.js";
+
 const {
   REDIS_URL,
   PGHOST,
@@ -64,12 +67,12 @@ function loadToolsConfig() {
 const TOOLS_CONFIG = loadToolsConfig();
 const channelMemory = new Map();
 
-function getToolSpec(toolName) {
+export function getToolSpec(toolName) {
   return TOOLS_CONFIG?.[toolName] || {};
 }
 
-const redis = new Redis(REDIS_URL);
-const pool = new pg.Pool({
+export const redis = new Redis(REDIS_URL);
+export const pool = new pg.Pool({
   host: PGHOST,
   port: Number(PGPORT || 5432),
   user: PGUSER,
@@ -77,7 +80,7 @@ const pool = new pg.Pool({
   database: PGDATABASE,
 });
 
-const s3 = new S3Client({
+export const s3 = new S3Client({
   endpoint: MINIO_ENDPOINT,
   credentials: { accessKeyId: MINIO_ACCESS_KEY, secretAccessKey: MINIO_SECRET_KEY },
   region: "us-east-1",
@@ -97,7 +100,7 @@ function makeIdempotencyKey(run_id, tool_name, payload = {}) {
   return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 48);
 }
 
-async function recordEvent(task_id, event_type, payload = {}) {
+export async function recordEvent(task_id, event_type, payload = {}) {
   try {
     await pool.query(
       "INSERT INTO event_log(task_id, event_type, payload_json) VALUES ($1,$2,$3)",
@@ -214,21 +217,37 @@ async function ensureRun(run_id, { client_msg_id, user_id, status, input_text })
 async function callQwenChat(messages) {
   const QWEN_KEY = process.env.QWEN_API_KEY;
   if (!QWEN_KEY) throw new Error("QWEN_API_KEY is not set");
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
-  const response = await fetch(`${QWEN_BASE}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${QWEN_KEY}` },
-    body: JSON.stringify({ model: QWEN_MODEL, messages }),
-    signal: controller.signal,
-  }).finally(() => clearTimeout(timeoutId));
+  const baseRaw = String(QWEN_BASE || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1").replace(/\/+$/, "");
+  const candidates = [...new Set([
+    baseRaw,
+    baseRaw.replace(/\/v1$/i, "/compatible-mode/v1"),
+    baseRaw.replace(/\/compatible-mode\/v1$/i, "/v1"),
+  ])].filter(x => /^https?:\/\//i.test(x));
+  let lastErr = "Qwen API error";
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "");
-    throw new Error(`Qwen API error ${response.status} ${response.statusText} ${errText}`.trim());
+  for (const base of candidates) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch(`${base}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${QWEN_KEY}` },
+        body: JSON.stringify({ model: QWEN_MODEL, messages }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        lastErr = `Qwen API error ${response.status} ${response.statusText} ${errText}`.trim();
+        if (response.status === 404) continue;
+        throw new Error(lastErr);
+      }
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content?.trim() || "";
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content?.trim() || "";
+  throw new Error(lastErr);
 }
 
 function detectProject(text) {
@@ -405,7 +424,7 @@ async function callLocalOllamaChat(model, userInput, timeoutMs = Number(process.
   }
 }
 
-async function upsertTask(task) {
+export async function upsertTask(task) {
   await pool.query(
     `INSERT INTO tasks(task_id, tool_name, status, risk_level, payload_json, run_id, idempotency_key, workflow_id, step_index)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -424,84 +443,23 @@ async function upsertTask(task) {
   );
 }
 
-function getTaskStream(tool_name) {
+export function getTaskStream(tool_name) {
   if (typeof tool_name === "string" && tool_name.startsWith("coding.")) {
     return STREAM_TASK_CODING;
   }
   return STREAM_TASK;
 }
 
-function analyzeCodingDelegateRisk(payload = {}) {
-  const prompt = String(payload?.task_prompt || "");
-  const lower = prompt.toLowerCase();
-  const reasons = [];
-
-  const highRiskPatterns = [
-    { re: /\b(?:rm\s+-rf|git\s+reset\s+--hard|git\s+clean\s+-fd|del\s+\/f|format\s+[a-z]:|mkfs|dd\s+if=)\b/i, reason: "destructive_command" },
-    { re: /\b(?:drop\s+table|truncate\s+table|alter\s+table|delete\s+from)\b/i, reason: "db_destructive_operation" },
-    { re: /\b(?:pip\s+install|npm\s+i(?:nstall)?|apt(?:-get)?\s+install|brew\s+install|yum\s+install)\b/i, reason: "dependency_install" },
-    { re: /\b(?:curl\s+https?:\/\/|wget\s+https?:\/\/|ssh\s+|scp\s+|rsync\s+)\b/i, reason: "network_or_remote_access" },
-    { re: /\b(?:\.github\/|infra\/|deploy\/|k8s\/|helm\/|docker-compose|Dockerfile|\.env|secret|id_rsa|credentials?)\b/i, reason: "sensitive_path_or_secret" },
-    { re: /(生产|正式环境|线上|密钥|凭证|数据库迁移|删除表|重置仓库)/i, reason: "high_risk_cn_intent" },
-  ];
-
-  for (const item of highRiskPatterns) {
-    if (item.re.test(prompt)) reasons.push(item.reason);
-  }
-
-  if (Array.isArray(payload?.codex_command) && payload.codex_command.length > 0) {
-    reasons.push("custom_delegate_command");
-  }
-  if (Array.isArray(payload?.opencode_command) && payload.opencode_command.length > 0) {
-    reasons.push("custom_delegate_command");
-  }
-  const provider = String(payload?.provider || "").toLowerCase();
-  if (provider && !["opencode", "codex", "auto"].includes(provider)) {
-    reasons.push("non_default_provider");
-  }
-
-  const uniqueReasons = [...new Set(reasons)];
-  return {
-    highRisk: uniqueReasons.length > 0,
-    reasons: uniqueReasons,
-  };
-}
-
-function resolveApprovalPolicy({ tool_name, payload, spec }) {
-  const defaultRequiresApproval = Boolean(spec?.requires_approval);
-  const defaultRisk = String(spec?.default_risk || "low");
-
-  if (tool_name !== "coding.delegate") {
-    return {
-      requiresApproval: defaultRequiresApproval,
-      effectiveRisk: defaultRisk,
-      approvalReasons: [],
-    };
-  }
-
-  const risk = analyzeCodingDelegateRisk(payload || {});
-  if (risk.highRisk) {
-    return {
-      requiresApproval: true,
-      effectiveRisk: "high",
-      approvalReasons: risk.reasons,
-    };
-  }
-
-  return {
-    requiresApproval: false,
-    effectiveRisk: "medium",
-    approvalReasons: [],
-  };
-}
+// Risk analysis logic moved to policy.js
 
 async function enqueueTask({ tool_name, payload, run_id, risk_level = null, idempotency_key, context }) {
   const fullPayload = { ...(payload || {}), run_id };
   const idem = idempotency_key || makeIdempotencyKey(run_id, tool_name, fullPayload);
   const spec = getToolSpec(tool_name);
-  const policy = resolveApprovalPolicy({ tool_name, payload: fullPayload, spec });
-  const finalRisk = risk_level || policy.effectiveRisk || spec?.default_risk || "low";
-  const requiresApproval = Boolean(policy.requiresApproval);
+  
+  const risk = analyzeTaskRisk(tool_name, fullPayload);
+  const finalRisk = risk_level || risk.risk_level || spec?.default_risk || "low";
+  const requiresApproval = Boolean(risk.requires_approval);
 
   const existing = await pool.query("SELECT task_id FROM tasks WHERE idempotency_key=$1 LIMIT 1", [idem]);
   if (existing.rows.length > 0) {
@@ -527,13 +485,13 @@ async function enqueueTask({ tool_name, payload, run_id, risk_level = null, idem
     tool_name,
     run_id,
     risk_level: finalRisk,
-    approval_reasons: policy.approvalReasons || [],
+    approval_reasons: risk.reasons || [],
   });
   if (requiresApproval) {
     await recordEvent(task_id, "approval.requested", {
       tool_name,
       run_id,
-      reasons: policy.approvalReasons || [],
+      reasons: risk.reasons || [],
     });
   } else {
     const taskStream = getTaskStream(tool_name);
@@ -646,6 +604,17 @@ function fallbackRouteClause(clause) {
     const capital = m ? Number(m[1]) : null;
     if (capital) return { tool_name: "portfolio.set_account", payload: { starting_capital: capital, ccy: /usd/i.test(raw) ? "USD" : "JPY" } };
   }
+  // Capital + no-position + action-planning intent should be treated as discovery workflow.
+  if (/(本金|资金|空仓|仓位|怎(?:么|樣)操作|如何操作|明天怎么操作|明日どうする)/i.test(raw)) {
+    const payload = buildDiscoveryPayloadFromText(raw);
+    if (/(日元|円|JPY)/i.test(raw)) payload.market = payload.market || "JP";
+    if (!payload.goal) payload.goal = "空仓状态下的次日操作建议";
+    payload.quick_mode = true;
+    payload.time_budget_s = 75;
+    payload.max_attempts = Math.min(Number(payload.max_attempts || 2), 2);
+    payload.min_candidates = Math.min(Number(payload.min_candidates || 2), 2);
+    return { tool_name: "quant.discovery_workflow", payload };
+  }
   return null;
 }
 
@@ -676,6 +645,7 @@ function extractGoalText(text) {
 function buildDiscoveryPayloadFromText(text) {
   const s = String(text || "").trim();
   const payload = {};
+  const isImmediateOpsQuery = /(本金|资金|空仓|仓位|怎(?:么|樣)操作|如何操作|明天怎么操作|明日どうする)/i.test(s);
 
   const capital = parseCapitalJpy(s);
   if (capital && Number.isFinite(capital) && capital > 0) {
@@ -707,6 +677,14 @@ function buildDiscoveryPayloadFromText(text) {
     payload.goal = goalText;
   } else if (/(?:\u76ee\u6807|\u589e\u503c|\u56de\u62a5|\u6536\u76ca|\u5efa\u4ed3\u8ba1\u5212|\u5efa\u5009\u8a08\u5283|\u5206\u6279)/.test(s)) {
     payload.goal = s.slice(0, 120);
+  }
+  if (isImmediateOpsQuery) {
+    payload.quick_mode = true;
+    payload.time_budget_s = 75;
+    payload.max_attempts = Math.min(Number(payload.max_attempts || 2), 2);
+    payload.min_candidates = Math.min(Number(payload.min_candidates || 2), 2);
+  } else if (!Number.isFinite(Number(payload.time_budget_s))) {
+    payload.time_budget_s = 150;
   }
   return payload;
 }
@@ -1064,6 +1042,20 @@ discord.on("messageCreate", async msg => {
     const m = String(input || "").match(new RegExp(`^${command}(?::|：|\\s+)(.+)$`, "i"));
     return m?.[1]?.trim() || "";
   };
+  const parseRunDirective = (input) => {
+    const arg = extractCommandArg(input, "\\/run");
+    if (!arg) return { tool_name: "", payload: null, error: "missing_arg" };
+    const firstSpace = arg.indexOf(" ");
+    const tool_name = (firstSpace >= 0 ? arg.slice(0, firstSpace) : arg).trim();
+    const payloadPart = (firstSpace >= 0 ? arg.slice(firstSpace + 1) : "").trim();
+    if (!tool_name) return { tool_name: "", payload: null, error: "missing_tool" };
+    if (!payloadPart) return { tool_name, payload: {}, error: "" };
+    try {
+      return { tool_name, payload: JSON.parse(payloadPart), error: "" };
+    } catch {
+      return { tool_name, payload: null, error: "invalid_payload_json" };
+    }
+  };
 
   if (trimmedInput === "/model-local" || trimmedInput.startsWith("/model-local:") || trimmedInput.startsWith("/model-local ")) {
     const requestedModel = extractCommandArg(trimmedInput, "\\/model-local");
@@ -1135,6 +1127,64 @@ discord.on("messageCreate", async msg => {
       }
     } catch (e) {
       await msg.reply(`[NEXUS] 拒绝异常：${e.message}`);
+    }
+    return;
+  }
+
+  if (trimmedInput === "/run" || trimmedInput.startsWith("/run:") || trimmedInput.startsWith("/run：") || trimmedInput.startsWith("/run ")) {
+    const parsedRun = parseRunDirective(trimmedInput);
+    if (parsedRun.error === "missing_arg" || parsedRun.error === "missing_tool") {
+      await msg.reply("[NEXUS] 用法：`/run <tool_name> [json_payload]`，例如：`/run news.tdnet_close_flash {\"date\":\"2026-03-02\"}`");
+      return;
+    }
+    if (parsedRun.error === "invalid_payload_json") {
+      await msg.reply("[NEXUS] payload 必须是合法 JSON。示例：`/run news.daily_report {\"lookback_hours\":24}`");
+      return;
+    }
+    if (!getToolSpec(parsedRun.tool_name)?.kind) {
+      await msg.reply(`[NEXUS] 未知工具：\`${parsedRun.tool_name}\`。请检查 configs/tools.json。`);
+      return;
+    }
+
+    const run_id = uuidv4();
+    const runLang = detectLanguageQuick(trimmedInput);
+    const context = {
+      channelId: msg.channel.id,
+      startTime: Date.now(),
+      lang: runLang || "zh",
+      run_id,
+      closeRunOnTaskResult: true,
+    };
+    runToContext.set(run_id, context);
+
+    try {
+      await ensureRun(run_id, {
+        client_msg_id: msg.id,
+        user_id: msg.author.id,
+        status: "running",
+        input_text: trimmedInput.slice(0, 2000),
+      });
+      const progressText = await translate(`已收到 /run，开始执行工具 ${parsedRun.tool_name} ...`, context.lang || "zh");
+      await msg.reply(`[NEXUS] ${progressText}`);
+
+      const queued = await enqueueTask({
+        tool_name: parsedRun.tool_name,
+        payload: parsedRun.payload || {},
+        run_id,
+        idempotency_key: makeIdempotencyKey(run_id, parsedRun.tool_name, parsedRun.payload || {}),
+        context,
+      });
+      if (queued?.waiting_approval) {
+        await msg.reply(
+          `[NEXUS] 任务等待审批：task_id=${queued.task_id}\n` +
+          `批准：\`/approve: ${queued.task_id}\`\n` +
+          `拒绝：\`/reject: ${queued.task_id}\``
+        );
+      }
+    } catch (err) {
+      runToContext.delete(run_id);
+      await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["failed", run_id]).catch(() => {});
+      await msg.reply(`[NEXUS] /run 执行失败：${err.message}`);
     }
     return;
   }
@@ -1265,8 +1315,24 @@ discord.on("messageCreate", async msg => {
       (intent.mode_suggested === "chat" || !intent.requires_tools || intent.confidence < 0.6 || !intent.tool_name)
     ) {
       intent = forcedIntent;
+    } else if (
+      forcedIntent &&
+      intent?.tool_name &&
+      forcedIntent.tool_name === intent.tool_name
+    ) {
+      intent.payload = { ...(intent.payload || {}), ...(forcedIntent.payload || {}) };
     }
     const lang = intent.language || "zh";
+    const immediateOpsQuery = /(本金|资金|空仓|仓位|怎(?:么|樣)操作|如何操作|明天怎么操作|明日どうする)/i.test(userInput);
+    if (intent.tool_name === "quant.discovery_workflow" && immediateOpsQuery) {
+      intent.payload = {
+        ...(intent.payload || {}),
+        quick_mode: true,
+        time_budget_s: 75,
+        max_attempts: Math.min(Number(intent.payload?.max_attempts || 2), 2),
+        min_candidates: Math.min(Number(intent.payload?.min_candidates || 2), 2),
+      };
+    }
 
     // Update memory if a symbol was found
     if (intent.payload && intent.payload.symbol) {
@@ -1278,8 +1344,19 @@ discord.on("messageCreate", async msg => {
     if (intent.mode_suggested === "chat" || !intent.requires_tools || intent.confidence < 0.6 || !intent.tool_name) {
       const useCloudChat = !FORCE_LOCAL_LLM && (process.env.QWEN_API_KEY || model_preference === "api");
       if (useCloudChat) {
-        const reply = await callQwenChat([{ role: "user", content: userInput }]);
-        await replyChunked(msg, reply || "I didn't understand that.");
+        try {
+          const reply = await callQwenChat([{ role: "user", content: userInput }]);
+          await replyChunked(msg, reply || "I didn't understand that.");
+        } catch (cloudErr) {
+          console.warn("[chat] cloud model failed, fallback to local:", cloudErr?.message || cloudErr);
+          const project = detectProject(userInput);
+          const projectContext = await buildContext(project);
+          const localReply = await callLocalOllamaChat(CURRENT_LOCAL_MODEL, userInput, undefined, projectContext);
+          await replyChunked(
+            msg,
+            localReply || "我是 NEXUS 助手。当前云端模型不可用，已回退本地模型。"
+          );
+        }
             } else {
                             try {
                               const project = detectProject(userInput);
@@ -1375,6 +1452,14 @@ discord.on("messageCreate", async msg => {
       const progressText = await translate(progressMap[mode], lang);
       await msg.reply(`[NEXUS] ${progressText}`);
 
+      const toolPayload = { ...(intent.payload || {}) };
+      if (mode === "discovery" && /(本金|资金|空仓|仓位|怎(?:么|樣)操作|如何操作|明天怎么操作|明日どうする)/i.test(userInput)) {
+        toolPayload.quick_mode = true;
+        toolPayload.time_budget_s = 75;
+        toolPayload.max_attempts = Math.min(Number(toolPayload.max_attempts || 2), 2);
+        toolPayload.min_candidates = Math.min(Number(toolPayload.min_candidates || 2), 2);
+      }
+      const brainRetries = mode === "discovery" ? 0 : 2;
       const brainData = await callBrainWithRetry({
         symbol: intent.payload.symbol || "unknown",
         run_id,
@@ -1382,9 +1467,9 @@ discord.on("messageCreate", async msg => {
         local_model: CURRENT_LOCAL_MODEL,
         mode: mode,
         tool_name: intent.tool_name,
-        tool_payload: intent.payload || {},
+        tool_payload: toolPayload,
         qwen_model: CURRENT_QWEN_MODEL
-      });
+      }, brainRetries);
 
       const report = (brainData?.narrative || "").trim();
       const reportMarkdown = (brainData?.report_markdown || "").trim();
@@ -1527,10 +1612,18 @@ discord.on("messageReactionAdd", async (reaction, user) => {
   }
 });
 
-if (DISCORD_TOKEN) discord.login(DISCORD_TOKEN).catch(console.error);
+if (DISCORD_TOKEN && DISCORD_TOKEN !== "" && DISCORD_TOKEN !== "your_discord_token_here") {
+  console.log("[discord] Attempting to login...");
+  discord.login(DISCORD_TOKEN).catch(err => {
+    console.error(`[discord] Login failed: ${err.message}`);
+  });
+} else {
+  console.warn("[discord] No valid DISCORD_TOKEN found. Running in API-only mode.");
+}
 
 async function startResultConsumer() {
   const consumer = "orchestrator-1";
+  console.log(`[result-consumer] Starting on stream ${STREAM_RESULT}...`);
   while (true) {
     try {
       const res = await redis.xreadgroup("GROUP", GROUP_RESULT, consumer, "BLOCK", 5000, "COUNT", 20, "STREAMS", STREAM_RESULT, ">");
@@ -1545,12 +1638,18 @@ async function startResultConsumer() {
           const status = obj.status || "succeeded";
           const output = parseOutputField(obj.output);
           const streamError = obj.error ? String(obj.error) : "";
+          
+          console.log(`[result-consumer] Processing task ${task_id} with status ${status}`);
 
           if (status === "claimed") {
             await pool.query("UPDATE tasks SET status=$1, updated_at=NOW() WHERE task_id=$2", ["running", task_id]);
             await recordEvent(task_id, "task.claimed", { task_id });
           } else {
-            await pool.query("UPDATE tasks SET status=$1, updated_at=NOW() WHERE task_id=$2", [status, task_id]);
+            // Task finished (succeeded/failed/aborted)
+            await pool.query(
+              "UPDATE tasks SET status=$1, result_json=$2, error_code=$3, updated_at=NOW() WHERE task_id=$4",
+              [status, JSON.stringify(output || {}), streamError || null, task_id]
+            );
             if (status === "succeeded") {
               await recordEvent(task_id, "task.succeeded", { task_id });
             } else if (status === "failed") {
@@ -1945,21 +2044,47 @@ app.post("/chat", async (req, res) => {
     (intent.mode_suggested === "chat" || !intent.requires_tools || intent.confidence < 0.6 || !intent.tool_name)
   ) {
     intent = forcedIntent;
+  } else if (
+    forcedIntent &&
+    intent?.tool_name &&
+    forcedIntent.tool_name === intent.tool_name
+  ) {
+    intent.payload = { ...(intent.payload || {}), ...(forcedIntent.payload || {}) };
   }
 
   if (intent.confidence > 0.6 && intent.tool_name) {
     try {
+      const immediateOpsQuery = /(本金|资金|空仓|仓位|怎(?:么|樣)操作|如何操作|明天怎么操作|明日どうする)/i.test(String(message || ""));
+      if (intent.tool_name === "quant.discovery_workflow" && immediateOpsQuery) {
+        intent.payload = {
+          ...(intent.payload || {}),
+          quick_mode: true,
+          time_budget_s: 75,
+          max_attempts: Math.min(Number(intent.payload?.max_attempts || 2), 2),
+          min_candidates: Math.min(Number(intent.payload?.min_candidates || 2), 2),
+        };
+      }
+
       await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["running", run_id]);
+      const mode = intent.tool_name === "quant.discovery_workflow" ? "discovery" : "analysis";
+      const toolPayload = { ...(intent.payload || {}) };
+      if (mode === "discovery" && /(本金|资金|空仓|仓位|怎(?:么|樣)操作|如何操作|明天怎么操作|明日どうする)/i.test(String(message || ""))) {
+        toolPayload.quick_mode = true;
+        toolPayload.time_budget_s = 75;
+        toolPayload.max_attempts = Math.min(Number(toolPayload.max_attempts || 2), 2);
+        toolPayload.min_candidates = Math.min(Number(toolPayload.min_candidates || 2), 2);
+      }
+      const brainRetries = mode === "discovery" ? 0 : 2;
       const brainData = await callBrainWithRetry({
         symbol: intent.payload.symbol || "unknown",
         run_id,
-        mode: intent.tool_name === "quant.discovery_workflow" ? "discovery" : "analysis",
+        mode,
         tool_name: intent.tool_name,
-        tool_payload: intent.payload || {},
+        tool_payload: toolPayload,
         model_preference: FORCE_LOCAL_LLM ? "local_large" : "local_small",
         local_model: CURRENT_LOCAL_MODEL,
         qwen_model: CURRENT_QWEN_MODEL
-      });
+      }, brainRetries);
       await pool.query("UPDATE runs SET status=$1, cost_ledger_json=$2 WHERE run_id=$3", [
         "completed",
         JSON.stringify(brainData?.cost_ledger || {}),

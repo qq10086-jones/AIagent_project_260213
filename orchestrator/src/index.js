@@ -46,11 +46,14 @@ const {
   WORKSPACE_ROOT = "/workspace",
   STREAM_TASK_DLQ = "stream:task:dlq",
   TASK_RUNNING_TIMEOUT_SEC = "900",
+  TASK_QUEUED_TIMEOUT_SEC = "21600",
   TASK_WATCHDOG_INTERVAL_SEC = "30",
   TASK_TIMEOUT_AUTO_DLQ = "1",
   RUNTIME_CONFIG_PATH = "configs/runtime/runtime_defaults.json",
   RELEASE_PACK_ARCHIVE_TO_MINIO = "1",
   RELEASE_PACK_BUCKET = "nexus-artifacts",
+  WORKFLOW_STEP_ARTIFACT_AUDIT = "",
+  WORKFLOW_STRICT_STEP_ARTIFACTS = "",
 } = process.env;
 
 function loadRuntimeConfig() {
@@ -86,8 +89,13 @@ const QWEN_MODEL = process.env.QWEN_MODEL || RUNTIME_ORCH.qwen_model || "qwen-pl
 const CODER_PROVIDER_DEFAULT = String(process.env.CODER_PROVIDER_DEFAULT || RUNTIME_ORCH.coder_provider_default || "opencode").toLowerCase();
 const CODER_MODEL_DEFAULT = String(process.env.CODER_MODEL_DEFAULT || RUNTIME_ORCH.coder_model_default || "minimax-m2.5");
 const DEFAULT_LOCAL_MODEL = process.env.QUANT_LLM_MODEL || RUNTIME_ORCH.quant_llm_model || "deepseek-r1:32b";
+const RESOLVED_WORKFLOW_STEP_ARTIFACT_AUDIT =
+  String(WORKFLOW_STEP_ARTIFACT_AUDIT || (RUNTIME_ORCH.workflow_step_artifact_audit ? "1" : "0")) !== "0";
+const RESOLVED_WORKFLOW_STRICT_STEP_ARTIFACTS =
+  String(WORKFLOW_STRICT_STEP_ARTIFACTS || (RUNTIME_ORCH.workflow_strict_step_artifacts ? "1" : "0")) !== "0";
 const RESOLVED_STREAM_TASK_DLQ = String(STREAM_TASK_DLQ || RUNTIME_STREAMS.task_dlq || "stream:task:dlq");
 const RESOLVED_TASK_RUNNING_TIMEOUT_SEC = Number(TASK_RUNNING_TIMEOUT_SEC || RUNTIME_WATCHDOG.running_timeout_sec || 900);
+const RESOLVED_TASK_QUEUED_TIMEOUT_SEC = Number(TASK_QUEUED_TIMEOUT_SEC || RUNTIME_WATCHDOG.queued_timeout_sec || 21600);
 const RESOLVED_TASK_WATCHDOG_INTERVAL_SEC = Number(TASK_WATCHDOG_INTERVAL_SEC || RUNTIME_WATCHDOG.interval_sec || 30);
 const RESOLVED_TASK_TIMEOUT_AUTO_DLQ = String(TASK_TIMEOUT_AUTO_DLQ || (RUNTIME_WATCHDOG.auto_dlq ? "1" : "0")) !== "0";
 let CURRENT_LOCAL_MODEL = DEFAULT_LOCAL_MODEL;
@@ -679,6 +687,8 @@ const workflowEngine = createWorkflowEngine({
   resumeTokenSecret: String(RESUME_TOKEN_SECRET || "dev-resume-secret"),
   resumeTokenTtlSec: Number(RESUME_TOKEN_TTL_SEC || 86400),
   workspaceRoot: String(WORKSPACE_ROOT || "/workspace"),
+  auditStepArtifacts: RESOLVED_WORKFLOW_STEP_ARTIFACT_AUDIT,
+  strictStepArtifacts: RESOLVED_WORKFLOW_STRICT_STEP_ARTIFACTS,
   minio: {
     enabled: String(RELEASE_PACK_ARCHIVE_TO_MINIO || "1") !== "0",
     bucket: String(RELEASE_PACK_BUCKET || "nexus-artifacts"),
@@ -1979,8 +1989,11 @@ ${searchData}
 async function startTaskWatchdog() {
   const intervalMs = Math.max(5000, Number(RESOLVED_TASK_WATCHDOG_INTERVAL_SEC || 30) * 1000);
   const timeoutSec = Math.max(60, Number(RESOLVED_TASK_RUNNING_TIMEOUT_SEC || 900));
+  const queuedTimeoutSec = Math.max(300, Number(RESOLVED_TASK_QUEUED_TIMEOUT_SEC || 21600));
   const autoDlq = Boolean(RESOLVED_TASK_TIMEOUT_AUTO_DLQ);
-  console.log(`[watchdog] enabled interval=${intervalMs}ms running_timeout=${timeoutSec}s auto_dlq=${autoDlq}`);
+  console.log(
+    `[watchdog] enabled interval=${intervalMs}ms running_timeout=${timeoutSec}s queued_timeout=${queuedTimeoutSec}s auto_dlq=${autoDlq}`
+  );
 
   while (true) {
     try {
@@ -2044,6 +2057,67 @@ async function startTaskWatchdog() {
             console.warn(`[watchdog] workflow timeout propagation failed: ${err.message}`);
           });
       }
+
+      const staleQueued = await pool.query(
+        `SELECT task_id, run_id, tool_name, payload_json, workflow_id, step_index
+         FROM tasks
+         WHERE status='queued'
+           AND updated_at < NOW() - ($1::int * INTERVAL '1 second')
+         ORDER BY updated_at ASC
+         LIMIT 50`,
+        [queuedTimeoutSec]
+      );
+
+      for (const row of staleQueued.rows) {
+        const staleError = "TASK_QUEUED_STALE";
+        const stalePayload = normalizeResultPayload(
+          "failed",
+          { error: `task queued stale after ${queuedTimeoutSec}s`, watchdog: true },
+          staleError
+        );
+        await pool.query(
+          "UPDATE tasks SET status='failed', error_code=$2, result_json=$3, updated_at=NOW() WHERE task_id=$1 AND status='queued'",
+          [row.task_id, staleError, JSON.stringify(stalePayload)]
+        );
+        await recordEvent(row.task_id, "task.queued.stale", {
+          task_id: row.task_id,
+          run_id: row.run_id,
+          timeout_sec: queuedTimeoutSec,
+          tool_name: row.tool_name,
+        });
+
+        if (autoDlq) {
+          await redis.xadd(
+            RESOLVED_STREAM_TASK_DLQ,
+            "*",
+            "task_id",
+            row.task_id,
+            "run_id",
+            row.run_id || "",
+            "tool_name",
+            row.tool_name || "",
+            "payload",
+            row.payload_json || "{}",
+            "error_code",
+            staleError
+          );
+          await recordEvent(row.task_id, "task.dlq.enqueued", {
+            stream: RESOLVED_STREAM_TASK_DLQ,
+            reason: staleError,
+          });
+        }
+
+        await workflowEngine
+          .handleTaskTerminal({
+            task_id: row.task_id,
+            status: "failed",
+            output: { error: `task queued stale after ${queuedTimeoutSec}s`, watchdog: true },
+            error_code: staleError,
+          })
+          .catch((err) => {
+            console.warn(`[watchdog] workflow queued-stale propagation failed: ${err.message}`);
+          });
+      }
     } catch (err) {
       console.warn(`[watchdog] loop error: ${err.message}`);
     }
@@ -2064,8 +2138,11 @@ app.get("/runtime/config", (_, res) => {
       coder_provider_default: CODER_PROVIDER_DEFAULT,
       coder_model_default: CODER_MODEL_DEFAULT,
       quant_llm_model: DEFAULT_LOCAL_MODEL,
+      workflow_step_artifact_audit: RESOLVED_WORKFLOW_STEP_ARTIFACT_AUDIT,
+      workflow_strict_step_artifacts: RESOLVED_WORKFLOW_STRICT_STEP_ARTIFACTS,
       stream_task_dlq: RESOLVED_STREAM_TASK_DLQ,
       task_running_timeout_sec: RESOLVED_TASK_RUNNING_TIMEOUT_SEC,
+      task_queued_timeout_sec: RESOLVED_TASK_QUEUED_TIMEOUT_SEC,
       task_watchdog_interval_sec: RESOLVED_TASK_WATCHDOG_INTERVAL_SEC,
       task_timeout_auto_dlq: RESOLVED_TASK_TIMEOUT_AUTO_DLQ,
     },

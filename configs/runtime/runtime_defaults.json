@@ -3,9 +3,11 @@
   "orchestrator": {
     "qwen_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
     "qwen_model": "qwen-plus",
-    "coder_provider_default": "opencode",
-    "coder_model_default": "minimax-m2.5",
+    "coder_provider_default": "qwen",
+    "coder_model_default": "qwen3-coder-next",
     "quant_llm_model": "deepseek-r1:32b",
+    "workflow_step_artifact_audit": true,
+    "workflow_strict_step_artifacts": true,
     "approval_token_default": "dev-approval-token"
   },
   "brain": {
@@ -17,8 +19,8 @@
     "llm_timeout_sec": 60
   },
   "worker_coder": {
-    "provider_default": "opencode",
-    "model_default": "minimax-m2.5",
+    "provider_default": "qwen",
+    "model_default": "qwen3-coder-next",
     "global_task_timeout_ms": 900000
   },
   "worker_quant": {
@@ -32,6 +34,7 @@
   },
   "watchdog": {
     "running_timeout_sec": 900,
+    "queued_timeout_sec": 21600,
     "interval_sec": 30,
     "auto_dlq": true
   },

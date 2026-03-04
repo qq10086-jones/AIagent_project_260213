@@ -2938,7 +2938,8 @@ def _build_position_plan(
         }
 
     investable_pct = max(0.50, 1.0 - defaults["cash_reserve_pct"])
-    max_alloc_per_name = max(0.10, min(float(max_pos_pct), 0.35))
+    # Keep per-name cap aligned with discovery candidate generation range.
+    max_alloc_per_name = max(0.10, min(float(max_pos_pct), 0.65))
 
     raw_scores = [max(0.05, float(c.get("selection_score") or c.get("score") or 0.05)) for c in selected]
     score_sum = sum(raw_scores) or 1.0
@@ -2989,6 +2990,37 @@ def _build_position_plan(
         })
 
     total_planned = round(total_planned, 2)
+    if total_planned <= 0 and selected:
+        # Fallback: if candidate ranking produced at least one tradable lot, avoid empty plan.
+        for c in selected:
+            lot_size = int(c.get("lot_size") or 1)
+            cost_per_lot_jpy = float(c.get("cost_per_lot_jpy") or 0.0)
+            if cost_per_lot_jpy <= 0:
+                continue
+            if cost_per_lot_jpy > capital_base_jpy * max_alloc_per_name:
+                continue
+            planned_cost = cost_per_lot_jpy
+            total_planned = round(planned_cost, 2)
+            positions.append({
+                "symbol": c.get("symbol"),
+                "market": c.get("market"),
+                "weight_pct": round((planned_cost / capital_base_jpy) * 100.0, 2),
+                "planned_budget_jpy": round(capital_base_jpy * max_alloc_per_name, 2),
+                "planned_cost_jpy": round(planned_cost, 2),
+                "planned_lots": 1,
+                "planned_shares": lot_size,
+                "entry_schedule": [
+                    {
+                        "stage": idx + 1,
+                        "allocation_pct_of_position": round(pct * 100.0, 2),
+                        "planned_notional_jpy": round(planned_cost * pct, 2),
+                    }
+                    for idx, pct in enumerate(steps)
+                ],
+                "thesis": f"fallback_one_lot alpha={round(float(c.get('score') or 0.0), 3)}",
+            })
+            break
+
     cash_left = round(max(0.0, capital_base_jpy - total_planned), 2)
     return {
         "goal": goal or "balanced growth",

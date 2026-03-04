@@ -70,6 +70,9 @@ services:
       - STREAM_TASK=stream:task:coding
       - GROUP_TASK=cg:workers:coding
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - QWEN_API_KEY=${QWEN_API_KEY}
+      - QWEN_BASE_URL=${QWEN_BASE_URL}
+      - QWEN_MODEL=${QWEN_MODEL:-qwen-plus}
       - CODEX_BIN=${CODEX_BIN:-codex}
       - CODEX_SANDBOX=${CODEX_SANDBOX:-workspace-write}
       - OPENCODE_BIN=${OPENCODE_BIN:-opencode}

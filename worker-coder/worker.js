@@ -142,6 +142,10 @@ async function processTask(msgId, task) {
       const result = await CodingService.executeCommand({
         workspaceRoot: WORKSPACE_ROOT,
         command,
+        artifact_root: payload.artifact_root || "",
+        expected_artifacts: Array.isArray(payload.expected_artifacts) ? payload.expected_artifacts : [],
+        step_id: payload.step_id || "",
+        task_prompt: payload.task_prompt || payload.prompt || "",
         run_id,
         task_id
       });
@@ -152,6 +156,9 @@ async function processTask(msgId, task) {
       const result = await CodingService.delegateTask({
         workspaceRoot: WORKSPACE_ROOT,
         task_prompt: payload.task_prompt || payload.prompt,
+        artifact_root: payload.artifact_root || "",
+        expected_artifacts: Array.isArray(payload.expected_artifacts) ? payload.expected_artifacts : [],
+        step_id: payload.step_id || "",
         provider: payload.provider || DEFAULT_PROVIDER,
         model: payload.model || DEFAULT_MODEL || null,
         run_id,

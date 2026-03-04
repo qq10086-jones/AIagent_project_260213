@@ -18,6 +18,8 @@ __pycache__/
 discord_bot_token.txt
 artifacts/runs/
 artifacts/logs/
+artifacts/release/
+artifacts/canary/
 backup_20260301*/
 coder_test/
 __write_test*.txt

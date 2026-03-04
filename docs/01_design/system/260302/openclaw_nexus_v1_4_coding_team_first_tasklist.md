@@ -109,3 +109,23 @@
 
 
 
+
+## EPIC 8: Stabilization and Productionization (v1.4.1)
+
+### S8.1 Hard Gates
+- [x] T36: Enable strict step artifact gate by default.
+  - DoD: `runtime_defaults.json` sets `workflow_strict_step_artifacts=true` and runtime reflects enabled state.
+- [x] T37: Add canary guard report for strict-mode runs.
+  - DoD: run report includes per-step `artifact_check` and explicit pass/fail verdict.
+
+### S8.2 Delivery Criteria
+- [x] T38: Formalize Go/No-Go release checklist.
+  - DoD: checklist contains 6-step success, artifact completeness, acceptance pass, release-pack validation pass.
+- [x] T39: Enforce checklist in operational runbook.
+  - DoD: no production promotion without checklist evidence linked to `workflow_run_id`.
+
+### S8.3 Regression and SLO
+- [ ] T40: Build fixed regression smoke set (CRM + game).
+  - DoD: both scenarios runnable as repeatable canary inputs.
+- [ ] T41: Add SLO panel and alerts.
+  - DoD: success-rate, p95 duration, failure-code distribution, missing-artifact spike alert are visible and actionable.

@@ -348,3 +348,54 @@
     - steps `pm_spec/arch_design/impl_fe/impl_be/qa_verify/release_pack` all `succeeded`
   - acceptance step output:
     - `stdout: v20.20.0 / 10.8.2`
+
+## v1.4.1 Stabilization Reinforcement (2026-03-03)
+- **Strict Artifact Gate Activated by Default**:
+  - `configs/runtime/runtime_defaults.json` now sets `workflow_strict_step_artifacts=true`.
+  - Missing required step artifacts now fail fast instead of allowing soft success.
+- **T37 Delivered (Strict Canary Guard Report)**:
+  - Release pack now generates:
+    - `qa/strict_canary_report.json`
+    - `qa/strict_canary_report.md`
+  - Report contains per-step `artifact_check` and final verdict (`PASS/FAIL`).
+  - Canary fail now contributes to pack failure path (`ARTIFACT_INCOMPLETE`).
+- **T38 Delivered (Executable Go/No-Go Checklist)**:
+  - Added script: `orchestrator/scripts/validate_go_nogo.js`.
+  - Added npm command: `npm run validate:go-nogo`.
+  - Added runbook: `docs/03_feature_development/GO_NO_GO_RUNBOOK_20260303.md`.
+  - Validation output now persists to `qa/go_no_go_result.json` under release pack.
+- **T39 Delivered (Checklist Enforcement in Finalize Path)**:
+  - `workflow_engine` now computes Go/No-Go during release-pack generation.
+  - `qa/go_no_go_result.json` is generated automatically for finalized runs.
+  - `NO_GO` verdict now blocks success and contributes to `ARTIFACT_INCOMPLETE` fail path.
+  - `artifact.pack.generated` event now includes `go_no_go_result` and `go_no_go_verdict`.
+- **WS1 Delivered (Artifact Quality Gate baseline)**:
+  - `artifact_pack_validator` now validates both presence and quality.
+  - Added contract-driven checks for `coding_team_v0` required artifacts.
+  - Added JSON schema checks for acceptance/risk/verification artifacts.
+  - Added markdown minimum-content checks for QA markdown artifacts.
+- **WS2 Delivered (Deterministic QA Template baseline)**:
+  - Added QA templates and scaffold fallback for deterministic artifact generation.
+  - `coding.delegate` and `coding.execute` now support expected-artifact scaffold fallback.
+- **WS3 Delivered (Canary Harness command)**:
+  - Added canary fixtures (`crm_mini.json`, `game_mini.json`) and CLI:
+    - `npm run canary:coding_team -- --n <N> --strict <true|false> --input <fixture>`
+  - Added canary report output:
+    - `artifacts/canary/coding_team/<timestamp>/canary_report.json|md`
+- **WS4 P0 Delivered (Strict failure payload standardization)**:
+  - `workflow_engine` now emits standardized strict failure payload:
+    - `error_code`, `failed_step`, `missing[]`, `invalid[]`, `suggested_fix`, `detail`
+  - Applied to:
+    - `workflow.failed` event payload
+    - strict step `result_json.failure_payload`
+    - `artifact.pack.failed` payload for `ARTIFACT_INCOMPLETE`
+- **Runtime Override Bug Fixed**:
+  - `orchestrator/src/index.js` no longer hardcodes `WORKFLOW_STRICT_STEP_ARTIFACTS=\"0\"`.
+  - Runtime config now reflects strict mode correctly (`/runtime/config -> workflow_strict_step_artifacts=true`).
+- **Production Readiness Criteria Added (Design + Tasklist)**:
+  - Added explicit Go/No-Go criteria in design doc (6/6 steps, zero missing artifacts, acceptance pass, release-pack validator pass).
+  - Added stabilization epic/tasks in tasklist for canary report, release checklist, regression baseline, and SLO monitoring.
+- **Operational Direction**:
+  - Keep strict mode enabled.
+  - Use CRM + game dual-canary as baseline for model/runtime changes.
+  - Track SLO by success rate, p95 duration, and failure-code distribution.

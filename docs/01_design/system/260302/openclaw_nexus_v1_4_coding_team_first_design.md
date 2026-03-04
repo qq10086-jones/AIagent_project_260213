@@ -289,3 +289,34 @@ Registry 是“系统的真理来源”，统一声明：
 ---
 
 > 本文是“Coding Team First”的更新版设计：先把团队交付跑起来，再谈接入更多 OSS 与更多助手类型。
+
+## 13. v1.4.1 Stabilization Addendum (Production Readiness)
+
+### 13.1 What "stable and deployable" means
+A workflow is considered production-ready only when all of the following are true:
+- Deterministic gate: strict step artifact validation is enabled.
+- Deterministic output: each role writes required artifacts under the declared artifact root.
+- Deterministic acceptance: acceptance suite is executable and blocks promotion on failures.
+- Deterministic release pack: run manifest + summary + required coverage pass validator.
+
+### 13.2 Hard runtime rule
+- Default runtime must keep `workflow_strict_step_artifacts=true`.
+- Any missing required artifact in a step must fail the step immediately.
+- "Succeeded" status is forbidden when step-required artifacts are missing.
+
+### 13.3 Release criteria (Go/No-Go)
+- `coding_team_v0` must finish with `6/6` step success.
+- Every step must have `artifact_check.missing=0`.
+- Acceptance gate commands must pass fully.
+- Release pack validator must pass with no `ARTIFACT_INCOMPLETE`.
+
+### 13.4 Regression baseline
+- Baseline-A: CRM generation request (`webapp_crm`).
+- Baseline-B: simple game generation request (`webapp`).
+- Both baselines are mandatory canary checks before production config or model changes.
+
+### 13.5 Operations SLO baseline
+- Daily workflow success rate.
+- p95 end-to-end workflow duration.
+- Error-code distribution and trend alarms (`STEP_FAILED`, `ACCEPTANCE_FAILED`, `ARTIFACT_INCOMPLETE`, `TASK_TIMEOUT`).
+- Alert when missing-artifact events spike (`workflow.step.artifacts.missing`).

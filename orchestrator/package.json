@@ -5,7 +5,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "validate:registry": "node scripts/validate_registry.js"
+    "validate:registry": "node scripts/validate_registry.js",
+    "validate:go-nogo": "node scripts/validate_go_nogo.js",
+    "canary:coding_team": "node scripts/canary_coding_team.js"
   },
   "dependencies": {
     "express": "^4.19.2",

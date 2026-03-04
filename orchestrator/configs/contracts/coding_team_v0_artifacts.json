@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "workflow_id": "coding_team_v0",
+  "artifacts": [
+    {
+      "path": "plan/acceptance.json",
+      "required": true,
+      "type": "json",
+      "schema": "orchestrator/configs/schemas/acceptance.schema.json"
+    },
+    {
+      "path": "risk/risk_report.json",
+      "required": true,
+      "type": "json",
+      "schema": "orchestrator/configs/schemas/risk_report.schema.json"
+    },
+    {
+      "path": "qa/verification.json",
+      "required": true,
+      "type": "json",
+      "schema": "orchestrator/configs/schemas/verification.schema.json"
+    },
+    {
+      "path": "tests/test_plan.md",
+      "required": true,
+      "type": "markdown",
+      "min_nonempty_lines": 4,
+      "deny_patterns": [
+        "placeholder",
+        "auto-generated to satisfy workflow artifact contract"
+      ]
+    },
+    {
+      "path": "qa/smoke_report.md",
+      "required": true,
+      "type": "markdown",
+      "min_nonempty_lines": 4,
+      "deny_patterns": [
+        "placeholder",
+        "auto-generated to satisfy workflow artifact contract"
+      ]
+    }
+  ]
+}

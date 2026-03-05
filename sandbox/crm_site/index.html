@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nova CRM Pro Demo</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="bg-shape bg-a"></div>
+  <div class="bg-shape bg-b"></div>
+
+  <section id="authView" class="auth-wrap">
+    <div class="auth-card">
+      <h1>Nova CRM Pro</h1>
+      <p>Sign in to open role-based CRM workspace.</p>
+      <form id="loginForm">
+        <label>
+          Username
+          <input id="loginUser" required>
+        </label>
+        <label>
+          Password
+          <input id="loginPass" type="password" required>
+        </label>
+        <button type="submit" class="btn btn-primary">Sign In</button>
+      </form>
+      <div class="auth-hint">
+        <strong>Demo accounts</strong>
+        <div>`admin / admin123`</div>
+        <div>`sales / sales123`</div>
+        <div>`viewer / viewer123`</div>
+        <div>`tech / tech123`</div>
+      </div>
+      <p id="authError" class="auth-error hidden"></p>
+    </div>
+  </section>
+
+  <section id="appView" class="hidden">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo-dot"></span>
+        <h1>Nova CRM Pro</h1>
+      </div>
+      <div class="session-box">
+        <div id="sessionText"></div>
+        <div class="session-actions">
+          <button id="newCustomerBtn" class="btn btn-primary">+ New Customer</button>
+          <button id="logoutBtn" class="btn btn-ghost">Logout</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel panel-list">
+        <div class="panel-head">
+          <h2>Customers</h2>
+          <p id="customerCount">0 records</p>
+        </div>
+        <div class="toolbar">
+          <input id="searchInput" type="text" placeholder="Search by name/company/email">
+          <select id="statusFilter">
+            <option value="all">All stages</option>
+            <option value="lead">Lead</option>
+            <option value="qualified">Qualified</option>
+            <option value="proposal">Proposal</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+          </select>
+        </div>
+        <ul id="customerList" class="customer-list"></ul>
+      </section>
+
+      <section class="panel panel-detail">
+        <div class="panel-head">
+          <h2>Customer Detail</h2>
+        </div>
+        <div id="detailEmpty" class="empty-state">Select a customer or create a new one.</div>
+        <div id="detailView" class="detail hidden"></div>
+      </section>
+    </main>
+
+    <section class="layout lower-layout">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Activity Log</h2>
+          <p id="activityCount">0 events</p>
+        </div>
+        <ul id="activityList" class="activity-list"></ul>
+      </section>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Learning Insights</h2>
+          <p>Auto generated from local CRM activity</p>
+        </div>
+        <ul id="insightList" class="insight-list"></ul>
+      </section>
+    </section>
+
+    <section id="complaintPanel" class="layout lower-layout hidden">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Complaint Management (Tech Only)</h2>
+          <p id="complaintCount">0 tickets</p>
+        </div>
+        <form id="complaintForm" class="complaint-form">
+          <label>
+            Customer
+            <select id="complaintCustomer" required></select>
+          </label>
+          <label>
+            Priority
+            <select id="complaintPriority" required>
+              <option value="P1">P1 - Critical</option>
+              <option value="P2" selected>P2 - High</option>
+              <option value="P3">P3 - Medium</option>
+              <option value="P4">P4 - Low</option>
+            </select>
+          </label>
+          <label class="full">
+            Title
+            <input id="complaintTitle" required>
+          </label>
+          <label class="full">
+            Description
+            <textarea id="complaintDesc" rows="3" required></textarea>
+          </label>
+          <div class="form-actions full">
+            <button type="submit" class="btn btn-primary">Create Ticket</button>
+          </div>
+        </form>
+      </section>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Open Tickets</h2>
+          <p>Only visible for `tech` account</p>
+        </div>
+        <ul id="complaintList" class="activity-list"></ul>
+      </section>
+    </section>
+  </section>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modalTitle">New Customer</h3>
+        <button id="closeModalBtn" class="icon-btn">x</button>
+      </div>
+      <form id="customerForm" class="form-grid">
+        <label>
+          Full Name
+          <input id="nameInput" required>
+        </label>
+        <label>
+          Company
+          <input id="companyInput" required>
+        </label>
+        <label>
+          Email
+          <input id="emailInput" type="email" required>
+        </label>
+        <label>
+          Phone
+          <input id="phoneInput" required>
+        </label>
+        <label>
+          Stage
+          <select id="statusInput" required>
+            <option value="lead">Lead</option>
+            <option value="qualified">Qualified</option>
+            <option value="proposal">Proposal</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+          </select>
+        </label>
+        <label>
+          Deal Size (CNY)
+          <input id="dealInput" type="number" min="0" step="1000" required>
+        </label>
+        <label class="full">
+          Notes
+          <textarea id="notesInput" rows="3"></textarea>
+        </label>
+        <div class="form-actions full">
+          <button type="button" id="cancelBtn" class="btn btn-ghost">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

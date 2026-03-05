@@ -399,3 +399,36 @@
   - Keep strict mode enabled.
   - Use CRM + game dual-canary as baseline for model/runtime changes.
   - Track SLO by success rate, p95 duration, and failure-code distribution.
+
+## Fast-Track Usability Update (2026-03-05)
+- **Clarification**:
+  - Reported duration values are single-run execution wall-clock (one coding-team run), not release-cycle duration.
+  - Build-runtime can be minutes; readiness decision remains based on stability criteria (consecutive strict greens).
+- **Canary Diagnostics Enhanced**:
+  - `orchestrator/scripts/canary_coding_team.js` now emits structured timeout diagnostics:
+    - `error_code=CANARY_TIMEOUT`
+    - `current_step_index/current_step_id/current_task_id`
+  - Timeout failures are now directly attributable to a concrete workflow step.
+- **Workflow Fast Mode Delivered**:
+  - `orchestrator/src/workflow_engine.js` supports `input.fast_mode=true`.
+  - `coding.delegate` now receives bounded step runtime defaults (unless explicitly overridden):
+    - `pm_spec=120s`, `arch_design=180s`, `impl_fe=240s`, `impl_be=240s`, `release_pack=120s`
+  - fast-mode prompt bias added for concise/required-artifact-first outputs.
+- **Canary Inputs Switched to Fast Defaults**:
+  - `orchestrator/canary_inputs/crm_mini.json`
+  - `orchestrator/canary_inputs/game_mini.json`
+  - both now use:
+    - `provider=qwen`
+    - `model=qwen-plus`
+    - `fast_mode=true`
+    - `max_runtime_s=180`
+- **Runtime Validation (2026-03-05)**:
+  - CRM strict run:
+    - `workflow_run_id=9218e744-9c32-41ee-995a-fcf3deed759a`
+    - `run_id=50c1b60f-dbc7-4ab1-a0e0-4f29df27299e`
+    - `workflow_status=succeeded`, `go_no_go_verdict=GO`, `duration_s=412`
+    - `validate-pack -> ok=true`
+  - Game strict run:
+    - strict canary passed (`pass_runs=1, fail_runs=0`, `go_no_go_verdict=GO`)
+- **Remaining**:
+  - `20 consecutive strict green` target is still pending (not yet reached).

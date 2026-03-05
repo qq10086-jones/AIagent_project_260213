@@ -4,6 +4,8 @@
   "input": {
     "goal": "Build a small browser game with score tracking and restart flow. Keep implementation reviewable and emit all required workflow artifacts.",
     "provider": "qwen",
-    "model": "qwen3-coder-next"
+    "model": "qwen-plus",
+    "fast_mode": true,
+    "max_runtime_s": 180
   }
 }

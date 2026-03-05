@@ -71,6 +71,25 @@ async function pollWorkflow(baseUrl, workflowRunId, timeoutSec = 1800, intervalM
   throw new Error(`timeout waiting workflow ${workflowRunId}`);
 }
 
+async function fetchWorkflowSnapshot(baseUrl, workflowRunId) {
+  if (!workflowRunId) return null;
+  const r = await fetch(`${baseUrl}/workflow-runs/${workflowRunId}`);
+  if (!r.ok) return null;
+  const j = await r.json();
+  const steps = Array.isArray(j?.steps) ? j.steps : [];
+  const activeStep =
+    steps.find((s) => String(s?.status || "") === "running") ||
+    steps.find((s) => String(s?.status || "") === "waiting_approval") ||
+    steps.find((s) => String(s?.status || "") === "queued") ||
+    null;
+  return {
+    workflow_status: String(j?.run?.status || ""),
+    current_step_index: Number(j?.run?.current_step_index ?? -1),
+    current_step_id: String(activeStep?.step_id || ""),
+    current_task_id: String(activeStep?.task_id || ""),
+  };
+}
+
 function readGoNoGo(workspaceRoot, runId) {
   const p = path.resolve(workspaceRoot, "artifacts", "release", String(runId || ""), "qa", "go_no_go_result.json");
   if (!fs.existsSync(p)) {
@@ -129,8 +148,24 @@ async function main() {
       item.go_no_go_file_exists = Boolean(go.file_exists);
       item.go_no_go_failed_checks = Number(go.checks_failed || 0);
     } catch (err) {
-      item.workflow_status = "failed";
+      item.workflow_status = item.workflow_status || "failed";
       item.error_message = err.message || String(err);
+      if (String(item.error_message).includes("timeout waiting workflow")) {
+        item.error_code = "CANARY_TIMEOUT";
+        const snap = await fetchWorkflowSnapshot(baseUrl, item.workflow_run_id);
+        if (snap) {
+          if (snap.workflow_status) item.workflow_status = snap.workflow_status;
+          item.current_step_index = snap.current_step_index;
+          item.current_step_id = snap.current_step_id;
+          item.current_task_id = snap.current_task_id;
+          const details = [
+            `current_step_index=${snap.current_step_index}`,
+            `current_step_id=${snap.current_step_id || "unknown"}`,
+            `current_task_id=${snap.current_task_id || "unknown"}`,
+          ].join(" ");
+          item.error_message = `${item.error_message}; ${details}`;
+        }
+      }
     } finally {
       item.duration_s = Math.round((Date.now() - t0) / 1000);
       runs.push(item);

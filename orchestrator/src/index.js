@@ -271,6 +271,16 @@ async function replyChunked(msg, text, header = "") {
   return sentMsgs;
 }
 
+async function safeTranslate(text, lang = "zh") {
+  const raw = String(text ?? "");
+  try {
+    return await translate(raw, lang || "zh");
+  } catch (err) {
+    console.warn("[translate] fallback to raw text:", err?.message || err);
+    return raw;
+  }
+}
+
 function markdownToSimpleHtml(markdownText, title = "NEXUS Report") {
   const safe = String(markdownText || "")
     .replace(/&/g, "&amp;")
@@ -1381,37 +1391,37 @@ discord.on("messageCreate", async msg => {
         startTime: Date.now(),
         lang,
         run_id,
-        closeRunOnTaskResult: true,
+        closeRunOnTaskResult: false,
       };
       runToContext.set(run_id, context);
       await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["running", run_id]);
 
-      const progressText = await translate("已进入 Coder 委派模式，正在调用编码代理执行任务，请稍候...", lang);
+      const progressText = await safeTranslate("已进入 Coding Team 模式，正在启动 PM/架构/前后端/QA 流程，请稍候...", lang);
       await msg.reply(`[NEXUS] ${progressText}`);
 
-      const queued = await enqueueTask({
-        tool_name: "coding.delegate",
-        payload: {
-          task_prompt: userInput,
-          provider: coderOptions?.provider || CODER_PROVIDER_DEFAULT,
-          model: coderOptions?.model || CODER_MODEL_DEFAULT,
-          max_runtime_s: 900,
-        },
+      const wf = await workflowEngine.startWorkflowRun({
+        workflow_id: "coding_team_v0",
+        project_type: "webapp_crm",
         run_id,
-        idempotency_key: makeIdempotencyKey(run_id, "coding.delegate", {
-          task_prompt: userInput,
+        input: {
+          goal: userInput,
           provider: coderOptions?.provider || CODER_PROVIDER_DEFAULT,
           model: coderOptions?.model || CODER_MODEL_DEFAULT,
-        }),
+          fast_mode: true,
+          max_runtime_s: 180,
+        },
         context,
       });
-      const queuedText = await translate(`已提交 coding.delegate。run_id=${run_id}。`, lang);
+      const queuedText = await safeTranslate(
+        `已提交 coding_team_v0。run_id=${run_id}，workflow_run_id=${wf.workflow_run_id}。`,
+        lang
+      );
       await msg.reply(`[NEXUS] ${queuedText}`);
-      if (queued.waiting_approval) {
+      if (wf?.first_step?.waiting_approval && wf?.first_step?.task_id) {
         await msg.reply(
-          `[NEXUS] 任务等待审批：task_id=${queued.task_id}\n` +
-          `批准：\`/approve: ${queued.task_id}\`\n` +
-          `拒绝：\`/reject: ${queued.task_id}\``
+          `[NEXUS] 任务等待审批：task_id=${wf.first_step.task_id}\n` +
+          `批准：\`/approve: ${wf.first_step.task_id}\`\n` +
+          `拒绝：\`/reject: ${wf.first_step.task_id}\``
         );
       }
       return;
@@ -1784,9 +1794,9 @@ async function startResultConsumer() {
           for (let i = 0; i < kv.length; i += 2) obj[kv[i]] = kv[i + 1];
 
           const task_id = obj.task_id;
-          const status = obj.status || "succeeded";
+          let status = obj.status || "succeeded";
           const output = parseOutputField(obj.output);
-          const streamError = obj.error ? String(obj.error) : "";
+          let streamError = obj.error ? String(obj.error) : "";
           
           console.log(`[result-consumer] Processing task ${task_id} with status ${status}`);
 
@@ -1809,7 +1819,7 @@ async function startResultConsumer() {
             } else if (status === "failed") {
               await recordEvent(task_id, "task.failed", { task_id, error_code: normalizedErrorCode });
             }
-            await workflowEngine
+            const workflowTerminal = await workflowEngine
               .handleTaskTerminal({
                 task_id,
                 status,
@@ -1818,7 +1828,33 @@ async function startResultConsumer() {
               })
               .catch((err) => {
                 console.warn(`[workflow] handleTaskTerminal failed: ${err.message}`);
+                return null;
               });
+
+            const wfFailed =
+              Boolean(workflowTerminal?.failed_due_to_impl_validation) ||
+              Boolean(workflowTerminal?.failed_due_to_qa_validation) ||
+              Boolean(workflowTerminal?.failed_due_to_artifacts);
+            if (status === "succeeded" && wfFailed) {
+              const wfCode =
+                workflowTerminal?.impl_validation?.code ||
+                workflowTerminal?.qa_validation?.code ||
+                (Array.isArray(workflowTerminal?.missing_artifacts) && workflowTerminal.missing_artifacts.length > 0
+                  ? "STEP_ARTIFACT_MISSING"
+                  : "WORKFLOW_VALIDATION_FAILED");
+              status = "failed";
+              streamError = `Workflow validation failed: ${wfCode}`;
+              const failedResult = normalizeResultPayload(
+                "failed",
+                { ...(output || {}), workflow_validation: workflowTerminal || {} },
+                wfCode
+              );
+              await pool.query(
+                "UPDATE tasks SET status='failed', result_json=$2, error_code=$3, updated_at=NOW() WHERE task_id=$1",
+                [task_id, JSON.stringify(failedResult), wfCode]
+              );
+              await recordEvent(task_id, "task.failed", { task_id, error_code: wfCode, workflow_validation: true });
+            }
 
             const ctx = taskToContext.get(task_id);
             if (ctx) {
@@ -1864,7 +1900,7 @@ ${searchData}
                   const titleRaw = ctx.tool_name === "coding.delegate"
                     ? (status === "succeeded" ? "Coder Delegation Completed" : "Coder Delegation Failed")
                     : (status === "succeeded" ? "Task Completed" : "Task Failed");
-                  const title = ctx.tool_name === "coding.delegate" ? titleRaw : await translate(titleRaw, lang);
+                  const title = ctx.tool_name === "coding.delegate" ? titleRaw : await safeTranslate(titleRaw, lang);
                   const embed = new EmbedBuilder()
                     .setTitle(title)
                     .setColor(status === "succeeded" ? 0x00ff00 : 0xff0000)
@@ -1876,10 +1912,10 @@ ${searchData}
                     embed.addFields({ name: "Result", value: summary });
                   } else if (output) {
                     const summaryRaw = output.analysis || output.summary || output.stdout || output.raw || "Done";
-                    const summary = await translate(String(summaryRaw), lang);
+                    const summary = await safeTranslate(String(summaryRaw), lang);
                     embed.addFields({ name: "Result", value: summary.slice(0, 1024) });
                   } else if (streamError) {
-                    const errText = await translate(streamError, lang);
+                    const errText = await safeTranslate(streamError, lang);
                     embed.addFields({ name: "Result", value: errText.slice(0, 1024) });
                   }
 
@@ -1939,7 +1975,7 @@ ${searchData}
                 const done = Math.max(0, total - ctx.pendingTaskIds.size);
                 if (total > 1 && channel && typeof channel.send === "function") {
                   const progressRaw = `任务进度：${done}/${total}（run_id=${ctx.run_id}）`;
-                  const progressText = await translate(progressRaw, ctx.lang || "zh");
+                  const progressText = await safeTranslate(progressRaw, ctx.lang || "zh");
                   await channel.send(`[NEXUS] ${progressText}`);
                 }
                 if (ctx.pendingTaskIds.size === 0 && ctx.closeRunOnTaskResult) {
@@ -1955,7 +1991,7 @@ ${searchData}
                   const doneRaw = status === "succeeded"
                     ? `本轮任务已全部完成。run_id=${ctx.run_id}`
                     : `本轮任务已结束，但存在失败任务。run_id=${ctx.run_id}`;
-                  const doneText = await translate(doneRaw, ctx.lang || "zh");
+                  const doneText = await safeTranslate(doneRaw, ctx.lang || "zh");
                   if (channel && typeof channel.send === "function") {
                     await channel.send(`[NEXUS] ${doneText}`);
                   }
@@ -1971,7 +2007,23 @@ ${searchData}
                   [run_id]
                 );
                 if ((pendingRes.rows[0]?.c || 0) === 0) {
-                  await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", [status === "succeeded" ? "completed" : "failed", run_id]).catch(() => {});
+                  const wfFailedRes = await pool.query(
+                    "SELECT COUNT(1)::int AS c FROM workflow_runs WHERE run_id=$1 AND status='failed'",
+                    [run_id]
+                  );
+                  const taskFailedRes = await pool.query(
+                    "SELECT COUNT(1)::int AS c FROM tasks WHERE run_id=$1 AND status='failed'",
+                    [run_id]
+                  );
+                  const hasWorkflowFailed = Number(wfFailedRes.rows[0]?.c || 0) > 0;
+                  const hasTaskFailed = Number(taskFailedRes.rows[0]?.c || 0) > 0;
+                  const finalStatus = (hasWorkflowFailed || hasTaskFailed || status !== "succeeded")
+                    ? "failed"
+                    : "completed";
+                  await pool.query(
+                    "UPDATE runs SET status=$1 WHERE run_id=$2 AND COALESCE(status,'') <> 'failed'",
+                    [finalStatus, run_id]
+                  ).catch(() => {});
                 }
               }
             }

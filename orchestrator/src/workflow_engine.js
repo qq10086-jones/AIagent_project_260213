@@ -237,6 +237,7 @@ export function createWorkflowEngine({
     const input = parseJsonSafe(run.input_json, {});
     const artifactRoot = pathForRunArtifacts(run.run_id);
     const contract = STEP_CONTRACTS[stepDef.id] || null;
+    const fastMode = Boolean(input.fast_mode);
     const payload = {
       ...(input.step_payloads?.[stepDef.id] || {}),
       ...(input.default_payload || {}),
@@ -252,10 +253,33 @@ export function createWorkflowEngine({
     };
 
     if (stepDef.tool === "coding.delegate") {
+      const runtimeByStep = {
+        pm_spec: 120,
+        arch_design: 180,
+        impl_fe: 240,
+        impl_be: 240,
+        release_pack: 120,
+      };
       payload.task_prompt = payload.task_prompt || buildStepPrompt({ run, stepDef, input, payload });
+      if (fastMode) {
+        const fastNote = [
+          "",
+          "[Fast Mode]",
+          "- Keep output concise and directly actionable.",
+          "- Prioritize required artifact paths first; avoid unnecessary long prose.",
+        ].join("\n");
+        payload.task_prompt = `${payload.task_prompt}${fastNote}`;
+      }
       if (!payload.prompt) payload.prompt = payload.task_prompt;
       if (input.provider && !payload.provider) payload.provider = input.provider;
       if (input.model && !payload.model) payload.model = input.model;
+      if (!Number.isFinite(Number(payload.max_runtime_s))) {
+        const configured = Number(input.max_runtime_s || 0);
+        payload.max_runtime_s = configured > 0 ? configured : (runtimeByStep[stepDef.id] || 240);
+      }
+      if ((stepDef.id === "impl_fe" || stepDef.id === "impl_be") && !Array.isArray(payload.target_paths)) {
+        payload.target_paths = ["sandbox/crm_site/"];
+      }
     }
 
     if (stepDef.gate === "acceptance") {
@@ -299,6 +323,143 @@ export function createWorkflowEngine({
       else missing.push(relNorm);
     }
     return { checked: true, missing, found, artifact_root: relRoot };
+  }
+
+  function normalizePathText(value) {
+    return String(value || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  }
+
+  function collectChangedFiles(output = {}) {
+    const raw = Array.isArray(output?.files_changed) ? output.files_changed : [];
+    return raw
+      .map((item) => normalizePathText(item))
+      .filter((item) => Boolean(item));
+  }
+
+  function isCodingTeamImplementationStep(run, stepId) {
+    const wf = String(run?.workflow_id || "");
+    const sid = String(stepId || "");
+    return wf === "coding_team_v0" && (sid === "impl_fe" || sid === "impl_be");
+  }
+
+  function validateImplementationDelta({ run, stepId, output, payload }) {
+    if (!isCodingTeamImplementationStep(run, stepId)) {
+      return { checked: false, ok: true };
+    }
+    const changedFiles = collectChangedFiles(output || {});
+    const diffFilesRaw = Number(output?.diff_stats?.files || 0);
+    const diffFiles = Number.isFinite(diffFilesRaw) ? diffFilesRaw : 0;
+    if (changedFiles.length === 0 || diffFiles <= 0) {
+      return {
+        checked: true,
+        ok: false,
+        code: "STEP_CODE_NOT_CHANGED",
+        detail: "implementation step completed without real code delta",
+        changed_files: changedFiles,
+        diff_files: diffFiles,
+        scoped_files: [],
+      };
+    }
+
+    const targetPathsRaw = Array.isArray(payload?.target_paths) ? payload.target_paths : [];
+    const targetPaths = (targetPathsRaw.length > 0 ? targetPathsRaw : ["sandbox/crm_site/"])
+      .map((item) => normalizePathText(item).replace(/\/+$/, "") + "/");
+    const scopedFiles = changedFiles.filter((f) => targetPaths.some((prefix) => f.startsWith(prefix)));
+    if (scopedFiles.length === 0) {
+      return {
+        checked: true,
+        ok: false,
+        code: "STEP_CODE_OUT_OF_SCOPE",
+        detail: `implementation delta does not touch required paths: ${targetPaths.join(", ")}`,
+        changed_files: changedFiles,
+        diff_files: diffFiles,
+        scoped_files: [],
+      };
+    }
+
+    return {
+      checked: true,
+      ok: true,
+      changed_files: changedFiles,
+      diff_files: diffFiles,
+      scoped_files: scopedFiles,
+      target_paths: targetPaths,
+    };
+  }
+
+  function readTextFileSafe(absPath, maxBytes = 262144) {
+    try {
+      const st = fs.statSync(absPath);
+      if (!st.isFile()) return "";
+      if (st.size > maxBytes) return "";
+      return fs.readFileSync(absPath, "utf8");
+    } catch {
+      return "";
+    }
+  }
+
+  async function validateQaEvidence({ run, workflow_run_id, payload }) {
+    if (!(String(run?.workflow_id || "") === "coding_team_v0" && String(payload?.step_id || "") === "qa_verify")) {
+      return { checked: false, ok: true };
+    }
+    const steps = await getSteps(workflow_run_id);
+    const implStepRows = (steps || []).filter((s) => ["impl_fe", "impl_be"].includes(String(s?.step_id || "")));
+    const scoped = [];
+    for (const step of implStepRows) {
+      const result = parseStepResult(step);
+      const files = Array.isArray(result?.impl_validation?.scoped_files) ? result.impl_validation.scoped_files : [];
+      for (const file of files) scoped.push(normalizePathText(file));
+    }
+    const dedupScoped = Array.from(new Set(scoped));
+    if (dedupScoped.length === 0) {
+      return {
+        checked: true,
+        ok: false,
+        code: "STEP_QA_NO_IMPL_DELTA",
+        detail: "qa step has no upstream scoped implementation delta",
+        scoped_files: [],
+      };
+    }
+
+    const input = parseJsonSafe(run.input_json, {});
+    const goal = String(input.goal || "").toLowerCase();
+    const checks = [];
+    if (/health check|健康检查/.test(goal)) checks.push({ id: "health_check", re: /health\s*check|健康检查/i });
+    if (/current time|当前时间/.test(goal)) checks.push({ id: "current_time", re: /current\s*time|当前时间|tolocalestring|date\(/i });
+    if (checks.length === 0) {
+      return { checked: true, ok: true, scoped_files: dedupScoped, keyword_checks: [] };
+    }
+
+    const missing = [];
+    for (const check of checks) {
+      let matched = false;
+      for (const rel of dedupScoped) {
+        const abs = path.resolve(workspaceRoot, rel);
+        const text = readTextFileSafe(abs);
+        if (!text) continue;
+        if (check.re.test(text)) {
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) missing.push(check.id);
+    }
+    if (missing.length > 0) {
+      return {
+        checked: true,
+        ok: false,
+        code: "STEP_QA_EVIDENCE_MISSING",
+        detail: `qa evidence missing keyword checks: ${missing.join(", ")}`,
+        scoped_files: dedupScoped,
+        missing_checks: missing,
+      };
+    }
+    return {
+      checked: true,
+      ok: true,
+      scoped_files: dedupScoped,
+      keyword_checks: checks.map((c) => c.id),
+    };
   }
 
   function pathForRunArtifacts(run_id) {
@@ -1267,7 +1428,7 @@ function writeJsonFile(targetPath, obj) {
     const gateName = String(stepRow.rows[0]?.gate_name || "");
     if (status === "succeeded") {
       const artifactAudit = auditStepArtifacts ? validateExpectedArtifacts(payload) : { checked: false, missing: [], found: [] };
-      const mergedOutput = {
+      let mergedOutput = {
         ...(output || {}),
         artifact_check: artifactAudit,
       };
@@ -1324,6 +1485,105 @@ function writeJsonFile(targetPath, obj) {
           step_index,
           failed_due_to_artifacts: true,
           missing_artifacts: artifactAudit.missing,
+        };
+      }
+
+      const implValidation = validateImplementationDelta({
+        run,
+        stepId: step_id || String(payload.step_id || ""),
+        output: output || {},
+        payload,
+      });
+      if (implValidation.checked) {
+        mergedOutput = { ...mergedOutput, impl_validation: implValidation };
+      }
+      if (implValidation.checked && !implValidation.ok) {
+        const failurePayload = buildFailurePayload({
+          errorCode: implValidation.code || "STEP_CODE_NOT_CHANGED",
+          failedStep: step_id || String(payload.step_id || ""),
+          detail: implValidation.detail || "implementation delta validation failed",
+        });
+        await pool.query(
+          `UPDATE workflow_steps
+           SET status='failed',
+               result_json=$3,
+               error_code=$4,
+               ended_at=NOW(),
+               updated_at=NOW()
+           WHERE workflow_run_id=$1 AND step_index=$2`,
+          [
+            workflow_run_id,
+            step_index,
+            JSON.stringify({
+              ...(output || {}),
+              artifact_check: artifactAudit,
+              impl_validation: implValidation,
+              failure_payload: failurePayload,
+            }),
+            String(implValidation.code || "STEP_CODE_NOT_CHANGED"),
+          ]
+        );
+        await failWorkflowRun({
+          run,
+          stepDef: { id: step_id || String(payload.step_id || `step_${step_index}`) },
+          stepIndex: step_index,
+          error_code: String(implValidation.code || "STEP_CODE_NOT_CHANGED"),
+          error_message: implValidation.detail || "implementation delta validation failed",
+          failure_payload: failurePayload,
+        });
+        return {
+          handled: true,
+          workflow_run_id,
+          step_index,
+          failed_due_to_impl_validation: true,
+          impl_validation: implValidation,
+        };
+      }
+
+      const qaValidation = await validateQaEvidence({ run, workflow_run_id, payload });
+      if (qaValidation.checked) {
+        mergedOutput = { ...mergedOutput, qa_validation: qaValidation };
+      }
+      if (qaValidation.checked && !qaValidation.ok) {
+        const failurePayload = buildFailurePayload({
+          errorCode: qaValidation.code || "STEP_QA_EVIDENCE_MISSING",
+          failedStep: step_id || String(payload.step_id || ""),
+          detail: qaValidation.detail || "qa evidence validation failed",
+        });
+        await pool.query(
+          `UPDATE workflow_steps
+           SET status='failed',
+               result_json=$3,
+               error_code=$4,
+               ended_at=NOW(),
+               updated_at=NOW()
+           WHERE workflow_run_id=$1 AND step_index=$2`,
+          [
+            workflow_run_id,
+            step_index,
+            JSON.stringify({
+              ...(output || {}),
+              artifact_check: artifactAudit,
+              qa_validation: qaValidation,
+              failure_payload: failurePayload,
+            }),
+            String(qaValidation.code || "STEP_QA_EVIDENCE_MISSING"),
+          ]
+        );
+        await failWorkflowRun({
+          run,
+          stepDef: { id: step_id || String(payload.step_id || `step_${step_index}`) },
+          stepIndex: step_index,
+          error_code: String(qaValidation.code || "STEP_QA_EVIDENCE_MISSING"),
+          error_message: qaValidation.detail || "qa evidence validation failed",
+          failure_payload: failurePayload,
+        });
+        return {
+          handled: true,
+          workflow_run_id,
+          step_index,
+          failed_due_to_qa_validation: true,
+          qa_validation: qaValidation,
         };
       }
 

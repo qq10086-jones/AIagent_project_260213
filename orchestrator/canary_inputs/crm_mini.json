@@ -4,6 +4,8 @@
   "input": {
     "goal": "Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.",
     "provider": "qwen",
-    "model": "qwen3-coder-next"
+    "model": "qwen-plus",
+    "fast_mode": true,
+    "max_runtime_s": 180
   }
 }

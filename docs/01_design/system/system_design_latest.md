@@ -7,6 +7,8 @@
   - `docs/90_archive/legacy_workspace/AIagent_project/Project_OpenClaw_Nexus_v1_2_3_MAS.md`
   - `docs/01_design/system/task_queue_protocol.md`
   - `docs/01_design/coding/coding_agent_design_latest.md`
+  - `docs/01_design/system/260305/coding_team_fasttrack_ui_strategy.md`
+  - `docs/01_design/system/260305/coding_team_fasttrack_ui_strategy_r1.md`
 
 ---
 

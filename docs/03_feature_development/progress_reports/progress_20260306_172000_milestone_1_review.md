@@ -38,6 +38,21 @@ All foundational components from `WS-01` through `WS-10` defined in the `OpenCla
 ## Next Steps (Blocked by User Review)
 Once the manual code review is complete, the project is ready to enter **Milestone 2: E2E Integration**. This will involve wiring these pure JS modules into the live local service endpoints (e.g., `index.js`, express routes, and real Discord event listeners).
 
+## Pending TODOs
+- [ ] Treat current status as `contract/data-layer mostly complete`, not `full WS-01 ~ WS-10 completion`
+- [ ] Fix integration script path assumptions so workflow canaries run from repository root
+- [ ] Verify real Discord/HTTP entrypoints fully execute `normalizeInputRequest -> routeTaskRequest -> workflowEngine`
+- [ ] Integrate `WS-09` guardrails into the real dispatch/execution path
+- [ ] Integrate `WS-10` observability into real workflow transition/failure paths
+- [ ] Add integration coverage for approval, rejection, and progress/failure notification paths
+- [ ] Re-run stage review for `WS-09` and `WS-10` using runtime evidence
+- [ ] Do not mark downstream workstreams complete until DoD evidence includes integration/runtime validation
+
+## QA Correction
+- The current codebase is strongest at the contract/schema/module level.
+- `WS-09` and `WS-10` should currently be treated as **conditional pass / not yet fully closed at runtime** until real integration wiring and end-to-end evidence are complete.
+- The next allowed work is therefore `Milestone 2: E2E Integration + hardening`, not broader feature expansion.
+
 ## Files for Review
 - All schemas: `orchestrator/contracts/**/*.schema.json`
 - All business logic: `orchestrator/src/vnext/*.js`

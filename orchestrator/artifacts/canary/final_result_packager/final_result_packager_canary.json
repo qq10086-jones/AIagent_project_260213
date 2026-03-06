@@ -1,0 +1,44 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T06:43:16.679Z",
+  "package": {
+    "workflow_run_id": "wf-1",
+    "run_id": "run-1",
+    "status": "succeeded",
+    "summary": "run_id=run-1 | workflow_run_id=wf-1 | status=succeeded | go_no_go=GO | strict_canary=pass",
+    "artifacts": [
+      {
+        "label": "run_manifest",
+        "path": "artifacts/release/run-1/meta/run_manifest.json",
+        "mime": "application/json"
+      },
+      {
+        "label": "run_summary",
+        "path": "artifacts/release/run-1/summary/run_summary.md",
+        "mime": "text/markdown"
+      },
+      {
+        "label": "go_no_go_result",
+        "path": "artifacts/release/run-1/qa/go_no_go_result.json",
+        "mime": "application/json"
+      },
+      {
+        "label": "strict_canary_report",
+        "path": "artifacts/release/run-1/qa/strict_canary_report.md",
+        "mime": "text/markdown"
+      },
+      {
+        "label": "strict_canary_json",
+        "path": "artifacts/release/run-1/qa/strict_canary_report.json",
+        "mime": "application/json"
+      }
+    ],
+    "go_no_go_verdict": "GO",
+    "strict_canary_verdict": "pass"
+  },
+  "checked": {
+    "ok": true,
+    "errors": [],
+    "schema_id": "final_result_package.schema.json"
+  }
+}

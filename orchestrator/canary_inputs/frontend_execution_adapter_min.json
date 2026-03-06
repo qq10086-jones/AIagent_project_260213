@@ -1,0 +1,9 @@
+{
+  "name": "frontend_execution_adapter_min",
+  "expected": {
+    "adapter_id": "frontend.execution.v1",
+    "role": "frontend",
+    "step_id": "impl_fe",
+    "schema_id": "frontend_execution_packet.schema.json"
+  }
+}

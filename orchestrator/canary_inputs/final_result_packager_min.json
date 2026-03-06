@@ -1,0 +1,8 @@
+{
+  "name": "final_result_packager_min",
+  "expected": {
+    "schema_id": "final_result_package.schema.json",
+    "artifact_count": 5,
+    "status": "succeeded"
+  }
+}

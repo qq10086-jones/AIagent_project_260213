@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/dispatch_error_response.schema.json",
+  "title": "DispatchErrorResponse",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "ok": { "type": "boolean", "const": false },
+    "response_mode": {
+      "type": "string",
+      "enum": ["final_completion_reply"]
+    },
+    "run_id": { "type": "string" },
+    "error": { "type": "string", "minLength": 1 },
+    "error_code": {
+      "type": "string",
+      "enum": ["BAD_REQUEST", "TASK_ENVELOPE_INVALID", "REGISTRY_INVALID", "UNKNOWN_ERROR"]
+    },
+    "task_envelope": {
+      "oneOf": [
+        { "$ref": "./task_envelope.schema.json" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "required": ["ok", "response_mode", "run_id", "error", "error_code", "task_envelope"]
+}

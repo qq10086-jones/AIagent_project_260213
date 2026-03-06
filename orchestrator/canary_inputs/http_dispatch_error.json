@@ -1,0 +1,15 @@
+{
+  "name": "http_dispatch_error",
+  "kind": "http_dispatch",
+  "request": {
+    "source": "discord",
+    "raw_input": "",
+    "channel_id": "dispatch-error-1",
+    "user_id": "tester-1"
+  },
+  "expected": {
+    "ok": false,
+    "response_mode": "final_completion_reply",
+    "error_code": "BAD_REQUEST"
+  }
+}

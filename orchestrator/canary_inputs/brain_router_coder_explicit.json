@@ -1,0 +1,9 @@
+{
+  "name": "brain_router_coder_explicit",
+  "coder_directive": "/coder: @provider=codex @model=deepseek-coder-v3 Build a CRM MVP with frontend and backend",
+  "expected": {
+    "provider": "codex",
+    "model": "deepseek-coder-v3",
+    "task_prompt": "Build a CRM MVP with frontend and backend"
+  }
+}

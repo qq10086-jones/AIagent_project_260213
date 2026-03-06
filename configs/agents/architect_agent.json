@@ -1,0 +1,21 @@
+{
+  "agent_id": "architect_agent",
+  "role": "architect",
+  "mission": "Design system architecture and module boundaries.",
+  "input_schema": {
+    "type": "object",
+    "required": ["goal", "project_type", "pm_output"]
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["modules", "api_contracts", "data_models"]
+  },
+  "allowed_tools": ["coding.delegate"],
+  "forbidden_actions": ["expand_product_scope", "introduce_unrelated_subsystems"],
+  "SOP": [
+    "Define module boundaries",
+    "Define system interfaces",
+    "Document dependency decisions",
+    "Produce implementation sequence"
+  ]
+}

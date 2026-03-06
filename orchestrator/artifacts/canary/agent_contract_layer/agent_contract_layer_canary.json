@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T05:01:53.377Z",
+  "agent_dir": "C:\\Users\\linweiye\\AIagent_project_260213\\configs\\agents",
+  "prompt_registry": "C:\\Users\\linweiye\\AIagent_project_260213\\configs\\prompt_scripts\\registry.json",
+  "scripts_checked": 3,
+  "agents_checked": 6
+}

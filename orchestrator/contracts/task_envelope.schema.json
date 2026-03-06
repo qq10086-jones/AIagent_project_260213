@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/task_envelope.schema.json",
+  "title": "TaskEnvelope",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "task_id": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "raw_input": { "type": "string", "minLength": 1 },
+    "normalized_input": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "text": { "type": "string" },
+        "attachments": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "metadata": { "type": "object" }
+      },
+      "required": ["text"]
+    },
+    "intent": {
+      "type": "string",
+      "enum": ["chat", "coding", "quant", "docs", "research", "ops", "unknown"]
+    },
+    "sub_intent": { "type": "string" },
+    "requires_orchestration": { "type": "boolean" },
+    "target_team": { "type": "string", "minLength": 1 },
+    "expected_outputs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "local_only": { "type": "boolean" },
+        "approval_mode": { "type": "string" },
+        "risk_level": { "type": "string" },
+        "complexity": { "type": "string" }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["direct_reply", "single_agent", "orchestrated_workflow", "human_review_required"]
+    },
+    "execution_plan": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["direct_reply", "single_agent", "orchestrated_workflow", "human_review_required"]
+        },
+        "tool_name": { "type": "string" },
+        "workflow_id": { "type": "string" },
+        "project_type": { "type": "string" }
+      }
+    }
+  },
+  "required": [
+    "task_id",
+    "source",
+    "raw_input",
+    "normalized_input",
+    "intent",
+    "requires_orchestration",
+    "target_team",
+    "expected_outputs",
+    "constraints",
+    "context"
+  ]
+}

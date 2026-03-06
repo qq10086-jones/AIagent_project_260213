@@ -5,6 +5,18 @@ import { v4 as uuidv4 } from "uuid";
 import { analyzeTaskRisk } from "./policy.js";
 import { validateArtifactPack } from "./artifact_pack_validator.js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { validatePmOutput, validateArchitectOutput } from "./coding_team_validators.js";
+import { validateCodingTeamHandoff } from "./coding_team_handoff_validators.js";
+import { validateQaVerifierArtifacts } from "./qa_verifier.js";
+import { buildArtifactMetadata, validateArtifactMetadata } from "./artifact_registry.js";
+import { buildFinalResultPackage, validateFinalResultPackage } from "./final_result_packager.js";
+import {
+  buildBackendExecutionPacket,
+  validateBackendExecutionPacket,
+  buildFrontendExecutionPacket,
+  validateFrontendExecutionPacket,
+} from "./coding_execution_adapters.js";
+import { buildCodingExecutorRequest, validateCodingExecutorRequest } from "./coding_executor.js";
 
 function parseJsonSafe(raw, fallback = {}) {
   if (!raw || typeof raw !== "string") return fallback;
@@ -122,7 +134,7 @@ const STEP_CONTRACTS = {
   },
 };
 
-function buildStepPrompt({ run, stepDef, input, payload }) {
+function buildStepPrompt({ run, stepDef, input, payload, promptScript = null }) {
   const c = STEP_CONTRACTS[stepDef.id] || null;
   const goal = String(input.goal || input.task_prompt || input.prompt || "Build a minimal CRM web app").trim();
   const title = c?.title || stepDef.id;
@@ -134,9 +146,36 @@ function buildStepPrompt({ run, stepDef, input, payload }) {
   const outputReq = required.length > 0
     ? `Required artifacts (relative to ${artifactRoot}):\n- ${required.join("\n- ")}`
     : "Required artifacts: follow workflow step contract.";
+  const handoffReq = payload?.handoff_contract_out
+    ? [
+        `Handoff artifacts for next stage:`,
+        `- ${Array.isArray(payload.handoff_contract_out.required_artifacts) ? payload.handoff_contract_out.required_artifacts.join("\n- ") : ""}`,
+        payload.handoff_contract_out.typed_handoff?.file
+          ? `- typed handoff manifest: ${payload.handoff_contract_out.typed_handoff.file}`
+          : "",
+      ].filter(Boolean).join("\n")
+    : "";
   const guidance = lines.length > 0
     ? `Execution requirements:\n- ${lines.join("\n- ")}`
     : "Execution requirements: complete this step with verifiable outputs.";
+  const promptScriptNote = promptScript
+    ? [
+        `Prompt Script ID: ${promptScript.script_id}`,
+        `Prompt Script Artifact Type: ${promptScript.artifact_type}`,
+        `Prompt Script Validation: ${JSON.stringify(promptScript.validation || {})}`,
+        promptScript.system_prompt ? `Prompt Script Goal: ${promptScript.system_prompt}` : "",
+      ].filter(Boolean).join("\n")
+    : "";
+  const executionAdapterNote = payload?.execution_adapter_packet
+    ? [
+        `Execution Adapter: ${payload.execution_adapter_packet.adapter_id}`,
+        `Execution Target Paths: ${Array.isArray(payload.execution_adapter_packet.target_paths) ? payload.execution_adapter_packet.target_paths.join(", ") : ""}`,
+        `Execution Required Outputs: ${Array.isArray(payload.execution_adapter_packet.required_outputs) ? payload.execution_adapter_packet.required_outputs.join(", ") : ""}`,
+        payload.tool_adapter_request?.adapter_type
+          ? `Tool Adapter Request: ${payload.tool_adapter_request.adapter_type}/${payload.tool_adapter_request.provider}`
+          : "",
+      ].filter(Boolean).join("\n")
+    : "";
   return [
     `[CodingTeam Step] ${title}`,
     `Workflow: ${run.workflow_id}`,
@@ -144,8 +183,11 @@ function buildStepPrompt({ run, stepDef, input, payload }) {
     `Step ID: ${stepDef.id}`,
     `Role: ${stepDef.role}`,
     `Goal: ${goal}`,
+    promptScriptNote,
+    executionAdapterNote,
     guidance,
     outputReq,
+    handoffReq,
     `Absolute artifact output root: ${artifactAbs}`,
     "Write files under the artifact output root exactly with the required relative paths.",
     "Constraints:",
@@ -153,6 +195,27 @@ function buildStepPrompt({ run, stepDef, input, payload }) {
     "- Keep outputs deterministic and explicit.",
     "- Include concise validation evidence.",
   ].join("\n");
+}
+
+function validatePromptScriptBinding({ stepDef, promptScriptRegistry, promptScript }) {
+  const promptScriptId = String(stepDef?.prompt_script_id || "").trim();
+  if (!promptScriptId) {
+    return { ok: true, prompt_script_id: "" };
+  }
+  if (!promptScriptRegistry || !promptScriptRegistry.scripts) {
+    return { ok: false, code: "PROMPT_SCRIPT_REGISTRY_MISSING", detail: "prompt script registry not loaded" };
+  }
+  if (!promptScript) {
+    return { ok: false, code: "PROMPT_SCRIPT_NOT_FOUND", detail: `prompt script '${promptScriptId}' not found` };
+  }
+  if (String(promptScript.role || "") !== String(stepDef.role || "")) {
+    return {
+      ok: false,
+      code: "PROMPT_SCRIPT_ROLE_MISMATCH",
+      detail: `prompt script '${promptScriptId}' role '${promptScript.role}' does not match step role '${stepDef.role}'`,
+    };
+  }
+  return { ok: true, prompt_script_id: promptScriptId };
 }
 
 function classifyArtifactReasons(reasons = []) {
@@ -195,6 +258,8 @@ function buildFailurePayload({
 export function createWorkflowEngine({
   pool,
   registry,
+  promptScriptRegistry = null,
+  handoffContracts = null,
   enqueueTask,
   recordEvent,
   makeIdempotencyKey,
@@ -237,7 +302,18 @@ export function createWorkflowEngine({
     const input = parseJsonSafe(run.input_json, {});
     const artifactRoot = pathForRunArtifacts(run.run_id);
     const contract = STEP_CONTRACTS[stepDef.id] || null;
+    const promptScript = stepDef.prompt_script_id ? promptScriptRegistry?.scripts?.[stepDef.prompt_script_id] || null : null;
+    const promptBinding = validatePromptScriptBinding({ stepDef, promptScriptRegistry, promptScript });
+    if (!promptBinding.ok) {
+      const err = new Error(promptBinding.detail || "prompt script binding invalid");
+      err.code = promptBinding.code || "PROMPT_SCRIPT_BINDING_INVALID";
+      throw err;
+    }
     const fastMode = Boolean(input.fast_mode);
+    const downstreamHandoff = Object.values(handoffContracts?.handoffs || {}).find((item) => String(item?.from_step || "") === String(stepDef.id || ""));
+    const upstreamHandoffs = Object.values(handoffContracts?.handoffs || {}).filter((item) =>
+      Array.isArray(item?.to_steps) && item.to_steps.includes(String(stepDef.id || ""))
+    );
     const payload = {
       ...(input.step_payloads?.[stepDef.id] || {}),
       ...(input.default_payload || {}),
@@ -250,7 +326,70 @@ export function createWorkflowEngine({
       run_id: run.run_id,
       artifact_root: artifactRoot,
       expected_artifacts: contract?.required_artifacts || [],
+      prompt_script_id: stepDef.prompt_script_id || "",
+      prompt_script: promptScript,
+      handoff_contract_out: downstreamHandoff || null,
+      handoff_contract_in: upstreamHandoffs,
     };
+
+    if (String(stepDef.id || "") === "impl_be") {
+      const executionPacket = buildBackendExecutionPacket({
+        stepDef,
+        payload,
+        provider: input.provider || payload.provider || "",
+        model: input.model || payload.model || "",
+      });
+      const checked = validateBackendExecutionPacket(executionPacket);
+      if (!checked.ok) {
+        const err = new Error(`backend execution packet invalid: ${checked.errors.join("; ")}`);
+        err.code = "BACKEND_EXECUTION_PACKET_INVALID";
+        throw err;
+      }
+      payload.execution_adapter_packet = executionPacket;
+      const toolAdapterRequest = buildCodingExecutorRequest({
+        provider: input.provider || payload.provider || "",
+        payload,
+        executionPacket,
+        role: stepDef.role,
+        stepId: stepDef.id,
+      });
+      const requestChecked = validateCodingExecutorRequest(toolAdapterRequest);
+      if (!requestChecked.ok) {
+        const err = new Error(`coding executor request invalid: ${requestChecked.errors.join("; ")}`);
+        err.code = "CODING_EXECUTOR_REQUEST_INVALID";
+        throw err;
+      }
+      payload.tool_adapter_request = toolAdapterRequest;
+    }
+    if (String(stepDef.id || "") === "impl_fe") {
+      const executionPacket = buildFrontendExecutionPacket({
+        stepDef,
+        payload,
+        provider: input.provider || payload.provider || "",
+        model: input.model || payload.model || "",
+      });
+      const checked = validateFrontendExecutionPacket(executionPacket);
+      if (!checked.ok) {
+        const err = new Error(`frontend execution packet invalid: ${checked.errors.join("; ")}`);
+        err.code = "FRONTEND_EXECUTION_PACKET_INVALID";
+        throw err;
+      }
+      payload.execution_adapter_packet = executionPacket;
+      const toolAdapterRequest = buildCodingExecutorRequest({
+        provider: input.provider || payload.provider || "",
+        payload,
+        executionPacket,
+        role: stepDef.role,
+        stepId: stepDef.id,
+      });
+      const requestChecked = validateCodingExecutorRequest(toolAdapterRequest);
+      if (!requestChecked.ok) {
+        const err = new Error(`coding executor request invalid: ${requestChecked.errors.join("; ")}`);
+        err.code = "CODING_EXECUTOR_REQUEST_INVALID";
+        throw err;
+      }
+      payload.tool_adapter_request = toolAdapterRequest;
+    }
 
     if (stepDef.tool === "coding.delegate") {
       const runtimeByStep = {
@@ -260,7 +399,7 @@ export function createWorkflowEngine({
         impl_be: 240,
         release_pack: 120,
       };
-      payload.task_prompt = payload.task_prompt || buildStepPrompt({ run, stepDef, input, payload });
+      payload.task_prompt = payload.task_prompt || buildStepPrompt({ run, stepDef, input, payload, promptScript });
       if (fastMode) {
         const fastNote = [
           "",
@@ -280,6 +419,9 @@ export function createWorkflowEngine({
       if ((stepDef.id === "impl_fe" || stepDef.id === "impl_be") && !Array.isArray(payload.target_paths)) {
         payload.target_paths = ["sandbox/crm_site/"];
       }
+      if ((stepDef.id === "impl_be" || stepDef.id === "impl_fe") && payload.execution_adapter_packet) {
+        payload.target_paths = payload.execution_adapter_packet.target_paths;
+      }
     }
 
     if (stepDef.gate === "acceptance") {
@@ -296,6 +438,8 @@ export function createWorkflowEngine({
         role: stepDef.role,
         goal: String(input.goal || ""),
         required_artifacts: payload.expected_artifacts || [],
+        prompt_script_id: stepDef.prompt_script_id || "",
+        prompt_script: promptScript,
       };
     }
     return payload;
@@ -387,21 +531,41 @@ export function createWorkflowEngine({
     };
   }
 
-  function readTextFileSafe(absPath, maxBytes = 262144) {
-    try {
-      const st = fs.statSync(absPath);
-      if (!st.isFile()) return "";
-      if (st.size > maxBytes) return "";
-      return fs.readFileSync(absPath, "utf8");
-    } catch {
-      return "";
+  function findHandoffForStep(stepId) {
+    const safeStepId = String(stepId || "");
+    return Object.values(handoffContracts?.handoffs || {}).find((item) => String(item?.from_step || "") === safeStepId) || null;
+  }
+
+  function validateDocumentHandoff({ payload = {}, stepId = "" }) {
+    const handoff = findHandoffForStep(stepId);
+    return validateCodingTeamHandoff({
+      workspaceRoot,
+      artifactRoot: payload.artifact_root,
+      handoff,
+    });
+  }
+
+  function validateRoleOutput({ payload = {}, stepId = "" }) {
+    const safeStepId = String(stepId || "");
+    if (safeStepId === "pm_spec") {
+      return validatePmOutput({ workspaceRoot, artifactRoot: payload.artifact_root });
     }
+    if (safeStepId === "arch_design") {
+      return validateArchitectOutput({ workspaceRoot, artifactRoot: payload.artifact_root });
+    }
+    return { checked: false, ok: true };
   }
 
   async function validateQaEvidence({ run, workflow_run_id, payload }) {
     if (!(String(run?.workflow_id || "") === "coding_team_v0" && String(payload?.step_id || "") === "qa_verify")) {
       return { checked: false, ok: true };
     }
+    const qaArtifacts = validateQaVerifierArtifacts({
+      workspaceRoot,
+      artifactRoot: payload.artifact_root,
+    });
+    if (!qaArtifacts.ok) return qaArtifacts;
+
     const steps = await getSteps(workflow_run_id);
     const implStepRows = (steps || []).filter((s) => ["impl_fe", "impl_be"].includes(String(s?.step_id || "")));
     const scoped = [];
@@ -457,6 +621,7 @@ export function createWorkflowEngine({
     return {
       checked: true,
       ok: true,
+      qa_artifacts: qaArtifacts,
       scoped_files: dedupScoped,
       keyword_checks: checks.map((c) => c.id),
     };
@@ -778,16 +943,27 @@ function writeJsonFile(targetPath, obj) {
         const sha256 = crypto.createHash("sha256").update(buf).digest("hex");
         const stat = fs.statSync(filePath);
         const relPath = path.relative(workspaceRoot, filePath).replace(/\\/g, "/");
+        const metadata = buildArtifactMetadata({
+          taskId: `workflow_run:${run.workflow_run_id}`,
+          role: "qa",
+          objectKey: relPath,
+          mime: filePath.endsWith(".json") ? "application/json" : "text/markdown",
+          createdAt: new Date().toISOString(),
+          source: "release_pack_local",
+        });
+        const checked = validateArtifactMetadata(metadata);
+        if (!checked.ok) continue;
         await pool.query(
           `INSERT INTO assets(task_id, object_key, sha256, mime_type, file_size, metadata_json)
            VALUES ($1,$2,$3,$4,$5,$6)`,
           [
-            `workflow_run:${run.workflow_run_id}`,
-            relPath,
+            metadata.task_id,
+            metadata.path,
             sha256,
-            filePath.endsWith(".json") ? "application/json" : "text/markdown",
+            metadata.mime,
             Number(stat.size || 0),
             JSON.stringify({
+              artifact_metadata: metadata,
               run_id: run.run_id,
               workflow_run_id: run.workflow_run_id,
               source: "release_pack_local",
@@ -801,16 +977,27 @@ function writeJsonFile(targetPath, obj) {
       for (const art of item.artifacts || []) {
         if (!art || (!art.object_key && !art.name)) continue;
         try {
+          const metadata = buildArtifactMetadata({
+            taskId: `workflow_run:${run.workflow_run_id}`,
+            role: item.step_id || "worker",
+            objectKey: String(art.object_key || art.name || "unknown"),
+            mime: String(art.mime || "application/octet-stream"),
+            createdAt: new Date().toISOString(),
+            source: "step_artifact_ref",
+          });
+          const checked = validateArtifactMetadata(metadata);
+          if (!checked.ok) continue;
           await pool.query(
             `INSERT INTO assets(task_id, object_key, sha256, mime_type, file_size, metadata_json)
              VALUES ($1,$2,$3,$4,$5,$6)`,
             [
-              `workflow_run:${run.workflow_run_id}`,
-              String(art.object_key || art.name || "unknown"),
+              metadata.task_id,
+              metadata.path,
               String(art.sha256 || ""),
-              String(art.mime || "application/octet-stream"),
+              metadata.mime,
               Number(art.file_size || 0),
               JSON.stringify({
+                artifact_metadata: metadata,
                 run_id: run.run_id,
                 workflow_run_id: run.workflow_run_id,
                 source: "step_artifact_ref",
@@ -826,16 +1013,27 @@ function writeJsonFile(targetPath, obj) {
 
     for (const art of minioArchived || []) {
       try {
+        const metadata = buildArtifactMetadata({
+          taskId: `workflow_run:${run.workflow_run_id}`,
+          role: "qa",
+          objectKey: String(art.object_key || ""),
+          mime: String(art.mime_type || "application/octet-stream"),
+          createdAt: new Date().toISOString(),
+          source: "release_pack_minio",
+        });
+        const checked = validateArtifactMetadata(metadata);
+        if (!checked.ok) continue;
         await pool.query(
           `INSERT INTO assets(task_id, object_key, sha256, mime_type, file_size, metadata_json)
            VALUES ($1,$2,$3,$4,$5,$6)`,
           [
-            `workflow_run:${run.workflow_run_id}`,
-            String(art.object_key || ""),
+            metadata.task_id,
+            metadata.path,
             String(art.sha256 || ""),
-            String(art.mime_type || "application/octet-stream"),
+            metadata.mime,
             Number(art.file_size || 0),
             JSON.stringify({
+              artifact_metadata: metadata,
               run_id: run.run_id,
               workflow_run_id: run.workflow_run_id,
               source: "release_pack_minio",
@@ -990,6 +1188,22 @@ function writeJsonFile(targetPath, obj) {
       strict: true,
     });
     writeJsonFile(goNoGoJsonPath, goNoGo);
+    const finalResultPackage = buildFinalResultPackage({
+      workflowRunId: run.workflow_run_id,
+      runId: run.run_id,
+      status: manifest.status,
+      summaryPath,
+      manifestPath,
+      goNoGoResultPath: goNoGoJsonPath,
+      strictCanaryReportPath: canaryMdPath,
+      strictCanaryJsonPath: canaryJsonPath,
+      goNoGoVerdict: goNoGo.verdict,
+      strictCanaryVerdict: canaryReport.verdict,
+    });
+    const finalResultChecked = validateFinalResultPackage(finalResultPackage);
+    if (!finalResultChecked.ok) {
+      reasons.push(`final result package invalid: ${finalResultChecked.errors.join("; ")}`);
+    }
     const minioArchived = await archiveReleasePackToMinio({
       run,
       manifestPath,
@@ -1021,6 +1235,7 @@ function writeJsonFile(targetPath, obj) {
         strict_canary_report_path: canaryMdPath,
         strict_canary_json_path: canaryJsonPath,
         strict_canary_verdict: canaryReport.verdict,
+        final_result_package: finalResultPackage,
         validator,
       };
     }
@@ -1033,6 +1248,7 @@ function writeJsonFile(targetPath, obj) {
       strict_canary_report_path: canaryMdPath,
       strict_canary_json_path: canaryJsonPath,
       strict_canary_verdict: canaryReport.verdict,
+      final_result_package: finalResultPackage,
       validator,
     };
   }
@@ -1310,6 +1526,17 @@ function writeJsonFile(targetPath, obj) {
       err.code = "WORKFLOW_EMPTY";
       throw err;
     }
+    for (const step of steps) {
+      const promptScriptId = String(step?.prompt_script_id || "").trim();
+      if (!promptScriptId) continue;
+      const promptScript = promptScriptRegistry?.scripts?.[promptScriptId] || null;
+      const checked = validatePromptScriptBinding({ stepDef: step, promptScriptRegistry, promptScript });
+      if (!checked.ok) {
+        const err = new Error(checked.detail || `workflow '${workflow_id}' prompt script binding invalid`);
+        err.code = checked.code || "PROMPT_SCRIPT_BINDING_INVALID";
+        throw err;
+      }
+    }
 
     const workflow_run_id = uuidv4();
     await pool.query(
@@ -1537,6 +1764,106 @@ function writeJsonFile(targetPath, obj) {
           step_index,
           failed_due_to_impl_validation: true,
           impl_validation: implValidation,
+        };
+      }
+
+      const roleOutputValidation = validateRoleOutput({
+        payload,
+        stepId: step_id || String(payload.step_id || ""),
+      });
+      if (roleOutputValidation.checked) {
+        mergedOutput = { ...mergedOutput, role_output_validation: roleOutputValidation };
+      }
+      if (roleOutputValidation.checked && !roleOutputValidation.ok) {
+        const failurePayload = buildFailurePayload({
+          errorCode: roleOutputValidation.code || "ROLE_OUTPUT_VALIDATION_FAILED",
+          failedStep: step_id || String(payload.step_id || ""),
+          detail: roleOutputValidation.detail || "role output validation failed",
+        });
+        await pool.query(
+          `UPDATE workflow_steps
+           SET status='failed',
+               result_json=$3,
+               error_code=$4,
+               ended_at=NOW(),
+               updated_at=NOW()
+           WHERE workflow_run_id=$1 AND step_index=$2`,
+          [
+            workflow_run_id,
+            step_index,
+            JSON.stringify({
+              ...(output || {}),
+              artifact_check: artifactAudit,
+              role_output_validation: roleOutputValidation,
+              failure_payload: failurePayload,
+            }),
+            String(roleOutputValidation.code || "ROLE_OUTPUT_VALIDATION_FAILED"),
+          ]
+        );
+        await failWorkflowRun({
+          run,
+          stepDef: { id: step_id || String(payload.step_id || `step_${step_index}`) },
+          stepIndex: step_index,
+          error_code: String(roleOutputValidation.code || "ROLE_OUTPUT_VALIDATION_FAILED"),
+          error_message: roleOutputValidation.detail || "role output validation failed",
+          failure_payload: failurePayload,
+        });
+        return {
+          handled: true,
+          workflow_run_id,
+          step_index,
+          failed_due_to_role_output_validation: true,
+          role_output_validation: roleOutputValidation,
+        };
+      }
+
+      const handoffValidation = validateDocumentHandoff({
+        payload,
+        stepId: step_id || String(payload.step_id || ""),
+      });
+      if (handoffValidation.checked) {
+        mergedOutput = { ...mergedOutput, handoff_validation: handoffValidation };
+      }
+      if (handoffValidation.checked && !handoffValidation.ok) {
+        const failurePayload = buildFailurePayload({
+          errorCode: handoffValidation.code || "HANDOFF_VALIDATION_FAILED",
+          failedStep: step_id || String(payload.step_id || ""),
+          detail: handoffValidation.detail || "handoff validation failed",
+        });
+        await pool.query(
+          `UPDATE workflow_steps
+           SET status='failed',
+               result_json=$3,
+               error_code=$4,
+               ended_at=NOW(),
+               updated_at=NOW()
+           WHERE workflow_run_id=$1 AND step_index=$2`,
+          [
+            workflow_run_id,
+            step_index,
+            JSON.stringify({
+              ...(output || {}),
+              artifact_check: artifactAudit,
+              handoff_validation: handoffValidation,
+              failure_payload: failurePayload,
+            }),
+            String(handoffValidation.code || "HANDOFF_VALIDATION_FAILED"),
+          ]
+        );
+        await failWorkflowRun({
+          run,
+          stepDef: { id: step_id || String(payload.step_id || `step_${step_index}`) },
+          stepIndex: step_index,
+          error_code: String(handoffValidation.code || "HANDOFF_VALIDATION_FAILED"),
+          error_message: handoffValidation.detail || "handoff validation failed",
+          failure_payload: failurePayload,
+        });
+        return {
+          handled: true,
+          workflow_run_id,
+          step_index,
+          failed_due_to_handoff_validation: true,
+          handoff_validation: handoffValidation,
         };
       }
 

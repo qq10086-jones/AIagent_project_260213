@@ -19,6 +19,33 @@ import {
   validateTaskInputAgainstRegistry,
 } from "./registry.js";
 import { createWorkflowEngine } from "./workflow_engine.js";
+import {
+  getDefaultPromptScriptRegistryPath,
+  loadPromptScriptRegistryOrThrow,
+  validatePromptScriptsAgainstAgents,
+} from "./prompt_script_registry.js";
+import {
+  getDefaultAgentRegistryDir,
+  loadAgentContractsOrThrow,
+} from "./agent_contract_registry.js";
+import {
+  getDefaultHandoffContractPath,
+  loadHandoffContractsOrThrow,
+} from "./handoff_contract_registry.js";
+import { normalizeInputRequest } from "./vnext/input_normalizer.js";
+import { routeTaskRequest } from "./vnext/brain_router.js";
+import { buildRouteContractResponse } from "./vnext/route_contract.js";
+import {
+  makeDirectReplyResponse,
+  makeTaskQueuedResponse,
+  makeWorkflowQueuedResponse,
+  makeErrorResponse,
+} from "./vnext/response_protocol.js";
+import { parseCoderDirectiveOptions, DEFAULT_CODER_MODEL } from "./vnext/coder_directive.js";
+import {
+  assertDispatchErrorResponse,
+  assertDispatchSuccessResponse,
+} from "./vnext/contract_validator.js";
 
 const {
   REDIS_URL,
@@ -122,10 +149,50 @@ function loadToolsConfig() {
 }
 
 const TOOLS_CONFIG = loadToolsConfig();
-const REGISTRY_CONFIG_PATH = REGISTRY_PATH && String(REGISTRY_PATH).trim()
-  ? String(REGISTRY_PATH).trim()
-  : getDefaultRegistryPath();
-const REGISTRY = loadRegistryOrThrow(REGISTRY_CONFIG_PATH);
+function loadRegistryWithFallback() {
+  const explicit = REGISTRY_PATH && String(REGISTRY_PATH).trim() ? String(REGISTRY_PATH).trim() : "";
+  if (explicit) {
+    try {
+      return {
+        path: explicit,
+        registry: loadRegistryOrThrow(explicit),
+      };
+    } catch (err) {
+      const fallbackPath = getDefaultRegistryPath();
+      if (path.resolve(explicit) === path.resolve(fallbackPath)) {
+        throw err;
+      }
+      console.warn(`[registry] explicit REGISTRY_PATH failed ('${explicit}'): ${err.message}`);
+      console.warn(`[registry] falling back to default registry path '${fallbackPath}'`);
+      return {
+        path: fallbackPath,
+        registry: loadRegistryOrThrow(fallbackPath),
+      };
+    }
+  }
+  const fallbackPath = getDefaultRegistryPath();
+  return {
+    path: fallbackPath,
+    registry: loadRegistryOrThrow(fallbackPath),
+  };
+}
+
+const REGISTRY_LOADED = loadRegistryWithFallback();
+const REGISTRY_CONFIG_PATH = REGISTRY_LOADED.path;
+const REGISTRY = REGISTRY_LOADED.registry;
+const PROMPT_SCRIPT_REGISTRY_PATH = getDefaultPromptScriptRegistryPath();
+const PROMPT_SCRIPT_REGISTRY = loadPromptScriptRegistryOrThrow(PROMPT_SCRIPT_REGISTRY_PATH);
+const AGENT_REGISTRY_DIR = getDefaultAgentRegistryDir();
+const AGENT_REGISTRY = loadAgentContractsOrThrow(AGENT_REGISTRY_DIR);
+const HANDOFF_CONTRACT_PATH = getDefaultHandoffContractPath();
+const HANDOFF_CONTRACTS = loadHandoffContractsOrThrow(HANDOFF_CONTRACT_PATH);
+const PROMPT_AGENT_BINDING_CHECK = validatePromptScriptsAgainstAgents({
+  promptRegistry: PROMPT_SCRIPT_REGISTRY,
+  agentRegistry: AGENT_REGISTRY,
+});
+if (!PROMPT_AGENT_BINDING_CHECK.ok) {
+  throw new Error(`prompt script/agent binding invalid: ${PROMPT_AGENT_BINDING_CHECK.errors.join("; ")}`);
+}
 const channelMemory = new Map();
 
 export function getToolSpec(toolName) {
@@ -433,6 +500,162 @@ async function buildContext(project) {
   }
 }
 
+async function generateBrainDirectReply(rawInput, modelPreference = "auto") {
+  const useCloudChat = modelPreference === "api" || (!FORCE_LOCAL_LLM && Boolean(process.env.QWEN_API_KEY));
+  if (useCloudChat) {
+    try {
+      const reply = await callQwenChat([{ role: "user", content: rawInput }]);
+      if (String(reply || "").trim()) return reply;
+    } catch (err) {
+      console.warn("[vnext] cloud direct reply failed, fallback to local:", err?.message || err);
+    }
+  }
+
+  const project = detectProject(rawInput);
+  const projectContext = await buildContext(project);
+  const localReply = await callLocalOllamaChat(CURRENT_LOCAL_MODEL, rawInput, undefined, projectContext);
+  return localReply || "";
+}
+
+function buildVNextDispatchInput({
+  source = "api",
+  rawInput = "",
+  msg = null,
+  payload = {},
+}) {
+  if (msg) {
+    return {
+      source: "discord",
+      raw_input: rawInput,
+      channel_id: msg.channel?.id || "",
+      thread_id: msg.id || "",
+      user_id: msg.author?.id || "",
+      attachments: Array.isArray(msg.attachments)
+        ? msg.attachments.map((item) => ({
+            filename: item.name || "",
+            url: item.url || "",
+            content_type: item.contentType || "",
+          }))
+        : [],
+      ...payload,
+    };
+  }
+  return {
+    source,
+    raw_input: rawInput,
+    ...payload,
+  };
+}
+
+async function executeVNextDispatch({
+  requestBody = {},
+  run_id,
+  client_msg_id = "",
+  skipEnsureRun = false,
+  analyzerResult = undefined,
+  routeOverride = null,
+}) {
+  const normalized = normalizeInputRequest(requestBody || {});
+  if (!normalized.raw_input) {
+    const err = new Error("raw_input/message is required");
+    err.code = "BAD_REQUEST";
+    throw err;
+  }
+
+  if (!skipEnsureRun) {
+    await ensureRun(run_id, {
+      client_msg_id: client_msg_id || `vnext-${run_id}`,
+      user_id: normalized.context?.user_id || "vnext-user",
+      status: "starting",
+      input_text: normalized.raw_input,
+    });
+  }
+
+  let finalAnalyzerResult = analyzerResult;
+  if (finalAnalyzerResult === undefined) {
+    try {
+      finalAnalyzerResult = await parseIntent(normalized.raw_input, {});
+    } catch (err) {
+      console.warn("[vnext] parseIntent failed during dispatch:", err?.message || err);
+      finalAnalyzerResult = null;
+    }
+  }
+
+  const routed = routeOverride || routeTaskRequest({
+    ...normalized,
+    analyzerResult: finalAnalyzerResult,
+    registry: REGISTRY,
+  });
+  const plan = routed.task_envelope.execution_plan || {};
+
+  if (routed.decision === "direct_reply") {
+    const reply = await generateBrainDirectReply(normalized.raw_input, String(requestBody?.model_preference || "auto"));
+    await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["completed", run_id]).catch(() => {});
+    return assertDispatchSuccessResponse(makeDirectReplyResponse({
+      run_id,
+      task_envelope: routed.task_envelope,
+      reply,
+    }));
+  }
+
+  if (routed.decision === "single_agent") {
+    await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["running", run_id]).catch(() => {});
+    const payload = {
+      ...(finalAnalyzerResult?.payload || {}),
+      ...(requestBody?.payload && typeof requestBody.payload === "object" ? requestBody.payload : {}),
+      task_envelope: routed.task_envelope,
+      task_prompt: requestBody?.task_prompt || normalized.raw_input,
+      prompt: requestBody?.prompt || normalized.raw_input,
+      project_type: plan.project_type || undefined,
+    };
+    const queued = await enqueueTask({
+      tool_name: String(plan.tool_name || "coding.delegate"),
+      payload,
+      run_id,
+      context: null,
+    });
+    return assertDispatchSuccessResponse(makeTaskQueuedResponse({
+      run_id,
+      task_envelope: routed.task_envelope,
+      task_id: queued.task_id,
+      tool_name: String(plan.tool_name || "coding.delegate"),
+      waiting_approval: Boolean(queued.waiting_approval),
+    }));
+  }
+
+  if (routed.decision === "orchestrated_workflow") {
+    await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["running", run_id]).catch(() => {});
+    const started = await workflowEngine.startWorkflowRun({
+      workflow_id: String(plan.workflow_id || "coding_team_v0"),
+      project_type: String(plan.project_type || "webapp_crm"),
+      run_id,
+      input: {
+        goal: normalized.raw_input,
+        provider: requestBody?.provider || CODER_PROVIDER_DEFAULT,
+        model: requestBody?.model || CODER_MODEL_DEFAULT,
+        task_envelope: routed.task_envelope,
+        fast_mode: Boolean(requestBody?.fast_mode),
+      },
+      context: null,
+    });
+    return assertDispatchSuccessResponse(makeWorkflowQueuedResponse({
+      run_id,
+      task_envelope: routed.task_envelope,
+      workflow_run_id: started.workflow_run_id,
+      workflow_id: started.workflow_id,
+      first_step: started.first_step,
+    }));
+  }
+
+  await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["failed", run_id]).catch(() => {});
+  return assertDispatchErrorResponse(makeErrorResponse({
+    run_id,
+    error: "human review required",
+    error_code: "UNKNOWN_ERROR",
+    task_envelope: routed.task_envelope,
+  }));
+}
+
 function sanitizeLocalAssistantReply(raw) {
   let out = String(raw || "");
   out = out.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
@@ -691,6 +914,8 @@ async function enqueueWorkflow({ name, steps, run_id, context = null }) {
 const workflowEngine = createWorkflowEngine({
   pool,
   registry: REGISTRY,
+  promptScriptRegistry: PROMPT_SCRIPT_REGISTRY,
+  handoffContracts: HANDOFF_CONTRACTS,
   enqueueTask,
   recordEvent,
   makeIdempotencyKey,
@@ -1023,27 +1248,6 @@ function formatCodingDelegateResult(output, status, streamError = "", runId = ""
   return lines.join("\n").slice(0, 1024);
 }
 
-function parseCoderDelegateOptions(rawText) {
-  const text = String(rawText || "");
-  let cleaned = text;
-  let model = null;
-
-  if (/@gpt-5\.3\b/i.test(cleaned) || /\bmodel\s*=\s*gpt-5\.3\b/i.test(cleaned)) {
-    model = "gpt-5.3";
-    cleaned = cleaned.replace(/@gpt-5\.3\b/gi, " ").replace(/\bmodel\s*=\s*gpt-5\.3\b/gi, " ");
-  } else if (/@minimax\b/i.test(cleaned) || /\bmodel\s*=\s*minimax-m2\.5\b/i.test(cleaned)) {
-    model = "minimax-m2.5";
-    cleaned = cleaned.replace(/@minimax\b/gi, " ").replace(/\bmodel\s*=\s*minimax-m2\.5\b/gi, " ");
-  }
-
-  cleaned = cleaned.replace(/\s+/g, " ").trim();
-  return {
-    taskPrompt: cleaned,
-    provider: CODER_PROVIDER_DEFAULT,
-    model: model || CODER_MODEL_DEFAULT,
-  };
-}
-
 async function callBrainWithRetry(payload, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
@@ -1352,15 +1556,18 @@ discord.on("messageCreate", async msg => {
     trimmedInput.startsWith("/coder ");
   const coderTask = isCoderDirective ? extractCommandArg(trimmedInput, "\\/coder") : "";
   if (isCoderDirective && !coderTask) {
-    await msg.reply("[NEXUS] 用法：`/coder: <你的开发任务>`");
+    await msg.reply("[NEXUS] 用法：`/coder: <开发任务>`，可选：`@model=qwen-coder-next` / `@provider=opencode`");
     return;
   }
 
   const coderOptions = isCoderDirective
-    ? parseCoderDelegateOptions(coderTask)
+    ? parseCoderDirectiveOptions(coderTask, {
+        provider: CODER_PROVIDER_DEFAULT,
+        model: DEFAULT_CODER_MODEL,
+      })
     : null;
   const effectiveInput = isCoderDirective ? coderOptions.taskPrompt : rawInput;
-  const userInput = effectiveInput.replace(/@api\b/gi, "").replace(/@32b\b/gi, "").trim();
+  const userInput = effectiveInput.trim();
   if (!userInput) return;
 
   const client_msg_id = msg.id;
@@ -1377,335 +1584,129 @@ discord.on("messageCreate", async msg => {
       status: "starting",
       input_text: userInput,
     });
-
-    let model_preference = "local_small";
-    if (rawInput.includes("@api")) model_preference = "api";
-    if (rawInput.includes("@32b")) model_preference = "local_large";
-
-    const memory = channelMemory.get(msg.channelId) || {};
+    const lang = detectLanguageQuick(userInput) || "zh";
+    const routeOverride = isCoderDirective
+      ? {
+          decision: "orchestrated_workflow",
+          route: {
+            intent: "coding",
+            complexity: "complex",
+            target_team: "coding_team",
+            requires_orchestration: true,
+            expected_outputs: ["design_doc", "task_breakdown", "repo_changes", "tests", "qa_summary"],
+            execution_plan: {
+              mode: "orchestrated_workflow",
+              workflow_id: "coding_team_v0",
+              project_type: "webapp_crm",
+            },
+          },
+          task_envelope: {
+            task_id: uuidv4(),
+            source: "discord",
+            raw_input: userInput,
+            normalized_input: {
+              text: userInput,
+              attachments: [],
+              metadata: {
+                user_id: String(msg.author?.id || ""),
+                username: String(msg.author?.username || ""),
+                channel_id: String(msg.channel?.id || ""),
+                thread_id: String(msg.id || ""),
+              },
+            },
+            intent: "coding",
+            sub_intent: "coder_directive",
+            requires_orchestration: true,
+            target_team: "coding_team",
+            expected_outputs: ["design_doc", "task_breakdown", "repo_changes", "tests", "qa_summary"],
+            constraints: {
+              local_only: true,
+              approval_mode: "manual",
+              risk_level: "medium",
+              complexity: "complex",
+            },
+            context: {
+              channel_id: String(msg.channel?.id || ""),
+              thread_id: String(msg.id || ""),
+              user_id: String(msg.author?.id || ""),
+              attachments: [],
+              raw_event: null,
+            },
+            decision: "orchestrated_workflow",
+            execution_plan: {
+              mode: "orchestrated_workflow",
+              workflow_id: "coding_team_v0",
+              project_type: "webapp_crm",
+            },
+          },
+        }
+      : null;
 
     if (isCoderDirective) {
-      const lang = detectLanguageQuick(userInput);
-      const context = {
-        channelId: msg.channel.id,
-        startTime: Date.now(),
-        lang,
-        run_id,
-        closeRunOnTaskResult: false,
-      };
-      runToContext.set(run_id, context);
-      await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["running", run_id]);
-
-      const progressText = await safeTranslate("已进入 Coding Team 模式，正在启动 PM/架构/前后端/QA 流程，请稍候...", lang);
+      const progressText = await safeTranslate(
+        `已进入 Coding Team 模式，正在启动 PM/架构/前后端/QA 流程。provider=${coderOptions?.provider || CODER_PROVIDER_DEFAULT}，model=${coderOptions?.model || "qwen-coder-next"}`,
+        lang
+      );
       await msg.reply(`[NEXUS] ${progressText}`);
+    }
 
-      const wf = await workflowEngine.startWorkflowRun({
-        workflow_id: "coding_team_v0",
-        project_type: "webapp_crm",
-        run_id,
-        input: {
-          goal: userInput,
+    const result = await executeVNextDispatch({
+      requestBody: buildVNextDispatchInput({
+        rawInput: userInput,
+        msg,
+        payload: {
           provider: coderOptions?.provider || CODER_PROVIDER_DEFAULT,
-          model: coderOptions?.model || CODER_MODEL_DEFAULT,
-          fast_mode: true,
-          max_runtime_s: 180,
+          model: coderOptions?.model || undefined,
+          fast_mode: isCoderDirective,
+          model_preference: FORCE_LOCAL_LLM ? "local" : "auto",
         },
-        context,
-      });
+      }),
+      run_id,
+      client_msg_id,
+      skipEnsureRun: true,
+      routeOverride,
+    });
+
+    if (!result.ok) {
+      await replyChunked(msg, `[NEXUS] ${result.error || "任务需要人工确认。"}`);
+      return;
+    }
+
+    if (result.response_mode === "direct_reply") {
+      await replyChunked(msg, result.reply || "I didn't understand that.");
+      return;
+    }
+
+    if (result.execution?.workflow_run_id) {
       const queuedText = await safeTranslate(
-        `已提交 coding_team_v0。run_id=${run_id}，workflow_run_id=${wf.workflow_run_id}。`,
+        `已提交 ${result.execution.workflow_id || "workflow"}。run_id=${run_id}，workflow_run_id=${result.execution.workflow_run_id}。`,
         lang
       );
       await msg.reply(`[NEXUS] ${queuedText}`);
-      if (wf?.first_step?.waiting_approval && wf?.first_step?.task_id) {
+      if (result.execution?.first_step?.waiting_approval && result.execution?.first_step?.task_id) {
         await msg.reply(
-          `[NEXUS] 任务等待审批：task_id=${wf.first_step.task_id}\n` +
-          `批准：\`/approve: ${wf.first_step.task_id}\`\n` +
-          `拒绝：\`/reject: ${wf.first_step.task_id}\``
+          `[NEXUS] 任务等待审批：task_id=${result.execution.first_step.task_id}\n` +
+          `批准：\`/approve: ${result.execution.first_step.task_id}\`\n` +
+          `拒绝：\`/reject: ${result.execution.first_step.task_id}\``
         );
       }
       return;
     }
 
-    const compositePlan = await planCompositeWorkflowFromText(userInput, memory);
-    if (compositePlan) {
-      const lang = detectLanguageQuick(userInput);
-      const context = {
-        channelId: msg.channel.id,
-        startTime: Date.now(),
-        lang,
-        run_id,
-        closeRunOnTaskResult: true,
-        totalTaskCount: compositePlan.steps.length,
-        completedTaskCount: 0,
-      };
-      runToContext.set(run_id, context);
-      await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["running", run_id]);
-
-      const planningText = await translate(
-        `识别到复合指令，已拆分为 ${compositePlan.steps.length} 个子任务，开始执行。`,
+    if (result.execution?.task_id) {
+      const queuedText = await safeTranslate(
+        `任务已进入执行队列。run_id=${run_id}，task_id=${result.execution.task_id}，tool=${result.execution.tool_name || "unknown"}。`,
         lang
       );
-      await msg.reply(`[NEXUS] ${planningText}`);
-
-      const wf = await enqueueWorkflow({
-        name: compositePlan.name,
-        steps: compositePlan.steps,
-        run_id,
-        context,
-      });
-      if (!wf?.ok) {
-        throw new Error(wf?.error || "Failed to enqueue workflow.");
-      }
-
-      const stepNames = compositePlan.steps.map((s, i) => `${i + 1}.${s.tool_name}`).join(" | ");
-      const enqText = await translate(`工作流已创建。run_id=${run_id}。步骤: ${stepNames}`, lang);
-      await msg.reply(`[NEXUS] ${enqText}`);
-      return;
-    }
-
-    let intent = await parseIntent(userInput, memory);
-    const forcedIntent = buildForcedIntentFromRule(userInput);
-    if (
-      forcedIntent &&
-      (intent.mode_suggested === "chat" || !intent.requires_tools || intent.confidence < 0.6 || !intent.tool_name)
-    ) {
-      intent = forcedIntent;
-    } else if (
-      forcedIntent &&
-      intent?.tool_name &&
-      forcedIntent.tool_name === intent.tool_name
-    ) {
-      intent.payload = { ...(intent.payload || {}), ...(forcedIntent.payload || {}) };
-    }
-    const lang = intent.language || "zh";
-    const immediateOpsQuery = /(本金|资金|空仓|仓位|怎(?:么|樣)操作|如何操作|明天怎么操作|明日どうする)/i.test(userInput);
-    if (intent.tool_name === "quant.discovery_workflow" && immediateOpsQuery) {
-      intent.payload = {
-        ...(intent.payload || {}),
-        quick_mode: true,
-        time_budget_s: 75,
-        max_attempts: Math.min(Number(intent.payload?.max_attempts || 2), 2),
-        min_candidates: Math.min(Number(intent.payload?.min_candidates || 2), 2),
-      };
-    }
-
-    // Update memory if a symbol was found
-    if (intent.payload && intent.payload.symbol) {
-      memory.last_symbol = intent.payload.symbol;
-      channelMemory.set(msg.channelId, memory);
-    }
-
-    // 1. CHAT MODE: If intent analyzer suggests chat or no tools are required
-    if (intent.mode_suggested === "chat" || !intent.requires_tools || intent.confidence < 0.6 || !intent.tool_name) {
-      const useCloudChat = !FORCE_LOCAL_LLM && (process.env.QWEN_API_KEY || model_preference === "api");
-      if (useCloudChat) {
-        try {
-          const reply = await callQwenChat([{ role: "user", content: userInput }]);
-          await replyChunked(msg, reply || "I didn't understand that.");
-        } catch (cloudErr) {
-          console.warn("[chat] cloud model failed, fallback to local:", cloudErr?.message || cloudErr);
-          const project = detectProject(userInput);
-          const projectContext = await buildContext(project);
-          const localReply = await callLocalOllamaChat(CURRENT_LOCAL_MODEL, userInput, undefined, projectContext);
-          await replyChunked(
-            msg,
-            localReply || "我是 NEXUS 助手。当前云端模型不可用，已回退本地模型。"
-          );
-        }
-            } else {
-                            try {
-                              const project = detectProject(userInput);
-                              const projectContext = await buildContext(project);
-                              
-                              // Fetch recent chat history for context memory
-                              let chatHistoryPayload = userInput;
-                              try {
-                                const recentMsgs = await msg.channel.messages.fetch({ limit: 6 });
-                                const history = [];
-                                recentMsgs.forEach(m => {
-                                  if (m.content && (!m.author.bot || m.author.id === discord.user.id)) {
-                                    history.push({
-                                      role: m.author.id === discord.user.id ? "assistant" : "user",
-                                      content: m.content.replace(/<@!?[0-9]+>/g, '').trim()
-                                    });
-                                  }
-                                });
-                                history.reverse();
-                                if (history.length > 0) {
-                                  chatHistoryPayload = history;
-                                }
-                              } catch (err) {
-                                console.warn("[discord] Failed to fetch chat history:", err.message);
-                              }
-                              
-                              let localReply = await callLocalOllamaChat(CURRENT_LOCAL_MODEL, chatHistoryPayload, undefined, projectContext);
-              
-                              // MVP-1: Post-Processing Rule Validation & Rewrite
-                              const violation = checkHardRules(localReply, project);
-                              if (violation) {
-                                console.log(`[learning] Hard rule violation detected (${project}): ${violation}. Triggering rewrite.`);
-                                const rewritePrompt = `${userInput}\n\n[System Feedback]: 你的上一次回答违反了项目硬约束：“${violation}”。请严格遵守约束，修正后重新回答。`;
-                                
-                                if (Array.isArray(chatHistoryPayload)) {
-                                   chatHistoryPayload.push({ role: "user", content: `[System Feedback]: 你的上一次回答违反了项目硬约束：“${violation}”。请严格遵守约束，修正后重新回答。` });
-                                } else {
-                                   chatHistoryPayload = rewritePrompt;
-                                }
-                                localReply = await callLocalOllamaChat(CURRENT_LOCAL_MODEL, chatHistoryPayload, undefined, projectContext);
-                              }          const sentMsgs = await replyChunked(
-            msg,
-            localReply || "我是 NEXUS 助手。你可以直接问我分析、新闻、选股、策略或任何问题。"
-          );
-          
-          if (sentMsgs && sentMsgs.length > 0) {
-            const lastMsg = sentMsgs[sentMsgs.length - 1];
-            try {
-              await pool.query(
-                `INSERT INTO traces(trace_id, project_id, task_type, context_digest, action_json, metrics_json, created_at)
-                 VALUES ($1, $2, 'chat', $3, $4, '{}', NOW())`,
-                [lastMsg.id, project, userInput.slice(0, 300), JSON.stringify({ response: localReply })]
-              );
-            } catch (err) {
-              console.warn("[learning] Failed to insert trace:", err.message);
-            }
-          }
-        } catch (err) {
-          const em = String(err?.message || err || "");
-          if (/aborted|aborterror|timeout/i.test(em)) {
-            await replyChunked(
-              msg,
-              `[NEXUS] 本地模型响应超时（${CURRENT_LOCAL_MODEL}）。请重试一次，或改用 /model-local:glm-4.7-flash:latest。`
-            );
-          } else {
-            await replyChunked(msg, `[NEXUS] 本地模型调用失败: ${em}`);
-          }
-        }
-      }
-      await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["completed", run_id]).catch(() => {});
-      return;
-    }
-
-    // 2. RUN MODE: Tools are required
-    const isBrainControlled = intent.tool_name === "quant.deep_analysis" || intent.tool_name === "quant.discovery_workflow";
-    const mode = intent.tool_name === "quant.discovery_workflow" ? "discovery" : "analysis";
-    
-    const context = {
-      channelId: msg.channel.id,
-      startTime: Date.now(),
-      lang,
-      run_id,
-      closeRunOnTaskResult: !isBrainControlled,
-    };
-    runToContext.set(run_id, context);
-    await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["running", run_id]);
-
-    if (isBrainControlled) {
-      const progressMap = {
-        "discovery": "正在为您搜寻全球金融情报并由专业模型进行量化筛选，请稍候...",
-        "analysis": "已开始查找并生成深度分析，请稍候..."
-      };
-      const progressText = await translate(progressMap[mode], lang);
-      await msg.reply(`[NEXUS] ${progressText}`);
-
-      const toolPayload = { ...(intent.payload || {}) };
-      if (mode === "discovery" && /(本金|资金|空仓|仓位|怎(?:么|樣)操作|如何操作|明天怎么操作|明日どうする)/i.test(userInput)) {
-        toolPayload.quick_mode = true;
-        toolPayload.time_budget_s = 75;
-        toolPayload.max_attempts = Math.min(Number(toolPayload.max_attempts || 2), 2);
-        toolPayload.min_candidates = Math.min(Number(toolPayload.min_candidates || 2), 2);
-      }
-      const brainRetries = mode === "discovery" ? 0 : 2;
-      const brainData = await callBrainWithRetry({
-        symbol: intent.payload.symbol || "unknown",
-        run_id,
-        model_preference: FORCE_LOCAL_LLM ? "local_large" : model_preference,
-        local_model: CURRENT_LOCAL_MODEL,
-        mode: mode,
-        tool_name: intent.tool_name,
-        tool_payload: toolPayload,
-        qwen_model: CURRENT_QWEN_MODEL
-      }, brainRetries);
-
-      const report = (brainData?.narrative || "").trim();
-      const reportMarkdown = (brainData?.report_markdown || "").trim();
-      const reportHtmlObjectKey = brainData?.report_html_object_key || "";
-      await pool.query("UPDATE runs SET status=$1, cost_ledger_json=$2 WHERE run_id=$3", [
-        "completed",
-        JSON.stringify(brainData?.cost_ledger || {}),
-        run_id,
-      ]);
-      runToContext.delete(run_id);
-
-      const needAttachment = report.length > DISCORD_MAX_CONTENT * 2 || reportMarkdown.length > DISCORD_MAX_CONTENT * 2;
-      if (report || reportMarkdown) {
-        if (!needAttachment) {
-          await replyChunked(msg, report || reportMarkdown, "[NEXUS Report]");
-        } else {
-          const preview = (report || reportMarkdown).slice(0, DISCORD_MAX_CONTENT - 120);
-          if (preview) await replyChunked(msg, preview, "[NEXUS Report Preview]");
-
-          const files = [];
-          if (reportHtmlObjectKey) {
-            try {
-              const htmlBuffer = await readS3ObjectBuffer("nexus-artifacts", reportHtmlObjectKey);
-              files.push(new AttachmentBuilder(htmlBuffer, { name: `nexus_report_${run_id.slice(0, 8)}.html` }));
-            } catch (err) {
-              console.error("S3 report download error:", err);
-            }
-          }
-          if (files.length === 0 && reportMarkdown) {
-            const htmlFallback = markdownToSimpleHtml(reportMarkdown, `NEXUS Report ${run_id.slice(0, 8)}`);
-            files.push(new AttachmentBuilder(Buffer.from(htmlFallback, "utf-8"), { name: `nexus_report_${run_id.slice(0, 8)}.html` }));
-            files.push(new AttachmentBuilder(Buffer.from(reportMarkdown, "utf-8"), { name: `nexus_report_${run_id.slice(0, 8)}.md` }));
-          }
-          if (files.length > 0) {
-            await msg.reply({ content: "[NEXUS] 完整报告见附件（HTML/Markdown）。", files });
-          } else {
-            await replyChunked(msg, report || reportMarkdown, "[NEXUS Report]");
-          }
-        }
-      } else {
-        const fallback = await translate("任务完成，但未生成正文报告。", lang);
-        await replyChunked(
-          msg,
-          `[NEXUS] ${fallback}\nrun_id=${run_id}\nstatus_api=/runs/${run_id}/status\ntimeline_api=/runs/${run_id}/timeline`
-        );
-      }
-
-      const elapsedSec = ((Date.now() - context.startTime) / 1000).toFixed(1);
-      const doneRaw = `任务已完成。run_id=${run_id}，耗时=${elapsedSec}s`;
-      const doneText = await translate(doneRaw, lang);
-      await msg.reply(`[NEXUS] ${doneText}`);
-    } else {
-      const actionMap = {
-        "news.daily_report": "正在生成全市场新闻日报，请稍候...",
-        "news.active_hot_search": "正在主动扫描24小时热点新闻并关联持仓，请稍候...",
-        "news.preclose_brief_jp": "正在获取日本市场盘尾情报简报，请稍候...",
-        "news.tdnet_close_flash": "正在扫描TDnet盘后公告闪讯，请稍候...",
-        "github.skills_daily_report": "正在为您扫描最新AI智能体技能，请稍候...",
-        "portfolio.set_account": "正在为您设置资金账户参数，请稍候...",
-        "portfolio.record_fill": "正在记录您的成交数据并更新持仓，请稍候...",
-        "web.search_and_browse": "正在为您全网搜索最新情报，请稍候..."
-      };
-      const defaultMsg = `已识别指令 [${intent.tool_name}]，正在分配给对应Agent...`;
-      const progressText = await translate(actionMap[intent.tool_name] || defaultMsg, lang);
-      await msg.reply(`[NEXUS] ${progressText}`);
-      
-      const queued = await enqueueTask({
-        tool_name: intent.tool_name,
-        payload: intent.payload || {},
-        run_id,
-        idempotency_key: makeIdempotencyKey(run_id, intent.tool_name, intent.payload || {}),
-        context,
-      });
-      if (queued?.waiting_approval) {
+      await msg.reply(`[NEXUS] ${queuedText}`);
+      if (result.execution.waiting_approval) {
         await msg.reply(
-          `[NEXUS] 任务等待审批：task_id=${queued.task_id}\n` +
-          `批准：\`/approve: ${queued.task_id}\`\n` +
-          `拒绝：\`/reject: ${queued.task_id}\``
+          `[NEXUS] 任务等待审批：task_id=${result.execution.task_id}\n` +
+          `批准：\`/approve: ${result.execution.task_id}\`\n` +
+          `拒绝：\`/reject: ${result.execution.task_id}\``
         );
       }
+      return;
     }
 
   } catch (e) {
@@ -2180,6 +2181,65 @@ async function startTaskWatchdog() {
 const app = express();
 app.use(express.json());
 app.get("/health", (_, res) => res.send("ok"));
+app.post("/vnext/route", async (req, res) => {
+  try {
+    let analyzerResult = null;
+    try {
+      const raw = String(req.body?.raw_input || req.body?.message || req.body?.text || "");
+      analyzerResult = raw ? await parseIntent(raw, {}) : null;
+    } catch (err) {
+      console.warn("[vnext] parseIntent failed, fallback to heuristic router:", err?.message || err);
+    }
+    const result = buildRouteContractResponse({
+      body: req.body || {},
+      analyzerResult,
+      registry: REGISTRY,
+    });
+    return res.json(result);
+  } catch (err) {
+    const code = String(err?.code || "");
+    const badReq = code === "TASK_ENVELOPE_INVALID" || code === "BAD_REQUEST";
+    return res.status(badReq ? 400 : 500).json(assertDispatchErrorResponse(makeErrorResponse({
+      error: err.message || "vnext route failed",
+      error_code: code || "UNKNOWN_ERROR",
+      task_envelope: null,
+    })));
+  }
+});
+
+app.post("/vnext/dispatch", async (req, res) => {
+  const run_id = String(req.body?.run_id || uuidv4()).trim();
+  try {
+    const result = await executeVNextDispatch({
+      requestBody: req.body || {},
+      run_id,
+      client_msg_id: `vnext-${run_id}`,
+    });
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
+  } catch (err) {
+    await pool.query("UPDATE runs SET status=$1 WHERE run_id=$2", ["failed", run_id]).catch(() => {});
+    const code = String(err?.code || "");
+    const badReq =
+      code === "TASK_ENVELOPE_INVALID" ||
+      code === "REGISTRY_INVALID" ||
+      code === "BAD_REQUEST" ||
+      code === "DISPATCH_SUCCESS_CONTRACT_INVALID" ||
+      code === "DISPATCH_ERROR_CONTRACT_INVALID";
+    return res.status(badReq ? 400 : 500).json(assertDispatchErrorResponse(makeErrorResponse({
+      run_id,
+      error: err.message || "vnext dispatch failed",
+      error_code: (
+        code === "TASK_ENVELOPE_INVALID" ||
+        code === "REGISTRY_INVALID" ||
+        code === "BAD_REQUEST"
+      ) ? code : "UNKNOWN_ERROR",
+      task_envelope: null,
+    })));
+  }
+});
 app.get("/runtime/config", (_, res) => {
   return res.json({
     ok: true,

@@ -1,0 +1,71 @@
+{
+  "name": "http_dispatch_coder",
+  "kind": "http_dispatch",
+  "request": {
+    "source": "discord",
+    "raw_input": "Build a CRM MVP with frontend and backend",
+    "channel_id": "dispatch-coder-1",
+    "user_id": "tester-1",
+    "provider": "opencode",
+    "model": "qwen-coder-next",
+    "fast_mode": true
+  },
+  "route_override": {
+    "decision": "orchestrated_workflow",
+    "route": {
+      "intent": "coding",
+      "complexity": "complex",
+      "target_team": "coding_team",
+      "requires_orchestration": true,
+      "expected_outputs": ["design_doc", "task_breakdown", "repo_changes", "tests", "qa_summary"],
+      "execution_plan": {
+        "mode": "orchestrated_workflow",
+        "workflow_id": "coding_team_v0",
+        "project_type": "webapp_crm"
+      }
+    },
+    "task_envelope": {
+      "task_id": "coder-preview-task",
+      "source": "discord",
+      "raw_input": "Build a CRM MVP with frontend and backend",
+      "normalized_input": {
+        "text": "Build a CRM MVP with frontend and backend",
+        "attachments": [],
+        "metadata": {
+          "user_id": "tester-1",
+          "channel_id": "dispatch-coder-1",
+          "thread_id": ""
+        }
+      },
+      "intent": "coding",
+      "sub_intent": "coder_directive",
+      "requires_orchestration": true,
+      "target_team": "coding_team",
+      "expected_outputs": ["design_doc", "task_breakdown", "repo_changes", "tests", "qa_summary"],
+      "constraints": {
+        "local_only": true,
+        "approval_mode": "manual",
+        "risk_level": "medium",
+        "complexity": "complex"
+      },
+      "context": {
+        "channel_id": "dispatch-coder-1",
+        "thread_id": "",
+        "user_id": "tester-1",
+        "attachments": []
+      },
+      "decision": "orchestrated_workflow",
+      "execution_plan": {
+        "mode": "orchestrated_workflow",
+        "workflow_id": "coding_team_v0",
+        "project_type": "webapp_crm"
+      }
+    }
+  },
+  "expected": {
+    "ok": true,
+    "response_mode": "progress_update",
+    "intent": "coding",
+    "workflow_id": "coding_team_v0"
+  }
+}

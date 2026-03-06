@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/prompt_script_registry.schema.json",
+  "title": "PromptScriptRegistry",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "minLength": 1 },
+    "scripts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "script_id": { "type": "string", "minLength": 1 },
+          "agent_id": { "type": "string", "minLength": 1 },
+          "role": { "type": "string", "minLength": 1 },
+          "model": { "type": "string", "minLength": 1 },
+          "input_schema": { "type": "object" },
+          "output_schema": { "type": "object" },
+          "tool_permissions": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "artifact_type": { "type": "string", "minLength": 1 },
+          "validation": { "type": "object" },
+          "system_prompt": { "type": "string" }
+        },
+        "required": [
+          "script_id",
+          "agent_id",
+          "role",
+          "model",
+          "input_schema",
+          "output_schema",
+          "tool_permissions",
+          "artifact_type",
+          "validation"
+        ]
+      }
+    }
+  },
+  "required": ["version", "scripts"]
+}

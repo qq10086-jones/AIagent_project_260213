@@ -1,0 +1,9 @@
+{
+  "name": "backend_execution_adapter_min",
+  "expected": {
+    "adapter_id": "backend.execution.v1",
+    "role": "backend",
+    "step_id": "impl_be",
+    "schema_id": "backend_execution_packet.schema.json"
+  }
+}

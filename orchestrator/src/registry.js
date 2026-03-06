@@ -78,6 +78,9 @@ export function loadRegistryOrThrow(registryPath) {
       if (reg.roles[step.role] && !reg.roles[step.role].tools.includes(step.tool)) {
         errors.push(`workflow '${workflowId}' step '${step.id}' tool '${step.tool}' not allowed for role '${step.role}'`);
       }
+      if (step.prompt_script_id && typeof step.prompt_script_id !== "string") {
+        errors.push(`workflow '${workflowId}' step '${step.id}' prompt_script_id must be a string`);
+      }
     }
   }
 
@@ -104,10 +107,11 @@ export function getDefaultRegistryPath() {
     path.join(process.cwd(), "configs", "capability_registry.json"),
     path.join(process.cwd(), "..", "configs", "capability_registry.json"),
   ];
-  for (const p of candidates) {
+  const normalized = Array.from(new Set(candidates.map((item) => path.resolve(item))));
+  for (const p of normalized) {
     if (fs.existsSync(p)) return p;
   }
-  return candidates[0];
+  return normalized[0];
 }
 
 export function validateTaskInputAgainstRegistry({ registry, tool_name, payload }) {
@@ -116,6 +120,7 @@ export function validateTaskInputAgainstRegistry({ registry, tool_name, payload 
   const projectType = body.project_type;
   const workflowId = body.workflow_id;
   const role = body.role || body.role_name;
+  const stepId = body.step_id;
   const toolSpec = registry.tools?.[tool_name];
 
   if (!toolSpec) {
@@ -140,6 +145,9 @@ export function validateTaskInputAgainstRegistry({ registry, tool_name, payload 
       }
       if (!role && !wf.steps.some((s) => s.tool === tool_name)) {
         errors.push(`workflow '${workflowId}' has no step using tool '${tool_name}'`);
+      }
+      if (stepId && !wf.steps.some((s) => s.id === stepId)) {
+        errors.push(`workflow '${workflowId}' has no step '${stepId}'`);
       }
     }
   }

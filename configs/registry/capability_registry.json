@@ -121,11 +121,11 @@
     "coding_team_v0": {
       "project_type": "webapp_crm",
       "steps": [
-        { "id": "pm_spec", "role": "pm", "tool": "coding.delegate", "gate": "low" },
-        { "id": "arch_design", "role": "architect", "tool": "coding.delegate", "gate": "policy" },
+        { "id": "pm_spec", "role": "pm", "tool": "coding.delegate", "gate": "low", "prompt_script_id": "pm.design_doc.v1" },
+        { "id": "arch_design", "role": "architect", "tool": "coding.delegate", "gate": "policy", "prompt_script_id": "architect.system_spec.v1" },
         { "id": "impl_fe", "role": "frontend", "tool": "coding.delegate", "gate": "policy" },
         { "id": "impl_be", "role": "backend", "tool": "coding.delegate", "gate": "policy" },
-        { "id": "qa_verify", "role": "qa", "tool": "coding.execute", "gate": "acceptance" },
+        { "id": "qa_verify", "role": "qa", "tool": "coding.execute", "gate": "acceptance", "prompt_script_id": "qa.test_plan.v1" },
         { "id": "release_pack", "role": "qa", "tool": "coding.delegate", "gate": "finalize" }
       ]
     }

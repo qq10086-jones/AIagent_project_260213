@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tool_adapter_result.schema.json",
+  "type": "object",
+  "required": ["ok", "adapter_type", "provider", "result"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "adapter_type": { "type": "string", "minLength": 1 },
+    "provider": { "type": "string", "minLength": 1 },
+    "result": { "type": "object" },
+    "error": { "type": "string" }
+  },
+  "additionalProperties": true
+}

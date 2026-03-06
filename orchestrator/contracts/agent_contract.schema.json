@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/agent_contract.schema.json",
+  "title": "AgentContract",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": { "type": "string", "minLength": 1 },
+    "role": { "type": "string", "minLength": 1 },
+    "mission": { "type": "string", "minLength": 1 },
+    "input_schema": { "type": "object" },
+    "output_schema": { "type": "object" },
+    "allowed_tools": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "forbidden_actions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "SOP": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": [
+    "agent_id",
+    "role",
+    "mission",
+    "input_schema",
+    "output_schema",
+    "allowed_tools",
+    "forbidden_actions",
+    "SOP"
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "scripts": {
+    "pm.design_doc.v1": {
+      "script_id": "pm.design_doc.v1",
+      "agent_id": "pm_agent",
+      "role": "pm",
+      "model": "qwen-coder-next",
+      "input_schema": {
+        "type": "object",
+        "required": ["goal", "project_type"]
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["problem_statement", "scope", "user_stories", "acceptance_criteria", "milestones"]
+      },
+      "tool_permissions": ["coding.delegate"],
+      "artifact_type": "design_doc",
+      "validation": {
+        "required_sections": ["scope", "user_stories", "acceptance_criteria", "non_goals", "artifact_list"]
+      },
+      "system_prompt": "Generate a structured PM design document with explicit scope, user stories, acceptance criteria, non-goals, and artifact list."
+    },
+    "architect.system_spec.v1": {
+      "script_id": "architect.system_spec.v1",
+      "agent_id": "architect_agent",
+      "role": "architect",
+      "model": "qwen-coder-next",
+      "input_schema": {
+        "type": "object",
+        "required": ["goal", "project_type", "pm_output"]
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["module_breakdown", "interfaces", "dependencies", "implementation_sequence", "risk_notes"]
+      },
+      "tool_permissions": ["coding.delegate"],
+      "artifact_type": "system_spec",
+      "validation": {
+        "required_sections": ["module_breakdown", "interfaces", "dependency_choices", "risk_notes"]
+      },
+      "system_prompt": "Generate a system specification with module boundaries, interfaces, dependency choices, implementation sequence, and risk notes."
+    },
+    "qa.test_plan.v1": {
+      "script_id": "qa.test_plan.v1",
+      "agent_id": "qa_agent",
+      "role": "qa",
+      "model": "qwen-coder-next",
+      "input_schema": {
+        "type": "object",
+        "required": ["goal", "project_type", "implementation_context"]
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["test_matrix", "verification_steps", "release_checklist"]
+      },
+      "tool_permissions": ["coding.execute", "coding.delegate"],
+      "artifact_type": "test_plan",
+      "validation": {
+        "required_sections": ["test_matrix", "verification_steps", "release_checklist"]
+      },
+      "system_prompt": "Generate a QA test plan with test matrix, verification steps, and release checklist for the current workflow."
+    }
+  }
+}

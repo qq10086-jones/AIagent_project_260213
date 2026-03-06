@@ -1,0 +1,15 @@
+{
+  "name": "http_dispatch_chat",
+  "kind": "http_dispatch",
+  "request": {
+    "source": "discord",
+    "raw_input": "Hello there",
+    "channel_id": "dispatch-chat-1",
+    "user_id": "tester-1"
+  },
+  "expected": {
+    "ok": true,
+    "response_mode": "direct_reply",
+    "intent": "chat"
+  }
+}

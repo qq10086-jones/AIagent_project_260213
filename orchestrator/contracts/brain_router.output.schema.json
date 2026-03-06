@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/brain_router.output.schema.json",
+  "title": "BrainRouterOutput",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["direct_reply", "single_agent", "orchestrated_workflow", "human_review_required"]
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "intent": {
+          "type": "string",
+          "enum": ["chat", "coding", "quant", "docs", "research", "ops", "unknown"]
+        },
+        "complexity": {
+          "type": "string",
+          "enum": ["simple", "medium", "complex"]
+        },
+        "target_team": { "type": "string" },
+        "requires_orchestration": { "type": "boolean" },
+        "expected_outputs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "execution_plan": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["direct_reply", "single_agent", "orchestrated_workflow", "human_review_required"]
+            },
+            "tool_name": { "type": "string" },
+            "workflow_id": { "type": "string" },
+            "project_type": { "type": "string" }
+          },
+          "required": ["mode"]
+        }
+      },
+      "required": [
+        "intent",
+        "complexity",
+        "target_team",
+        "requires_orchestration",
+        "expected_outputs",
+        "execution_plan"
+      ]
+    },
+    "task_envelope": {
+      "$ref": "./task_envelope.schema.json"
+    }
+  },
+  "required": ["decision", "route", "task_envelope"]
+}

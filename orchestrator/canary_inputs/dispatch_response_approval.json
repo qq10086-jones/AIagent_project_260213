@@ -1,0 +1,9 @@
+{
+  "name": "dispatch_response_approval",
+  "kind": "response",
+  "response_case": "approval_request",
+  "expected": {
+    "ok": true,
+    "response_mode": "approval_request"
+  }
+}

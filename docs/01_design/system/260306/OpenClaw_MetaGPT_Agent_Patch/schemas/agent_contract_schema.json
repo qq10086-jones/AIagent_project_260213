@@ -1,0 +1,11 @@
+
+{
+ "agent_id": "string",
+ "role": "string",
+ "mission": "string",
+ "input_schema": "object",
+ "output_schema": "object",
+ "allowed_tools": "array",
+ "forbidden_actions": "array",
+ "SOP": "array"
+}

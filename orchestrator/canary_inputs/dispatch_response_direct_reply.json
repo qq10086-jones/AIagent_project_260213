@@ -1,0 +1,9 @@
+{
+  "name": "dispatch_response_direct_reply",
+  "kind": "response",
+  "response_case": "direct_reply",
+  "expected": {
+    "ok": true,
+    "response_mode": "direct_reply"
+  }
+}

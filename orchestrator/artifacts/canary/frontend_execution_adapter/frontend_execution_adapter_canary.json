@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T06:15:34.277Z",
+  "packet": {
+    "adapter_id": "frontend.execution.v1",
+    "role": "frontend",
+    "step_id": "impl_fe",
+    "target_paths": [
+      "sandbox/crm_site/"
+    ],
+    "required_outputs": [
+      "patch/diff.patch",
+      "tests/frontend_test_report.md",
+      "run/run_frontend.md"
+    ],
+    "input_artifacts": [
+      "plan/arch.md",
+      "plan/workplan.md",
+      "handoff/architect_to_impl.json"
+    ],
+    "execution_mode": "ui_patch_and_verify",
+    "verification_hint": "return diff summary, changed files, frontend test evidence, and runbook",
+    "provider_hint": "qwen",
+    "model_hint": "qwen-coder-next"
+  },
+  "checked": {
+    "ok": true,
+    "errors": [],
+    "schema_id": "frontend_execution_packet.schema.json"
+  }
+}

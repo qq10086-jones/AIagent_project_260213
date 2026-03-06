@@ -1,0 +1,21 @@
+{
+  "from_step": "arch_design",
+  "to_steps": [
+    "impl_be",
+    "impl_fe",
+    "qa_verify"
+  ],
+  "modules": [
+    "auth",
+    "crm"
+  ],
+  "interfaces": [
+    "POST /login"
+  ],
+  "decisions": [
+    "postgres"
+  ],
+  "risks": [
+    "auth migration"
+  ]
+}

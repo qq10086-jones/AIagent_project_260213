@@ -1,0 +1,1 @@
+scope user_stories acceptance_criteria non_goals artifact_list

@@ -1,0 +1,104 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T05:50:07.489Z",
+  "pm_invalid_shape": {
+    "stop_stage": "role_output_validation",
+    "code": "PM_REQUIRED_SECTIONS_MISSING",
+    "role_result": {
+      "checked": true,
+      "ok": false,
+      "code": "PM_REQUIRED_SECTIONS_MISSING",
+      "detail": "missing PM sections: acceptance.json:$.artifacts missing, acceptance.json:$.owner missing, acceptance.json:$.version missing"
+    }
+  },
+  "arch_invalid_shape": {
+    "stop_stage": "role_output_validation",
+    "code": "ARCH_REQUIRED_SECTIONS_MISSING",
+    "role_result": {
+      "checked": true,
+      "ok": false,
+      "code": "ARCH_REQUIRED_SECTIONS_MISSING",
+      "detail": "missing Architect sections: risk_report.json:$.decision_log missing, risk_report.json:$.risks[0].mitigation missing"
+    }
+  },
+  "pm_handoff_missing_field": {
+    "stop_stage": "handoff_validation",
+    "code": "HANDOFF_TYPED_FIELDS_MISSING",
+    "handoff_result": {
+      "checked": true,
+      "ok": false,
+      "code": "HANDOFF_TYPED_FIELDS_MISSING",
+      "detail": "missing typed handoff fields: scope_summary",
+      "handoff": {
+        "from_step": "pm_spec",
+        "to_steps": [
+          "arch_design"
+        ],
+        "required_artifacts": [
+          "plan/spec.md",
+          "plan/acceptance.json",
+          "plan/milestones.md",
+          "handoff/pm_to_architect.json"
+        ],
+        "required_sections": [
+          "scope",
+          "user_stories",
+          "acceptance_criteria",
+          "non_goals",
+          "artifact_list"
+        ],
+        "typed_handoff": {
+          "file": "handoff/pm_to_architect.json",
+          "required_fields": [
+            "from_step",
+            "to_steps",
+            "scope_summary",
+            "artifacts",
+            "acceptance.criteria"
+          ]
+        }
+      }
+    }
+  },
+  "arch_handoff_schema_invalid": {
+    "stop_stage": "handoff_validation",
+    "code": "HANDOFF_TYPED_SCHEMA_INVALID",
+    "handoff_result": {
+      "checked": true,
+      "ok": false,
+      "code": "HANDOFF_TYPED_SCHEMA_INVALID",
+      "detail": "typed handoff schema invalid: $.modules[0] requires minLength 1",
+      "handoff": {
+        "from_step": "arch_design",
+        "to_steps": [
+          "impl_be",
+          "impl_fe",
+          "qa_verify"
+        ],
+        "required_artifacts": [
+          "plan/arch.md",
+          "risk/risk_report.json",
+          "plan/workplan.md",
+          "handoff/architect_to_impl.json"
+        ],
+        "required_sections": [
+          "module_breakdown",
+          "interfaces",
+          "dependency_choices",
+          "risk_notes"
+        ],
+        "typed_handoff": {
+          "file": "handoff/architect_to_impl.json",
+          "required_fields": [
+            "from_step",
+            "to_steps",
+            "modules",
+            "interfaces",
+            "decisions",
+            "risks"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/route_response.schema.json",
+  "title": "RouteResponse",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "normalized": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "source": { "type": "string" },
+        "raw_input": { "type": "string" },
+        "normalized_input": { "type": "object" },
+        "context": { "type": "object" }
+      },
+      "required": ["source", "raw_input", "normalized_input", "context"]
+    },
+    "analyzer_result": {
+      "oneOf": [
+        { "type": "object" },
+        { "type": "null" }
+      ]
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["direct_reply", "single_agent", "orchestrated_workflow", "human_review_required"]
+    },
+    "route": {
+      "type": "object"
+    },
+    "task_envelope": {
+      "$ref": "./task_envelope.schema.json"
+    }
+  },
+  "required": ["ok", "normalized", "decision", "route", "task_envelope"]
+}

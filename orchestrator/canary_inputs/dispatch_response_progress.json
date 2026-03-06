@@ -1,0 +1,9 @@
+{
+  "name": "dispatch_response_progress",
+  "kind": "response",
+  "response_case": "progress_update",
+  "expected": {
+    "ok": true,
+    "response_mode": "progress_update"
+  }
+}

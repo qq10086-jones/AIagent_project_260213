@@ -1,0 +1,11 @@
+{
+  "risks": [
+    {
+      "title": "auth",
+      "mitigation": "staged rollout"
+    }
+  ],
+  "decision_log": [
+    "Use postgres"
+  ]
+}

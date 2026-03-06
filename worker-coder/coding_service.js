@@ -4,12 +4,40 @@ import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { applyEditBlocks } from './patch_manager.js';
 import { v4 as uuidv4 } from 'uuid';
-import { runCodexTask } from './adapters/codex_adapter.js';
-import { runOpenCodeTask } from './adapters/opencode_adapter.js';
-import { runQwenTask } from './adapters/qwen_adapter.js';
+import { executeCodingAdapter } from './coding_executor_runtime.js';
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = path.join(MODULE_DIR, "templates");
+
+function payloadToAdapterRequest({
+    provider,
+    task_prompt,
+    artifact_root,
+    expected_artifacts,
+    step_id,
+    execution_adapter_packet,
+    model,
+    run_id,
+    task_id,
+}) {
+    return {
+        adapter_type: "coding_executor",
+        provider: String(provider || "opencode"),
+        task_type: "coding_execution",
+        payload: {
+            step_id: String(step_id || ""),
+            task_prompt: String(task_prompt || ""),
+            artifact_root: String(artifact_root || ""),
+            expected_artifacts: Array.isArray(expected_artifacts) ? expected_artifacts : [],
+            execution_adapter_packet: execution_adapter_packet || null,
+            model_hint: String(model || ""),
+        },
+        context: {
+            run_id: String(run_id || ""),
+            task_id: String(task_id || ""),
+        },
+    };
+}
 
 /**
  * Service to handle all coding-related business logic.
@@ -131,6 +159,7 @@ export const CodingService = {
             max_runtime_s = 600,
             codex_command = null,
             opencode_command = null,
+            execution_adapter_packet = null,
         } = params;
 
         const providerRequested = String(provider || "auto").toLowerCase();
@@ -155,41 +184,27 @@ export const CodingService = {
 
         const baselineFiles = await getGitStatusFiles(workspaceRoot);
         const started = new Date().toISOString();
-        const runByProvider = async (providerName) => {
-            if (providerName === "opencode") {
-                return runOpenCodeTask({
-                    workspaceRoot,
-                    taskPrompt: task_prompt,
-                    model,
-                    maxRuntimeS: max_runtime_s,
-                    opencodeCommand: opencode_command,
-                });
-            }
-            if (providerName === "qwen") {
-                return runQwenTask({
-                    taskPrompt: task_prompt,
-                    model,
-                    maxRuntimeS: max_runtime_s,
-                });
-            }
-            return runCodexTask({
-                workspaceRoot,
-                taskPrompt: task_prompt,
-                model,
-                maxRuntimeS: max_runtime_s,
-                codexCommand: codex_command,
-            });
-        };
-
-        let result = await runByProvider(preferredProvider);
-        let fallbackFrom = null;
-        if (
-            preferredProvider === "opencode" &&
-            String(result?.diagnostics?.error_code || "") === "E_PROVIDER_UNAVAILABLE"
-        ) {
-            fallbackFrom = "opencode";
-            result = await runByProvider("codex");
-        }
+        const adapterRequest = payloadToAdapterRequest({
+            provider: preferredProvider,
+            task_prompt,
+            artifact_root,
+            expected_artifacts,
+            step_id,
+            execution_adapter_packet,
+            model,
+            run_id,
+            task_id,
+        });
+        const result = await executeCodingAdapter({
+            workspaceRoot,
+            adapterRequest,
+            provider: preferredProvider,
+            model,
+            maxRuntimeS: max_runtime_s,
+            codexCommand: codex_command,
+            opencodeCommand: opencode_command,
+        });
+        const fallbackFrom = result?.diagnostics?.fallback_from || null;
 
         let artifactScaffold = null;
         if (result?.ok) {
@@ -234,8 +249,9 @@ export const CodingService = {
             diagnostics: {
                 ...(result.diagnostics || {}),
                 provider_requested: providerRequested,
-                fallback_from: fallbackFrom,
                 artifact_scaffold: artifactScaffold || null,
+                execution_adapter_packet: execution_adapter_packet || null,
+                tool_adapter_request: adapterRequest,
                 parse_error: false,
                 truncated: false,
             },

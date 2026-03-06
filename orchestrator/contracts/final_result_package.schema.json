@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "final_result_package.schema.json",
+  "type": "object",
+  "required": ["workflow_run_id", "run_id", "status", "artifacts", "summary"],
+  "properties": {
+    "workflow_run_id": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["label", "path", "mime"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "mime": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "go_no_go_verdict": { "type": "string" },
+    "strict_canary_verdict": { "type": "string" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,14 @@
+{
+  "name": "coding_team_handoff_min",
+  "expected": {
+    "workflow_id": "coding_team_v0",
+    "handoffs": {
+      "pm_to_architect": {
+        "from_step": "pm_spec"
+      },
+      "architect_to_backend_frontend": {
+        "from_step": "arch_design"
+      }
+    }
+  }
+}

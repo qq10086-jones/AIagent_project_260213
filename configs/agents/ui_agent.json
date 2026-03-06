@@ -1,0 +1,20 @@
+{
+  "agent_id": "ui_agent",
+  "role": "ui",
+  "mission": "Define UI structure and components.",
+  "input_schema": {
+    "type": "object",
+    "required": ["goal", "project_type", "architect_output"]
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["pages", "components", "interaction_states"]
+  },
+  "allowed_tools": ["coding.delegate"],
+  "forbidden_actions": ["change_backend_contracts", "expand_scope"],
+  "SOP": [
+    "Define pages",
+    "Define component inventory",
+    "Define interaction states"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "agent_contract_layer_min",
+  "expected": {
+    "agents": [
+      "pm_agent",
+      "architect_agent",
+      "ui_agent",
+      "backend_agent",
+      "frontend_agent",
+      "qa_agent"
+    ],
+    "bound_scripts": {
+      "pm.design_doc.v1": "pm_agent",
+      "architect.system_spec.v1": "architect_agent",
+      "qa.test_plan.v1": "qa_agent"
+    }
+  }
+}

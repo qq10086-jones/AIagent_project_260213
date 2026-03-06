@@ -1,0 +1,25 @@
+{
+  "workflow_id": "coding_team_v0",
+  "handoffs": {
+    "pm_to_architect": {
+      "from_step": "pm_spec",
+      "to_steps": ["arch_design"],
+      "required_artifacts": ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md", "handoff/pm_to_architect.json"],
+      "required_sections": ["scope", "user_stories", "acceptance_criteria", "non_goals", "artifact_list"],
+      "typed_handoff": {
+        "file": "handoff/pm_to_architect.json",
+        "required_fields": ["from_step", "to_steps", "scope_summary", "artifacts", "acceptance.criteria"]
+      }
+    },
+    "architect_to_backend_frontend": {
+      "from_step": "arch_design",
+      "to_steps": ["impl_be", "impl_fe", "qa_verify"],
+      "required_artifacts": ["plan/arch.md", "risk/risk_report.json", "plan/workplan.md", "handoff/architect_to_impl.json"],
+      "required_sections": ["module_breakdown", "interfaces", "dependency_choices", "risk_notes"],
+      "typed_handoff": {
+        "file": "handoff/architect_to_impl.json",
+        "required_fields": ["from_step", "to_steps", "modules", "interfaces", "decisions", "risks"]
+      }
+    }
+  }
+}

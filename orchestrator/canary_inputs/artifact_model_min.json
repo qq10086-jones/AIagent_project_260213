@@ -1,0 +1,8 @@
+{
+  "name": "artifact_model_min",
+  "expected": {
+    "schema_id": "artifact_metadata.schema.json",
+    "type": "document",
+    "mime": "text/markdown"
+  }
+}

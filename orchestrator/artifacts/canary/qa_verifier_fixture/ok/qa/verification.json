@@ -1,0 +1,11 @@
+{
+  "verdict": "pass",
+  "acceptance_mapping": [
+    {
+      "acceptance_id": "A1",
+      "status": "pass",
+      "evidence": "qa/smoke_report.md"
+    }
+  ],
+  "summary": "QA checks passed"
+}

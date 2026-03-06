@@ -1,0 +1,21 @@
+{
+  "agent_id": "backend_agent",
+  "role": "backend",
+  "mission": "Implement backend services.",
+  "input_schema": {
+    "type": "object",
+    "required": ["goal", "project_type", "architect_output"]
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["services", "database_schema", "api_endpoints"]
+  },
+  "allowed_tools": ["coding.delegate", "coding.patch", "coding.execute"],
+  "forbidden_actions": ["alter_architecture_scope", "introduce_new_domains"],
+  "SOP": [
+    "Implement backend services",
+    "Define database changes",
+    "Document API endpoints",
+    "Produce backend validation evidence"
+  ]
+}

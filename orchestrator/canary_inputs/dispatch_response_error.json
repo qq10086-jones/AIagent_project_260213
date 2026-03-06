@@ -1,0 +1,10 @@
+{
+  "name": "dispatch_response_error",
+  "kind": "response",
+  "response_case": "error",
+  "expected": {
+    "ok": false,
+    "response_mode": "final_completion_reply",
+    "error_code": "BAD_REQUEST"
+  }
+}

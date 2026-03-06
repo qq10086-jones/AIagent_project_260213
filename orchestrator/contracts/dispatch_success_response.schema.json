@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/dispatch_success_response.schema.json",
+  "title": "DispatchSuccessResponse",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "ok": { "type": "boolean", "const": true },
+    "response_mode": {
+      "type": "string",
+      "enum": ["direct_reply", "progress_update", "approval_request", "final_completion_reply"]
+    },
+    "run_id": { "type": "string" },
+    "task_envelope": {
+      "$ref": "./task_envelope.schema.json"
+    },
+    "reply": { "type": "string" },
+    "execution": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "task_id": { "type": "string" },
+        "tool_name": { "type": "string" },
+        "waiting_approval": { "type": "boolean" },
+        "workflow_run_id": { "type": "string" },
+        "workflow_id": { "type": "string" },
+        "first_step": { "type": ["object", "null"] }
+      }
+    }
+  },
+  "required": ["ok", "response_mode", "run_id", "task_envelope"]
+}

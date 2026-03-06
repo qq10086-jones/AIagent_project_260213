@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T05:46:24.765Z",
+  "pm": {
+    "checked": true,
+    "ok": false,
+    "code": "PM_REQUIRED_FILES_MISSING",
+    "detail": "missing PM files: spec.md, acceptance.json, milestones.md"
+  },
+  "architect": {
+    "checked": true,
+    "ok": false,
+    "code": "ARCH_REQUIRED_FILES_MISSING",
+    "detail": "missing Architect files: arch.md, risk_report.json, workplan.md"
+  },
+  "pm_ok": {
+    "checked": true,
+    "ok": true,
+    "files_checked": [
+      "plan/spec.md",
+      "plan/acceptance.json",
+      "plan/milestones.md"
+    ],
+    "headings_checked": [
+      "scope",
+      "user_stories",
+      "acceptance_criteria",
+      "non_goals",
+      "artifact_list"
+    ],
+    "schema_checked": "coding_team_pm_acceptance.schema.json"
+  },
+  "architect_ok": {
+    "checked": true,
+    "ok": true,
+    "files_checked": [
+      "plan/arch.md",
+      "risk/risk_report.json",
+      "plan/workplan.md"
+    ],
+    "headings_checked": [
+      "module_breakdown",
+      "interfaces",
+      "dependency_choices",
+      "risk_notes"
+    ],
+    "schema_checked": "coding_team_arch_risk_report.schema.json"
+  }
+}

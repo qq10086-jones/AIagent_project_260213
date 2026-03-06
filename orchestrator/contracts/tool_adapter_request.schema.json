@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tool_adapter_request.schema.json",
+  "type": "object",
+  "required": ["adapter_type", "provider", "task_type", "payload"],
+  "properties": {
+    "adapter_type": { "type": "string", "minLength": 1 },
+    "provider": { "type": "string", "minLength": 1 },
+    "task_type": { "type": "string", "minLength": 1 },
+    "payload": { "type": "object" },
+    "context": { "type": "object" }
+  },
+  "additionalProperties": true
+}

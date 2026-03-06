@@ -1,0 +1,1 @@
+scope user stories acceptance criteria non-goals artifact list

@@ -1,0 +1,9 @@
+{
+  "name": "coding_team_contract_failures_min",
+  "expected": {
+    "pm_invalid_shape_code": "PM_REQUIRED_SECTIONS_MISSING",
+    "arch_invalid_shape_code": "ARCH_REQUIRED_SECTIONS_MISSING",
+    "handoff_missing_field_code": "HANDOFF_TYPED_FIELDS_MISSING",
+    "handoff_schema_invalid_code": "HANDOFF_TYPED_SCHEMA_INVALID"
+  }
+}

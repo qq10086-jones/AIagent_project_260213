@@ -1,0 +1,21 @@
+{
+  "agent_id": "qa_agent",
+  "role": "qa",
+  "mission": "Verify system correctness.",
+  "input_schema": {
+    "type": "object",
+    "required": ["goal", "project_type", "implementation_context"]
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["test_plan", "test_cases", "qa_result"]
+  },
+  "allowed_tools": ["coding.execute", "coding.delegate"],
+  "forbidden_actions": ["change_product_scope", "change_architecture"],
+  "SOP": [
+    "Generate test plan",
+    "Define test cases",
+    "Verify acceptance criteria",
+    "Report QA result"
+  ]
+}

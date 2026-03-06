@@ -1,0 +1,87 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T06:35:40.429Z",
+  "request": {
+    "adapter_type": "coding_executor",
+    "provider": "qwen",
+    "task_type": "coding_execution",
+    "payload": {
+      "role": "backend",
+      "step_id": "impl_be",
+      "task_prompt": "Implement backend login API",
+      "artifact_root": "artifacts/release/run-1",
+      "expected_artifacts": [
+        "patch/diff.patch",
+        "tests/backend_test_report.md",
+        "run/run_backend.md"
+      ],
+      "target_paths": [
+        "sandbox/crm_site/"
+      ],
+      "execution_adapter_packet": {
+        "adapter_id": "backend.execution.v1",
+        "role": "backend",
+        "step_id": "impl_be",
+        "target_paths": [
+          "sandbox/crm_site/"
+        ],
+        "required_outputs": [
+          "patch/diff.patch",
+          "tests/backend_test_report.md",
+          "run/run_backend.md"
+        ],
+        "input_artifacts": [
+          "plan/arch.md",
+          "risk/risk_report.json",
+          "plan/workplan.md",
+          "handoff/architect_to_impl.json"
+        ],
+        "execution_mode": "patch_and_verify",
+        "verification_hint": "return diff summary, changed files, backend test evidence, and runbook",
+        "provider_hint": "qwen",
+        "model_hint": "qwen-coder-next"
+      },
+      "provider_hint": "qwen",
+      "model_hint": ""
+    },
+    "context": {
+      "workflow_id": "coding_team_v0",
+      "workflow_run_id": "wf-1",
+      "run_id": "run-1"
+    }
+  },
+  "request_checked": {
+    "ok": true,
+    "errors": [],
+    "schema_id": "tool_adapter_request.schema.json"
+  },
+  "result": {
+    "ok": true,
+    "adapter_type": "coding_executor",
+    "provider": "qwen",
+    "result": {
+      "provider_used": "qwen",
+      "model_used": "qwen-coder-next",
+      "command_used": "qwen_api qwen-coder-next",
+      "command_source": "qwen_api",
+      "diagnostics": {
+        "error_code": null,
+        "timeout": false
+      },
+      "files_changed": [
+        "sandbox/crm_site/server.js"
+      ],
+      "diff_stats": {
+        "files": 1
+      },
+      "artifacts": {
+        "diff_bundle": "artifacts/runs/run-1/task_t1/diff.patch"
+      }
+    }
+  },
+  "result_checked": {
+    "ok": true,
+    "errors": [],
+    "schema_id": "tool_adapter_result.schema.json"
+  }
+}

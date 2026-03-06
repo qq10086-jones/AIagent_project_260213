@@ -1,0 +1,110 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T05:42:03.918Z",
+  "handoff_count": 2,
+  "pm_ok": {
+    "checked": true,
+    "ok": true,
+    "handoff": {
+      "from_step": "pm_spec",
+      "to_steps": [
+        "arch_design"
+      ],
+      "required_artifacts": [
+        "plan/spec.md",
+        "plan/acceptance.json",
+        "plan/milestones.md",
+        "handoff/pm_to_architect.json"
+      ],
+      "required_sections": [
+        "scope",
+        "user_stories",
+        "acceptance_criteria",
+        "non_goals",
+        "artifact_list"
+      ],
+      "typed_handoff": {
+        "file": "handoff/pm_to_architect.json",
+        "required_fields": [
+          "from_step",
+          "to_steps",
+          "scope_summary",
+          "artifacts",
+          "acceptance.criteria"
+        ]
+      }
+    },
+    "typed_schema_checked": "coding_team_pm_handoff.schema.json"
+  },
+  "arch_ok": {
+    "checked": true,
+    "ok": true,
+    "handoff": {
+      "from_step": "arch_design",
+      "to_steps": [
+        "impl_be",
+        "impl_fe",
+        "qa_verify"
+      ],
+      "required_artifacts": [
+        "plan/arch.md",
+        "risk/risk_report.json",
+        "plan/workplan.md",
+        "handoff/architect_to_impl.json"
+      ],
+      "required_sections": [
+        "module_breakdown",
+        "interfaces",
+        "dependency_choices",
+        "risk_notes"
+      ],
+      "typed_handoff": {
+        "file": "handoff/architect_to_impl.json",
+        "required_fields": [
+          "from_step",
+          "to_steps",
+          "modules",
+          "interfaces",
+          "decisions",
+          "risks"
+        ]
+      }
+    },
+    "typed_schema_checked": "coding_team_arch_handoff.schema.json"
+  },
+  "pm_missing_typed": {
+    "checked": true,
+    "ok": false,
+    "code": "HANDOFF_ARTIFACTS_MISSING",
+    "detail": "missing handoff artifacts: handoff/pm_to_architect.json",
+    "handoff": {
+      "from_step": "pm_spec",
+      "to_steps": [
+        "arch_design"
+      ],
+      "required_artifacts": [
+        "plan/spec.md",
+        "plan/acceptance.json",
+        "plan/milestones.md",
+        "handoff/pm_to_architect.json"
+      ],
+      "required_sections": [
+        "scope",
+        "user_stories",
+        "acceptance_criteria",
+        "non_goals",
+        "artifact_list"
+      ],
+      "typed_handoff": {
+        "file": "handoff/pm_to_architect.json",
+        "required_fields": [
+          "from_step",
+          "to_steps",
+          "scope_summary",
+          "artifacts",
+          "acceptance.criteria"
+        ]
+      }
+    }
+  }
+}

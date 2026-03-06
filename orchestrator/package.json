@@ -5,9 +5,16 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "test": "node --test",
     "validate:registry": "node scripts/validate_registry.js",
     "validate:go-nogo": "node scripts/validate_go_nogo.js",
-    "canary:coding_team": "node scripts/canary_coding_team.js"
+    "canary:coding_team": "node scripts/canary_coding_team.js",
+    "canary:brain_router": "node scripts/canary_brain_router.js",
+    "canary:prompt_registry": "node scripts/canary_prompt_registry.js",
+    "canary:agent_contract_layer": "node scripts/canary_agent_contract_layer.js",
+    "canary:runtime_contract_hardening": "node scripts/canary_runtime_contract_hardening.js",
+    "canary:coding_team_handoff": "node scripts/canary_coding_team_handoff.js",
+    "canary:coding_team_output_validators": "node scripts/canary_coding_team_output_validators.js"
   },
   "dependencies": {
     "express": "^4.19.2",

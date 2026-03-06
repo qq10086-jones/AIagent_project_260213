@@ -1,0 +1,16 @@
+{
+  "name": "http_dispatch_coding_simple",
+  "kind": "http_dispatch",
+  "request": {
+    "source": "discord",
+    "raw_input": "Fix a small login page bug and patch the existing frontend.",
+    "channel_id": "dispatch-code-1",
+    "user_id": "tester-1"
+  },
+  "expected": {
+    "ok": true,
+    "response_mode": "progress_update",
+    "intent": "coding",
+    "tool_name": "coding.delegate"
+  }
+}

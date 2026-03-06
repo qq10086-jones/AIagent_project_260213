@@ -1,0 +1,15 @@
+{
+  "name": "prompt_script_registry_min",
+  "expected": {
+    "scripts": [
+      "pm.design_doc.v1",
+      "architect.system_spec.v1",
+      "qa.test_plan.v1"
+    ],
+    "workflow_bindings": {
+      "pm_spec": "pm.design_doc.v1",
+      "arch_design": "architect.system_spec.v1",
+      "qa_verify": "qa.test_plan.v1"
+    }
+  }
+}

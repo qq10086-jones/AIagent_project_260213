@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "checked_scripts": [
+    "pm.design_doc.v1",
+    "architect.system_spec.v1",
+    "qa.test_plan.v1"
+  ],
+  "workflow_bindings": {
+    "pm_spec": "pm.design_doc.v1",
+    "arch_design": "architect.system_spec.v1",
+    "qa_verify": "qa.test_plan.v1"
+  },
+  "generated_at": "2026-03-06T05:01:53.511Z"
+}

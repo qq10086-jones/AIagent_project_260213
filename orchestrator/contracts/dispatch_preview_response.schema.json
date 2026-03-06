@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/dispatch_preview_response.schema.json",
+  "title": "DispatchPreviewResponse",
+  "oneOf": [
+    { "$ref": "./dispatch_success_response.schema.json" },
+    { "$ref": "./dispatch_error_response.schema.json" }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "runtime_contract_hardening_min",
+  "expected": {
+    "agent_binding_ok": true,
+    "workflow_prompt_bindings": {
+      "pm_spec": "pm.design_doc.v1",
+      "arch_design": "architect.system_spec.v1",
+      "qa_verify": "qa.test_plan.v1"
+    }
+  }
+}

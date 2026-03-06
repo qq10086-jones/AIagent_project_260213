@@ -1,0 +1,14 @@
+{
+  "name": "http_route_chat",
+  "kind": "http_route",
+  "request": {
+    "source": "discord",
+    "raw_input": "Hello there",
+    "channel_id": "route-chat-1",
+    "user_id": "tester-1"
+  },
+  "expected": {
+    "decision": "direct_reply",
+    "intent": "chat"
+  }
+}

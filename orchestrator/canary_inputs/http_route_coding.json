@@ -1,0 +1,15 @@
+{
+  "name": "http_route_coding",
+  "kind": "http_route",
+  "request": {
+    "source": "discord",
+    "raw_input": "Build a full-stack CRM MVP with frontend, backend, QA and tests",
+    "channel_id": "route-code-1",
+    "user_id": "tester-1"
+  },
+  "expected": {
+    "decision": "orchestrated_workflow",
+    "intent": "coding",
+    "workflow_id": "coding_team_v0"
+  }
+}

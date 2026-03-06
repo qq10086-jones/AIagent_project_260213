@@ -1,0 +1,14 @@
+{
+  "from_step": "pm_spec",
+  "to_steps": [
+    "arch_design"
+  ],
+  "artifacts": [
+    "plan/spec.md"
+  ],
+  "acceptance": {
+    "criteria": [
+      "Login works"
+    ]
+  }
+}

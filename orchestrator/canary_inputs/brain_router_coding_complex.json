@@ -1,0 +1,16 @@
+{
+  "name": "brain_router_coding_complex",
+  "request": {
+    "source": "discord",
+    "raw_input": "Build a full-stack CRM MVP with PM planning, architecture, frontend, backend, QA, and tests.",
+    "channel_id": "canary-code-2",
+    "user_id": "tester-1"
+  },
+  "expected": {
+    "decision": "orchestrated_workflow",
+    "intent": "coding",
+    "target_team": "coding_team",
+    "workflow_id": "coding_team_v0",
+    "requires_orchestration": true
+  }
+}

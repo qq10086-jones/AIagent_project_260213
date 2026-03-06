@@ -166,6 +166,7 @@ async function processTask(msgId, task) {
         max_runtime_s: payload.max_runtime_s || 600,
         codex_command: Array.isArray(payload.codex_command) ? payload.codex_command : null,
         opencode_command: Array.isArray(payload.opencode_command) ? payload.opencode_command : null,
+        execution_adapter_packet: payload.execution_adapter_packet || null,
       });
       output = result;
       isSuccess = !!result.ok;

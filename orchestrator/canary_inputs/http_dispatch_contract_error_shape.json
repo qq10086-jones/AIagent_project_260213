@@ -1,0 +1,10 @@
+{
+  "name": "http_dispatch_contract_error_shape",
+  "kind": "response",
+  "response_case": "dispatch_error_shape",
+  "expected": {
+    "ok": false,
+    "response_mode": "final_completion_reply",
+    "error_code": "BAD_REQUEST"
+  }
+}

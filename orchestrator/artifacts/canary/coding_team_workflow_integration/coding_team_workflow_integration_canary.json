@@ -1,0 +1,166 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T06:43:18.509Z",
+  "pm_role_failure": {
+    "workflow_run_id": "21763d62-72dd-46c7-92fb-0d0522c79961",
+    "task_id": "task-1",
+    "terminal": {
+      "handled": true,
+      "workflow_run_id": "21763d62-72dd-46c7-92fb-0d0522c79961",
+      "step_index": 0,
+      "failed_due_to_role_output_validation": true,
+      "role_output_validation": {
+        "checked": true,
+        "ok": false,
+        "code": "PM_REQUIRED_SECTIONS_MISSING",
+        "detail": "missing PM sections: acceptance.json:$.artifacts missing, acceptance.json:$.owner missing, acceptance.json:$.version missing"
+      }
+    },
+    "workflow_status": "failed",
+    "step_status": "failed",
+    "error_code": "PM_REQUIRED_SECTIONS_MISSING"
+  },
+  "pm_handoff_failure": {
+    "workflow_run_id": "9af49ba5-23d3-4367-9b51-02a3c19b7d3a",
+    "task_id": "task-1",
+    "terminal": {
+      "handled": true,
+      "workflow_run_id": "9af49ba5-23d3-4367-9b51-02a3c19b7d3a",
+      "step_index": 0,
+      "failed_due_to_handoff_validation": true,
+      "handoff_validation": {
+        "checked": true,
+        "ok": false,
+        "code": "HANDOFF_TYPED_FIELDS_MISSING",
+        "detail": "missing typed handoff fields: scope_summary",
+        "handoff": {
+          "from_step": "pm_spec",
+          "to_steps": [
+            "arch_design"
+          ],
+          "required_artifacts": [
+            "plan/spec.md",
+            "plan/acceptance.json",
+            "plan/milestones.md",
+            "handoff/pm_to_architect.json"
+          ],
+          "required_sections": [
+            "scope",
+            "user_stories",
+            "acceptance_criteria",
+            "non_goals",
+            "artifact_list"
+          ],
+          "typed_handoff": {
+            "file": "handoff/pm_to_architect.json",
+            "required_fields": [
+              "from_step",
+              "to_steps",
+              "scope_summary",
+              "artifacts",
+              "acceptance.criteria"
+            ]
+          }
+        }
+      }
+    },
+    "workflow_status": "failed",
+    "step_status": "failed",
+    "error_code": "HANDOFF_TYPED_FIELDS_MISSING"
+  },
+  "arch_role_failure": {
+    "workflow_run_id": "fff0f24a-e91f-4c75-bfda-a8dccf705da5",
+    "pm_task_id": "task-1",
+    "arch_task_id": "task-2",
+    "pm_terminal": {
+      "handled": true,
+      "workflow_run_id": "fff0f24a-e91f-4c75-bfda-a8dccf705da5",
+      "step_index": 0,
+      "checkpoint_id": "13f3bcbe-5280-4833-9049-c76857168f6f",
+      "next": {
+        "ok": true,
+        "task_id": "task-2",
+        "waiting_approval": false,
+        "step_id": "arch_design"
+      }
+    },
+    "arch_terminal": {
+      "handled": true,
+      "workflow_run_id": "fff0f24a-e91f-4c75-bfda-a8dccf705da5",
+      "step_index": 1,
+      "failed_due_to_role_output_validation": true,
+      "role_output_validation": {
+        "checked": true,
+        "ok": false,
+        "code": "ARCH_REQUIRED_SECTIONS_MISSING",
+        "detail": "missing Architect sections: risk_report.json:$.decision_log missing, risk_report.json:$.risks[0].mitigation missing"
+      }
+    },
+    "workflow_status": "failed",
+    "step_status": "failed",
+    "error_code": "ARCH_REQUIRED_SECTIONS_MISSING"
+  },
+  "arch_handoff_failure": {
+    "workflow_run_id": "7b6eab97-8641-4c85-a4ee-745a8dbea4fe",
+    "pm_task_id": "task-1",
+    "arch_task_id": "task-2",
+    "pm_terminal": {
+      "handled": true,
+      "workflow_run_id": "7b6eab97-8641-4c85-a4ee-745a8dbea4fe",
+      "step_index": 0,
+      "checkpoint_id": "a70d66d7-7d5f-428a-9faf-783cffa6f7fe",
+      "next": {
+        "ok": true,
+        "task_id": "task-2",
+        "waiting_approval": false,
+        "step_id": "arch_design"
+      }
+    },
+    "arch_terminal": {
+      "handled": true,
+      "workflow_run_id": "7b6eab97-8641-4c85-a4ee-745a8dbea4fe",
+      "step_index": 1,
+      "failed_due_to_handoff_validation": true,
+      "handoff_validation": {
+        "checked": true,
+        "ok": false,
+        "code": "HANDOFF_TYPED_SCHEMA_INVALID",
+        "detail": "typed handoff schema invalid: $.modules[0] requires minLength 1",
+        "handoff": {
+          "from_step": "arch_design",
+          "to_steps": [
+            "impl_be",
+            "impl_fe",
+            "qa_verify"
+          ],
+          "required_artifacts": [
+            "plan/arch.md",
+            "risk/risk_report.json",
+            "plan/workplan.md",
+            "handoff/architect_to_impl.json"
+          ],
+          "required_sections": [
+            "module_breakdown",
+            "interfaces",
+            "dependency_choices",
+            "risk_notes"
+          ],
+          "typed_handoff": {
+            "file": "handoff/architect_to_impl.json",
+            "required_fields": [
+              "from_step",
+              "to_steps",
+              "modules",
+              "interfaces",
+              "decisions",
+              "risks"
+            ]
+          }
+        }
+      }
+    },
+    "workflow_status": "failed",
+    "step_status": "failed",
+    "error_code": "HANDOFF_TYPED_SCHEMA_INVALID"
+  }
+}

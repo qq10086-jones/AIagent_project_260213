@@ -1,0 +1,21 @@
+{
+  "agent_id": "frontend_agent",
+  "role": "frontend",
+  "mission": "Implement UI components.",
+  "input_schema": {
+    "type": "object",
+    "required": ["goal", "project_type", "ui_output", "architect_output"]
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["components", "routes", "state_management"]
+  },
+  "allowed_tools": ["coding.delegate", "coding.patch", "coding.execute"],
+  "forbidden_actions": ["change_backend_contracts", "expand_scope"],
+  "SOP": [
+    "Implement UI components",
+    "Map routes",
+    "Define state management",
+    "Produce frontend validation evidence"
+  ]
+}

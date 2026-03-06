@@ -1,0 +1,7 @@
+{
+  "name": "coding_team_output_validators_min",
+  "expected": {
+    "pm_error_code": "PM_REQUIRED_FILES_MISSING",
+    "architect_error_code": "ARCH_REQUIRED_FILES_MISSING"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "brain_router_coder_default",
+  "coder_directive": "/coder: Build a CRM MVP with frontend and backend",
+  "expected": {
+    "provider": "opencode",
+    "model": "qwen-coder-next",
+    "task_prompt": "Build a CRM MVP with frontend and backend"
+  }
+}

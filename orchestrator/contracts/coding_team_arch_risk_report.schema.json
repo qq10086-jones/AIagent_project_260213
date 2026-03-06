@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "coding_team_arch_risk_report.schema.json",
+  "type": "object",
+  "required": ["risks", "decision_log"],
+  "properties": {
+    "risks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["title", "mitigation"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "mitigation": { "type": "string", "minLength": 1 },
+          "level": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "decision_log": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "generated_at": { "type": "string" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,11 @@
+{
+  "criteria": [
+    "Login works"
+  ],
+  "artifacts": [
+    "plan/spec.md",
+    "plan/milestones.md"
+  ],
+  "owner": "pm_agent",
+  "version": "v1"
+}

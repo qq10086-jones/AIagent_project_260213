@@ -1,0 +1,16 @@
+{
+  "from_step": "pm_spec",
+  "to_steps": [
+    "arch_design"
+  ],
+  "scope_summary": "CRM MVP",
+  "artifacts": [
+    "plan/spec.md",
+    "plan/acceptance.json"
+  ],
+  "acceptance": {
+    "criteria": [
+      "Login works"
+    ]
+  }
+}

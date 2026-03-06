@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/guardrails/tool_permission.schema.json",
+  "title": "ToolPermissionMatrix",
+  "type": "object",
+  "patternProperties": {
+    "^[a-zA-Z0-9_-]+$": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Array of tool names permitted for the given role"
+    }
+  },
+  "additionalProperties": false
+}

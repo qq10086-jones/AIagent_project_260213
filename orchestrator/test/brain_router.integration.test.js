@@ -6,7 +6,11 @@ import { loadRegistryOrThrow } from "../src/registry.js";
 import { routeTaskRequest } from "../src/vnext/brain_router.js";
 import { createTaskEnvelope } from "../src/vnext/task_envelope.js";
 
-const registry = loadRegistryOrThrow(path.resolve(process.cwd(), "..", "configs", "registry", "capability_registry.json"));
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const registry = loadRegistryOrThrow(path.resolve(__dirname, "..", "..", "configs", "registry", "capability_registry.json"));
 
 test("brain router returns direct_reply for chat input", () => {
   const routed = routeTaskRequest({

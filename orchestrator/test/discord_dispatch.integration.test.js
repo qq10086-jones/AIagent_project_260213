@@ -7,7 +7,11 @@ import { normalizeInputRequest } from "../src/vnext/input_normalizer.js";
 import { routeTaskRequest } from "../src/vnext/brain_router.js";
 import { parseCoderDirectiveOptions, DEFAULT_CODER_MODEL } from "../src/vnext/coder_directive.js";
 
-const registry = loadRegistryOrThrow(path.resolve(process.cwd(), "..", "configs", "registry", "capability_registry.json"));
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const registry = loadRegistryOrThrow(path.resolve(__dirname, "..", "..", "configs", "registry", "capability_registry.json"));
 
 test("discord event normalization produces canonical source request", () => {
   const normalized = normalizeInputRequest({

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/observability/failure_report_input.schema.json",
+  "title": "FailureReportInput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["step_id", "role", "error_code", "error_message"],
+  "properties": {
+    "step_id": { "type": "string" },
+    "role": { "type": "string" },
+    "error_code": { "type": "string" },
+    "error_message": { "type": "string" },
+    "raw_logs": { "type": "string" }
+  }
+}

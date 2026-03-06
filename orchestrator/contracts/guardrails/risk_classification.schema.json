@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openclaw-nexus/guardrails/risk_classification.schema.json",
+  "title": "RiskClassificationResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["risk_level", "requires_approval", "triggers"],
+  "properties": {
+    "risk_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "requires_approval": {
+      "type": "boolean"
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "description"],
+        "properties": {
+          "rule_id": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

@@ -1,5 +1,10 @@
 import fs from "fs";
 import path from "path";
+import {
+  getDefaultWorkspaceRoot,
+  resolveCanaryInputPath,
+  resolveOrchestratorArtifactPath,
+} from "./_paths.js";
 
 function arg(name, fallback = "") {
   const idx = process.argv.indexOf(`--${name}`);
@@ -114,8 +119,8 @@ async function main() {
   const inputArg = arg("input", "crm_mini.json");
   const timeoutSec = Math.max(120, Number(arg("timeout-sec", "1800")));
   const baseUrl = arg("base-url", process.env.ORCH_BASE_URL || "http://localhost:3000");
-  const workspaceRoot = path.resolve(arg("workspace-root", path.resolve(process.cwd(), "..")));
-  const inputPath = path.resolve(process.cwd(), "canary_inputs", inputArg);
+  const workspaceRoot = path.resolve(arg("workspace-root", getDefaultWorkspaceRoot()));
+  const inputPath = resolveCanaryInputPath(inputArg);
   if (!fs.existsSync(inputPath)) {
     throw new Error(`input file not found: ${inputPath}`);
   }
@@ -191,7 +196,7 @@ async function main() {
     runs,
   };
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const outDir = path.resolve(workspaceRoot, "artifacts", "canary", "coding_team", stamp);
+  const outDir = resolveOrchestratorArtifactPath("canary", "coding_team", stamp);
   fs.mkdirSync(outDir, { recursive: true });
   const jsonPath = path.join(outDir, "canary_report.json");
   const mdPath = path.join(outDir, "canary_report.md");

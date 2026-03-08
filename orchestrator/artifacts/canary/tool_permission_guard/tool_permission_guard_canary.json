@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-08T10:15:51.953Z",
+  "results": {
+    "pmDelegate": {
+      "allowed": true
+    },
+    "pmDocs": {
+      "allowed": true
+    },
+    "pmCode": {
+      "allowed": false,
+      "reason": "Role 'pm_agent' is not permitted to use tool 'bash.execute'. Allowed tools: coding.delegate, document.read, document.write"
+    },
+    "feBash": {
+      "allowed": true
+    },
+    "unknownAgent": {
+      "allowed": false,
+      "reason": "Role 'rogue_agent' is not permitted to use tool 'bash.execute'. Allowed tools: "
+    }
+  }
+}

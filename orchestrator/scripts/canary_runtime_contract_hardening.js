@@ -9,7 +9,8 @@ import {
   loadPromptScriptRegistryOrThrow,
   validatePromptScriptsAgainstAgents,
 } from "../src/prompt_script_registry.js";
-import { loadRegistryOrThrow } from "../src/registry.js";
+import { getDefaultRegistryPath, loadRegistryOrThrow } from "../src/registry.js";
+import { resolveCanaryInputPath, resolveOrchestratorArtifactPath } from "./_paths.js";
 
 function assertEqual(actual, expected, label) {
   if (actual !== expected) {
@@ -18,11 +19,11 @@ function assertEqual(actual, expected, label) {
 }
 
 function main() {
-  const fixturePath = path.resolve(process.cwd(), "canary_inputs", "runtime_contract_hardening_min.json");
+  const fixturePath = resolveCanaryInputPath("runtime_contract_hardening_min.json");
   const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
   const agentRegistry = loadAgentContractsOrThrow(getDefaultAgentRegistryDir());
   const promptRegistry = loadPromptScriptRegistryOrThrow(getDefaultPromptScriptRegistryPath());
-  const capabilityRegistry = loadRegistryOrThrow(path.resolve(process.cwd(), "..", "configs", "registry", "capability_registry.json"));
+  const capabilityRegistry = loadRegistryOrThrow(getDefaultRegistryPath());
 
   const binding = validatePromptScriptsAgainstAgents({ promptRegistry, agentRegistry });
   assertEqual(binding.ok, fixture.expected?.agent_binding_ok, "agent_binding_ok");
@@ -38,7 +39,7 @@ function main() {
     }
   }
 
-  const outDir = path.resolve(process.cwd(), "artifacts", "canary", "runtime_contract_hardening");
+  const outDir = resolveOrchestratorArtifactPath("canary", "runtime_contract_hardening");
   fs.mkdirSync(outDir, { recursive: true });
   const reportPath = path.join(outDir, "runtime_contract_hardening_canary.json");
   fs.writeFileSync(reportPath, JSON.stringify({

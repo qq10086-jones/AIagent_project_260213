@@ -36,6 +36,23 @@ function normalizeContractPath(rel) {
   return String(rel || "").replace(/\\/g, "/").replace(/^\/+/, "");
 }
 
+function resolveArtifactPath(releaseRoot, relPath) {
+  const rel = normalizeContractPath(relPath);
+  if (!rel) return null;
+  const releaseRelative = path.resolve(releaseRoot, rel);
+  if (fs.existsSync(releaseRelative)) return releaseRelative;
+
+  const marker = `${path.sep}artifacts${path.sep}release${path.sep}`;
+  const normalizedReleaseRoot = path.resolve(releaseRoot);
+  const markerIndex = normalizedReleaseRoot.lastIndexOf(marker);
+  if (markerIndex !== -1) {
+    const workspaceRoot = normalizedReleaseRoot.slice(0, markerIndex);
+    const workspaceRelative = path.resolve(workspaceRoot, rel);
+    if (fs.existsSync(workspaceRelative)) return workspaceRelative;
+  }
+  return releaseRelative;
+}
+
 function nonEmptyLines(text = "") {
   return String(text || "")
     .split(/\r?\n/)
@@ -166,24 +183,74 @@ function deriveAcceptanceIds(releaseRoot) {
 function validateAcceptanceVerificationMapping(releaseRoot) {
   const expectedIds = deriveAcceptanceIds(releaseRoot);
   if (expectedIds.length === 0) return { ok: true, reasons: [] };
-  const vPath = path.resolve(releaseRoot, "qa", "verification.json");
+  const vPath = path.resolve(releaseRoot, "verify", "qa_report.json");
   const vJson = loadJsonIfExists(vPath);
-  if (!vJson || !Array.isArray(vJson.acceptance_mapping)) {
-    return { ok: false, reasons: ["ARTIFACT_INVALID:qa/verification.json:acceptance_mapping missing"] };
+  if (!vJson || typeof vJson !== "object") {
+    return { ok: false, reasons: ["ARTIFACT_INVALID:verify/qa_report.json:report missing"] };
   }
-  const actualIds = new Set(
-    vJson.acceptance_mapping
-      .map((x) => String(x?.acceptance_id || "").trim())
-      .filter(Boolean)
-  );
+  if (typeof vJson.overall_status !== "string" || !vJson.overall_status.trim()) {
+    return { ok: false, reasons: ["ARTIFACT_INVALID:verify/qa_report.json:overall_status missing"] };
+  }
+  if (!Array.isArray(vJson.checks) || vJson.checks.length < 1) {
+    return { ok: false, reasons: ["ARTIFACT_INVALID:verify/qa_report.json:checks missing"] };
+  }
+  if (!Array.isArray(vJson.verified_artifacts) || vJson.verified_artifacts.length < 1) {
+    return { ok: false, reasons: ["ARTIFACT_INVALID:verify/qa_report.json:verified_artifacts missing"] };
+  }
+  const actualIds = new Set(vJson.verified_artifacts.map((x) => String(x || "").trim()).filter(Boolean));
   const miss = expectedIds.filter((id) => !actualIds.has(id));
   if (miss.length > 0) {
     return {
       ok: false,
-      reasons: [`ARTIFACT_INVALID:qa/verification.json:missing acceptance ids ${miss.join(",")}`],
+      reasons: [`ARTIFACT_INVALID:verify/qa_report.json:missing acceptance ids ${miss.join(",")}`],
     };
   }
   return { ok: true, reasons: [] };
+}
+
+function validateContextBudgetCoverage({ releaseRoot, manifest, steps }) {
+  const reasons = [];
+  const reports = Array.isArray(manifest?.context_budget_reports) ? manifest.context_budget_reports : null;
+  if (!reports) {
+    return { ok: false, reasons: ["manifest missing field: context_budget_reports"] };
+  }
+  const expectedSteps = Array.isArray(steps) ? steps.map((s) => String(s?.step_id || "")).filter(Boolean) : [];
+  for (const stepId of expectedSteps) {
+    const item = reports.find((report) => String(report?.step_id || "") === stepId);
+    if (!item) {
+      reasons.push(`ARTIFACT_MISSING:metrics/context_budget_${stepId}.json`);
+      continue;
+    }
+    const rel = String(item.report_path || "").trim().replace(/\\/g, "/");
+    if (!rel) {
+      reasons.push(`ARTIFACT_MISSING:metrics/context_budget_${stepId}.json`);
+      continue;
+    }
+    const abs = resolveArtifactPath(releaseRoot, rel);
+    const json = loadJsonIfExists(abs);
+    if (!json || typeof json !== "object") {
+      reasons.push(`ARTIFACT_INVALID:${rel}:invalid json`);
+      continue;
+    }
+    if (String(json.step_id || "") !== stepId) {
+      reasons.push(`ARTIFACT_INVALID:${rel}:step_id mismatch`);
+    }
+    if (!["ok", "warning", "overflow_risk"].includes(String(json.status || ""))) {
+      reasons.push(`ARTIFACT_INVALID:${rel}:status invalid`);
+    }
+    if (!String(json.threshold_source || "").trim()) {
+      reasons.push(`ARTIFACT_INVALID:${rel}:threshold_source missing`);
+    }
+  }
+  const summary = manifest?.context_budget_summary;
+  if (!summary || typeof summary !== "object") {
+    reasons.push("manifest missing field: context_budget_summary");
+  } else {
+    if (Number(summary.total_steps || 0) !== expectedSteps.length) {
+      reasons.push("manifest context_budget_summary total_steps mismatch");
+    }
+  }
+  return { ok: reasons.length === 0, reasons };
 }
 
 function validateArtifactQuality({ run, manifestPath }) {
@@ -305,6 +372,8 @@ export function validateArtifactPack({
       "steps",
       "checkpoints",
       "step_artifacts",
+      "context_budget_reports",
+      "context_budget_summary",
     ];
     for (const k of requiredTop) {
       if (manifest[k] === undefined || manifest[k] === null) reasons.push(`manifest missing field: ${k}`);
@@ -339,6 +408,12 @@ export function validateArtifactPack({
 
   const quality = validateArtifactQuality({ run, manifestPath });
   if (!quality.ok) reasons.push(...quality.reasons);
+  const contextBudget = validateContextBudgetCoverage({
+    releaseRoot: path.dirname(path.dirname(manifestPath || "")),
+    manifest,
+    steps,
+  });
+  if (!contextBudget.ok) reasons.push(...contextBudget.reasons);
 
   return {
     ok: reasons.length === 0,

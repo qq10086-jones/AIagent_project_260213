@@ -15,7 +15,7 @@ function main() {
   const packet = buildBackendExecutionPacket({
     stepDef: { id: "impl_be", role: "backend" },
     payload: {
-      expected_artifacts: ["patch/diff.patch", "tests/backend_test_report.md", "run/run_backend.md"],
+      expected_artifacts: ["impl/be_changes/server.js", "impl/be_notes.md", "handoff/be_to_fe.json"],
       target_paths: ["sandbox/crm_site/"],
     },
     provider: "qwen",

@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-08T13:09:09.823Z",
+  "workflow_run_id": "a75463cb-3ec5-4ce3-bc9d-a610ef61568d",
+  "run_id": "m4-compat-run",
+  "checks": [
+    {
+      "id": "full_sequential_workflow",
+      "ok": true,
+      "steps": 6,
+      "workflow_status": "succeeded"
+    },
+    {
+      "id": "impl_be_full_file_mode",
+      "ok": true,
+      "prompt_script_id": "backend.impl.v1",
+      "execution_mode_used": "full_file_fallback"
+    },
+    {
+      "id": "impl_fe_full_file_mode",
+      "ok": true,
+      "prompt_script_id": "frontend.impl.v1",
+      "execution_mode_used": "full_file_fallback"
+    },
+    {
+      "id": "m4_handoff_paths_present",
+      "ok": true
+    },
+    {
+      "id": "release_pack_structure_preserved",
+      "ok": true
+    }
+  ],
+  "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/canary/m4_compat/happy_path/artifacts/release/m4-compat-run"
+}

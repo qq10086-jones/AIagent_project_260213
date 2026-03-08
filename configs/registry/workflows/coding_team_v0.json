@@ -4,9 +4,9 @@
   "steps": [
     { "id": "pm_spec", "role": "pm", "tool": "coding.delegate", "gate": "low" },
     { "id": "arch_design", "role": "architect", "tool": "coding.delegate", "gate": "policy" },
-    { "id": "impl_fe", "role": "frontend", "tool": "coding.delegate", "gate": "policy" },
-    { "id": "impl_be", "role": "backend", "tool": "coding.delegate", "gate": "policy" },
-    { "id": "qa_verify", "role": "qa", "tool": "coding.execute", "gate": "acceptance" },
-    { "id": "release_pack", "role": "qa", "tool": "coding.delegate", "gate": "finalize" }
+    { "id": "impl_be", "role": "backend", "tool": "coding.delegate", "gate": "policy", "prompt_script_id": "backend.impl.v1" },
+    { "id": "impl_fe", "role": "frontend", "tool": "coding.delegate", "gate": "policy", "prompt_script_id": "frontend.impl.v1", "fe_safe_input_classes": ["fe_led"] },
+    { "id": "qa_verify", "role": "qa", "tool": "coding.execute", "gate": "acceptance", "prompt_script_id": "qa.verify.v1" },
+    { "id": "release_pack", "role": "release", "tool": "coding.delegate", "gate": "finalize", "prompt_script_id": "release.pack.v1" }
   ]
 }

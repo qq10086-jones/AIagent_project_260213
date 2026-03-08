@@ -1,0 +1,22 @@
+{
+  "cloud_qwen": {
+    "type": "cloud_api",
+    "endpoint_env": "QWEN_BASE_URL",
+    "auth_env": "QWEN_API_KEY",
+    "timeout_ms": 30000,
+    "available_models": [
+      "qwen-plus",
+      "qwen-max",
+      "qwen-coder-next"
+    ]
+  },
+  "local_ollama": {
+    "type": "local_ollama",
+    "endpoint_env": "OLLAMA_BASE_URL",
+    "timeout_ms": 240000,
+    "available_models": [
+      "deepseek-r1:32b",
+      "qwen2.5-coder:7b"
+    ]
+  }
+}

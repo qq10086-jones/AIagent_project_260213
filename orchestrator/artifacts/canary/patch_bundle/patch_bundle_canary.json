@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-08T12:57:44.785Z",
+  "workspace_root": "C:/Users/jones/AppData/Local/Temp/ocn-canary-patch-AHFUDo",
+  "checks": [
+    {
+      "id": "patch_applies_successfully",
+      "ok": true
+    },
+    {
+      "id": "same_file_anchor_shift",
+      "ok": true
+    },
+    {
+      "id": "malformed_patch_typed_error",
+      "ok": true,
+      "error_code": "PATCH_ANCHOR_INVALID"
+    },
+    {
+      "id": "anchor_not_found_after_prior_op",
+      "ok": true,
+      "error_code": "PATCH_ANCHOR_NOT_FOUND"
+    },
+    {
+      "id": "path_traversal_rejected",
+      "ok": true,
+      "error_code": "PATCH_PATH_TRAVERSAL"
+    },
+    {
+      "id": "fallback_mode_observable",
+      "ok": true,
+      "mode": "full_file_fallback"
+    },
+    {
+      "id": "feature_gate_disabled_full_file_mode",
+      "ok": true,
+      "mode": "full_file_fallback"
+    }
+  ]
+}

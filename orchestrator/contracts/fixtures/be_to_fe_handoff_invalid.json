@@ -1,0 +1,6 @@
+{
+  "_comment": "INVALID: missing required fields 'be_changes_path', 'api_contracts', 'scope_constraints'; wrong 'from_step' value",
+  "from_step": "arch_design",
+  "to_step": "impl_fe",
+  "shared_types": []
+}

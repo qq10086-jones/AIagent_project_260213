@@ -1,0 +1,32 @@
+{
+  "run_id": "e2e-happy-run",
+  "workflow_id": "coding_team_v0",
+  "completed_at": "2026-03-08T10:38:46.438Z",
+  "artifacts": [
+    {
+      "path": "plan/spec.md",
+      "type": "markdown",
+      "size_bytes": 120
+    },
+    {
+      "path": "plan/acceptance.json",
+      "type": "json",
+      "size_bytes": 80
+    },
+    {
+      "path": "risk/risk_report.json",
+      "type": "json",
+      "size_bytes": 90
+    },
+    {
+      "path": "verify/qa_report.json",
+      "type": "json",
+      "size_bytes": 200
+    },
+    {
+      "path": "release/release_notes.md",
+      "type": "markdown",
+      "size_bytes": 180
+    }
+  ]
+}

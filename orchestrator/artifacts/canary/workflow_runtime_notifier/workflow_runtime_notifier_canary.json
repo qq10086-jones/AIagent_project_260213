@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T12:36:21.963Z",
+  "transition": {
+    "kind": "transition",
+    "message": "✅ Completed **pm_spec**.\n⏳ Transitioning to **arch_design** (architect)..."
+  },
+  "failure": {
+    "kind": "failure",
+    "message": "❌ **Workflow Halted at Step:** `pm_spec`\n👤 **Role:** `pm`\n⚠️ **Error Code:** `STEP_FAILED`\n\n**Details:**\n> compile failed\n\n**Diagnostic Logs:**\n```text\nsecret_token=***REDACTED***\nerror TS1005\n```\n"
+  }
+}

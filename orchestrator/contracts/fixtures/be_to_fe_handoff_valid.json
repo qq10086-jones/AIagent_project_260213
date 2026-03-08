@@ -1,0 +1,34 @@
+{
+  "from_step": "impl_be",
+  "to_step": "impl_fe",
+  "be_changes_path": "artifacts/release/test-run-001/impl/be_changes",
+  "api_contracts": [
+    {
+      "name": "List Customers",
+      "method": "GET",
+      "path": "/api/customers",
+      "response_shape": "{ data: Customer[], total: number }",
+      "auth_required": false
+    },
+    {
+      "name": "Create Customer",
+      "method": "POST",
+      "path": "/api/customers",
+      "response_shape": "{ id: string, name: string, email: string }",
+      "auth_required": false
+    }
+  ],
+  "shared_types": [
+    {
+      "name": "Customer",
+      "description": "{ id: string, name: string, email: string, notes: string }"
+    }
+  ],
+  "scope_constraints": [
+    "No authentication implemented in this iteration",
+    "No pagination on customer list",
+    "No file upload support"
+  ],
+  "run_id": "test-run-001",
+  "workflow_run_id": "wf-run-001"
+}

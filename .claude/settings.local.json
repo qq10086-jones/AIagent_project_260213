@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(head:*)",
+      "Bash(wc:*)",
+      "Bash(tail:*)",
+      "Bash(cd E:/AIagent_project_260213 && npm --prefix orchestrator run validate:live_m2_e2e 2>&1)",
+      "Bash(sleep 5 && curl -s http://localhost:3000/health 2>&1)",
+      "Bash(curl -s http://localhost:3000/workflow-runs/80af3eeb-0b7e-405e-a0e7-f000785cfa91 2>&1 | python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('status:', d.get\\('run',{}\\).get\\('status'\\)\\); print\\('step:', d.get\\('run',{}\\).get\\('current_step_index'\\)\\); steps=d.get\\('steps',[]\\); [print\\(f'  step {s[\\\\\"step_index\\\\\"]} {s[\\\\\"step_id\\\\\"]} -> {s[\\\\\"status\\\\\"]} err={s[\\\\\"error_code\\\\\"]}'\\) for s in steps]\" 2>&1)",
+      "Bash(node:*)",
+      "Bash(sleep 5:*)",
+      "Bash(grep step_transition:*)",
+      "Bash(npm:*)",
+      "Bash(git:*)",
+      "Bash(mkdir:*)"
+    ]
+  }
+}

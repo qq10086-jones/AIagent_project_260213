@@ -1,82 +1,41 @@
 {
   "ok": true,
-  "generated_at": "2026-03-06T06:43:18.509Z",
+  "generated_at": "2026-03-08T10:37:52.501Z",
   "pm_role_failure": {
-    "workflow_run_id": "21763d62-72dd-46c7-92fb-0d0522c79961",
+    "workflow_run_id": "5cd19513-40a2-46ec-85ee-17ed440ce3b3",
     "task_id": "task-1",
     "terminal": {
       "handled": true,
-      "workflow_run_id": "21763d62-72dd-46c7-92fb-0d0522c79961",
+      "workflow_run_id": "5cd19513-40a2-46ec-85ee-17ed440ce3b3",
       "step_index": 0,
-      "failed_due_to_role_output_validation": true,
-      "role_output_validation": {
-        "checked": true,
-        "ok": false,
-        "code": "PM_REQUIRED_SECTIONS_MISSING",
-        "detail": "missing PM sections: acceptance.json:$.artifacts missing, acceptance.json:$.owner missing, acceptance.json:$.version missing"
-      }
+      "failed_due_to_role_validation": true
     },
     "workflow_status": "failed",
     "step_status": "failed",
     "error_code": "PM_REQUIRED_SECTIONS_MISSING"
   },
   "pm_handoff_failure": {
-    "workflow_run_id": "9af49ba5-23d3-4367-9b51-02a3c19b7d3a",
+    "workflow_run_id": "3fe50970-aeef-444c-9308-8d206df3ba5c",
     "task_id": "task-1",
     "terminal": {
       "handled": true,
-      "workflow_run_id": "9af49ba5-23d3-4367-9b51-02a3c19b7d3a",
+      "workflow_run_id": "3fe50970-aeef-444c-9308-8d206df3ba5c",
       "step_index": 0,
-      "failed_due_to_handoff_validation": true,
-      "handoff_validation": {
-        "checked": true,
-        "ok": false,
-        "code": "HANDOFF_TYPED_FIELDS_MISSING",
-        "detail": "missing typed handoff fields: scope_summary",
-        "handoff": {
-          "from_step": "pm_spec",
-          "to_steps": [
-            "arch_design"
-          ],
-          "required_artifacts": [
-            "plan/spec.md",
-            "plan/acceptance.json",
-            "plan/milestones.md",
-            "handoff/pm_to_architect.json"
-          ],
-          "required_sections": [
-            "scope",
-            "user_stories",
-            "acceptance_criteria",
-            "non_goals",
-            "artifact_list"
-          ],
-          "typed_handoff": {
-            "file": "handoff/pm_to_architect.json",
-            "required_fields": [
-              "from_step",
-              "to_steps",
-              "scope_summary",
-              "artifacts",
-              "acceptance.criteria"
-            ]
-          }
-        }
-      }
+      "failed_due_to_handoff_validation": true
     },
     "workflow_status": "failed",
     "step_status": "failed",
     "error_code": "HANDOFF_TYPED_FIELDS_MISSING"
   },
   "arch_role_failure": {
-    "workflow_run_id": "fff0f24a-e91f-4c75-bfda-a8dccf705da5",
+    "workflow_run_id": "ed684586-d093-4448-b4b8-1c5174026a58",
     "pm_task_id": "task-1",
     "arch_task_id": "task-2",
     "pm_terminal": {
       "handled": true,
-      "workflow_run_id": "fff0f24a-e91f-4c75-bfda-a8dccf705da5",
+      "workflow_run_id": "ed684586-d093-4448-b4b8-1c5174026a58",
       "step_index": 0,
-      "checkpoint_id": "13f3bcbe-5280-4833-9049-c76857168f6f",
+      "checkpoint_id": "5ebceabd-4584-4d45-9529-d30d72ad6774",
       "next": {
         "ok": true,
         "task_id": "task-2",
@@ -86,29 +45,23 @@
     },
     "arch_terminal": {
       "handled": true,
-      "workflow_run_id": "fff0f24a-e91f-4c75-bfda-a8dccf705da5",
+      "workflow_run_id": "ed684586-d093-4448-b4b8-1c5174026a58",
       "step_index": 1,
-      "failed_due_to_role_output_validation": true,
-      "role_output_validation": {
-        "checked": true,
-        "ok": false,
-        "code": "ARCH_REQUIRED_SECTIONS_MISSING",
-        "detail": "missing Architect sections: risk_report.json:$.decision_log missing, risk_report.json:$.risks[0].mitigation missing"
-      }
+      "failed_due_to_role_validation": true
     },
     "workflow_status": "failed",
     "step_status": "failed",
     "error_code": "ARCH_REQUIRED_SECTIONS_MISSING"
   },
   "arch_handoff_failure": {
-    "workflow_run_id": "7b6eab97-8641-4c85-a4ee-745a8dbea4fe",
+    "workflow_run_id": "be8f3437-3828-4a3e-bbd7-848b26442b7f",
     "pm_task_id": "task-1",
     "arch_task_id": "task-2",
     "pm_terminal": {
       "handled": true,
-      "workflow_run_id": "7b6eab97-8641-4c85-a4ee-745a8dbea4fe",
+      "workflow_run_id": "be8f3437-3828-4a3e-bbd7-848b26442b7f",
       "step_index": 0,
-      "checkpoint_id": "a70d66d7-7d5f-428a-9faf-783cffa6f7fe",
+      "checkpoint_id": "80a838ea-5228-4293-b8f2-26127b286a54",
       "next": {
         "ok": true,
         "task_id": "task-2",
@@ -118,49 +71,87 @@
     },
     "arch_terminal": {
       "handled": true,
-      "workflow_run_id": "7b6eab97-8641-4c85-a4ee-745a8dbea4fe",
+      "workflow_run_id": "be8f3437-3828-4a3e-bbd7-848b26442b7f",
       "step_index": 1,
-      "failed_due_to_handoff_validation": true,
-      "handoff_validation": {
-        "checked": true,
-        "ok": false,
-        "code": "HANDOFF_TYPED_SCHEMA_INVALID",
-        "detail": "typed handoff schema invalid: $.modules[0] requires minLength 1",
-        "handoff": {
-          "from_step": "arch_design",
-          "to_steps": [
-            "impl_be",
-            "impl_fe",
-            "qa_verify"
-          ],
-          "required_artifacts": [
-            "plan/arch.md",
-            "risk/risk_report.json",
-            "plan/workplan.md",
-            "handoff/architect_to_impl.json"
-          ],
-          "required_sections": [
-            "module_breakdown",
-            "interfaces",
-            "dependency_choices",
-            "risk_notes"
-          ],
-          "typed_handoff": {
-            "file": "handoff/architect_to_impl.json",
-            "required_fields": [
-              "from_step",
-              "to_steps",
-              "modules",
-              "interfaces",
-              "decisions",
-              "risks"
-            ]
-          }
-        }
-      }
+      "failed_due_to_handoff_validation": true
     },
     "workflow_status": "failed",
     "step_status": "failed",
     "error_code": "HANDOFF_TYPED_SCHEMA_INVALID"
+  },
+  "tool_permission_denied": {
+    "workflow_run_id": "2dd50452-ad4e-49d6-923b-034ec199b44a",
+    "workflow_status": "failed",
+    "error_code": "TOOL_PERMISSION_DENIED",
+    "step_status": "failed",
+    "denied_event": {
+      "stream_id": "2dd50452-ad4e-49d6-923b-034ec199b44a",
+      "event_name": "policy.tool_permission.denied",
+      "payload": {
+        "workflow_run_id": "2dd50452-ad4e-49d6-923b-034ec199b44a",
+        "step_id": "pm_spec",
+        "step_index": 0,
+        "role_name": "pm",
+        "tool_name": "bash.execute",
+        "reason": "Role 'pm' is not permitted to use tool 'bash.execute'. Allowed tools: coding.delegate, document.read, document.write"
+      }
+    }
+  },
+  "approval_gate": {
+    "workflow_run_id": "fa9ee40e-9bbb-43a2-9fc6-8b5ef93d0d34",
+    "workflow_status": "running",
+    "step_status": "waiting_approval",
+    "approval_required": true,
+    "first_step": {
+      "ok": true,
+      "task_id": "task-1",
+      "waiting_approval": true,
+      "step_id": "pm_spec"
+    },
+    "approval_event": {
+      "stream_id": "fa9ee40e-9bbb-43a2-9fc6-8b5ef93d0d34",
+      "event_name": "policy.gate.checked",
+      "payload": {
+        "workflow_run_id": "fa9ee40e-9bbb-43a2-9fc6-8b5ef93d0d34",
+        "step_id": "pm_spec",
+        "step_index": 0,
+        "tool_name": "coding.delegate",
+        "risk_level": "high",
+        "requires_approval": true,
+        "reasons": [
+          "sensitive_path_or_secret",
+          "registry_manual_path:.env*"
+        ]
+      }
+    }
+  },
+  "approval_approved": {
+    "workflow_run_id": "77b3d3ae-24c2-41a4-b1a2-677956c7ea5d",
+    "workflow_status": "running",
+    "step_status": "queued",
+    "approved_event": {
+      "stream_id": "task-1",
+      "event_name": "workflow.step.approval.approved",
+      "payload": {
+        "workflow_run_id": "77b3d3ae-24c2-41a4-b1a2-677956c7ea5d",
+        "step_index": 0
+      }
+    }
+  },
+  "approval_rejected": {
+    "workflow_run_id": "7bdbaf14-95d1-4dbb-80c8-f54d791984d4",
+    "workflow_status": "failed",
+    "workflow_error_code": "APPROVAL_REJECTED",
+    "step_status": "failed",
+    "step_error_code": "APPROVAL_REJECTED",
+    "rejected_event": {
+      "stream_id": "task-1",
+      "event_name": "workflow.step.approval.rejected",
+      "payload": {
+        "workflow_run_id": "7bdbaf14-95d1-4dbb-80c8-f54d791984d4",
+        "step_index": 0,
+        "reason": "manual rejection for canary"
+      }
+    }
   }
 }

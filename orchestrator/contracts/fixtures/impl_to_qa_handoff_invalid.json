@@ -1,0 +1,6 @@
+{
+  "_comment": "INVALID: missing required fields 'be_changes_path', 'fe_changes_path', 'run_instructions'; wrong 'to_step' value",
+  "from_steps": ["impl_be"],
+  "to_step": "release_pack",
+  "known_limitations": []
+}

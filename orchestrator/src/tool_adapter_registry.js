@@ -14,7 +14,7 @@ const RESULT_SCHEMA = JSON.parse(
 
 const TOOL_ADAPTERS = {
   coding_executor: {
-    providers: ["opencode", "codex", "qwen"],
+    providers: ["opencode", "codex"],
     task_types: ["coding_execution"],
   },
 };

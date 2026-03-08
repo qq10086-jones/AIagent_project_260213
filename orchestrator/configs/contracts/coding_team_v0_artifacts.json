@@ -15,30 +15,10 @@
       "schema": "orchestrator/configs/schemas/risk_report.schema.json"
     },
     {
-      "path": "qa/verification.json",
+      "path": "verify/qa_report.json",
       "required": true,
       "type": "json",
-      "schema": "orchestrator/configs/schemas/verification.schema.json"
-    },
-    {
-      "path": "tests/test_plan.md",
-      "required": true,
-      "type": "markdown",
-      "min_nonempty_lines": 4,
-      "deny_patterns": [
-        "placeholder",
-        "auto-generated to satisfy workflow artifact contract"
-      ]
-    },
-    {
-      "path": "qa/smoke_report.md",
-      "required": true,
-      "type": "markdown",
-      "min_nonempty_lines": 4,
-      "deny_patterns": [
-        "placeholder",
-        "auto-generated to satisfy workflow artifact contract"
-      ]
+      "schema": "orchestrator/contracts/coding_team_qa_report.schema.json"
     }
   ]
 }

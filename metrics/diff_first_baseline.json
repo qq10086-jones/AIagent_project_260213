@@ -1,0 +1,34 @@
+{
+  "generated_at": "2026-03-08T15:45:40.455Z",
+  "source": "m6_staging_replay (sequential mode)",
+  "note": "Values derived from replay simulation. Re-derive from live LLM execution before GO_LIMITED_EXPOSURE.",
+  "overall": {
+    "total_cases": 100,
+    "impl_steps": 200,
+    "diff_first_hits": 200,
+    "diff_first_fallbacks": 0,
+    "hit_rate": 1,
+    "fallback_rate": 0
+  },
+  "clean_repo": {
+    "total_cases": 90,
+    "impl_steps": 180,
+    "diff_first_hits": 180,
+    "diff_first_fallbacks": 0,
+    "hit_rate": 1,
+    "fallback_rate": 0
+  },
+  "dirty_repo": {
+    "total_cases": 10,
+    "impl_steps": 20,
+    "diff_first_hits": 20,
+    "diff_first_fallbacks": 0,
+    "hit_rate": 1,
+    "fallback_rate": 0
+  },
+  "go_nogo_threshold": {
+    "diff_first_hit_rate_required": 0.6,
+    "clean_repo_actual": 1,
+    "assessment": "PASS"
+  }
+}

@@ -7,12 +7,16 @@
       "ui_agent",
       "backend_agent",
       "frontend_agent",
-      "qa_agent"
+      "qa_agent",
+      "release_agent"
     ],
     "bound_scripts": {
       "pm.design_doc.v1": "pm_agent",
       "architect.system_spec.v1": "architect_agent",
-      "qa.test_plan.v1": "qa_agent"
+      "backend.impl.v1": "backend_agent",
+      "frontend.impl.v1": "frontend_agent",
+      "qa.verify.v1": "qa_agent",
+      "release.pack.v1": "release_agent"
     }
   }
 }

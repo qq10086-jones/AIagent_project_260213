@@ -1,0 +1,12 @@
+{
+  "risks": [
+    {
+      "level": "high",
+      "title": "auth",
+      "mitigation": "staged rollout"
+    }
+  ],
+  "decision_log": [
+    "Use postgres for auth storage"
+  ]
+}

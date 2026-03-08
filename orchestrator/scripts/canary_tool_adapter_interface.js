@@ -26,16 +26,16 @@ function main() {
       workflow_run_id: "wf-1",
       run_id: "run-1",
       artifact_root: "artifacts/release/run-1",
-      expected_artifacts: ["patch/diff.patch", "tests/backend_test_report.md", "run/run_backend.md"],
+      expected_artifacts: ["impl/be_changes/server.js", "impl/be_notes.md", "handoff/be_to_fe.json"],
       target_paths: ["sandbox/crm_site/"],
       task_prompt: "Implement backend login API",
     },
-    provider: "qwen",
+    provider: "opencode",
     model: "qwen-coder-next",
   });
 
   const request = buildCodingExecutorRequest({
-    provider: "qwen",
+    provider: "opencode",
     payload: {
       role: "backend",
       step_id: "impl_be",
@@ -44,7 +44,7 @@ function main() {
       run_id: "run-1",
       task_prompt: "Implement backend login API",
       artifact_root: "artifacts/release/run-1",
-      expected_artifacts: ["patch/diff.patch", "tests/backend_test_report.md", "run/run_backend.md"],
+      expected_artifacts: ["impl/be_changes/server.js", "impl/be_notes.md", "handoff/be_to_fe.json"],
       target_paths: ["sandbox/crm_site/"],
       execution_adapter_packet: executionPacket,
     },
@@ -55,13 +55,13 @@ function main() {
   const requestChecked = validateCodingExecutorRequest(request);
 
   const result = buildCodingExecutorResult({
-    provider: "qwen",
+    provider: "opencode",
     adapterResult: {
       ok: true,
-      provider_used: "qwen",
+      provider_used: "opencode",
       model_used: "qwen-coder-next",
-      command_used: "qwen_api qwen-coder-next",
-      command_source: "qwen_api",
+      command_used: "opencode qwen-coder-next",
+      command_source: "opencode_cli",
       diagnostics: { error_code: null, timeout: false },
       files_changed: ["sandbox/crm_site/server.js"],
       diff_stats: { files: 1 },

@@ -1,0 +1,13 @@
+{
+  "fixture_group": "pm_heavy",
+  "version": "1.0",
+  "cases": [
+    { "replay_id": "R001", "input": { "channel_id": "SANITIZED_CH_001", "user_id": "SANITIZED_U_001", "message": "We need a user authentication system with SSO support for our CRM platform", "attachments": [], "timestamp": "2026-01-15T09:23:00Z" }, "expected": { "route": "pm", "workflow_type": "coding_team_v0", "project_type": "crm", "fe_parallel_eligible": false } },
+    { "replay_id": "R002", "input": { "channel_id": "SANITIZED_CH_001", "user_id": "SANITIZED_U_002", "message": "Plan a customer data import feature that handles CSV and Excel files with field mapping", "attachments": [], "timestamp": "2026-01-16T10:05:00Z" }, "expected": { "route": "pm", "workflow_type": "coding_team_v0", "project_type": "crm", "fe_parallel_eligible": false } },
+    { "replay_id": "R003", "input": { "channel_id": "SANITIZED_CH_002", "user_id": "SANITIZED_U_001", "message": "Define requirements for a notification system with email, SMS, and in-app channels", "attachments": [], "timestamp": "2026-01-17T14:30:00Z" }, "expected": { "route": "pm", "workflow_type": "coding_team_v0", "project_type": "crm", "fe_parallel_eligible": false } },
+    { "replay_id": "R004", "input": { "channel_id": "SANITIZED_CH_001", "user_id": "SANITIZED_U_003", "message": "Create acceptance criteria for a reporting dashboard with PDF and CSV export functionality", "attachments": [], "timestamp": "2026-01-18T09:00:00Z" }, "expected": { "route": "pm", "workflow_type": "coding_team_v0", "project_type": "crm", "fe_parallel_eligible": false } },
+    { "replay_id": "R005", "input": { "channel_id": "SANITIZED_CH_001", "user_id": "SANITIZED_U_002", "message": "We need to redesign the onboarding flow to reduce the observed drop-off rate after step two", "attachments": [], "timestamp": "2026-01-19T11:20:00Z" }, "expected": { "route": "pm", "workflow_type": "coding_team_v0", "project_type": "crm", "fe_parallel_eligible": false } },
+    { "replay_id": "R006", "input": { "channel_id": "SANITIZED_CH_002", "user_id": "SANITIZED_U_001", "message": "Specify the integration requirements for connecting a third-party payment provider", "attachments": [], "timestamp": "2026-01-20T15:45:00Z" }, "expected": { "route": "pm", "workflow_type": "coding_team_v0", "project_type": "crm", "fe_parallel_eligible": false } },
+    { "replay_id": "R007", "input": { "channel_id": "SANITIZED_CH_001", "user_id": "SANITIZED_U_003", "message": "Document the requirements for a multi-tenant role-based access control system", "attachments": [], "timestamp": "2026-01-21T09:10:00Z" }, "expected": { "route": "pm", "workflow_type": "coding_team_v0", "project_type": "crm", "fe_parallel_eligible": false } }
+  ]
+}

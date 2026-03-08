@@ -2,6 +2,6 @@
   "name": "qa_verifier_min",
   "expected": {
     "invalid_code": "QA_VERIFICATION_INVALID",
-    "schema_id": "qa_verification.schema.json"
+    "schema_id": "coding_team_qa_report.schema.json"
   }
 }

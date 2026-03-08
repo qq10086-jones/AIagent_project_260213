@@ -1,0 +1,78 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-07T13:16:09.479Z",
+  "canary": "arch_design",
+  "ws": "WS-12-04",
+  "cases": {
+    "arch_ok": {
+      "verdict": "PASS",
+      "artifact_presence": {
+        "ok": true,
+        "missing": []
+      },
+      "arch_validation": {
+        "checked": true,
+        "ok": true,
+        "files_checked": [
+          "plan/arch.md",
+          "plan/interfaces.md",
+          "risk/risk_report.json",
+          "plan/workplan.md"
+        ],
+        "headings_checked": [
+          "module_breakdown",
+          "interfaces",
+          "dependency_choices",
+          "risk_notes"
+        ],
+        "interfaces_checked": [
+          "post /login",
+          "get /contacts",
+          "post /contacts"
+        ],
+        "schema_checked": "coding_team_arch_risk_report.schema.json"
+      },
+      "decisions_check": {
+        "ok": true,
+        "decisions_count": 2
+      },
+      "schema_check": {
+        "ok": true,
+        "errors": []
+      }
+    },
+    "arch_no_interfaces": {
+      "verdict": "PASS (failure correctly detected)",
+      "artifact_presence": {
+        "ok": false,
+        "missing": [
+          "plan/interfaces.md"
+        ]
+      },
+      "arch_validation": {
+        "ok": false,
+        "code": "ARCH_REQUIRED_FILES_MISSING"
+      }
+    },
+    "arch_empty_interfaces": {
+      "verdict": "PASS (empty interfaces correctly rejected)",
+      "arch_validation": {
+        "ok": false,
+        "code": "ARCH_REQUIRED_SECTIONS_MISSING",
+        "detail": "missing Architect sections: ARCH_INTERFACES_UNSPECIFIED"
+      }
+    }
+  },
+  "summary": {
+    "required_files_checked": [
+      "plan/arch.md",
+      "plan/interfaces.md",
+      "plan/workplan.md",
+      "risk/risk_report.json",
+      "handoff/architect_to_impl.json"
+    ],
+    "schema_id": "coding_team_arch_handoff.schema.json",
+    "decisions_min": 1,
+    "failure_case_covered": true
+  }
+}

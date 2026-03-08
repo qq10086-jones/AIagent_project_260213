@@ -1,0 +1,21 @@
+{
+  "from_step": "impl_be",
+  "to_step": "impl_fe",
+  "be_changes_path": "impl/be_changes",
+  "api_contracts": [
+    {
+      "name": "login",
+      "method": "POST",
+      "path": "/api/login"
+    }
+  ],
+  "shared_types": [
+    {
+      "name": "User",
+      "description": "{ id, email }"
+    }
+  ],
+  "scope_constraints": [
+    "no email verification"
+  ]
+}

@@ -38,7 +38,8 @@ export function loadPromptScriptRegistryOrThrow(registryPath) {
       continue;
     }
     if (!String(spec.role || "").trim()) errors.push(`script '${scriptId}' missing role`);
-    if (!String(spec.model || "").trim()) errors.push(`script '${scriptId}' missing model`);
+    if (Object.prototype.hasOwnProperty.call(spec, "model")) errors.push(`script '${scriptId}' must not contain deprecated model field`);
+    if (!String(spec.llm_role || "").trim()) errors.push(`script '${scriptId}' missing llm_role`);
     if (!isObject(spec.input_schema)) errors.push(`script '${scriptId}' missing input_schema`);
     if (!isObject(spec.output_schema)) errors.push(`script '${scriptId}' missing output_schema`);
     if (!Array.isArray(spec.tool_permissions)) errors.push(`script '${scriptId}' missing tool_permissions[]`);
@@ -76,6 +77,9 @@ export function validatePromptScriptsAgainstAgents({ promptRegistry, agentRegist
     }
     if (String(spec.role || "") !== String(agent.role || "")) {
       errors.push(`script '${scriptId}' role '${spec.role}' does not match agent '${agentId}' role '${agent.role}'`);
+    }
+    if (String(spec.llm_role || "").trim() !== String(spec.role || "").trim()) {
+      errors.push(`script '${scriptId}' llm_role '${spec.llm_role}' does not match role '${spec.role}'`);
     }
     const scriptTools = Array.isArray(spec.tool_permissions) ? spec.tool_permissions : [];
     const agentTools = Array.isArray(agent.allowed_tools) ? agent.allowed_tools : [];

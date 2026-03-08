@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generated_at": "2026-03-06T05:46:24.765Z",
+  "generated_at": "2026-03-07T13:16:29.702Z",
   "pm": {
     "checked": true,
     "ok": false,
@@ -11,7 +11,7 @@
     "checked": true,
     "ok": false,
     "code": "ARCH_REQUIRED_FILES_MISSING",
-    "detail": "missing Architect files: arch.md, risk_report.json, workplan.md"
+    "detail": "missing Architect files: arch.md, interfaces.md, risk_report.json, workplan.md"
   },
   "pm_ok": {
     "checked": true,
@@ -35,6 +35,7 @@
     "ok": true,
     "files_checked": [
       "plan/arch.md",
+      "plan/interfaces.md",
       "risk/risk_report.json",
       "plan/workplan.md"
     ],
@@ -44,6 +45,16 @@
       "dependency_choices",
       "risk_notes"
     ],
+    "interfaces_checked": [
+      "post /login",
+      "get /contacts"
+    ],
     "schema_checked": "coding_team_arch_risk_report.schema.json"
+  },
+  "architect_bad_interfaces": {
+    "checked": true,
+    "ok": false,
+    "code": "ARCH_REQUIRED_SECTIONS_MISSING",
+    "detail": "missing Architect sections: ARCH_INTERFACES_UNSPECIFIED"
   }
 }

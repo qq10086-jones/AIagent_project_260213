@@ -1,0 +1,20 @@
+{
+  "bundle_id": "bundle-001",
+  "step_id": "impl_be",
+  "mode": "structured_patch",
+  "operations": [
+    {
+      "type": "insert_after_anchor",
+      "target_file": "src/server.js",
+      "anchor": "app.use(express.json());",
+      "content": "\napp.use(requestLogger);\n"
+    },
+    {
+      "type": "create_file",
+      "target_file": "src/request_logger.js",
+      "file_content": "export function requestLogger(req, _res, next) { next(); }\n"
+    }
+  ],
+  "target_files": ["src/server.js", "src/request_logger.js"],
+  "summary": "Add request logger middleware and supporting file."
+}

@@ -1,0 +1,62 @@
+{
+  "canary": "canary_m6_rollout_gate",
+  "milestone": "M6",
+  "workstream": "WS-25-04",
+  "timestamp": "2026-03-08T15:47:14.227Z",
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "status": "PASS",
+  "results": [
+    {
+      "label": "Denied workflow (be_led) remains sequential even when master enabled",
+      "status": "PASS",
+      "detail": "deny_reason=unapproved_input_class"
+    },
+    {
+      "label": "Approved FE-safe workflow (fe_led) enters gated-parallel path when gate open",
+      "status": "PASS",
+      "detail": "source=eligibility_policy_allowed"
+    },
+    {
+      "label": "Emergency rollback (force_sequential: true) forces all runs to sequential",
+      "status": "PASS",
+      "detail": "force_sequential_override confirmed for FE-safe run"
+    },
+    {
+      "label": "Gate evaluation result contains all required queryability fields",
+      "status": "PASS",
+      "detail": "fields present: effective_exposure_decision=gated_parallel_allowed"
+    },
+    {
+      "label": "Circuit-breaker activates when partial_failure_rate exceeds threshold",
+      "status": "PASS",
+      "detail": "trigger=partial_failure_rate observed=60% threshold=25%"
+    },
+    {
+      "label": "Circuit-breaker activation persists force_sequential to config file",
+      "status": "PASS",
+      "detail": "activated_at=2026-03-08T15:47:14.184Z"
+    },
+    {
+      "label": "Circuit-breaker activation causes gate to return forced_sequential",
+      "status": "PASS",
+      "detail": "deny_reason=force_sequential_override"
+    },
+    {
+      "label": "Circuit-breaker does not auto-recover without explicit operator reset",
+      "status": "PASS",
+      "detail": "CB remains activated without explicit reset — no auto-recovery"
+    },
+    {
+      "label": "Operator reset clears circuit-breaker and restores gate evaluation",
+      "status": "PASS",
+      "detail": "reset_at=2026-03-08T15:47:14.215Z"
+    },
+    {
+      "label": "Circuit-breaker activated state is persisted in config for exposure_state_query",
+      "status": "PASS",
+      "detail": "activation_reason=rollback_trigger_events"
+    }
+  ]
+}

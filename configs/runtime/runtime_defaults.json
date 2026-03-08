@@ -10,6 +10,9 @@
     "workflow_strict_step_artifacts": true,
     "approval_token_default": "dev-approval-token"
   },
+  "execution": {
+    "diff_first_enabled": true
+  },
   "brain": {
     "llm_provider": "dashscope",
     "qwen_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",

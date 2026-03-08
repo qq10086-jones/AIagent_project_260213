@@ -1,0 +1,47 @@
+{
+  "canary": "canary_m6_staging",
+  "milestone": "M6",
+  "workstream": "WS-23-04",
+  "timestamp": "2026-03-08T15:47:14.100Z",
+  "total": 7,
+  "passed": 7,
+  "failed": 0,
+  "status": "PASS",
+  "results": [
+    {
+      "label": "Replay manifest loads and parses",
+      "status": "PASS",
+      "detail": "corpus.length=50"
+    },
+    {
+      "label": "Coverage summary overall_status is PASS",
+      "status": "PASS",
+      "detail": "total_cases=50"
+    },
+    {
+      "label": "Sequential case (R001): gate returns forced_sequential when master disabled",
+      "status": "PASS",
+      "detail": "source=rollout_master_disabled"
+    },
+    {
+      "label": "FE-safe case (R023 fe_led): gate returns gated_parallel_allowed when master enabled",
+      "status": "PASS",
+      "detail": "source=eligibility_policy_allowed"
+    },
+    {
+      "label": "Non-FE-safe case (R015 be_led): forced sequential even when master enabled",
+      "status": "PASS",
+      "detail": "deny_reason=unapproved_input_class"
+    },
+    {
+      "label": "Replay runner script exists and passes syntax check",
+      "status": "PASS",
+      "detail": "exists"
+    },
+    {
+      "label": "Staging artifact directory is writable",
+      "status": "PASS",
+      "detail": "writable"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "from_step": "qa_verify",
+  "to_step": "release_pack",
+  "qa_report_path": "verify/qa_report.json",
+  "overall_status": "pass",
+  "verified_artifacts": [
+    "A1"
+  ],
+  "run_id": "e2e-happy-run",
+  "workflow_run_id": "e2e-happy-run"
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "coding_team_impl_to_qa_handoff.schema.json",
+  "title": "Coding Team Impl-to-QA Handoff",
+  "description": "Handoff manifest from implementation steps (BE + FE) to QA Verify step. QA agent must not proceed without a valid instance of this schema.",
+  "type": "object",
+  "required": ["from_steps", "to_step", "be_changes_path", "fe_changes_path", "run_instructions"],
+  "additionalProperties": true,
+  "properties": {
+    "from_steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Steps that produced this handoff. Typically ['impl_be', 'impl_fe']."
+    },
+    "to_step": {
+      "type": "string",
+      "const": "qa_verify",
+      "description": "Must be 'qa_verify'."
+    },
+    "be_changes_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Relative path to impl/be_changes/ directory."
+    },
+    "fe_changes_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Relative path to impl/fe_changes/ directory."
+    },
+    "run_instructions": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Step-by-step instructions for QA to run the implementation locally and reproduce the expected behavior."
+    },
+    "known_limitations": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Known gaps or out-of-scope items not implemented. QA must not fail on these."
+    },
+    "api_contracts_path": {
+      "type": "string",
+      "description": "Path to the BE-to-FE handoff file that defines the API contracts, for semantic verification."
+    },
+    "run_id": { "type": "string" },
+    "workflow_run_id": { "type": "string" }
+  }
+}

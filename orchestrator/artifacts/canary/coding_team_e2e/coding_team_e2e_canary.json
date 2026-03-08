@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-08T10:38:46.468Z",
+  "cases": {
+    "happy_path": {
+      "verdict": "pass",
+      "steps_succeeded": 6,
+      "checkpoints": 6
+    },
+    "be_failure": {
+      "verdict": "pass",
+      "workflow_status": "failed",
+      "be_error_code": "STEP_IMPL_BE_ARTIFACTS_MISSING",
+      "tasks_dispatched": 3
+    }
+  }
+}

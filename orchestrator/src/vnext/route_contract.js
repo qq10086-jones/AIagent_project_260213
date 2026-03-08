@@ -2,7 +2,7 @@ import { normalizeInputRequest } from "./input_normalizer.js";
 import { routeTaskRequest } from "./brain_router.js";
 import { assertRouteContractResponse } from "./contract_validator.js";
 
-export function buildRouteContractResponse({ body = {}, analyzerResult = null, registry }) {
+export function buildRouteContractResponse({ body = {}, analyzerResult = undefined, registry }) {
   const normalized = normalizeInputRequest(body || {});
   if (!normalized.raw_input) {
     const err = new Error("raw_input/message is required");

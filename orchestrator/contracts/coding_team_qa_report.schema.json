@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "coding_team_qa_report.schema.json",
+  "type": "object",
+  "required": ["overall_status", "checks", "verified_artifacts"],
+  "properties": {
+    "overall_status": {
+      "type": "string",
+      "enum": ["pass", "pass_with_warnings", "fail"]
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["check_id", "layer", "description", "status", "detail"],
+        "properties": {
+          "check_id": { "type": "string", "minLength": 1 },
+          "layer": { "type": "string", "enum": ["deterministic", "semantic"] },
+          "description": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["pass", "fail", "warning"] },
+          "detail": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "verified_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "generated_at": { "type": "string" },
+    "step_id": { "type": "string" }
+  },
+  "additionalProperties": true
+}

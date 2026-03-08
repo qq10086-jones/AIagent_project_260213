@@ -4,5 +4,6 @@ COPY package.json ./
 RUN npm install --omit=dev
 COPY src ./src
 COPY configs ./configs
+COPY contracts ./contracts
 EXPOSE 3000
 CMD ["npm","start"]

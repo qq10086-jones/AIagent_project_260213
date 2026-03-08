@@ -1,0 +1,9 @@
+{
+  "step_id": "impl_fe",
+  "artifact_count": 2,
+  "bytes_total": 9311,
+  "largest_artifact_bytes": 6000,
+  "prompt_chars": 50120,
+  "status": "danger",
+  "threshold_source": ""
+}

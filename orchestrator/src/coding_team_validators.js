@@ -11,6 +11,9 @@ const PM_ACCEPTANCE_SCHEMA = JSON.parse(
 const ARCH_RISK_REPORT_SCHEMA = JSON.parse(
   fs.readFileSync(path.resolve(CONTRACTS_DIR, "coding_team_arch_risk_report.schema.json"), "utf8")
 );
+const RELEASE_ARTIFACT_MANIFEST_SCHEMA = JSON.parse(
+  fs.readFileSync(path.resolve(CONTRACTS_DIR, "coding_team_release_artifact_manifest.schema.json"), "utf8")
+);
 
 export const PM_REQUIRED_FILES = ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"];
 export const PM_REQUIRED_SECTION_MATCHERS = [
@@ -21,7 +24,7 @@ export const PM_REQUIRED_SECTION_MATCHERS = [
   { id: "artifact_list", patterns: ["artifact list", "artifacts"] },
 ];
 
-export const ARCH_REQUIRED_FILES = ["plan/arch.md", "risk/risk_report.json", "plan/workplan.md"];
+export const ARCH_REQUIRED_FILES = ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md"];
 export const ARCH_REQUIRED_SECTION_MATCHERS = [
   { id: "module_breakdown", patterns: ["module"] },
   { id: "interfaces", patterns: ["interface"] },
@@ -42,6 +45,17 @@ const ARCH_REQUIRED_HEADINGS = [
   { id: "interfaces", patterns: ["interfaces", "interface contracts"] },
   { id: "dependency_choices", patterns: ["dependency choices", "dependencies"] },
   { id: "risk_notes", patterns: ["risk notes", "risks"] },
+];
+
+const INTERFACE_HEADING_PATTERNS = [
+  /^get\s+\S+/,
+  /^post\s+\S+/,
+  /^put\s+\S+/,
+  /^patch\s+\S+/,
+  /^delete\s+\S+/,
+  /^interface[:\s]/,
+  /^event[:\s]/,
+  /^rpc[:\s]/,
 ];
 
 function readJsonFile(absPath) {
@@ -73,6 +87,30 @@ function findMissingHeadings(text, headingMatchers = []) {
   return headingMatchers
     .filter((matcher) => !matcher.patterns.some((pattern) => headings.some((heading) => heading.includes(pattern))))
     .map((matcher) => matcher.id);
+}
+
+function validateInterfacesDocument(text) {
+  const headings = extractMarkdownHeadings(text);
+  if (headings.length === 0) {
+    return {
+      ok: false,
+      code: "ARCH_INTERFACES_EMPTY",
+      detail: "plan/interfaces.md does not contain any markdown headings",
+      headings: [],
+    };
+  }
+  const interfaceHeadings = headings.filter((heading) =>
+    INTERFACE_HEADING_PATTERNS.some((pattern) => pattern.test(heading))
+  );
+  if (interfaceHeadings.length === 0) {
+    return {
+      ok: false,
+      code: "ARCH_INTERFACES_UNSPECIFIED",
+      detail: "plan/interfaces.md must contain at least one concrete interface heading",
+      headings,
+    };
+  }
+  return { ok: true, headings, interface_headings: interfaceHeadings };
 }
 
 function normalizeRoot(workspaceRoot, artifactRoot) {
@@ -145,10 +183,11 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
   }
 
   const archPath = path.resolve(rootAbs, ARCH_REQUIRED_FILES[0]);
-  const riskPath = path.resolve(rootAbs, ARCH_REQUIRED_FILES[1]);
-  const workplanPath = path.resolve(rootAbs, ARCH_REQUIRED_FILES[2]);
+  const interfacesPath = path.resolve(rootAbs, ARCH_REQUIRED_FILES[1]);
+  const riskPath = path.resolve(rootAbs, ARCH_REQUIRED_FILES[2]);
+  const workplanPath = path.resolve(rootAbs, ARCH_REQUIRED_FILES[3]);
 
-  const missingFiles = [archPath, riskPath, workplanPath].filter((item) => !fs.existsSync(item));
+  const missingFiles = [archPath, interfacesPath, riskPath, workplanPath].filter((item) => !fs.existsSync(item));
   if (missingFiles.length > 0) {
     return {
       checked: true,
@@ -160,6 +199,7 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
 
   const rawArchText = readTextFile(archPath);
   const archText = rawArchText.toLowerCase();
+  const rawInterfacesText = readTextFile(interfacesPath);
   const workplanText = readTextFile(workplanPath).toLowerCase();
   const riskJson = readJsonFile(riskPath);
   const missingSections = [];
@@ -174,6 +214,10 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
   const riskErrors = validateJsonSchemaLite(ARCH_RISK_REPORT_SCHEMA, riskJson, "$");
   if (riskErrors.length > 0) {
     missingSections.push(...riskErrors.map((item) => `risk_report.json:${item}`));
+  }
+  const interfacesValidation = validateInterfacesDocument(rawInterfacesText);
+  if (!interfacesValidation.ok) {
+    missingSections.push(interfacesValidation.code);
   }
 
   if (missingSections.length > 0) {
@@ -190,6 +234,67 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
     ok: true,
     files_checked: ARCH_REQUIRED_FILES,
     headings_checked: ARCH_REQUIRED_HEADINGS.map((item) => item.id),
+    interfaces_checked: interfacesValidation.interface_headings,
     schema_checked: ARCH_RISK_REPORT_SCHEMA.$id,
+  };
+}
+
+export const RELEASE_REQUIRED_FILES = ["release/release_notes.md", "release/artifact_manifest.json"];
+
+export function validateReleaseOutput({ workspaceRoot, artifactRoot }) {
+  const rootAbs = normalizeRoot(workspaceRoot, artifactRoot);
+  if (!rootAbs) {
+    return { checked: true, ok: false, code: "RELEASE_ARTIFACT_ROOT_MISSING", detail: "artifact_root missing" };
+  }
+
+  const notesPath = path.resolve(rootAbs, "release/release_notes.md");
+  const manifestPath = path.resolve(rootAbs, "release/artifact_manifest.json");
+
+  const missingFiles = [notesPath, manifestPath].filter((item) => !fs.existsSync(item));
+  if (missingFiles.length > 0) {
+    return {
+      checked: true,
+      ok: false,
+      code: "RELEASE_REQUIRED_FILES_MISSING",
+      detail: `missing release files: ${missingFiles.map((item) => path.relative(rootAbs, item)).join(", ")}`,
+    };
+  }
+
+  const notesText = readTextFile(notesPath);
+  if (!notesText || notesText.trim().length < 10) {
+    return {
+      checked: true,
+      ok: false,
+      code: "RELEASE_NOTES_EMPTY",
+      detail: "release/release_notes.md is empty or too short",
+    };
+  }
+
+  const manifest = readJsonFile(manifestPath);
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    return {
+      checked: true,
+      ok: false,
+      code: "RELEASE_MANIFEST_INVALID_JSON",
+      detail: "release/artifact_manifest.json is not valid JSON",
+    };
+  }
+
+  const schemaErrors = validateJsonSchemaLite(RELEASE_ARTIFACT_MANIFEST_SCHEMA, manifest, "$");
+  if (schemaErrors.length > 0) {
+    return {
+      checked: true,
+      ok: false,
+      code: "RELEASE_MANIFEST_SCHEMA_INVALID",
+      detail: `artifact_manifest.json schema errors: ${schemaErrors.join("; ")}`,
+    };
+  }
+
+  return {
+    checked: true,
+    ok: true,
+    files_checked: RELEASE_REQUIRED_FILES,
+    schema_checked: RELEASE_ARTIFACT_MANIFEST_SCHEMA.$id,
+    artifact_count: Array.isArray(manifest.artifacts) ? manifest.artifacts.length : 0,
   };
 }

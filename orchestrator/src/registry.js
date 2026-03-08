@@ -72,6 +72,14 @@ export function loadRegistryOrThrow(registryPath) {
       errors.push(`workflow '${workflowId}' must define non-empty steps[]`);
       continue;
     }
+    const stepIds = new Set();
+    for (const step of wf.steps) {
+      if (!String(step?.id || "").trim()) continue;
+      if (stepIds.has(step.id)) {
+        errors.push(`workflow '${workflowId}' contains duplicate step id '${step.id}'`);
+      }
+      stepIds.add(step.id);
+    }
     for (const step of wf.steps) {
       if (!reg.roles[step.role]) errors.push(`workflow '${workflowId}' step '${step.id}' references unknown role '${step.role}'`);
       if (!reg.tools[step.tool]) errors.push(`workflow '${workflowId}' step '${step.id}' references unknown tool '${step.tool}'`);
@@ -80,6 +88,28 @@ export function loadRegistryOrThrow(registryPath) {
       }
       if (step.prompt_script_id && typeof step.prompt_script_id !== "string") {
         errors.push(`workflow '${workflowId}' step '${step.id}' prompt_script_id must be a string`);
+      }
+      if (step.depends_on !== undefined && !Array.isArray(step.depends_on)) {
+        errors.push(`workflow '${workflowId}' step '${step.id}' depends_on must be an array`);
+      }
+      if (Array.isArray(step.depends_on)) {
+        const seenDependencies = new Set();
+        for (const dependencyId of step.depends_on) {
+          if (typeof dependencyId !== "string" || dependencyId.trim() === "") {
+            errors.push(`workflow '${workflowId}' step '${step.id}' depends_on must contain non-empty strings`);
+            continue;
+          }
+          if (dependencyId === step.id) {
+            errors.push(`workflow '${workflowId}' step '${step.id}' cannot depend on itself`);
+          }
+          if (seenDependencies.has(dependencyId)) {
+            errors.push(`workflow '${workflowId}' step '${step.id}' has duplicate dependency '${dependencyId}'`);
+          }
+          seenDependencies.add(dependencyId);
+          if (!stepIds.has(dependencyId)) {
+            errors.push(`workflow '${workflowId}' step '${step.id}' depends_on unknown step '${dependencyId}'`);
+          }
+        }
       }
     }
   }

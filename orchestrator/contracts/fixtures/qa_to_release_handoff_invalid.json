@@ -1,0 +1,6 @@
+{
+  "_comment": "INVALID: missing required fields 'qa_report_path', 'verified_artifacts'; overall_status value not in enum",
+  "from_step": "qa_verify",
+  "to_step": "release_pack",
+  "overall_status": "unknown"
+}

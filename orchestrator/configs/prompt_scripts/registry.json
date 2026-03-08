@@ -1,0 +1,327 @@
+{
+  "version": "1",
+  "scripts": {
+    "pm.design_doc.v1": {
+      "script_id": "pm.design_doc.v1",
+      "role": "pm",
+      "llm_role": "pm",
+      "agent_id": "pm_agent",
+      "artifact_type": "design_doc",
+      "goal": "Produce a scoped product design document with user stories, acceptance criteria, and phased milestones.",
+      "required_sections": ["user_stories", "scope_boundaries", "acceptance_criteria", "milestones"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string" },
+          "project_type": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "spec_path": { "type": "string" },
+          "acceptance_path": { "type": "string" },
+          "milestones_path": { "type": "string" }
+        }
+      },
+      "tool_permissions": ["coding.delegate"],
+      "validation": {
+        "required_files": ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"],
+        "min_word_count": 200
+      }
+    },
+    "architect.system_spec.v1": {
+      "script_id": "architect.system_spec.v1",
+      "role": "architect",
+      "llm_role": "architect",
+      "agent_id": "architect_agent",
+      "artifact_type": "system_spec",
+      "goal": "Generate a system specification with architecture decisions, module boundaries, and risk notes.",
+      "required_sections": ["module_breakdown", "interfaces", "dependency_choices", "risk_notes"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string" },
+          "project_type": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "arch_path": { "type": "string" },
+          "interfaces_path": { "type": "string" },
+          "risk_report_path": { "type": "string" },
+          "workplan_path": { "type": "string" }
+        }
+      },
+      "tool_permissions": ["coding.delegate"],
+      "validation": {
+        "required_files": ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md"],
+        "min_word_count": 300
+      }
+    },
+    "architect.system_spec.v2": {
+      "script_id": "architect.system_spec.v2",
+      "role": "architect",
+      "llm_role": "architect",
+      "agent_id": "architect_agent",
+      "artifact_type": "system_spec",
+      "goal": "Generate a comprehensive system specification with ADRs, module boundaries, interfaces, and workplan.",
+      "required_sections": ["module_breakdown", "interfaces", "dependency_choices", "risk_notes", "adr", "workplan"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string" },
+          "project_type": { "type": "string" },
+          "prior_adrs": { "type": "array" },
+          "project_context": { "type": "object" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "arch_path": { "type": "string" },
+          "interfaces_path": { "type": "string" },
+          "risk_report_path": { "type": "string" },
+          "workplan_path": { "type": "string" },
+          "adr_paths": { "type": "array" }
+        }
+      },
+      "tool_permissions": ["coding.delegate"],
+      "system_prompt": "You are the system architect. Produce a comprehensive system specification.\n\nADR Template (use for each major technology decision):\n```\n# ADR-{N}: {Title}\n## Status: Proposed | Accepted | Deprecated\n## Context\n{Why this decision is needed}\n## Decision\n{What was decided}\n## Consequences\n{Trade-offs, risks, follow-ups}\n```\n\nRequired outputs:\n- plan/arch.md — Architecture overview with module boundaries and dependency graph\n- plan/interfaces.md — ALL API endpoints with method, path, request/response schemas\n- plan/workplan.md — Phased implementation tasks split by FE/BE/QA roles\n- risk/risk_report.json — Top risks with severity, mitigation, and owner\n- adr/adr-{N}.md — At least ONE ADR per major technology decision (framework, database, auth, hosting)\n\nInterface contract: plan/interfaces.md must enumerate every HTTP endpoint, internal RPC, or event schema used between modules. Each entry must include: method, path, request body shape, response body shape, and auth requirement.\n\nADR requirement: produce at minimum one ADR for each of the following categories where a choice is made — frontend framework, backend runtime, data store, authentication mechanism.",
+      "validation": {
+        "required_files": ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md"],
+        "required_dirs": ["adr"],
+        "min_adr_count": 1,
+        "min_word_count": 500,
+        "interfaces_must_have_endpoints": true
+      }
+    },
+    "qa.test_plan.v1": {
+      "script_id": "qa.test_plan.v1",
+      "role": "qa",
+      "llm_role": "qa",
+      "agent_id": "qa_agent",
+      "artifact_type": "test_plan",
+      "goal": "Produce a test plan mapping acceptance criteria to verifiable test cases with smoke evidence.",
+      "required_sections": ["test_cases", "smoke_evidence", "verification_matrix"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string" },
+          "acceptance_criteria": { "type": "array" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "qa_report_path": { "type": "string" }
+        }
+      },
+      "tool_permissions": ["coding.execute", "coding.delegate"],
+      "validation": {
+        "required_files": ["verify/qa_report.json"],
+        "min_word_count": 150
+      }
+    },
+    "backend.impl.v1": {
+      "script_id": "backend.impl.v1",
+      "role": "backend",
+      "llm_role": "backend",
+      "agent_id": "backend_agent",
+      "artifact_type": "backend_impl",
+      "goal": "Produce complete backend implementation files and a typed BE-to-FE handoff manifest.",
+      "required_sections": ["api_contracts", "shared_types", "scope_constraints", "run_instructions"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string" },
+          "project_type": { "type": "string" },
+          "architect_handoff_path": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "be_changes_path": { "type": "string" },
+          "be_notes_path": { "type": "string" },
+          "handoff_path": { "type": "string" }
+        }
+      },
+      "tool_permissions": ["coding.delegate"],
+      "system_prompt": "Implement the backend step as complete files, not diffs. Required outputs: impl/be_changes/* complete backend files, impl/be_notes.md with decisions and run instructions, and handoff/be_to_fe.json matching the typed schema. The handoff must list implemented API endpoints, shared_types, and explicit scope_constraints.",
+      "validation": {
+        "required_files": ["impl/be_notes.md", "handoff/be_to_fe.json"],
+        "required_dirs": ["impl/be_changes"],
+        "min_word_count": 120
+      }
+    },
+    "backend.impl.v2": {
+      "script_id": "backend.impl.v2",
+      "role": "backend",
+      "llm_role": "backend",
+      "agent_id": "backend_agent",
+      "artifact_type": "backend_impl_patch_bundle",
+      "goal": "Produce a structured patch bundle for backend implementation when target files already exist, with full-file fallback when patch output is not viable.",
+      "required_sections": ["patch_operations", "api_contracts", "scope_constraints", "run_instructions"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string" },
+          "project_type": { "type": "string" },
+          "architect_handoff_path": { "type": "string" },
+          "target_file_context": { "type": "array" },
+          "diff_first_enabled": { "type": "boolean" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "patch_bundle_path": { "type": "string" },
+          "be_notes_path": { "type": "string" },
+          "handoff_path": { "type": "string" },
+          "execution_mode_used": { "type": "string" }
+        }
+      },
+      "tool_permissions": ["coding.delegate"],
+      "system_prompt": "Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Include only deterministic operations of type replace_range, insert_after_anchor, delete_range, or create_file. Write the bundle under impl/be_patch_bundle.json, write impl/be_notes.md with decisions and run instructions, and write handoff/be_to_fe.json matching the typed schema. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/be_changes/ with the same handoff contract.",
+      "validation": {
+        "required_files": ["impl/be_notes.md", "handoff/be_to_fe.json"],
+        "one_of_files": ["impl/be_patch_bundle.json", "impl/be_changes/server.js"],
+        "min_word_count": 120
+      }
+    },
+    "frontend.impl.v1": {
+      "script_id": "frontend.impl.v1",
+      "role": "frontend",
+      "llm_role": "frontend",
+      "agent_id": "frontend_agent",
+      "artifact_type": "frontend_impl",
+      "goal": "Produce complete frontend implementation files that consume the backend handoff contract.",
+      "required_sections": ["ui_scope", "api_consumption", "run_instructions"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string" },
+          "project_type": { "type": "string" },
+          "be_handoff_path": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "fe_changes_path": { "type": "string" },
+          "fe_notes_path": { "type": "string" }
+        }
+      },
+      "tool_permissions": ["coding.delegate"],
+      "system_prompt": "Implement the frontend step as complete files, not diffs. Required outputs: impl/fe_changes/* complete frontend files and impl/fe_notes.md with UI decisions and run instructions. Frontend must consume handoff/be_to_fe.json and must not assume APIs outside that handoff.",
+      "validation": {
+        "required_files": ["impl/fe_notes.md"],
+        "required_dirs": ["impl/fe_changes"],
+        "min_word_count": 120
+      }
+    },
+    "frontend.impl.v2": {
+      "script_id": "frontend.impl.v2",
+      "role": "frontend",
+      "llm_role": "frontend",
+      "agent_id": "frontend_agent",
+      "artifact_type": "frontend_impl_patch_bundle",
+      "goal": "Produce a structured patch bundle for frontend implementation when target files already exist, with full-file fallback when patch output is not viable.",
+      "required_sections": ["patch_operations", "ui_scope", "api_consumption", "run_instructions"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string" },
+          "project_type": { "type": "string" },
+          "be_handoff_path": { "type": "string" },
+          "target_file_context": { "type": "array" },
+          "diff_first_enabled": { "type": "boolean" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "patch_bundle_path": { "type": "string" },
+          "fe_notes_path": { "type": "string" },
+          "execution_mode_used": { "type": "string" }
+        }
+      },
+      "tool_permissions": ["coding.delegate"],
+      "system_prompt": "Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Consume handoff/be_to_fe.json as the only backend contract source. Write the bundle under impl/fe_patch_bundle.json and write impl/fe_notes.md with UI decisions and run instructions. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/fe_changes/.",
+      "validation": {
+        "required_files": ["impl/fe_notes.md"],
+        "one_of_files": ["impl/fe_patch_bundle.json", "impl/fe_changes/app.js"],
+        "min_word_count": 120
+      }
+    },
+    "qa.verify.v1": {
+      "script_id": "qa.verify.v1",
+      "role": "qa",
+      "llm_role": "qa",
+      "agent_id": "qa_agent",
+      "artifact_type": "qa_verify",
+      "goal": "Produce a structured QA verification report with deterministic and semantic checks.",
+      "required_sections": ["deterministic_checks", "semantic_checks", "verified_artifacts"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string" },
+          "project_type": { "type": "string" },
+          "impl_to_qa_handoff_path": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "qa_report_path": { "type": "string" }
+        }
+      },
+      "tool_permissions": ["coding.execute", "coding.delegate"],
+      "system_prompt": "Produce verify/qa_report.json only. The report must include both deterministic and semantic checks, overall_status, and verified_artifacts. If a required upstream artifact is missing, set overall_status=fail and do not claim semantic success.",
+      "validation": {
+        "required_files": ["verify/qa_report.json"],
+        "min_word_count": 80
+      }
+    },
+    "release.pack.v1": {
+      "script_id": "release.pack.v1",
+      "role": "release",
+      "llm_role": "release",
+      "agent_id": "release_agent",
+      "artifact_type": "release_pack",
+      "goal": "Produce a release notes document and a structured artifact manifest from the verified QA artifacts.",
+      "required_sections": ["artifact_traceability", "go_no_go_summary"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "goal": { "type": "string" },
+          "project_type": { "type": "string" },
+          "qa_to_release_handoff_path": { "type": "string" }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "release_notes_path": { "type": "string" },
+          "artifact_manifest_path": { "type": "string" }
+        }
+      },
+      "tool_permissions": ["coding.delegate"],
+      "system_prompt": "Produce exactly two outputs: release/release_notes.md (human-readable summary of what was built and verified) and release/artifact_manifest.json (machine-readable manifest). The manifest must include run_id, workflow_id, completed_at, and an artifacts array where each entry has path, type, and size_bytes. Source artifact list from handoff/qa_to_release.json verified_artifacts field.",
+      "validation": {
+        "required_files": ["release/release_notes.md", "release/artifact_manifest.json"],
+        "min_word_count": 60
+      }
+    }
+  },
+  "workflow_bindings": {
+    "pm_spec": "pm.design_doc.v1",
+    "arch_design": "architect.system_spec.v2",
+    "impl_be": "backend.impl.v1",
+    "impl_fe": "frontend.impl.v1",
+    "qa_verify": "qa.verify.v1",
+    "release_pack": "release.pack.v1"
+  }
+}

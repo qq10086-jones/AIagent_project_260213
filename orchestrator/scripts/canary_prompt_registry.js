@@ -26,8 +26,15 @@ function main() {
 
   const expectedScripts = fixture.expected?.scripts || [];
   for (const scriptId of expectedScripts) {
-    if (!promptRegistry.scripts?.[scriptId]) {
+    const script = promptRegistry.scripts?.[scriptId];
+    if (!script) {
       throw new Error(`missing script '${scriptId}'`);
+    }
+    if (!String(script.llm_role || "").trim()) {
+      throw new Error(`script '${scriptId}' missing llm_role`);
+    }
+    if (Object.prototype.hasOwnProperty.call(script, "model")) {
+      throw new Error(`script '${scriptId}' still contains deprecated model field`);
     }
   }
 

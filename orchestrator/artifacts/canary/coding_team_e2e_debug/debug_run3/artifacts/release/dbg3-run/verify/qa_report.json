@@ -1,0 +1,17 @@
+{
+  "overall_status": "pass",
+  "checks": [
+    {
+      "check_id": "D-01",
+      "layer": "deterministic",
+      "description": "BE present",
+      "status": "pass",
+      "detail": "ok"
+    }
+  ],
+  "verified_artifacts": [
+    "AC-001"
+  ],
+  "generated_at": "2026-03-08T10:14:41.584Z",
+  "step_id": "qa_verify"
+}

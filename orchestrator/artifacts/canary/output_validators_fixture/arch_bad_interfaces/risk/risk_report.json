@@ -1,0 +1,14 @@
+{
+  "risks": [
+    {
+      "level": "medium",
+      "title": "auth integration",
+      "mitigation": "add staged rollout"
+    }
+  ],
+  "decision_log": [
+    "Use postgres for primary persistence",
+    "Ship auth first behind feature flag"
+  ],
+  "generated_at": "2026-03-07T13:16:29.694Z"
+}

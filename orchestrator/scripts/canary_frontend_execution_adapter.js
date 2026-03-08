@@ -15,7 +15,7 @@ function main() {
   const packet = buildFrontendExecutionPacket({
     stepDef: { id: "impl_fe", role: "frontend" },
     payload: {
-      expected_artifacts: ["patch/diff.patch", "tests/frontend_test_report.md", "run/run_frontend.md"],
+      expected_artifacts: ["impl/fe_changes/app.js", "impl/fe_notes.md"],
       target_paths: ["sandbox/crm_site/"],
     },
     provider: "qwen",

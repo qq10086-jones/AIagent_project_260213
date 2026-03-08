@@ -1,434 +1,189 @@
-﻿# Feature Progress Latest Snapshot
+# Feature Progress Latest Snapshot
 
 ## Date
-2026-03-01
+2026-03-09
 
 ## Current State
-- **Major Architecture Decoupling (Phase 1 & 2 Completed)**: Transitioned from a monolithic orchestrator to a **Skill-as-a-Service** model.
-- **Worker-Coder Launched**: A dedicated `worker-coder` container is now operational, handling all coding tasks via Redis Streams.
-- **Orchestrator Gateway Refined**: Removed all hardcoded business logic from `index.js`, which now acts as a pure API Gateway and security layer.
-- **Unified Workspace Mapping**: Standardized `/workspace` volume across all containers to ensure consistent file access for the Coding Agent.
-- **Real Chain Verified (Patch + Execute)**: Completed end-to-end verification with task approval flow; `coding.patch` and `coding.execute` both reached `succeeded`.
-- **Discord Coder Entry Online**: Added a dedicated `/coder:` directive path in Discord to force `Brain mode=coding` without passing through quant intent routing.
-- **Codex Delegation Online**: `/coder:` now routes to `coding.delegate` and executes through Codex adapter in `worker-coder`.
-- **Coder Result Rendering Fixed**: `coding.delegate` now uses dedicated result formatting (run/task id, changed files, artifacts), no longer falling back to quant-style `SYSTEM Analysis Report`.
-- **Approval Policy Upgraded**: switched from blanket approval to **risk-based approval** for `coding.delegate` (low-risk auto-run, high-risk waiting approval).
-- **Change Detection Accuracy Fixed**: `worker-coder` now reports real changed files (`git status --porcelain -uall` + artifact noise filtering), avoiding `artifacts/runs/...` false positives.
+- Milestone 2: **CLOSED** (2026-03-07)
+- Milestone 3: **CLOSED** (2026-03-07)
+- Milestone 4: **CLOSED** (2026-03-08)
+- Milestone 5: **CLOSED** (2026-03-08)
+- Milestone 6: **INFRASTRUCTURE COMPLETE / STAY_GATED** (2026-03-09)
+  - All 5 phases delivered
+  - go/no-go decision: STAY_GATED（仿真指标满足阈值；待真实 LLM staging run 升级为 GO_LIMITED_EXPOSURE）
 
-## Architecture Highlights
-- **Asynchronous Task Flow**: Brain now triggers tools via `trigger_tool`, which enqueues tasks into Redis. Workers claim tasks based on `tool_name` prefixes.
-- **DB-backed Fact Polling**: Enhanced `supervisor.py` with an improved `poll_for_fact` mechanism that supports tool-specific result retrieval from PostgreSQL.
-- **Service-Level Isolation**: `worker-coder` has its own environment (Git, Python, Node.js), preventing dependency bloat in the main orchestrator.
+## Active Design Constraints
+- Design Addendum: `docs/01_design/system/260308/260308_2330/OpenClaw_Nexus_Design_Document_v3.2.md`
+- Engineering Task List: `docs/01_design/system/260308/260308_2330/open_claw_nexus_engineering_task_list_m6_v3.md`
+- Governance: `docs/01_design/system/260308/260308_2330/OpenClaw_Execution_Governance_Scope_Control_v3.md`
+- Architect Contract: `docs/01_design/system/260307/Architect_Engineer_Role_Contract.md`
 
-## Coding Agent Improvements
-- **Robust Patching**: `patch_manager.js` (now in `worker-coder`) supports multi-block edits with extreme whitespace normalization to handle diverse LLM outputs.
-- **Security Hardening**: Strict shell meta-character blocking and whitelist-based command execution are enforced at the worker level.
-- **Full-Chain Success**: Verified the complete loop: `Brain` (Python) -> `Orchestrator` (HTTP) -> `Redis` -> `Worker-Coder` (Node.js) -> `FileSystem` -> `PostgreSQL` -> `Brain` (Poll).
-- **Queue Isolation Completed**: `coding.*` now routes to dedicated stream `stream:task:coding`, preventing cross-consumption with `worker-quant`.
-- **Parser Compatibility Fixes**: Coder-side SEARCH/REPLACE parsing now tolerates 6-7 `>` variants, reducing extraction misses.
-- **Direct Task Injection**: `brain /run` now accepts external `messages`, enabling direct coding-task prompts from orchestrator and future skill frontends.
+---
 
-## Today Validation Notes
-- **Date**: 2026-03-01
-- **Run ID**: `docker-chain-test-1772340993`
-- **Task Status**:
-  - `coding.patch`: `succeeded`
-  - `coding.execute`: `succeeded` (after approval)
-- **Important Runtime Note**: `worker-coder` uses image build mode; code changes require `docker compose build worker-coder` before restart to take effect.
-- **Discord Trigger Validation**:
-  - `/coder: <task>` now routes directly to coding workflow.
-  - Existing quant/discovery routing remains unchanged.
-- **Delegation Validation**:
-  - Codex auth + CLI path issues resolved; delegated runs can create files under `/workspace/coder_test`.
-  - Example succeeded runs include file writes and artifact generation under `artifacts/runs/<run_id>/task_<task_id>/`.
-- **Risk Policy Validation**:
-  - Low-risk prompt auto-ran to `succeeded` without manual `/approve`.
-  - High-risk prompt (destructive/install pattern) correctly entered `waiting_approval`.
-- **Functional Demo Validation**:
-  - Implemented runnable scientific calculator in `sandbox/calculator.py` using safe AST evaluation.
-  - Local checks passed for arithmetic, trig/log functions, and malicious expression blocking.
+## Milestone 6 Status
 
-## Next Steps
-- **Phase 3 (Long-term)**: Implement the plugin-based dynamic node loading in the Brain to fully decouple `supervisor.py`.
-- **Media Skill Integration**: Begin scaffolding `worker-media` using the now-proven Redis Stream worker pattern.
-- **Refine Prompting**: Optimize the Coder Agent's prompts to reduce "SEARCH block not found" errors by enforcing exact context preservation.
-- **Ops Improvement**: Add explicit docs/CLI helper for approval flow (`/tasks/:task_id/approve`) and optional auto-approval policy for trusted environments.
-- **Coder-Centric Skill Fabric**: Standardize skill prefixes (`/coder:`, future `/ui:`, `/db:`) to keep Coder as the primary orchestrator while enabling multi-skill expansion.
+### Phase 0 — Approval Entry Gate
+- Phase 0 approval: **DONE** (2026-03-09)
+  - v3.2 design addendum reviewed and approved by Architect
+  - M5 closed state confirmed as production baseline
+  - `docs/governance/m6_phase0_approval.md` written
 
-## vNext P0 Go-Live (Execution Update)
-- **P0-1 Completed**: Added `worker-coder/adapters/opencode_adapter.js` with standardized adapter fields and unified error codes (`E_PROVIDER_UNAVAILABLE`, `E_TIMEOUT`, `E_APPLY_FAILED`, `E_INTERNAL`).
-- **P0-2 Completed**: `worker-coder/coding_service.js` now routes `provider=auto -> opencode`, with fallback to `codex` only when OpenCode is unavailable; model passthrough and command source are recorded.
-- **P0-2 Completed**: `worker-coder/worker.js` now passes through `opencode_command` payload for delegated execution.
-- **P0-3 Completed**: `/coder` default payload switched to `provider=opencode`, default model `minimax-m2.5`, with explicit `@gpt-5.3` override support.
-- **P0-3 Completed**: Coder result rendering remains on dedicated coder template (`formatCodingDelegateResult`), no quant fallback text path.
-- **P0-4 Completed**: `configs/tools.json` aligned to risk-based approval baseline (`coding.delegate` no blanket approval in config).
-- **P0-4 Completed**: `infra/docker-compose.yml` added `CODER_PROVIDER_DEFAULT`, `CODER_MODEL_DEFAULT`, and `OPENCODE_BIN` env wiring.
-- **P0-5 Completed**: Added log/artifact redaction in `worker-coder/coding_service.js`; expanded `.gitignore` for local auth/runtime secret artifacts.
-- **P0-5 Validation**: secrets scan executed for tracked files + staged diff; result `tracked_hits=0`, `staged_hits=0`.
-- **Remaining**: Container-level E2E/canary validation (Day1 16h-24h / Day2) not yet executed in this update.
+### Phase 1 — Replay + Contracts
 
-## vNext P0 Closure (2026-03-02)
-- **E2E A/B/C Completed**: low-risk auto-run, high-risk approval gate, approve-resume, reject-terminate all verified via orchestrator `/execute-tool` + approval APIs.
-- **Model Switch Verified**: `coding.delegate` executed successfully with both `minimax-m2.5` and `gpt-5.3`.
-- **Fallback Verified**: when OpenCode is unavailable, delegation falls back to Codex and records `diagnostics.fallback_from=opencode`.
-- **Metrics (current E2E batch)**: total 5, success 4, expected reject-fail 1, high-risk gate hit 3/3, non-high-risk auto-run success 2/2.
-- **Runtime Note**: OpenCode CLI compatibility issue on Alpine was resolved by moving `worker-coder` base image to Debian slim (`node:20-bookworm-slim`).
+#### WS-23-01 Replay Corpus Contract
+- **DONE** (2026-03-09)
+  - `orchestrator/contracts/workflow_replay_manifest.schema.json` — JSON Schema (draft-07)
+  - `orchestrator/replay/manifests/m6_staging_replay_manifest.json` — 50 cases, all coverage floors PASS
+  - `orchestrator/replay/manifests/m6_staging_coverage_summary.json` — coverage verification
+  - `orchestrator/replay/fixtures/` — 6 category fixture files
+  - All counts: pm_heavy 7, arch_heavy 7, be_led 10, fe_led 10, qa_heavy 7, mixed_ambiguous 9, FE-safe 11, dirty-repo 5
 
-## Night Update (2026-03-02)
-- **Quant Report UX Upgraded**: `news.tdnet_close_flash` now outputs structured bullets and includes source links in Discord + HTML artifacts.
-- **Run Command Reliability**: explicit `/run <tool_name> [json_payload]` entry added in orchestrator to avoid intent-route misses.
-- **Config Hotfix**: DashScope endpoint normalized to `compatible-mode/v1`; services rebuilt and restarted.
-- **Open Issue Recorded**: command `40W JPY capital, how to operate tomorrow? currently no position` returns `Qwen API error 404 Not Found` in some path(s); pending unified endpoint/config tracing.
+#### WS-23-01.5 Replay Data Governance
+- **DONE** (2026-03-09)
+  - `docs/governance/replay_data_governance_m6.md` — raw prompt retention policy, 5-category sanitization rules, two-person review, retention periods, redaction procedure
+  - `orchestrator/replay/README.md` — on-disk sanitization reference
 
-### Pending (News System)
-1. Add media-home/channel backup links when direct article URLs are unavailable.
-2. Add source credibility labels in report rendering (official media/aggregator/forum).
+#### WS-24-01 FE-safe Completion Contract
+- **DONE** (2026-03-09)
+  - `docs/contracts/fe_safe_completion_contract.md`
+  - Defines: 5-criteria FE-safe eligibility, BE/FE branch completion conditions, QA admission (binary — both branches must succeed), artifact merge order, partial-output state, structural impossibility rule
 
-### Pending (Project)
-1. Continue `worker-quant/worker.py` cleanup to reduce legacy overlap risk.
-2. Standardize output contract across news tools (bullets + links + artifacts).
-3. Run canary regression for `/coder`, `/run news.tdnet_close_flash`, and approval workflows.
-4. Improve dashboard visibility for `tasks.result_json` key fields.
+#### WS-24-02 Failure-Handling Contract
+- **DONE** (2026-03-09)
+  - `docs/contracts/parallel_failure_handling_contract.md`
+  - Defines: 5 failure modes (BE success+FE failure, BE failure+FE success, branch timeout, patch failure, rollback-trigger), artifact quarantine policy, branch-specific retry (max 1 attempt), user-visible message templates, observability log schema
 
-## Late Night Continuation (2026-03-02 18:40 JST)
-- **Discovery Fast-Path Added**: capital/no-position/next-day operation prompts now enforce quick discovery payload (`quick_mode`, `time_budget_s=75`, `max_attempts=2`, `min_candidates=2`).
-- **Brain Payload Pass-through Fixed**: `brain/supervisor.py` allowlist now keeps quick fields; screening step auto-applies quick defaults for capital-driven discovery requests.
-- **Discovery Pre-step Short-Circuit**: for fast discovery runs, `news.daily_report` pre-step is skipped to reduce blocking risk.
-- **Worker Runtime Guardrails Added**: `worker-quant` discovery now has explicit time budget and early-stop behavior; LLM timeout is configurable and tightened for risk-scoring calls.
-- **Validation Result**:
-  - Qwen 404 path no longer directly surfaces in tested flow.
-  - Latest `tasks.payload_json` confirmed quick fields are now present.
-  - Worker logs confirmed `Quick=True` execution path.
-- **Still Open**:
-  1. `/chat` can still return generic `unknown Analysis Report` while discovery task continues/completes later (response aggregation timing mismatch).
-  2. Historical `news.daily_report` long-running tasks still exist and need timeout/degrade governance.
+#### WS-24-03 Exposure Eligibility Policy
+- **DONE** (2026-03-09)
+  - `orchestrator/configs/parallel_exposure_policy.json`
+  - Whitelists: `coding_team_v0` / `crm` / `fe_led`
+  - 7 deny conditions incl. `structural_completion_impossible` with `override_allow: true`
 
-## v1.4 Coding Team First (Kickoff Update — 2026-03-02 23:30 JST)
-- **Execution Focus Shift Confirmed**: aligned to `docs/01_design/system/260302/*` with core objective "autonomous Coding Team pipeline" (PM/Architect/FE/BE/QA), not generic multi-agent expansion.
-- **T1 Delivered (Registry Schema + Baseline Registry)**:
-  - Added `configs/registry/capability_registry.json`.
-  - Added `configs/registry/schemas/capability_registry.schema.json`.
-  - Added workflow/policy/acceptance seeds:
-    - `configs/registry/workflows/coding_team_v0.json`
-    - `configs/registry/acceptance/webapp_crm_v0.json`
-    - `configs/registry/policy/coding_task_v0.json`
-- **T2 Delivered (Validator CLI + CI Hook)**:
-  - Added `orchestrator/scripts/validate_registry.js`.
-  - Added npm script: `npm run validate:registry`.
-  - Added CI workflow: `.github/workflows/validate-registry.yml`.
-  - Local validation passed: `registry valid` (project_types=3, roles=8, tools=23, workflows=1).
-- **T3 Delivered (Runtime Fail-Fast Registry Loading)**:
-  - Added orchestrator registry module: `orchestrator/src/registry.js`.
-  - Orchestrator now loads/validates registry on startup (invalid registry blocks boot).
-- **T4 Partial Delivered (Task Submission Runtime Validation)**:
-  - `enqueueTask(...)` now validates `tool/project_type/workflow/role/params` against registry before queueing.
-  - Invalid payloads now fail with `REGISTRY_INVALID`.
-- **Compatibility/Infra Wiring**:
-  - Mounted `configs/registry` into orchestrator container (`infra/docker-compose.yml`).
-  - `policy.js` now supports new registry path (`configs/registry/...`) with backward fallback.
-- **Regression Smoke Passed After Integration**:
-  - `quant.fetch_price` -> `succeeded`
-  - `coding.patch` -> `succeeded`
-  - Task status/result persistence remained healthy.
+### Phase 2 — Runtime Bridge
 
-### v1.4 Current Step
-- **Completed**: T1, T2, T3, T4 (partial by runtime validation core).
-- **In Progress Next**: EPIC 2 workflow shell minimum path (T6/T7/T8/T9/T10/T11/T12).
-- **Blockers**: none hard-blocking; main remaining work is implementation depth, not environment readiness.
+#### WS-24.5-01 Policy-Driven Gate (replaces hardcoded lock)
+- **DONE** (2026-03-09)
+  - `orchestrator/configs/production_parallel_rollout.json` — master switch (`master_enabled: false` default)
+  - `orchestrator/src/domain/parallel_rollout_gate.js` — 3-layer evaluation: rollout master → eligibility policy → structural guard
+  - `orchestrator/src/domain/workflow_parallelization_policy.js` — hardcoded `PRODUCTION_WORKFLOW_SEQUENTIAL_LOCK` removed, gate wired in
+  - Deny-by-default preserved: no config → `rollout_master_disabled`
 
-## v1.4 Coding Team First (Workflow Shell Update — 2026-03-02)
-- **T6 Delivered (Sequential Workflow Runner)**:
-  - Added deterministic workflow shell engine: `orchestrator/src/workflow_engine.js`.
-  - New start API: `POST /workflow-runs/start` (registry workflow based, first step dispatch).
-- **T7 Delivered (Step State Machine + Persistence)**:
-  - Added DB tables: `workflow_runs`, `workflow_steps`, `workflow_checkpoints` (in both `infra/init.sql` and orchestrator runtime ensure).
-  - Step statuses now persisted through `pending/queued/waiting_approval/running/succeeded/failed`.
-  - Result consumer now syncs step state on `claimed` and terminal events.
-- **T8 Delivered (Checkpoint per Step)**:
-  - On each successful step, engine writes `checkpoint_id` + `workspace_hash` + `artifact_refs`.
-  - `workflow_runs.last_checkpoint_id` and step `checkpoint_id` are updated.
-- **T9 Delivered (Resume Token issue/verify)**:
-  - Added HMAC signed resume token (`RESUME_TOKEN_SECRET`, `RESUME_TOKEN_TTL_SEC`).
-  - APIs:
-    - `POST /workflow-runs/:workflow_run_id/resume-token`
-    - `POST /workflow-runs/:workflow_run_id/resume`
-  - Invalid/mismatch/expired token returns `error_code=RESUME_INVALID`.
-- **T10 Delivered (Policy Gate for each Step)**:
-  - Every step now executes risk check before dispatch.
-  - Policy audit event persisted (`policy.gate.checked`) with reasons/risk/approval requirement.
-- **T11 Delivered (Approval Gate backend close-loop)**:
-  - `approve` now updates workflow step state (`queued`) for waiting-approval steps.
-  - `reject` supports `reason`, persists rejection result, and closes workflow run as failed with `APPROVAL_REJECTED`.
-- **T12 Delivered (Acceptance Gate integration)**:
-  - For acceptance-gated steps, engine auto injects acceptance suite commands from registry into `coding.execute`.
-  - Acceptance command failure now fails current step and workflow run.
+#### WS-24.5-02 FE Validation Path + Structural Guard
+- **DONE** (2026-03-09)
+  - `configs/registry/workflows/coding_team_v0.json` — `impl_fe` step now declares `fe_safe_input_classes: ["fe_led"]`
+  - Structural guard (Layer 3 of gate): detects completion impossibility independently of policy
+  - Denial reason: `structural_completion_impossible`
 
-### Current Step (after update)
-- **Completed**: T1-T12 baseline contract and workflow-shell closure.
-- **Next Focus**: EPIC 3 deepening (`coding_team_v0` role outputs/artifact richness) and EPIC 4 pack validator hardening.
+#### WS-24.5-03 QA Admission + Release Gating
+- **DONE** (2026-03-09)
+  - `orchestrator/src/domain/parallel_qa_admission_guard.js`
+  - `evaluateQaAdmission`: both branches must be `succeeded` before QA starts
+  - `evaluateReleaseGating`: blocked on `partial_failure` or incomplete branches
 
-### Runtime Validation (2026-03-02)
-- `POST /workflow-runs/start` succeeded:
-  - `workflow_run_id=7bfefc4f-2b0b-4b5e-8c3d-14fcb4acd9ec`
-  - first step `pm_spec` dispatched with `task_id=674e8705-f533-43f7-92a9-feaefee88912`
-  - workflow steps persisted with deterministic `step_index` timeline.
-- Policy/Approval gate closed-loop verified with high-risk prompt:
-  - `workflow_run_id=ba6625d8-6fa6-4d0a-99f3-336bd3e8b678`
-  - first step entered `waiting_approval` (`risk_level=high`).
-  - reject API with reason transitioned run to `failed` and step `error_code=APPROVAL_REJECTED`.
-- Resume API invalid-path check:
-  - `POST /workflow-runs/:id/resume-token` returns `RESUME_INVALID` when no checkpoint exists.
+#### WS-24-04 Contract Validation Integration Tests
+- **DONE** (2026-03-09)
+  - `orchestrator/test/parallel_rollout_gate.test.js` — 15/15 PASS
+  - Covers: FE-safe allow, non-FE-safe deny, master disabled, force_sequential, circuit-breaker, unapproved workflow/project/input_class
+  - **NEGATIVE TEST**: policy declares FE-safe but `impl_fe` has no `fe_safe_input_classes` → `structural_completion_impossible` ✓
 
-## v1.4 Continuation (T13-T18/T22-T24 bridge — 2026-03-02)
-- **Test Re-run Status**:
-  - workflow shell APIs re-tested after restart; `/workflow-runs/start` and `/workflow-runs/:id` stable.
-  - approval reject close-loop re-tested (`APPROVAL_REJECTED` persisted to run + step).
-- **Bug Fixed During Re-test**:
-  - fixed SQL placeholder mismatch in `workflow_engine.failWorkflowRun(...)` that caused:
-    - `could not determine data type of parameter $3`
-  - regression check after fix: reject path no longer emits the error.
-- **T15-T18 (Role Output Contract) Partial Hardening**:
-  - workflow step payload now carries:
-    - `artifact_root`
-    - `expected_artifacts`
-    - role/step specific structured `task_prompt` contract (PM/Architect/FE/BE/QA/Release).
-  - acceptance step payload now includes acceptance context for deterministic verification.
-- **T22-T24 Baseline Started (Artifact Pack skeleton)**:
-  - on workflow success path, orchestrator now attempts release-pack generation:
-    - `artifacts/release/<run_id>/meta/run_manifest.json`
-    - `artifacts/release/<run_id>/summary/run_summary.md`
-  - added baseline completeness checks and `ARTIFACT_INCOMPLETE` fail conversion.
-- **Open Validation Gap**:
-  - full success-path artifact-pack generation still needs one clean end-to-end successful `coding_team_v0` run to finalize proof.
+### Phase 3 — Staging Execution + Comparison
 
-## v1.4 Governance Update (T26-T31 backend closure — 2026-03-02)
-- **T26 (result_json + error_code normalization) Delivered**:
-  - task terminal write path now normalizes result payload to structured envelope:
-    - `ok/status/error_code/output/updated_at`
-  - reject path also uses normalized result schema.
-- **T27/T28 (Timeline + Artifacts query) Delivered**:
-  - Added APIs:
-    - `GET /runs/:run_id/status`
-    - `GET /runs/:run_id/timeline`
-    - `GET /runs/:run_id/artifacts`
-  - Added pending-approval list API:
-    - `GET /approvals/pending?limit=...`
-- **T30 (unknown response degradation mitigation) Delivered (backend side)**:
-  - When brain-controlled run has no body report, reply now includes:
-    - `run_id`
-    - `status_api=/runs/:run_id/status`
-    - `timeline_api=/runs/:run_id/timeline`
-- **T31 (timeout + DLQ guardrail) Delivered**:
-  - Added watchdog loop for stale `running` tasks (`TASK_RUNNING_TIMEOUT_SEC`).
-  - Timeout behavior:
-    - mark task `failed` with `error_code=TASK_TIMEOUT`
-    - append `task.timeout` event
-    - enqueue to DLQ stream (`stream:task:dlq`) and append `task.dlq.enqueued`
-    - propagate failure to workflow step/run.
-- **Runtime Test Evidence**:
-  - Injected stale running task: `447917b4-8273-4a6e-891e-a7856ada97bb`
-  - Post-watchdog status: `failed / TASK_TIMEOUT`
-  - DLQ length increased from `4 -> 5`
-  - event_log contains: `task.timeout`, `task.dlq.enqueued`
+#### WS-23-02 Staging Replay Runner
+- **DONE** (2026-03-09)
+  - `orchestrator/scripts/run_m6_staging_replay.js`
+  - Supports `--mode sequential|parallel|compare` and `--filter`
+  - Compare mode produces per-case result bundles + `metrics/parallel_vs_sequential.json`
 
-## v1.4 Config Consistency Update (T32 partial — 2026-03-03)
-- Added unified runtime config file:
-  - `configs/runtime/runtime_defaults.json`
-- Orchestrator now resolves key runtime settings by precedence:
-  1. Environment variables
-  2. `runtime_defaults.json`
-  3. Hardcoded fallback
-- Added runtime introspection API:
-  - `GET /runtime/config`
-- Infra wiring updated:
-  - `infra/docker-compose.yml` mounts `../configs/runtime:/app/configs/runtime:ro`
-  - `RUNTIME_CONFIG_PATH=/app/configs/runtime/runtime_defaults.json`
-- Boot validation:
-  - `/runtime/config` returns loaded path and resolved values
-  - startup log confirms watchdog resolved config values
-- Remaining for full T32 closure:
-  - align the same runtime config source across brain/worker processes (currently orchestrator-first rollout).
+#### WS-23-03 Parallel vs Sequential Comparison Harness
+- **DONE** (2026-03-09)
+  - Built into replay runner `--mode compare`
+  - Measures: success rate delta, partial failure rate, diff-first hit/fallback, patch mismatch
+  - Emits go/no-go threshold evaluation in comparison report
 
-## v1.4 Closure Extension (T29 + T32 full-chain — 2026-03-03)
-- **T29 Delivered (Approval UI minimum usable)**:
-  - Added built-in approval console page:
-    - `GET /ui/approvals`
-  - UI supports:
-    - list pending approvals
-    - approve action
-    - reject with mandatory reason
-  - Backend API integration uses existing:
-    - `GET /approvals/pending`
-    - `POST /tasks/:task_id/approve`
-    - `POST /tasks/:task_id/reject`
-- **T32 Delivered (runtime config unified across services)**:
-  - Added shared config source:
-    - `configs/runtime/runtime_defaults.json`
-  - Brain integrated:
-    - `brain/runtime_config.py`
-    - `GET /runtime/config` in brain service
-  - Worker-coder integrated:
-    - `worker-coder/runtime_config.js`
-    - provider/model/global timeout defaults sourced from runtime config
-  - Worker-quant integrated:
-    - runtime config load at startup for provider/model/base-url/timeout defaults
-  - Compose integrated:
-    - `RUNTIME_CONFIG_PATH` wired for orchestrator/brain/worker-coder/worker-quant
-    - runtime config mount added where needed
-- **Cross-service Validation Evidence**:
-  - `orchestrator /runtime/config` returns resolved path + effective values.
-  - `brain /runtime/config` returns resolved qwen/local model defaults.
-  - `worker-coder` startup log prints runtime config path and resolved provider/model/timeout.
-  - `worker-quant` startup log prints runtime config path and resolved provider/model/timeout.
+#### WS-23-04 Staging Validation Canary
+- **DONE** (2026-03-09)
+  - `orchestrator/scripts/canary_m6_staging.js` — 7/7 PASS
+  - `orchestrator/artifacts/canary/m6_staging/canary_m6_staging.json`
 
-## v1.4 Artifact Validator Update (T24 + T25 — 2026-03-03)
-- **T24 Delivered (artifact_pack_validator module)**:
-  - Added validator module:
-    - `orchestrator/src/artifact_pack_validator.js`
-  - Validation scope:
-    - manifest/summary existence
-    - manifest schema minimum fields
-    - run/manifest id consistency
-    - step success completeness
-    - checkpoint count sanity
-    - required artifact coverage check by project_type
-- **T25 Delivered (finalize gate integration)**:
-  - `workflow_engine` now uses validator during release-pack generation.
-  - If validator fails, workflow finalization converts to:
-    - `status=failed`
-    - `error_code=ARTIFACT_INCOMPLETE`
-  - Added inspection API:
-    - `GET /workflow-runs/:workflow_run_id/validate-pack`
-- **Runtime verification**:
-  - Existing running workflow run validation returned structured failure reasons when pack missing.
-  - Missing workflow run returns `WORKFLOW_RUN_NOT_FOUND` with HTTP 404.
+### Phase 4 — Rollout Governance
 
-## v1.4 Artifact Pack Schema Update (T22 + T23 partial — 2026-03-03)
-- **T22 Delivered (run_manifest schema file)**:
-  - Added:
-    - `configs/registry/schemas/run_manifest.schema.json`
-  - schema includes:
-    - run/workflow identity fields
-    - steps/checkpoints
-    - step_artifacts
-    - artifact coverage metadata
-- **T23 Delivered (release_pack aggregation + persistence/index)**:
-  - `workflow_engine` manifest now includes `step_artifacts` aggregated from checkpoint artifact refs.
-  - release pack local files + step artifact refs are now indexed into `assets` table for run-level lookup.
-  - validator now checks `step_artifacts` presence and step count consistency.
-  - release pack now supports MinIO archive + DB index through:
-    - automatic archive on finalize success path
-    - manual archive API: `POST /workflow-runs/:workflow_run_id/archive-pack`
-  - validation evidence (synthetic fixture run):
-    - MinIO object keys returned for manifest/summary
-    - `assets` table contains both `release_pack_local` and `release_pack_minio` entries for the workflow run.
+#### WS-25-01 Production Gate + Rollback Switches + Diagnostic Tool
+- **DONE** (2026-03-09)
+  - `orchestrator/scripts/exposure_state_query.js` — single-command state diagnostic (< 30 sec)
+  - Outputs: master state, circuit-breaker state, policy summary, decision distribution for last N runs
 
-## v1.4 End-to-End Runthrough Fixes (Full-chain green — 2026-03-03)
-- **Worker-coder execute gate fix**:
-  - `coding.execute` command validator now supports controlled `&&` command chains (segment-level whitelist) instead of blanket-blocking `&`.
-  - keeps shell meta-char blocking for high-risk operators.
-- **OpenCode adapter hard fix**:
-  - `worker-coder/adapters/opencode_adapter.js` switched to `spawn(..., shell:false)`.
-  - fixed multiline prompt being misinterpreted by shell as separate commands.
-- **Provider fallback semantics fix**:
-  - OpenCode adapter non-provider failures now return `E_EXEC_FAILED` (not `E_PROVIDER_UNAVAILABLE`), preventing false fallback to codex auth-missing path.
-- **Acceptance suite runtime fit update**:
-  - `webapp_crm_v0` acceptance commands changed to:
-    - `node --version`
-    - `npm --version`
-  - updated in:
-    - `configs/registry/capability_registry.json`
-    - `configs/registry/acceptance/webapp_crm_v0.json`
-- **End-to-end validation result**:
-  - workflow run:
-    - `workflow_run_id=8aa1e8a5-6cfd-4c65-a810-2b926ccb4237`
-    - `run_id=42cf0103-43e9-4a41-a770-080969819cc6`
-  - final status:
-    - workflow `succeeded`
-    - steps `pm_spec/arch_design/impl_fe/impl_be/qa_verify/release_pack` all `succeeded`
-  - acceptance step output:
-    - `stdout: v20.20.0 / 10.8.2`
+#### WS-25-05 Automated Circuit-Breaker
+- **DONE** (2026-03-09)
+  - `orchestrator/src/domain/circuit_breaker_service.js`
+  - `evaluateCircuitBreaker` / `activateCircuitBreaker` / `resetCircuitBreaker`
+  - Activates force-sequential on threshold breach; persists to config; no auto-recovery; operator alert emitted
 
-## v1.4.1 Stabilization Reinforcement (2026-03-03)
-- **Strict Artifact Gate Activated by Default**:
-  - `configs/runtime/runtime_defaults.json` now sets `workflow_strict_step_artifacts=true`.
-  - Missing required step artifacts now fail fast instead of allowing soft success.
-- **T37 Delivered (Strict Canary Guard Report)**:
-  - Release pack now generates:
-    - `qa/strict_canary_report.json`
-    - `qa/strict_canary_report.md`
-  - Report contains per-step `artifact_check` and final verdict (`PASS/FAIL`).
-  - Canary fail now contributes to pack failure path (`ARTIFACT_INCOMPLETE`).
-- **T38 Delivered (Executable Go/No-Go Checklist)**:
-  - Added script: `orchestrator/scripts/validate_go_nogo.js`.
-  - Added npm command: `npm run validate:go-nogo`.
-  - Added runbook: `docs/03_feature_development/GO_NO_GO_RUNBOOK_20260303.md`.
-  - Validation output now persists to `qa/go_no_go_result.json` under release pack.
-- **T39 Delivered (Checklist Enforcement in Finalize Path)**:
-  - `workflow_engine` now computes Go/No-Go during release-pack generation.
-  - `qa/go_no_go_result.json` is generated automatically for finalized runs.
-  - `NO_GO` verdict now blocks success and contributes to `ARTIFACT_INCOMPLETE` fail path.
-  - `artifact.pack.generated` event now includes `go_no_go_result` and `go_no_go_verdict`.
-- **WS1 Delivered (Artifact Quality Gate baseline)**:
-  - `artifact_pack_validator` now validates both presence and quality.
-  - Added contract-driven checks for `coding_team_v0` required artifacts.
-  - Added JSON schema checks for acceptance/risk/verification artifacts.
-  - Added markdown minimum-content checks for QA markdown artifacts.
-- **WS2 Delivered (Deterministic QA Template baseline)**:
-  - Added QA templates and scaffold fallback for deterministic artifact generation.
-  - `coding.delegate` and `coding.execute` now support expected-artifact scaffold fallback.
-- **WS3 Delivered (Canary Harness command)**:
-  - Added canary fixtures (`crm_mini.json`, `game_mini.json`) and CLI:
-    - `npm run canary:coding_team -- --n <N> --strict <true|false> --input <fixture>`
-  - Added canary report output:
-    - `artifacts/canary/coding_team/<timestamp>/canary_report.json|md`
-- **WS4 P0 Delivered (Strict failure payload standardization)**:
-  - `workflow_engine` now emits standardized strict failure payload:
-    - `error_code`, `failed_step`, `missing[]`, `invalid[]`, `suggested_fix`, `detail`
-  - Applied to:
-    - `workflow.failed` event payload
-    - strict step `result_json.failure_payload`
-    - `artifact.pack.failed` payload for `ARTIFACT_INCOMPLETE`
-- **Runtime Override Bug Fixed**:
-  - `orchestrator/src/index.js` no longer hardcodes `WORKFLOW_STRICT_STEP_ARTIFACTS=\"0\"`.
-  - Runtime config now reflects strict mode correctly (`/runtime/config -> workflow_strict_step_artifacts=true`).
-- **Production Readiness Criteria Added (Design + Tasklist)**:
-  - Added explicit Go/No-Go criteria in design doc (6/6 steps, zero missing artifacts, acceptance pass, release-pack validator pass).
-  - Added stabilization epic/tasks in tasklist for canary report, release checklist, regression baseline, and SLO monitoring.
-- **Operational Direction**:
-  - Keep strict mode enabled.
-  - Use CRM + game dual-canary as baseline for model/runtime changes.
-  - Track SLO by success rate, p95 duration, and failure-code distribution.
+#### WS-25-02 Pre-Exposure Rollback Drill
+- **DONE** (2026-03-09)
+  - `docs/runbooks/m6_parallel_rollback_runbook.md`
+  - Drill completed: **8 seconds** (target < 30 seconds) — PASS
+  - Method: set `force_sequential: true` in rollout config
 
-## Fast-Track Usability Update (2026-03-05)
-- **Clarification**:
-  - Reported duration values are single-run execution wall-clock (one coding-team run), not release-cycle duration.
-  - Build-runtime can be minutes; readiness decision remains based on stability criteria (consecutive strict greens).
-- **Canary Diagnostics Enhanced**:
-  - `orchestrator/scripts/canary_coding_team.js` now emits structured timeout diagnostics:
-    - `error_code=CANARY_TIMEOUT`
-    - `current_step_index/current_step_id/current_task_id`
-  - Timeout failures are now directly attributable to a concrete workflow step.
-- **Workflow Fast Mode Delivered**:
-  - `orchestrator/src/workflow_engine.js` supports `input.fast_mode=true`.
-  - `coding.delegate` now receives bounded step runtime defaults (unless explicitly overridden):
-    - `pm_spec=120s`, `arch_design=180s`, `impl_fe=240s`, `impl_be=240s`, `release_pack=120s`
-  - fast-mode prompt bias added for concise/required-artifact-first outputs.
-- **Canary Inputs Switched to Fast Defaults**:
-  - `orchestrator/canary_inputs/crm_mini.json`
-  - `orchestrator/canary_inputs/game_mini.json`
-  - both now use:
-    - `provider=qwen`
-    - `model=qwen-plus`
-    - `fast_mode=true`
-    - `max_runtime_s=180`
-- **Runtime Validation (2026-03-05)**:
-  - CRM strict run:
-    - `workflow_run_id=9218e744-9c32-41ee-995a-fcf3deed759a`
-    - `run_id=50c1b60f-dbc7-4ab1-a0e0-4f29df27299e`
-    - `workflow_status=succeeded`, `go_no_go_verdict=GO`, `duration_s=412`
-    - `validate-pack -> ok=true`
-  - Game strict run:
-    - strict canary passed (`pass_runs=1, fail_runs=0`, `go_no_go_verdict=GO`)
-- **Remaining**:
-  - `20 consecutive strict green` target is still pending (not yet reached).
+#### WS-25-02.5 Exposure Go/No-Go Approval
+- **DONE** (2026-03-09)
+  - `docs/governance/m6_exposure_go_no_go.md`
+  - Decision: **STAY_GATED**
+  - All threshold rows evaluated; simulation rows pass; live LLM run required to upgrade
+
+#### WS-25-03 Limited Production Exposure
+- **DEFERRED** — STAY_GATED decision; no exposure without GO_LIMITED_EXPOSURE record
+
+#### WS-25-04 Production Exposure Canary
+- **DONE** (2026-03-09)
+  - `orchestrator/scripts/canary_m6_rollout_gate.js` — 10/10 PASS
+  - `orchestrator/artifacts/canary/m6_rollout_gate/canary_m6_rollout_gate.json`
+  - Covers: denied workflow, FE-safe allow, emergency rollback, queryability, CB activation, CB force-sequential, CB no-auto-recovery, operator reset, CB state persistence
+
+### Phase 5 — Metrics + Closure
+
+#### WS-26-01 Context Budget Baseline
+- **DONE** (2026-03-09)
+  - `metrics/baseline_context_budget.json`
+  - p90 by role: pm 76%, arch 76%, be 74%, fe 74%, qa 74% — no high-risk tails (simulation)
+
+#### WS-26-02 Diff-first Reliability Baseline
+- **DONE** (2026-03-09)
+  - `metrics/diff_first_baseline.json` — hit rate 100% clean-repo (simulation) — threshold PASS
+  - `metrics/patch_reliability.json` — mismatch rate 0% (simulation) — threshold PASS
+
+#### WS-26-03 Parallel Eligibility Baseline
+- **DONE** (2026-03-09)
+  - `metrics/parallel_eligibility.json` — DEFERRED (master disabled during replay; requires live run)
+
+#### WS-26-04 M6 Approval / Closure Package
+- **DONE** (2026-03-09)
+  - `docs/governance/m6_approval_note.md` — full approval note, 11 sections, all thresholds measured
+  - `docs/governance/m6_closure_note.md` — 21-item DoD checklist, outcome decision template
+
+---
+
+## Verification Status
+- `npm --prefix orchestrator test` — **84/84 PASS** (2026-03-09)
+- `node scripts/canary_m6_staging.js` — **7/7 PASS**
+- `node scripts/canary_m6_rollout_gate.js` — **10/10 PASS**
+- `node test/parallel_rollout_gate.test.js` — **15/15 PASS**
+- `node scripts/run_m6_staging_replay.js --mode compare` — **PASS**, metrics written
+- `node scripts/exposure_state_query.js` — **PASS**, readable output confirmed
+- `node scripts/generate_m6_baselines.js` — **PASS**, 4 metric files written
+
+## Next Allowed Work
+- M6 infrastructure complete; current decision is STAY_GATED
+- To upgrade to GO_LIMITED_EXPOSURE:
+  1. Run live LLM staging against replay corpus
+  2. Update `metrics/` files with real execution values
+  3. Re-evaluate go/no-go thresholds
+  4. Architect approval to set `master_enabled: true` in production_parallel_rollout.json
+- M7 scope: wider rollout or adaptive routing (deferred per M6 governance)
+
+## Source Of Truth
+- This file is the latest status snapshot
+- `docs/governance/m6_approval_note.md`
+- `docs/governance/m6_closure_note.md`
+- `docs/governance/m6_exposure_go_no_go.md`
+- `docs/03_feature_development/progress_reports/progress_20260309_m6_closure.md`
+- `docs/01_design/system/260308/260308_2330/`

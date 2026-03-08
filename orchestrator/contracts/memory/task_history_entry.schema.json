@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskHistoryEntry",
+  "type": "object",
+  "required": ["run_id", "intent", "outcome", "created_at"],
+  "properties": {
+    "run_id": { "type": "string" },
+    "workflow_run_id": { "type": "string" },
+    "intent": { "type": "string" },
+    "outcome": { "enum": ["succeeded", "failed", "cancelled"] },
+    "artifact_root": { "type": "string" },
+    "adr_ids": { "type": "array", "items": { "type": "string" } },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

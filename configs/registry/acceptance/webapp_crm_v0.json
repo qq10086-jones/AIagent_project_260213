@@ -5,7 +5,7 @@
     "npm --version"
   ],
   "required_reports": [
-    "verification.json",
+    "qa_report.json",
     "run_manifest.json"
   ]
 }

@@ -43,6 +43,7 @@ function main() {
   }, null, 2), "utf8");
 
   fs.writeFileSync(path.join(tmpRoot, "arch_ok", "plan", "arch.md"), "# Module Breakdown\n\n## Interfaces\n\n## Dependency Choices\n\n## Risk Notes\n", "utf8");
+  fs.writeFileSync(path.join(tmpRoot, "arch_ok", "plan", "interfaces.md"), "# API Interfaces\n\n## POST /login\n\nAuthentication endpoint.\n", "utf8");
   fs.writeFileSync(path.join(tmpRoot, "arch_ok", "plan", "workplan.md"), "module_breakdown interfaces dependency_choices risk_notes", "utf8");
   fs.writeFileSync(path.join(tmpRoot, "arch_ok", "risk", "risk_report.json"), JSON.stringify({ risks: [{ title: "auth", mitigation: "staged rollout" }] }, null, 2), "utf8");
   fs.writeFileSync(path.join(tmpRoot, "arch_ok", "handoff", "architect_to_impl.json"), JSON.stringify({
@@ -50,7 +51,7 @@ function main() {
     to_steps: ["impl_be", "impl_fe", "qa_verify"],
     modules: ["auth", "crm"],
     interfaces: ["POST /login"],
-    decisions: ["postgres"],
+    decisions: [{ adr_id: "ADR-001", title: "Use PostgreSQL as primary database", status: "accepted" }],
     risks: ["auth migration"]
   }, null, 2), "utf8");
 

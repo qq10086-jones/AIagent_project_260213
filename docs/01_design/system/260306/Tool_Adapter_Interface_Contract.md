@@ -9,7 +9,6 @@ Current phase scope:
 - providers:
   - `opencode`
   - `codex`
-  - `qwen`
 - no quant executor in this task
 
 ## Request Contract
@@ -40,11 +39,12 @@ Current result shape:
 
 Current runtime hard checks:
 - `impl_be` and `impl_fe` execution packets must map to a valid `coding_executor` request
-- provider can vary without changing workflow contract shape
+- external provider can vary without changing workflow contract shape, but is limited to `opencode` / `codex`
+- `qwen` is not an external agent provider; it is only an internal LLM choice behind `opencode`
 - adapter request is attached to workflow payload for execution steps
 
 ## Non-Scope
 
 - no generic cross-domain executor framework yet
 - no quant executor in this task
-- no worker-side provider refactor in this task
+- no generic provider expansion beyond `opencode` / `codex` in this task

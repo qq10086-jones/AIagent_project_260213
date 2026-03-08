@@ -4,10 +4,10 @@
 - Date: `2026-03-06 17:20:00`
 - Sprint context: `vnext_brain_first + coding_team_contracts + guardrails + observability`
 - North Star: `Discord/HTTP input -> Brain Router -> TaskEnvelope -> [Guardrails] -> OpenClaw orchestration -> [Observability Reporter] -> Discord`
-- Current status: **vNext Milestone 1 (Core Data Layer) Complete**. Paused for manual architectural review.
+- Current status: **This checkpoint is no longer the latest stage judgment.** Treat it as a contract/data-layer review note. The project has since moved into `Milestone 2 / E2E Integration + hardening`.
 
 ## Executive Summary
-All foundational components from `WS-01` through `WS-10` defined in the `OpenClaw_Nexus_vNext_Engineering_Task_List.md` have been fully implemented at the data, schema, and contract level. The system architecture has successfully shifted to a strict Schema-driven, UI-free infrastructure layer.
+All foundational components from `WS-01` through `WS-10` defined in the `OpenClaw_Nexus_vNext_Engineering_Task_List.md` had been implemented at the data, schema, and contract level by this checkpoint. Later runtime work showed that this should not be interpreted as proof that `WS-09` and `WS-10` were production-complete.
 
 ## Workstreams Completed (Ready for Review)
 1. **WS-01 / WS-02 / WS-03 (Input & Routing):**
@@ -36,7 +36,8 @@ All foundational components from `WS-01` through `WS-10` defined in the `OpenCla
 - **Governance Alignment:** 0 UI code was generated. All data flows follow strictly defined JSON Schemas.
 
 ## Next Steps (Blocked by User Review)
-Once the manual code review is complete, the project is ready to enter **Milestone 2: E2E Integration**. This will involve wiring these pure JS modules into the live local service endpoints (e.g., `index.js`, express routes, and real Discord event listeners).
+This line is outdated. The project has already entered **Milestone 2: E2E Integration + hardening**. The corrected stage review is:
+- `docs/03_feature_development/progress_reports/progress_20260306_213129_m2_e2e_stage_review.md`
 
 ## Pending TODOs
 - [ ] Treat current status as `contract/data-layer mostly complete`, not `full WS-01 ~ WS-10 completion`
@@ -52,6 +53,9 @@ Once the manual code review is complete, the project is ready to enter **Milesto
 - The current codebase is strongest at the contract/schema/module level.
 - `WS-09` and `WS-10` should currently be treated as **conditional pass / not yet fully closed at runtime** until real integration wiring and end-to-end evidence are complete.
 - The next allowed work is therefore `Milestone 2: E2E Integration + hardening`, not broader feature expansion.
+
+## Superseded By
+- `docs/03_feature_development/progress_reports/progress_20260306_213129_m2_e2e_stage_review.md`
 
 ## Files for Review
 - All schemas: `orchestrator/contracts/**/*.schema.json`

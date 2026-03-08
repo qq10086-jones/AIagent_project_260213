@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "llm_role_policy.schema.json",
+  "title": "LLM Role Policy",
+  "description": "Business policy layer: maps agent roles to LLM providers and models. Single source of truth for role-model assignment. No infrastructure details here.",
+  "type": "object",
+  "required": ["version", "roles", "retry_policy", "fallback_policy"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Semantic version of this policy file."
+    },
+    "roles": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Map of role name to model assignment. Role names must match llm_role fields in prompt_script_registry.json.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["provider", "model"],
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Provider key matching a key in llm_providers.json."
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Primary model name. Must exist in provider's available_models list."
+          },
+          "secondary_model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Fallback model used when primary fails due to OOM, context overflow, or sustained timeout. Must exist in provider's available_models list."
+          }
+        }
+      }
+    },
+    "retry_policy": {
+      "type": "object",
+      "required": ["strategy", "retries", "base_delay_ms"],
+      "additionalProperties": false,
+      "description": "Transport-layer retry policy. Applies to transient network errors only. Does NOT apply to OOM or provider-layer failures.",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["exponential_backoff", "linear", "none"],
+          "description": "Backoff strategy for transport-layer retries."
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Maximum number of retry attempts."
+        },
+        "base_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Base delay in ms. For exponential_backoff: attempt N waits base_delay_ms * 2^(N-1)."
+        }
+      }
+    },
+    "fallback_policy": {
+      "type": "string",
+      "enum": ["model_fallback", "fail_fast"],
+      "description": "Provider-layer failure policy. model_fallback: try secondary_model on OOM/overflow. fail_fast: throw immediately."
+    }
+  }
+}

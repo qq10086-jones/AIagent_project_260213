@@ -1,0 +1,31 @@
+{
+  "overall_status": "pass",
+  "checks": [
+    {
+      "check_id": "D-01",
+      "layer": "deterministic",
+      "description": "BE artifacts present",
+      "status": "pass",
+      "detail": "impl/be_changes/ non-empty"
+    },
+    {
+      "check_id": "D-02",
+      "layer": "deterministic",
+      "description": "FE artifacts present",
+      "status": "pass",
+      "detail": "impl/fe_changes/ non-empty"
+    },
+    {
+      "check_id": "S-01",
+      "layer": "semantic",
+      "description": "API contracts consistent",
+      "status": "pass",
+      "detail": "POST /api/login matches FE consumption"
+    }
+  ],
+  "verified_artifacts": [
+    "A1"
+  ],
+  "generated_at": "2026-03-08T10:38:46.432Z",
+  "step_id": "qa_verify"
+}

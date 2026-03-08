@@ -1,0 +1,34 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-08T12:32:57.551Z",
+  "workspace_root": "C:/Users/jones/AppData/Local/Temp/ocn-canary-budget-SDoju6",
+  "checks": [
+    {
+      "id": "normal_size_ok",
+      "ok": true,
+      "status": "ok"
+    },
+    {
+      "id": "oversized_warning",
+      "ok": true,
+      "status": "warning"
+    },
+    {
+      "id": "oversized_overflow_risk",
+      "ok": true,
+      "status": "overflow_risk"
+    },
+    {
+      "id": "release_pack_budget_metadata",
+      "ok": true,
+      "context_budget_reports": 1,
+      "summary_total_steps": 1
+    },
+    {
+      "id": "policy_override_changes_classification",
+      "ok": true,
+      "baseline_status": "ok",
+      "override_status": "warning"
+    }
+  ]
+}

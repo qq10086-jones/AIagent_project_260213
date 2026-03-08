@@ -1,20 +1,18 @@
 {
   "ok": true,
-  "generated_at": "2026-03-06T06:24:02.378Z",
+  "generated_at": "2026-03-08T10:15:58.637Z",
   "valid_case": {
     "checked": true,
     "ok": true,
-    "schema_checked": "qa_verification.schema.json",
+    "schema_checked": "coding_team_qa_report.schema.json",
     "files_checked": [
-      "tests/test_plan.md",
-      "qa/smoke_report.md",
-      "qa/verification.json"
+      "verify/qa_report.json"
     ]
   },
   "invalid_case": {
     "checked": true,
     "ok": false,
     "code": "QA_VERIFICATION_INVALID",
-    "detail": "qa verifier contract failed: test_plan:verification steps, test_plan:release checklist, smoke_report:executed checks, smoke_report:result summary, verification.json:$.acceptance_mapping missing"
+    "detail": "qa verifier contract failed: qa_report.json:$.checks missing, qa_report.json:$.verified_artifacts missing"
   }
 }

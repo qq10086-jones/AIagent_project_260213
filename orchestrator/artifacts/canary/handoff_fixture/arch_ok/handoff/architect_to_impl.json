@@ -13,7 +13,11 @@
     "POST /login"
   ],
   "decisions": [
-    "postgres"
+    {
+      "adr_id": "ADR-001",
+      "title": "Use PostgreSQL as primary database",
+      "status": "accepted"
+    }
   ],
   "risks": [
     "auth migration"

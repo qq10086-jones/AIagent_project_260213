@@ -1,0 +1,21 @@
+{
+  "agent_id": "release_agent",
+  "role": "release",
+  "mission": "Produce the release pack from verified QA artifacts: release notes and artifact manifest.",
+  "input_schema": {
+    "type": "object",
+    "required": ["goal", "project_type", "qa_to_release_handoff_path"]
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["release_notes_path", "artifact_manifest_path"]
+  },
+  "allowed_tools": ["coding.delegate"],
+  "forbidden_actions": ["change_product_scope", "change_architecture", "modify_implementation"],
+  "SOP": [
+    "Read handoff/qa_to_release.json to obtain verified_artifacts list",
+    "Block if overall_status is 'fail'",
+    "Write release/release_notes.md summarising what was built and verified",
+    "Write release/artifact_manifest.json with run_id, workflow_id, completed_at, and artifacts array"
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "coding_team_be_to_fe_handoff.schema.json",
+  "title": "Coding Team BE-to-FE Handoff",
+  "description": "Handoff manifest from Backend implementation step to Frontend implementation step. FE agent must not proceed without a valid instance of this schema.",
+  "type": "object",
+  "required": ["from_step", "to_step", "be_changes_path", "api_contracts", "shared_types", "scope_constraints"],
+  "additionalProperties": true,
+  "properties": {
+    "from_step": {
+      "type": "string",
+      "const": "impl_be",
+      "description": "Must be 'impl_be'."
+    },
+    "to_step": {
+      "type": "string",
+      "const": "impl_fe",
+      "description": "Must be 'impl_fe'."
+    },
+    "be_changes_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Relative path to the impl/be_changes/ directory containing all backend implementation files."
+    },
+    "api_contracts": {
+      "type": "array",
+      "minItems": 1,
+      "description": "List of API endpoints implemented by Backend that Frontend must consume.",
+      "items": {
+        "type": "object",
+        "required": ["name", "method", "path"],
+        "additionalProperties": true,
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "description": "Human-readable endpoint name." },
+          "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"], "description": "HTTP method." },
+          "path": { "type": "string", "minLength": 1, "description": "URL path, e.g. /api/customers." },
+          "response_shape": { "type": "string", "description": "Description or JSON schema of response body." },
+          "auth_required": { "type": "boolean" }
+        }
+      }
+    },
+    "shared_types": {
+      "type": "array",
+      "description": "Data types shared between Backend and Frontend (DTOs, enums, etc.).",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": true,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "scope_constraints": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Explicit list of what Backend did NOT implement. Frontend must not assume these are available."
+    },
+    "run_id": { "type": "string" },
+    "workflow_run_id": { "type": "string" }
+  }
+}

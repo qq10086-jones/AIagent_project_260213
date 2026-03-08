@@ -1,0 +1,14 @@
+{
+  "bundle_id": "bundle-002",
+  "step_id": "impl_fe",
+  "mode": "structured_patch",
+  "operations": [
+    {
+      "type": "insert_after_anchor",
+      "target_file": "src/app.js",
+      "content": "console.log('missing anchor');"
+    }
+  ],
+  "target_files": ["src/app.js"],
+  "summary": "Invalid fixture missing anchor field."
+}

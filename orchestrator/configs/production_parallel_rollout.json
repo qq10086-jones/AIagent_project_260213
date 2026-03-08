@@ -1,0 +1,15 @@
+{
+  "_comment": "M6 production parallel rollout master switch. master_enabled=false keeps coding_team_v0 sequential by default. Change requires Architect approval.",
+  "version": "1.0",
+  "master_enabled": false,
+  "force_sequential": false,
+  "circuit_breaker": {
+    "activated": false,
+    "rolling_window_size": 100,
+    "partial_failure_rate_threshold_pct": 25,
+    "rollback_trigger_event_threshold": 3,
+    "alert_destination": "ops-alerts"
+  },
+  "limited_exposure_cohort_pct": null,
+  "last_policy_change": "2026-03-09T00:00:00Z"
+}

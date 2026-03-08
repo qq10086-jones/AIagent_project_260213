@@ -1,4 +1,5 @@
 import { createTaskEnvelope } from "./task_envelope.js";
+import { applyRoutingPolicy } from "./brain_router_policy.js";
 
 const CODING_RE = /\b(build|implement|feature|fix|bug|patch|refactor|frontend|backend|full[- ]?stack|api|database|repo|code|coding|pm|architect|ui|qa|测试|修复|开发|功能|需求|前端|后端|架构|设计文档)\b/i;
 const QUANT_RE = /\b(quant|ticker|stock|portfolio|market|trading|alpha|strategy|backtest|日股|美股|选股|量化|股票|仓位)\b/i;
@@ -30,7 +31,7 @@ function inferIntentFromText(text) {
   if (DOCS_RE.test(normalized)) return "docs";
   if (RESEARCH_RE.test(normalized)) return "research";
   if (OPS_RE.test(normalized)) return "ops";
-  return "chat";
+  return "unknown";
 }
 
 function normalizeLegacyIntent(parsed = {}) {
@@ -56,6 +57,7 @@ function resolveTargetTeam(intent) {
 
 function resolveExpectedOutputs(intent, decision) {
   if (decision === "direct_reply") return ["direct_reply"];
+  if (decision === "clarification_required") return ["clarification_prompt"];
   if (intent === "coding" && decision === "orchestrated_workflow") {
     return ["design_doc", "task_breakdown", "repo_changes", "tests", "qa_summary"];
   }
@@ -118,6 +120,7 @@ function resolveExecutionPlan({ intent, complexity, legacyIntent, registry }) {
 
 function decisionFromPlan(plan) {
   if (plan.mode === "direct_reply") return "direct_reply";
+  if (plan.mode === "clarification_required") return "clarification_required";
   if (plan.mode === "single_agent") return "single_agent";
   if (plan.mode === "orchestrated_workflow") return "orchestrated_workflow";
   return "human_review_required";
@@ -128,29 +131,53 @@ export function routeTaskRequest({
   raw_input,
   normalized_input,
   context = {},
-  analyzerResult = null,
+  analyzerResult = undefined,
   registry,
 }) {
   const heuristicIntent = inferIntentFromText(raw_input);
   const legacyIntent = normalizeLegacyIntent(analyzerResult || {});
   const intent = legacyIntent?.intent || heuristicIntent;
   const complexity = inferComplexity(raw_input);
-  const executionPlan = resolveExecutionPlan({ intent, complexity, legacyIntent, registry });
-  const decision = decisionFromPlan(executionPlan);
+  let executionPlan = resolveExecutionPlan({ intent, complexity, legacyIntent, registry });
+  let decision = decisionFromPlan(executionPlan);
+  let finalIntent = intent;
+
+  // Apply deterministic policy override layer (WS-13)
+  // analyzerResult=undefined → heuristic-only (no LLM called), skip LLM-dependent rules
+  // analyzerResult=null → LLM was called and failed (P-05 applies)
+  const policyResult = applyRoutingPolicy(raw_input, analyzerResult, intent);
+  if (policyResult.override) {
+    finalIntent = policyResult.intent;
+    if (policyResult.decision === "orchestrated_workflow") {
+      const wfId = registry.project_types?.coding_task?.default_workflow || "coding_team_v0";
+      executionPlan = { mode: "orchestrated_workflow", workflow_id: wfId, project_type: registry.workflows?.[wfId]?.project_type || "webapp_crm" };
+    } else if (policyResult.decision === "direct_reply") {
+      executionPlan = { mode: "direct_reply" };
+    } else if (policyResult.decision === "clarification_required") {
+      executionPlan = {
+        mode: "clarification_required",
+        clarification_prompt: policyResult.clarification_prompt,
+      };
+    } else {
+      executionPlan = { mode: policyResult.decision };
+    }
+    decision = decisionFromPlan(executionPlan);
+  }
+
   const requiresOrchestration = decision === "orchestrated_workflow";
   const envelope = createTaskEnvelope({
     source,
     raw_input,
     normalized_input,
-    intent,
+    intent: finalIntent,
     sub_intent: complexity === "simple" ? "simple_request" : "project_workflow",
     requires_orchestration: requiresOrchestration,
-    target_team: resolveTargetTeam(intent),
-    expected_outputs: resolveExpectedOutputs(intent, decision),
+    target_team: resolveTargetTeam(finalIntent),
+    expected_outputs: resolveExpectedOutputs(finalIntent, decision),
     constraints: {
       local_only: true,
       approval_mode: "manual",
-      risk_level: intent === "ops" ? "high" : (intent === "coding" ? "medium" : "low"),
+      risk_level: finalIntent === "ops" ? "high" : (finalIntent === "coding" ? "medium" : "low"),
       complexity,
     },
     context,
@@ -161,7 +188,7 @@ export function routeTaskRequest({
   return {
     decision,
     route: {
-      intent,
+      intent: finalIntent,
       complexity,
       target_team: envelope.target_team,
       requires_orchestration: envelope.requires_orchestration,
@@ -169,5 +196,6 @@ export function routeTaskRequest({
       execution_plan: executionPlan,
     },
     task_envelope: envelope,
+    clarification_prompt: executionPlan.clarification_prompt,
   };
 }

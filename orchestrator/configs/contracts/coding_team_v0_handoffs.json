@@ -14,11 +14,41 @@
     "architect_to_backend_frontend": {
       "from_step": "arch_design",
       "to_steps": ["impl_be", "impl_fe", "qa_verify"],
-      "required_artifacts": ["plan/arch.md", "risk/risk_report.json", "plan/workplan.md", "handoff/architect_to_impl.json"],
+      "required_artifacts": ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md", "handoff/architect_to_impl.json"],
       "required_sections": ["module_breakdown", "interfaces", "dependency_choices", "risk_notes"],
       "typed_handoff": {
         "file": "handoff/architect_to_impl.json",
         "required_fields": ["from_step", "to_steps", "modules", "interfaces", "decisions", "risks"]
+      }
+    },
+    "backend_to_frontend": {
+      "from_step": "impl_be",
+      "to_steps": ["impl_fe"],
+      "required_artifacts": ["impl/be_changes/server.js", "impl/be_notes.md", "handoff/be_to_fe.json"],
+      "required_sections": ["api_contracts", "shared_types", "scope_constraints"],
+      "typed_handoff": {
+        "file": "handoff/be_to_fe.json",
+        "required_fields": ["from_step", "to_step", "be_changes_path", "api_contracts", "shared_types", "scope_constraints"]
+      }
+    },
+    "impl_to_qa": {
+      "from_step": "impl_fe",
+      "to_steps": ["qa_verify"],
+      "required_artifacts": ["impl/be_changes/server.js", "impl/fe_changes/app.js", "impl/be_notes.md", "impl/fe_notes.md", "handoff/impl_to_qa.json"],
+      "required_sections": [],
+      "typed_handoff": {
+        "file": "handoff/impl_to_qa.json",
+        "required_fields": ["from_steps", "to_step", "be_changes_path", "fe_changes_path", "run_instructions", "known_limitations"]
+      }
+    },
+    "qa_to_release": {
+      "from_step": "qa_verify",
+      "to_steps": ["release_pack"],
+      "required_artifacts": ["verify/qa_report.json", "handoff/qa_to_release.json"],
+      "required_sections": [],
+      "typed_handoff": {
+        "file": "handoff/qa_to_release.json",
+        "required_fields": ["from_step", "to_step", "qa_report_path", "overall_status", "verified_artifacts"]
       }
     }
   }

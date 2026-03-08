@@ -1,0 +1,52 @@
+{
+  "verdict": "NO_GO",
+  "workflow_run_id": "92edc61e-7770-4fee-b740-61ff137677e0",
+  "run_id": "dbg3-run",
+  "workflow_id": "coding_team_v0",
+  "project_type": "webapp_crm",
+  "strict": true,
+  "generated_at": "2026-03-08T10:14:41.604Z",
+  "total_checks": 7,
+  "passed_checks": 6,
+  "failed_checks": 1,
+  "checks": [
+    {
+      "name": "artifact_pack_validator",
+      "pass": false,
+      "detail": "validator failed: ARTIFACT_INVALID:verify/qa_report.json:missing acceptance ids A1"
+    },
+    {
+      "name": "workflow_status",
+      "pass": true,
+      "detail": "manifest.status=succeeded"
+    },
+    {
+      "name": "step_success",
+      "pass": true,
+      "detail": "succeeded=6/6"
+    },
+    {
+      "name": "step_count",
+      "pass": true,
+      "detail": "steps=6 expected=6"
+    },
+    {
+      "name": "acceptance_gate",
+      "pass": true,
+      "detail": "step=qa_verify status=succeeded"
+    },
+    {
+      "name": "strict_canary_verdict",
+      "pass": true,
+      "detail": "verdict=pass"
+    },
+    {
+      "name": "strict_canary_missing_artifacts",
+      "pass": true,
+      "detail": "missing_artifacts_total=0"
+    }
+  ],
+  "reasons": [
+    "artifact_pack_validator: validator failed: ARTIFACT_INVALID:verify/qa_report.json:missing acceptance ids A1"
+  ]
+}

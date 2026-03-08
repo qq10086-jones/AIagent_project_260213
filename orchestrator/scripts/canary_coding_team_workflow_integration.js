@@ -2,9 +2,11 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { createWorkflowEngine } from "../src/workflow_engine.js";
-import { loadRegistryOrThrow } from "../src/registry.js";
+import { getDefaultRegistryPath, loadRegistryOrThrow } from "../src/registry.js";
 import { loadPromptScriptRegistryOrThrow, getDefaultPromptScriptRegistryPath } from "../src/prompt_script_registry.js";
 import { loadHandoffContractsOrThrow, getDefaultHandoffContractPath } from "../src/handoff_contract_registry.js";
+import { analyzeTaskRisk } from "../src/policy.js";
+import { resolveOrchestratorArtifactPath } from "./_paths.js";
 
 function assertEqual(actual, expected, label) {
   if (actual !== expected) {
@@ -142,6 +144,12 @@ function createMemoryPool() {
         return { rows: [] };
       }
 
+      if (text.startsWith("UPDATE workflow_steps SET status='queued'")) {
+        const step = findStep(params[0], params[1]);
+        if (step) step.status = "queued";
+        return { rows: [] };
+      }
+
       if (text === "SELECT gate_name FROM workflow_steps WHERE workflow_run_id=$1 AND step_index=$2 LIMIT 1") {
         const step = findStep(params[0], params[1]);
         return { rows: [{ gate_name: step?.gate_name || "" }] };
@@ -183,6 +191,16 @@ function createMemoryPool() {
         if (step && step.status !== "succeeded") {
           step.status = "failed";
           step.error_code = params[2];
+        }
+        return { rows: [] };
+      }
+
+      if (text.startsWith("UPDATE workflow_steps SET status='failed', error_code='APPROVAL_REJECTED', result_json=$3")) {
+        const step = findStep(params[0], params[1]);
+        if (step) {
+          step.status = "failed";
+          step.result_json = params[2];
+          step.error_code = "APPROVAL_REJECTED";
         }
         return { rows: [] };
       }
@@ -232,9 +250,9 @@ function createMemoryPool() {
   };
 }
 
-function createEngineHarness(workspaceRoot) {
+function createEngineHarness(workspaceRoot, registryOverride = null) {
   const pool = createMemoryPool();
-  const registry = loadRegistryOrThrow(path.resolve(process.cwd(), "..", "configs", "registry", "capability_registry.json"));
+  const registry = registryOverride || loadRegistryOrThrow(getDefaultRegistryPath());
   const promptScriptRegistry = loadPromptScriptRegistryOrThrow(getDefaultPromptScriptRegistryPath());
   const handoffContracts = loadHandoffContractsOrThrow(getDefaultHandoffContractPath());
   const events = [];
@@ -250,13 +268,14 @@ function createEngineHarness(workspaceRoot) {
     auditStepArtifacts: true,
     enqueueTask: async ({ payload, run_id, tool_name }) => {
       const task_id = `task-${++nextTaskId}`;
+      const risk = analyzeTaskRisk(tool_name, payload || {});
       pool.state.tasks.push({
         task_id,
         run_id,
         tool_name,
         payload_json: JSON.stringify(payload),
       });
-      return { task_id, waiting_approval: false };
+      return { task_id, waiting_approval: Boolean(risk.requires_approval) };
     },
     recordEvent: async (stream_id, event_name, payload) => {
       events.push({ stream_id, event_name, payload });
@@ -266,6 +285,163 @@ function createEngineHarness(workspaceRoot) {
   });
 
   return { engine, pool, events };
+}
+
+async function runPermissionGateFailureCase({ name, workspaceRoot }) {
+  const registry = loadRegistryOrThrow(getDefaultRegistryPath());
+  const mutatedRegistry = JSON.parse(JSON.stringify(registry));
+  const pmStep = mutatedRegistry.workflows?.coding_team_v0?.steps?.find((item) => String(item.id || "") === "pm_spec");
+  if (!pmStep) throw new Error(`${name}: pm_spec step missing`);
+  pmStep.tool = "bash.execute";
+
+  const harness = createEngineHarness(workspaceRoot, mutatedRegistry);
+  harness.pool.state.runs.push({ run_id: `${name}-run`, status: "running" });
+
+  const started = await harness.engine.startWorkflowRun({
+    workflow_id: "coding_team_v0",
+    project_type: "webapp_crm",
+    run_id: `${name}-run`,
+    input: { goal: "Build CRM MVP", provider: "opencode", model: "qwen-coder-next" },
+  });
+
+  const workflowRun = harness.pool.state.workflow_runs.find((item) => item.workflow_run_id === started.workflow_run_id);
+  const pmStepState = harness.pool.state.workflow_steps.find(
+    (item) => item.workflow_run_id === started.workflow_run_id && item.step_id === "pm_spec"
+  );
+
+  assertEqual(workflowRun.status, "failed", `${name}.workflow.status`);
+  assertEqual(workflowRun.error_code, "TOOL_PERMISSION_DENIED", `${name}.workflow.error_code`);
+  assertEqual(pmStepState.status, "failed", `${name}.pm_step.status`);
+  assertEqual(pmStepState.error_code, "TOOL_PERMISSION_DENIED", `${name}.pm_step.error_code`);
+
+  const deniedEvent = harness.events.find((item) => item.event_name === "policy.tool_permission.denied");
+  if (!deniedEvent) {
+    throw new Error(`${name}.policy.tool_permission.denied missing`);
+  }
+
+  return {
+    workflow_run_id: started.workflow_run_id,
+    workflow_status: workflowRun.status,
+    error_code: workflowRun.error_code,
+    step_status: pmStepState.status,
+    denied_event: deniedEvent,
+  };
+}
+
+async function runApprovalGateCase({ name, workspaceRoot }) {
+  const harness = createEngineHarness(workspaceRoot);
+  harness.pool.state.runs.push({ run_id: `${name}-run`, status: "running" });
+
+  const started = await harness.engine.startWorkflowRun({
+    workflow_id: "coding_team_v0",
+    project_type: "webapp_crm",
+    run_id: `${name}-run`,
+    input: { goal: "Update .env secrets and credentials handling for CRM MVP", provider: "opencode", model: "qwen-coder-next" },
+  });
+
+  const workflowRun = harness.pool.state.workflow_runs.find((item) => item.workflow_run_id === started.workflow_run_id);
+  const pmStepState = harness.pool.state.workflow_steps.find(
+    (item) => item.workflow_run_id === started.workflow_run_id && item.step_id === "pm_spec"
+  );
+
+  assertEqual(workflowRun.status, "running", `${name}.workflow.status`);
+  assertEqual(pmStepState.status, "waiting_approval", `${name}.pm_step.status`);
+  assertEqual(Boolean(pmStepState.approval_required), true, `${name}.pm_step.approval_required`);
+  assertEqual(Boolean(started.first_step?.waiting_approval), true, `${name}.first_step.waiting_approval`);
+
+  const approvalEvent = harness.events.find((item) => item.event_name === "policy.gate.checked");
+  if (!approvalEvent) {
+    throw new Error(`${name}.policy.gate.checked missing`);
+  }
+
+  return {
+    workflow_run_id: started.workflow_run_id,
+    workflow_status: workflowRun.status,
+    step_status: pmStepState.status,
+    approval_required: pmStepState.approval_required,
+    first_step: started.first_step,
+    approval_event: approvalEvent,
+  };
+}
+
+async function runApprovalApprovedCase({ name, workspaceRoot }) {
+  const harness = createEngineHarness(workspaceRoot);
+  harness.pool.state.runs.push({ run_id: `${name}-run`, status: "running" });
+
+  const started = await harness.engine.startWorkflowRun({
+    workflow_id: "coding_team_v0",
+    project_type: "webapp_crm",
+    run_id: `${name}-run`,
+    input: { goal: "Update .env secrets and credentials handling for CRM MVP", provider: "opencode", model: "qwen-coder-next" },
+  });
+
+  const taskId = started.first_step?.task_id;
+  if (!taskId) throw new Error(`${name}: first approval task missing`);
+
+  const approved = await harness.engine.handleTaskApproved(taskId);
+  assertEqual(Boolean(approved.handled), true, `${name}.approved.handled`);
+
+  const workflowRun = harness.pool.state.workflow_runs.find((item) => item.workflow_run_id === started.workflow_run_id);
+  const pmStepState = harness.pool.state.workflow_steps.find(
+    (item) => item.workflow_run_id === started.workflow_run_id && item.step_id === "pm_spec"
+  );
+
+  assertEqual(workflowRun.status, "running", `${name}.workflow.status`);
+  assertEqual(pmStepState.status, "queued", `${name}.pm_step.status`);
+
+  const approvedEvent = harness.events.find((item) => item.event_name === "workflow.step.approval.approved");
+  if (!approvedEvent) {
+    throw new Error(`${name}.workflow.step.approval.approved missing`);
+  }
+
+  return {
+    workflow_run_id: started.workflow_run_id,
+    workflow_status: workflowRun.status,
+    step_status: pmStepState.status,
+    approved_event: approvedEvent,
+  };
+}
+
+async function runApprovalRejectedCase({ name, workspaceRoot }) {
+  const harness = createEngineHarness(workspaceRoot);
+  harness.pool.state.runs.push({ run_id: `${name}-run`, status: "running" });
+
+  const started = await harness.engine.startWorkflowRun({
+    workflow_id: "coding_team_v0",
+    project_type: "webapp_crm",
+    run_id: `${name}-run`,
+    input: { goal: "Update .env secrets and credentials handling for CRM MVP", provider: "opencode", model: "qwen-coder-next" },
+  });
+
+  const taskId = started.first_step?.task_id;
+  if (!taskId) throw new Error(`${name}: first approval task missing`);
+
+  const rejected = await harness.engine.handleTaskRejected(taskId, "manual rejection for canary");
+  assertEqual(Boolean(rejected.handled), true, `${name}.rejected.handled`);
+
+  const workflowRun = harness.pool.state.workflow_runs.find((item) => item.workflow_run_id === started.workflow_run_id);
+  const pmStepState = harness.pool.state.workflow_steps.find(
+    (item) => item.workflow_run_id === started.workflow_run_id && item.step_id === "pm_spec"
+  );
+
+  assertEqual(workflowRun.status, "failed", `${name}.workflow.status`);
+  assertEqual(workflowRun.error_code, "APPROVAL_REJECTED", `${name}.workflow.error_code`);
+  assertEqual(pmStepState.status, "failed", `${name}.pm_step.status`);
+  assertEqual(pmStepState.error_code, "APPROVAL_REJECTED", `${name}.pm_step.error_code`);
+
+  const rejectedEvent = harness.events.find((item) => item.event_name === "workflow.step.approval.rejected");
+  if (!rejectedEvent) {
+    throw new Error(`${name}.workflow.step.approval.rejected missing`);
+  }
+
+  return {
+    workflow_run_id: started.workflow_run_id,
+    workflow_status: workflowRun.status,
+    workflow_error_code: workflowRun.error_code,
+    step_status: pmStepState.status,
+    step_error_code: pmStepState.error_code,
+    rejected_event: rejectedEvent,
+  };
 }
 
 function writePmSuccessArtifacts(rootAbs) {
@@ -294,7 +470,7 @@ async function runPmWorkflowFailureCase({ name, workspaceRoot, fileWriter, expec
     workflow_id: "coding_team_v0",
     project_type: "webapp_crm",
     run_id: `${name}-run`,
-    input: { goal: "Build CRM MVP", provider: "qwen", model: "qwen-coder-next" },
+    input: { goal: "Build CRM MVP", provider: "opencode", model: "qwen-coder-next" },
   });
 
   const taskId = started.first_step?.task_id;
@@ -339,7 +515,7 @@ async function runArchWorkflowFailureCase({ name, workspaceRoot, archFileWriter,
     workflow_id: "coding_team_v0",
     project_type: "webapp_crm",
     run_id: `${name}-run`,
-    input: { goal: "Build CRM MVP", provider: "qwen", model: "qwen-coder-next" },
+    input: { goal: "Build CRM MVP", provider: "opencode", model: "qwen-coder-next" },
   });
 
   const pmTaskId = started.first_step?.task_id;
@@ -395,7 +571,7 @@ async function runArchWorkflowFailureCase({ name, workspaceRoot, archFileWriter,
 }
 
 async function main() {
-  const baseWorkspace = path.resolve(process.cwd(), "artifacts", "canary", "workflow_integration_fixture");
+  const baseWorkspace = resolveOrchestratorArtifactPath("canary", "workflow_integration_fixture");
   ensureDir(baseWorkspace);
 
   const pmRoleFailure = await runPmWorkflowFailureCase({
@@ -438,6 +614,8 @@ async function main() {
     archFileWriter: (rootAbs) => {
       writeText(path.join(rootAbs, "plan", "arch.md"), "# Module Breakdown\n\n## Interfaces\n\n## Dependency Choices\n\n## Risk Notes\n");
       writeText(path.join(rootAbs, "plan", "workplan.md"), "module breakdown interfaces dependency choices risk notes");
+      // interfaces.md exists but has no API endpoint headings → triggers ARCH_INTERFACES_UNSPECIFIED → ARCH_REQUIRED_SECTIONS_MISSING
+      writeText(path.join(rootAbs, "plan", "interfaces.md"), "# General Overview\n\nThis is a stub with no endpoints defined.\n");
       writeJson(path.join(rootAbs, "risk", "risk_report.json"), { risks: [{ title: "auth" }] });
     },
   });
@@ -449,6 +627,8 @@ async function main() {
     archFileWriter: (rootAbs) => {
       writeText(path.join(rootAbs, "plan", "arch.md"), "# Module Breakdown\n\n## Interfaces\n\n## Dependency Choices\n\n## Risk Notes\n");
       writeText(path.join(rootAbs, "plan", "workplan.md"), "module_breakdown interfaces dependency_choices risk_notes");
+      // interfaces.md with valid endpoint heading so arch validator passes, handoff validation fails instead
+      writeText(path.join(rootAbs, "plan", "interfaces.md"), "# POST /api/login\n\nRequest: { email, password }\nResponse: { token }\n");
       writeJson(path.join(rootAbs, "risk", "risk_report.json"), {
         risks: [{ title: "auth", mitigation: "staged rollout" }],
         decision_log: ["Use postgres"],
@@ -464,7 +644,27 @@ async function main() {
     },
   });
 
-  const outDir = path.resolve(process.cwd(), "artifacts", "canary", "coding_team_workflow_integration");
+  const permissionGateFailure = await runPermissionGateFailureCase({
+    name: "tool_permission_denied",
+    workspaceRoot: path.join(baseWorkspace, "tool_permission_denied"),
+  });
+
+  const approvalGate = await runApprovalGateCase({
+    name: "approval_gate",
+    workspaceRoot: path.join(baseWorkspace, "approval_gate"),
+  });
+
+  const approvalApproved = await runApprovalApprovedCase({
+    name: "approval_approved",
+    workspaceRoot: path.join(baseWorkspace, "approval_approved"),
+  });
+
+  const approvalRejected = await runApprovalRejectedCase({
+    name: "approval_rejected",
+    workspaceRoot: path.join(baseWorkspace, "approval_rejected"),
+  });
+
+  const outDir = resolveOrchestratorArtifactPath("canary", "coding_team_workflow_integration");
   ensureDir(outDir);
   const reportPath = path.join(outDir, "coding_team_workflow_integration_canary.json");
   fs.writeFileSync(
@@ -477,6 +677,10 @@ async function main() {
         pm_handoff_failure: pmHandoffFailure,
         arch_role_failure: archRoleFailure,
         arch_handoff_failure: archHandoffFailure,
+        tool_permission_denied: permissionGateFailure,
+        approval_gate: approvalGate,
+        approval_approved: approvalApproved,
+        approval_rejected: approvalRejected,
       },
       null,
       2

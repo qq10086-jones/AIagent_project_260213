@@ -1,0 +1,10 @@
+{
+  "from_step": "qa_verify",
+  "to_step": "release_pack",
+  "qa_report_path": "verify/qa_report.json",
+  "overall_status": "pass",
+  "verified_artifacts": [
+    "plan/spec.md",
+    "verify/qa_report.json"
+  ]
+}

@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 
 export const TASK_INTENTS = ["chat", "coding", "quant", "docs", "research", "ops", "unknown"];
-export const TASK_DECISIONS = ["direct_reply", "single_agent", "orchestrated_workflow", "human_review_required"];
+export const TASK_DECISIONS = ["direct_reply", "single_agent", "orchestrated_workflow", "human_review_required", "clarification_required"];
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);

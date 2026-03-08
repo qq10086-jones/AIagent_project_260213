@@ -13,6 +13,7 @@ const FRONTEND_EXECUTION_PACKET_SCHEMA = JSON.parse(
 );
 
 export function buildBackendExecutionPacket({ stepDef, payload = {}, provider = "", model = "" }) {
+  const diffFirst = String(payload?.execution_mode_requested || "") === "structured_patch";
   return {
     adapter_id: "backend.execution.v1",
     role: String(stepDef?.role || "backend"),
@@ -22,15 +23,20 @@ export function buildBackendExecutionPacket({ stepDef, payload = {}, provider = 
       : ["sandbox/crm_site/"],
     required_outputs: Array.isArray(payload.expected_artifacts) && payload.expected_artifacts.length > 0
       ? payload.expected_artifacts
-      : ["patch/diff.patch", "tests/backend_test_report.md", "run/run_backend.md"],
+      : diffFirst
+        ? ["impl/be_patch_bundle.json", "impl/be_notes.md", "handoff/be_to_fe.json"]
+        : ["impl/be_changes/server.js", "impl/be_notes.md", "handoff/be_to_fe.json"],
     input_artifacts: [
       "plan/arch.md",
+      "plan/interfaces.md",
       "risk/risk_report.json",
       "plan/workplan.md",
       "handoff/architect_to_impl.json",
     ],
-    execution_mode: "patch_and_verify",
-    verification_hint: "return diff summary, changed files, backend test evidence, and runbook",
+    execution_mode: diffFirst ? "structured_patch_and_handoff" : "file_output_and_handoff",
+    verification_hint: diffFirst
+      ? "return a structured backend patch bundle, backend notes, and a typed BE-to-FE handoff manifest"
+      : "return complete backend files, backend notes, and a typed BE-to-FE handoff manifest",
     provider_hint: String(provider || ""),
     model_hint: String(model || ""),
   };
@@ -46,6 +52,7 @@ export function validateBackendExecutionPacket(packet) {
 }
 
 export function buildFrontendExecutionPacket({ stepDef, payload = {}, provider = "", model = "" }) {
+  const diffFirst = String(payload?.execution_mode_requested || "") === "structured_patch";
   return {
     adapter_id: "frontend.execution.v1",
     role: String(stepDef?.role || "frontend"),
@@ -55,14 +62,20 @@ export function buildFrontendExecutionPacket({ stepDef, payload = {}, provider =
       : ["sandbox/crm_site/"],
     required_outputs: Array.isArray(payload.expected_artifacts) && payload.expected_artifacts.length > 0
       ? payload.expected_artifacts
-      : ["patch/diff.patch", "tests/frontend_test_report.md", "run/run_frontend.md"],
+      : diffFirst
+        ? ["impl/fe_patch_bundle.json", "impl/fe_notes.md"]
+        : ["impl/fe_changes/app.js", "impl/fe_notes.md"],
     input_artifacts: [
       "plan/arch.md",
+      "plan/interfaces.md",
       "plan/workplan.md",
       "handoff/architect_to_impl.json",
+      "handoff/be_to_fe.json",
     ],
-    execution_mode: "ui_patch_and_verify",
-    verification_hint: "return diff summary, changed files, frontend test evidence, and runbook",
+    execution_mode: diffFirst ? "structured_patch_from_backend_handoff" : "file_output_from_backend_handoff",
+    verification_hint: diffFirst
+      ? "return a structured frontend patch bundle and frontend notes that match the backend handoff contract"
+      : "return complete frontend files and frontend notes that match the backend handoff contract",
     provider_hint: String(provider || ""),
     model_hint: String(model || ""),
   };

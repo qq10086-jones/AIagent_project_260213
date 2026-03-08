@@ -1,0 +1,15 @@
+{
+  "from_steps": ["impl_be", "impl_fe"],
+  "to_step": "qa_verify",
+  "be_changes_path": "artifacts/release/test-run-001/impl/be_changes",
+  "fe_changes_path": "artifacts/release/test-run-001/impl/fe_changes",
+  "run_instructions": "1. cd sandbox/crm_site && npm install\n2. node server.js\n3. Open http://localhost:3000 in browser\n4. Verify customer list loads\n5. Create a new customer and confirm it appears in the list",
+  "known_limitations": [
+    "No authentication — all routes are public",
+    "In-memory data only — data resets on server restart",
+    "No input validation on customer creation form"
+  ],
+  "api_contracts_path": "artifacts/release/test-run-001/handoff/be_to_fe.json",
+  "run_id": "test-run-001",
+  "workflow_run_id": "wf-run-001"
+}

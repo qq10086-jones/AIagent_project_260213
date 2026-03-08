@@ -1,0 +1,33 @@
+{
+  "from_step": "arch_design",
+  "to_steps": [
+    "impl_be",
+    "impl_fe",
+    "qa_verify"
+  ],
+  "modules": [
+    "auth",
+    "crm"
+  ],
+  "interfaces": [
+    "POST /login",
+    "GET /contacts",
+    "POST /contacts"
+  ],
+  "decisions": [
+    {
+      "adr_id": "ADR-001",
+      "title": "Use PostgreSQL as primary database",
+      "status": "accepted"
+    },
+    {
+      "adr_id": "ADR-002",
+      "title": "Redis session cache over DB sessions",
+      "status": "accepted"
+    }
+  ],
+  "risks": [
+    "auth migration",
+    "session token rotation on deploy"
+  ]
+}

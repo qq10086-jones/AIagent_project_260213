@@ -1,0 +1,83 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T12:26:38.035Z",
+  "results": {
+    "safeResult": {
+      "ok": true,
+      "response_mode": "progress_update",
+      "run_id": "run1",
+      "task_envelope": {
+        "task_id": "t1",
+        "source": "api",
+        "raw_input": "Hello",
+        "normalized_input": {
+          "text": "Hello"
+        },
+        "intent": "chat",
+        "sub_intent": "general",
+        "requires_orchestration": false,
+        "target_team": "brain",
+        "expected_outputs": [],
+        "constraints": {},
+        "context": {}
+      },
+      "execution": {
+        "task_id": "t1",
+        "tool_name": "none",
+        "waiting_approval": false
+      }
+    },
+    "riskyResult": {
+      "ok": true,
+      "response_mode": "approval_request",
+      "run_id": "run2",
+      "task_envelope": {
+        "task_id": "t2",
+        "source": "api",
+        "raw_input": "rm -rf /",
+        "normalized_input": {
+          "text": "rm -rf /"
+        },
+        "intent": "coding",
+        "sub_intent": "general",
+        "requires_orchestration": false,
+        "target_team": "coding_team",
+        "expected_outputs": [],
+        "constraints": {},
+        "context": {}
+      },
+      "execution": {
+        "task_id": "t2",
+        "tool_name": "bash.execute",
+        "waiting_approval": true
+      }
+    },
+    "approvedResult": {
+      "ok": true,
+      "response_mode": "progress_update",
+      "run_id": "run3",
+      "task_envelope": {
+        "task_id": "t3",
+        "source": "api",
+        "raw_input": "rm -rf /",
+        "normalized_input": {
+          "text": "rm -rf /"
+        },
+        "intent": "coding",
+        "sub_intent": "general",
+        "requires_orchestration": false,
+        "target_team": "coding_team",
+        "expected_outputs": [],
+        "constraints": {
+          "approved": true
+        },
+        "context": {}
+      },
+      "execution": {
+        "task_id": "t3",
+        "tool_name": "bash.execute",
+        "waiting_approval": false
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-08T13:27:46.669Z",
+  "cases": {
+    "sequential_gate": {
+      "verdict": "pass",
+      "tasks_dispatched": 3,
+      "gate_reason": "PRODUCTION_WORKFLOW_SEQUENTIAL_LOCK"
+    },
+    "production_sequential_lock": {
+      "verdict": "pass",
+      "tasks_dispatched": 3,
+      "gate_reason": "PRODUCTION_WORKFLOW_SEQUENTIAL_LOCK"
+    },
+    "synthetic_parallel": {
+      "verdict": "pass",
+      "tasks_dispatched": 3,
+      "parallel_steps": [
+        "be_parallel",
+        "fe_parallel"
+      ]
+    },
+    "partial_failure": {
+      "verdict": "pass",
+      "workflow_status": "partial_failure",
+      "blocked_step": "qa_join"
+    },
+    "dual_failure": {
+      "verdict": "pass",
+      "workflow_status": "failed"
+    }
+  }
+}

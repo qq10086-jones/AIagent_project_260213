@@ -5,7 +5,7 @@
       "script_id": "pm.design_doc.v1",
       "agent_id": "pm_agent",
       "role": "pm",
-      "model": "qwen-coder-next",
+      "llm_role": "pm",
       "input_schema": {
         "type": "object",
         "required": ["goal", "project_type"]
@@ -25,7 +25,7 @@
       "script_id": "architect.system_spec.v1",
       "agent_id": "architect_agent",
       "role": "architect",
-      "model": "qwen-coder-next",
+      "llm_role": "architect",
       "input_schema": {
         "type": "object",
         "required": ["goal", "project_type", "pm_output"]
@@ -41,11 +41,31 @@
       },
       "system_prompt": "Generate a system specification with module boundaries, interfaces, dependency choices, implementation sequence, and risk notes."
     },
+    "architect.system_spec.v2": {
+      "script_id": "architect.system_spec.v2",
+      "agent_id": "architect_agent",
+      "role": "architect",
+      "llm_role": "architect",
+      "input_schema": {
+        "type": "object",
+        "required": ["goal", "project_type", "pm_output"]
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["module_breakdown", "interfaces", "dependencies", "implementation_sequence", "risk_notes", "decisions"]
+      },
+      "tool_permissions": ["coding.delegate"],
+      "artifact_type": "system_spec",
+      "validation": {
+        "required_sections": ["module_breakdown", "interfaces", "dependency_choices", "risk_notes"]
+      },
+      "system_prompt": "Scan the existing module list and file tree before designing. Generate a system specification with module boundaries, interfaces, dependency choices, implementation sequence, and risk notes. Create at least one ADR (Architecture Decision Record) per major technology decision in plan/adr/ directory. Define all API endpoints and internal interfaces in plan/interfaces.md. The handoff manifest must include a non-empty decisions array with adr_id, title, status fields for each entry."
+    },
     "qa.test_plan.v1": {
       "script_id": "qa.test_plan.v1",
       "agent_id": "qa_agent",
       "role": "qa",
-      "model": "qwen-coder-next",
+      "llm_role": "qa",
       "input_schema": {
         "type": "object",
         "required": ["goal", "project_type", "implementation_context"]
@@ -60,6 +80,86 @@
         "required_sections": ["test_matrix", "verification_steps", "release_checklist"]
       },
       "system_prompt": "Generate a QA test plan with test matrix, verification steps, and release checklist for the current workflow."
+    },
+    "backend.impl.v1": {
+      "script_id": "backend.impl.v1",
+      "agent_id": "backend_agent",
+      "role": "backend",
+      "llm_role": "backend",
+      "input_schema": {
+        "type": "object",
+        "required": ["goal", "project_type"]
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["be_changes_path", "be_notes_path", "handoff_path"]
+      },
+      "tool_permissions": ["coding.delegate"],
+      "artifact_type": "backend_impl",
+      "validation": {
+        "required_sections": ["api_contracts", "shared_types", "scope_constraints", "run_instructions"]
+      },
+      "system_prompt": "Produce backend implementation files under impl/be_changes/, write impl/be_notes.md with implementation decisions and run instructions, and emit handoff/be_to_fe.json with api_contracts, shared_types, and scope_constraints."
+    },
+    "frontend.impl.v1": {
+      "script_id": "frontend.impl.v1",
+      "agent_id": "frontend_agent",
+      "role": "frontend",
+      "llm_role": "frontend",
+      "input_schema": {
+        "type": "object",
+        "required": ["goal", "project_type"]
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["fe_changes_path", "fe_notes_path"]
+      },
+      "tool_permissions": ["coding.delegate"],
+      "artifact_type": "frontend_impl",
+      "validation": {
+        "required_sections": ["ui_scope", "api_consumption", "run_instructions"]
+      },
+      "system_prompt": "Produce frontend implementation files under impl/fe_changes/, write impl/fe_notes.md with UI decisions and run instructions, and consume handoff/be_to_fe.json as the backend contract source."
+    },
+    "qa.verify.v1": {
+      "script_id": "qa.verify.v1",
+      "agent_id": "qa_agent",
+      "role": "qa",
+      "llm_role": "qa",
+      "input_schema": {
+        "type": "object",
+        "required": ["goal", "project_type"]
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["qa_report_path"]
+      },
+      "tool_permissions": ["coding.execute", "coding.delegate"],
+      "artifact_type": "qa_verify",
+      "validation": {
+        "required_sections": ["deterministic_checks", "semantic_checks", "verified_artifacts"]
+      },
+      "system_prompt": "Produce verify/qa_report.json with overall_status, deterministic checks, semantic checks, and verified_artifacts."
+    },
+    "release.pack.v1": {
+      "script_id": "release.pack.v1",
+      "agent_id": "release_agent",
+      "role": "release",
+      "llm_role": "release",
+      "input_schema": {
+        "type": "object",
+        "required": ["goal", "project_type"]
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["release_notes_path", "artifact_manifest_path"]
+      },
+      "tool_permissions": ["coding.delegate"],
+      "artifact_type": "release_pack",
+      "validation": {
+        "required_sections": ["artifact_traceability", "go_no_go_summary"]
+      },
+      "system_prompt": "Produce exactly two outputs: release/release_notes.md and release/artifact_manifest.json. Keep artifact references explicit and traceable."
     }
   }
 }

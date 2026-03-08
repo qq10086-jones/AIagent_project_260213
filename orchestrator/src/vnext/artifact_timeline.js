@@ -1,3 +1,9 @@
+import {
+  getWorkflowRunById,
+  listWorkflowCheckpoints,
+  listWorkflowSteps,
+} from "../data/workflow_repository.js";
+
 /**
  * Provides timeline querying and task replay capabilities.
  * Pulls together task context, step metadata, and output artifacts to form a linear execution log.
@@ -9,19 +15,16 @@ export async function queryWorkflowTimeline({ pool, workflowRunId }) {
   }
 
   // 1. Get workflow run
-  const runs = await pool.query("SELECT * FROM workflow_runs WHERE workflow_run_id=$1", [workflowRunId]);
-  const run = runs.rows[0];
+  const run = await getWorkflowRunById(pool, workflowRunId);
   if (!run) {
     throw new Error(`Workflow run not found: ${workflowRunId}`);
   }
 
   // 2. Get steps ordered
-  const stepsRes = await pool.query("SELECT * FROM workflow_steps WHERE workflow_run_id=$1 ORDER BY step_index ASC", [workflowRunId]);
-  const steps = stepsRes.rows || [];
+  const steps = await listWorkflowSteps(pool, workflowRunId);
 
   // 3. Get checkpoints/artifacts for each step
-  const checkpointsRes = await pool.query("SELECT checkpoint_id, step_index, step_id, task_id, workspace_hash FROM workflow_checkpoints WHERE workflow_run_id=$1 ORDER BY step_index ASC", [workflowRunId]);
-  const checkpoints = checkpointsRes.rows || [];
+  const checkpoints = await listWorkflowCheckpoints(pool, workflowRunId);
 
   const timeline = steps.map(step => {
     const cp = checkpoints.find(c => c.step_index === step.step_index);

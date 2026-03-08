@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow_replay_manifest.schema.json",
+  "title": "WorkflowReplayManifest",
+  "description": "Schema for M6 staging replay corpus manifest",
+  "type": "object",
+  "required": ["manifest_id", "version", "created_at", "corpus", "coverage_summary_ref"],
+  "additionalProperties": false,
+  "properties": {
+    "manifest_id": { "type": "string" },
+    "version": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "corpus": {
+      "type": "array",
+      "minItems": 50,
+      "items": { "$ref": "#/definitions/ReplayCase" }
+    },
+    "coverage_summary_ref": { "type": "string", "description": "Path to coverage summary file" }
+  },
+  "definitions": {
+    "ReplayCase": {
+      "type": "object",
+      "required": [
+        "replay_id",
+        "source_channel_type",
+        "input_class",
+        "raw_prompt_ref",
+        "sanitized_prompt",
+        "expected_route",
+        "workflow_type",
+        "project_type",
+        "fe_parallel_eligible_expected",
+        "notes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "replay_id": { "type": "string", "pattern": "^R[0-9]{3}$" },
+        "source_channel_type": {
+          "type": "string",
+          "enum": ["discord_text", "discord_thread", "discord_dm", "synthetic"]
+        },
+        "input_class": {
+          "type": "string",
+          "enum": [
+            "pm_heavy",
+            "architect_heavy",
+            "be_led",
+            "fe_led",
+            "qa_heavy",
+            "mixed_ambiguous"
+          ]
+        },
+        "raw_prompt_ref": {
+          "type": ["string", "null"],
+          "description": "Reference path to raw prompt file, or null if not retained under governance"
+        },
+        "sanitized_prompt": { "type": "string", "minLength": 10 },
+        "expected_route": {
+          "type": "string",
+          "enum": ["pm", "architect", "be", "fe", "qa", "mixed"]
+        },
+        "workflow_type": { "type": "string" },
+        "project_type": { "type": "string" },
+        "fe_parallel_eligible_expected": { "type": "boolean" },
+        "dirty_repo_case": { "type": "boolean", "default": false },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

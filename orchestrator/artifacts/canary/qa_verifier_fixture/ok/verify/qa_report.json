@@ -1,0 +1,23 @@
+{
+  "overall_status": "pass",
+  "checks": [
+    {
+      "check_id": "det-1",
+      "layer": "deterministic",
+      "description": "artifacts exist",
+      "status": "pass",
+      "detail": "ok"
+    },
+    {
+      "check_id": "sem-1",
+      "layer": "semantic",
+      "description": "api consistency",
+      "status": "pass",
+      "detail": "ok"
+    }
+  ],
+  "verified_artifacts": [
+    "impl/be_changes/server.js",
+    "impl/fe_changes/app.js"
+  ]
+}

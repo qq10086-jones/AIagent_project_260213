@@ -1,0 +1,10 @@
+{
+  "step_id": "impl_be",
+  "artifact_count": 3,
+  "bytes_total": 18342,
+  "largest_artifact_bytes": 11200,
+  "prompt_chars": 48210,
+  "injected_context_bytes": 9234,
+  "status": "ok",
+  "threshold_source": "default_thresholds"
+}

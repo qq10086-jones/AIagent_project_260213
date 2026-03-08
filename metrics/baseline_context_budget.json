@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-03-08T15:45:40.455Z",
+  "source": "m6_staging_replay (sequential mode)",
+  "total_samples": 100,
+  "note": "Values derived from replay simulation. Re-derive from live LLM execution before GO_LIMITED_EXPOSURE.",
+  "distributions": {
+    "pm": {
+      "p50": 60,
+      "p90": 76,
+      "max": 79,
+      "count": 100
+    },
+    "arch": {
+      "p50": 58,
+      "p90": 76,
+      "max": 79,
+      "count": 100
+    },
+    "be": {
+      "p50": 56,
+      "p90": 74,
+      "max": 79,
+      "count": 100
+    },
+    "fe": {
+      "p50": 57,
+      "p90": 74,
+      "max": 79,
+      "count": 100
+    },
+    "qa": {
+      "p50": 57,
+      "p90": 74,
+      "max": 79,
+      "count": 100
+    }
+  },
+  "overflow_risk_tails": [
+    {
+      "role": "pm",
+      "p90": 76,
+      "max": 79,
+      "risk": "MEDIUM"
+    },
+    {
+      "role": "arch",
+      "p90": 76,
+      "max": 79,
+      "risk": "MEDIUM"
+    },
+    {
+      "role": "be",
+      "p90": 74,
+      "max": 79,
+      "risk": "MEDIUM"
+    },
+    {
+      "role": "fe",
+      "p90": 74,
+      "max": 79,
+      "risk": "MEDIUM"
+    },
+    {
+      "role": "qa",
+      "p90": 74,
+      "max": 79,
+      "risk": "MEDIUM"
+    }
+  ]
+}

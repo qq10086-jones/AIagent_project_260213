@@ -1,0 +1,238 @@
+{
+  "workflow_run_id": "a75463cb-3ec5-4ce3-bc9d-a610ef61568d",
+  "run_id": "m4-compat-run",
+  "workflow_id": "coding_team_v0",
+  "project_type": "webapp_crm",
+  "status": "succeeded",
+  "generated_at": "2026-03-08T13:09:09.806Z",
+  "required_artifacts": [
+    "spec",
+    "arch",
+    "diff",
+    "verification",
+    "run_manifest"
+  ],
+  "artifact_coverage": {
+    "spec": true,
+    "arch": true,
+    "diff": true,
+    "verification": true,
+    "run_summary": true,
+    "run_manifest": true
+  },
+  "step_artifacts": [
+    {
+      "step_index": 0,
+      "step_id": "pm_spec",
+      "task_id": "task-1",
+      "artifacts": []
+    },
+    {
+      "step_index": 1,
+      "step_id": "arch_design",
+      "task_id": "task-2",
+      "artifacts": []
+    },
+    {
+      "step_index": 2,
+      "step_id": "impl_be",
+      "task_id": "task-3",
+      "artifacts": []
+    },
+    {
+      "step_index": 3,
+      "step_id": "impl_fe",
+      "task_id": "task-4",
+      "artifacts": []
+    },
+    {
+      "step_index": 4,
+      "step_id": "qa_verify",
+      "task_id": "task-5",
+      "artifacts": []
+    },
+    {
+      "step_index": 5,
+      "step_id": "release_pack",
+      "task_id": "task-6",
+      "artifacts": []
+    }
+  ],
+  "context_budget_reports": [
+    {
+      "step_index": 0,
+      "step_id": "pm_spec",
+      "role_name": "pm",
+      "status": "ok",
+      "report_path": "artifacts/release/m4-compat-run/metrics/context_budget_pm_spec.json",
+      "threshold_source": "default_thresholds"
+    },
+    {
+      "step_index": 1,
+      "step_id": "arch_design",
+      "role_name": "architect",
+      "status": "ok",
+      "report_path": "artifacts/release/m4-compat-run/metrics/context_budget_arch_design.json",
+      "threshold_source": "role_overrides.architect"
+    },
+    {
+      "step_index": 2,
+      "step_id": "impl_be",
+      "role_name": "backend",
+      "status": "ok",
+      "report_path": "artifacts/release/m4-compat-run/metrics/context_budget_impl_be.json",
+      "threshold_source": "role_overrides.backend"
+    },
+    {
+      "step_index": 3,
+      "step_id": "impl_fe",
+      "role_name": "frontend",
+      "status": "ok",
+      "report_path": "artifacts/release/m4-compat-run/metrics/context_budget_impl_fe.json",
+      "threshold_source": "role_overrides.frontend"
+    },
+    {
+      "step_index": 4,
+      "step_id": "qa_verify",
+      "role_name": "qa",
+      "status": "ok",
+      "report_path": "artifacts/release/m4-compat-run/metrics/context_budget_qa_verify.json",
+      "threshold_source": "default_thresholds"
+    },
+    {
+      "step_index": 5,
+      "step_id": "release_pack",
+      "role_name": "release",
+      "status": "ok",
+      "report_path": "artifacts/release/m4-compat-run/metrics/context_budget_release_pack.json",
+      "threshold_source": "default_thresholds"
+    }
+  ],
+  "context_budget_summary": {
+    "total_steps": 6,
+    "ok": 6,
+    "warning": 0,
+    "overflow_risk": 0,
+    "missing": 0
+  },
+  "steps": [
+    {
+      "step_index": 0,
+      "step_id": "pm_spec",
+      "role_name": "pm",
+      "tool_name": "coding.delegate",
+      "gate_name": "low",
+      "task_id": "task-1",
+      "status": "succeeded",
+      "checkpoint_id": "552fd2e3-28f1-439f-9a4b-9220a0f5dbfb",
+      "error_code": null
+    },
+    {
+      "step_index": 1,
+      "step_id": "arch_design",
+      "role_name": "architect",
+      "tool_name": "coding.delegate",
+      "gate_name": "policy",
+      "task_id": "task-2",
+      "status": "succeeded",
+      "checkpoint_id": "022adc86-b388-43c0-9bb7-fa02d69b9b1f",
+      "error_code": null
+    },
+    {
+      "step_index": 2,
+      "step_id": "impl_be",
+      "role_name": "backend",
+      "tool_name": "coding.delegate",
+      "gate_name": "policy",
+      "task_id": "task-3",
+      "status": "succeeded",
+      "checkpoint_id": "320d1594-5d5b-4fbe-97dd-3badd03d398c",
+      "error_code": null
+    },
+    {
+      "step_index": 3,
+      "step_id": "impl_fe",
+      "role_name": "frontend",
+      "tool_name": "coding.delegate",
+      "gate_name": "policy",
+      "task_id": "task-4",
+      "status": "succeeded",
+      "checkpoint_id": "118d6615-ef2b-4871-b3cd-9e63dd2cf772",
+      "error_code": null
+    },
+    {
+      "step_index": 4,
+      "step_id": "qa_verify",
+      "role_name": "qa",
+      "tool_name": "coding.execute",
+      "gate_name": "acceptance",
+      "task_id": "task-5",
+      "status": "succeeded",
+      "checkpoint_id": "a8cfdfcb-0fcd-4bb5-ba52-43503e3bda8d",
+      "error_code": null
+    },
+    {
+      "step_index": 5,
+      "step_id": "release_pack",
+      "role_name": "release",
+      "tool_name": "coding.delegate",
+      "gate_name": "finalize",
+      "task_id": "task-6",
+      "status": "succeeded",
+      "checkpoint_id": "50e11771-f7e1-4f3c-9810-a0ee097c9037",
+      "error_code": null
+    }
+  ],
+  "checkpoints": [
+    {
+      "checkpoint_id": "552fd2e3-28f1-439f-9a4b-9220a0f5dbfb",
+      "step_index": 0,
+      "step_id": "pm_spec",
+      "task_id": "task-1",
+      "workspace_hash": "dc65ed03bedc398c5788a2d5daa13afbe703d37de122135a0b4ae69ad271d83a"
+    },
+    {
+      "checkpoint_id": "022adc86-b388-43c0-9bb7-fa02d69b9b1f",
+      "step_index": 1,
+      "step_id": "arch_design",
+      "task_id": "task-2",
+      "workspace_hash": "885df1cd26ed1443a78788ef448bf3188f2cb96c76693eb1a833be312d772346"
+    },
+    {
+      "checkpoint_id": "320d1594-5d5b-4fbe-97dd-3badd03d398c",
+      "step_index": 2,
+      "step_id": "impl_be",
+      "task_id": "task-3",
+      "workspace_hash": "e1745ffb1416e673c98ac5ce0e4b6dc47094f186f471d353fb53dfc9a82dac93"
+    },
+    {
+      "checkpoint_id": "118d6615-ef2b-4871-b3cd-9e63dd2cf772",
+      "step_index": 3,
+      "step_id": "impl_fe",
+      "task_id": "task-4",
+      "workspace_hash": "9f749ce26096376e71c32321d10edaeea7a31d29cca63fc561dfb0832bb68db5"
+    },
+    {
+      "checkpoint_id": "a8cfdfcb-0fcd-4bb5-ba52-43503e3bda8d",
+      "step_index": 4,
+      "step_id": "qa_verify",
+      "task_id": "task-5",
+      "workspace_hash": "1f672e3f716772e96a18d9a830a0ca1d8a838e3006cbd35db606eb1464effe04"
+    },
+    {
+      "checkpoint_id": "50e11771-f7e1-4f3c-9810-a0ee097c9037",
+      "step_index": 5,
+      "step_id": "release_pack",
+      "task_id": "task-6",
+      "workspace_hash": "63c79ba1f879d714fc362737631f41eb9af4720a5b967f15705fab7f35684e1f"
+    }
+  ],
+  "strict_canary": {
+    "verdict": "pass",
+    "report_json": "artifacts/release/m4-compat-run/qa/strict_canary_report.json",
+    "report_md": "artifacts/release/m4-compat-run/qa/strict_canary_report.md",
+    "failed_steps": 0,
+    "missing_artifacts_total": 0
+  },
+  "reasons": []
+}

@@ -1,0 +1,20 @@
+{
+  "from_step": "qa_verify",
+  "to_step": "release_pack",
+  "qa_report_path": "artifacts/release/test-run-001/verify/qa_report.json",
+  "overall_status": "pass_with_warnings",
+  "verified_artifacts": [
+    "artifacts/release/test-run-001/impl/be_changes/server.js",
+    "artifacts/release/test-run-001/impl/be_changes/routes/customers.js",
+    "artifacts/release/test-run-001/impl/fe_changes/index.html",
+    "artifacts/release/test-run-001/impl/fe_changes/app.js",
+    "artifacts/release/test-run-001/impl/be_notes.md",
+    "artifacts/release/test-run-001/impl/fe_notes.md"
+  ],
+  "warnings": [
+    "No input validation on customer creation — risk of empty name submission",
+    "In-memory data store — not suitable for production"
+  ],
+  "run_id": "test-run-001",
+  "workflow_run_id": "wf-run-001"
+}

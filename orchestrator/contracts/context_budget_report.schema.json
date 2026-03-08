@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "context_budget_report.schema.json",
+  "title": "Context Budget Report",
+  "description": "Per-step context budget metrics used to classify prompt and artifact size risk.",
+  "type": "object",
+  "required": [
+    "step_id",
+    "artifact_count",
+    "bytes_total",
+    "largest_artifact_bytes",
+    "prompt_chars",
+    "injected_context_bytes",
+    "status",
+    "threshold_source"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "step_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifact_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "bytes_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "largest_artifact_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "prompt_chars": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "injected_context_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "warning", "overflow_risk"]
+    },
+    "threshold_source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "workflow_run_id": {
+      "type": "string"
+    }
+  }
+}

@@ -1,8 +1,7 @@
 import { runCodexTask } from "./adapters/codex_adapter.js";
 import { runOpenCodeTask } from "./adapters/opencode_adapter.js";
-import { runQwenTask } from "./adapters/qwen_adapter.js";
 
-const SUPPORTED_PROVIDERS = new Set(["auto", "opencode", "codex", "qwen"]);
+const SUPPORTED_PROVIDERS = new Set(["auto", "opencode", "codex"]);
 
 function normalizeProvider(provider) {
   return String(provider || "auto").toLowerCase();
@@ -39,13 +38,6 @@ async function runProvider({ providerName, adapterRequest, model, maxRuntimeS, c
       opencodeCommand,
     });
   }
-  if (providerName === "qwen") {
-    return runQwenTask({
-      taskPrompt,
-      model,
-      maxRuntimeS,
-    });
-  }
   return runCodexTask({
     workspaceRoot,
     taskPrompt,
@@ -80,7 +72,7 @@ export async function executeCodingAdapter({
         adapter_type: String(adapterRequest?.adapter_type || "coding_executor"),
         task_type: String(adapterRequest?.task_type || "coding_execution"),
       },
-      error: `Unsupported provider '${providerRequested}'. Use auto/opencode/codex/qwen.`,
+      error: `Unsupported provider '${providerRequested}'. Use auto/opencode/codex.`,
     };
   }
 

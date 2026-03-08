@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { formatTransitionNotification, formatFailureReport } from "../src/vnext/observability_reporter.js";
+import { resolveOrchestratorArtifactPath } from "./_paths.js";
 
 function assertEqual(actual, expected, label) {
   if (actual !== expected) {
@@ -41,7 +42,7 @@ function main() {
   if (failMsg.includes("abc123def456ghi789jkl012mno")) throw new Error("failMsg secret leak");
   if (!failMsg.includes("***REDACTED***")) throw new Error("failMsg redact missing");
 
-  const outDir = path.resolve(process.cwd(), "artifacts", "canary", "observability_reporter");
+  const outDir = resolveOrchestratorArtifactPath("canary", "observability_reporter");
   fs.mkdirSync(outDir, { recursive: true });
   
   const reportPath = path.join(outDir, "observability_reporter_canary.json");

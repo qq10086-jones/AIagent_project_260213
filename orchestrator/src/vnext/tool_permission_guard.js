@@ -12,11 +12,19 @@ const MATRIX_SCHEMA = JSON.parse(
 // Hardcoded matrix mapping roles to allowed tools.
 // In a full system, this would be loaded dynamically from a config file.
 const DEFAULT_MATRIX = {
+  "pm": ["coding.delegate", "document.read", "document.write"],
   "pm_agent": ["coding.delegate", "document.read", "document.write"],
+  "architect": ["coding.delegate", "document.read", "document.write", "system.config_read"],
   "architect_agent": ["coding.delegate", "document.read", "document.write", "system.config_read"],
+  "frontend": ["coding.delegate", "file.read", "file.write", "bash.execute", "browser.test"],
   "frontend_agent": ["coding.delegate", "file.read", "file.write", "bash.execute", "browser.test"],
+  "backend": ["coding.delegate", "file.read", "file.write", "bash.execute", "database.query"],
   "backend_agent": ["coding.delegate", "file.read", "file.write", "bash.execute", "database.query"],
+  "qa": ["coding.delegate", "file.read", "bash.execute", "browser.test", "document.write", "coding.execute"],
   "qa_agent": ["coding.delegate", "file.read", "bash.execute", "browser.test", "document.write"],
+  "release": ["coding.delegate", "document.read", "document.write", "file.read"],
+  "release_agent": ["coding.delegate", "document.read", "document.write", "file.read"],
+  "quant_analyst": ["quant.fetch_price", "quant.compute_news_risk_factor"],
   "quant_agent": ["broker.query", "broker.trade", "data.fetch", "file.write"],
   "brain": ["none"]
 };

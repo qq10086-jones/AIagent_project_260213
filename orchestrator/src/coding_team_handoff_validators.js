@@ -11,6 +11,15 @@ const PM_HANDOFF_SCHEMA = JSON.parse(
 const ARCH_HANDOFF_SCHEMA = JSON.parse(
   fs.readFileSync(path.resolve(CONTRACTS_DIR, "coding_team_arch_handoff.schema.json"), "utf8")
 );
+const BE_TO_FE_HANDOFF_SCHEMA = JSON.parse(
+  fs.readFileSync(path.resolve(CONTRACTS_DIR, "coding_team_be_to_fe_handoff.schema.json"), "utf8")
+);
+const IMPL_TO_QA_HANDOFF_SCHEMA = JSON.parse(
+  fs.readFileSync(path.resolve(CONTRACTS_DIR, "coding_team_impl_to_qa_handoff.schema.json"), "utf8")
+);
+const QA_TO_RELEASE_HANDOFF_SCHEMA = JSON.parse(
+  fs.readFileSync(path.resolve(CONTRACTS_DIR, "coding_team_qa_to_release_handoff.schema.json"), "utf8")
+);
 
 function readTextFileSafe(absPath, maxBytes = 262144) {
   try {
@@ -46,10 +55,21 @@ function isPresentValue(value) {
   return value && typeof value === "object" ? Object.keys(value).length > 0 : false;
 }
 
+function normalizeSectionToken(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function getSchemaForTypedHandoff(fileName) {
   const safe = String(fileName || "").replace(/\\/g, "/");
   if (safe.endsWith("pm_to_architect.json")) return PM_HANDOFF_SCHEMA;
   if (safe.endsWith("architect_to_impl.json")) return ARCH_HANDOFF_SCHEMA;
+  if (safe.endsWith("be_to_fe.json")) return BE_TO_FE_HANDOFF_SCHEMA;
+  if (safe.endsWith("impl_to_qa.json")) return IMPL_TO_QA_HANDOFF_SCHEMA;
+  if (safe.endsWith("qa_to_release.json")) return QA_TO_RELEASE_HANDOFF_SCHEMA;
   return null;
 }
 
@@ -82,7 +102,11 @@ export function validateCodingTeamHandoff({ workspaceRoot, artifactRoot, handoff
   const corpus = searchableFiles
     .map((file) => readTextFileSafe(file).toLowerCase())
     .join("\n");
-  const missingSections = (handoff.required_sections || []).filter((section) => !corpus.includes(String(section || "").toLowerCase()));
+  const normalizedCorpus = normalizeSectionToken(corpus);
+  const missingSections = (handoff.required_sections || []).filter((section) => {
+    const token = normalizeSectionToken(section);
+    return token && !normalizedCorpus.includes(token);
+  });
   if (missingSections.length > 0) {
     return {
       checked: true,

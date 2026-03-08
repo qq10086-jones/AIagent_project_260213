@@ -1,7 +1,7 @@
 {
   "ok": true,
-  "generated_at": "2026-03-06T05:42:03.918Z",
-  "handoff_count": 2,
+  "generated_at": "2026-03-08T10:38:46.327Z",
+  "handoff_count": 5,
   "pm_ok": {
     "checked": true,
     "ok": true,
@@ -48,6 +48,7 @@
       ],
       "required_artifacts": [
         "plan/arch.md",
+        "plan/interfaces.md",
         "risk/risk_report.json",
         "plan/workplan.md",
         "handoff/architect_to_impl.json"

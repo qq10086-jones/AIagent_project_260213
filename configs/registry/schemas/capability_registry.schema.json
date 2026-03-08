@@ -79,7 +79,12 @@
                 "id": { "type": "string" },
                 "role": { "type": "string" },
                 "tool": { "type": "string" },
-                "gate": { "type": "string" }
+                "gate": { "type": "string" },
+                "prompt_script_id": { "type": "string" },
+                "depends_on": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
               },
               "additionalProperties": true
             }

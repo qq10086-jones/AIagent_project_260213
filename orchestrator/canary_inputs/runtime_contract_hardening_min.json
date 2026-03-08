@@ -5,7 +5,8 @@
     "workflow_prompt_bindings": {
       "pm_spec": "pm.design_doc.v1",
       "arch_design": "architect.system_spec.v1",
-      "qa_verify": "qa.test_plan.v1"
+      "qa_verify": "qa.verify.v1",
+      "release_pack": "release.pack.v1"
     }
   }
 }

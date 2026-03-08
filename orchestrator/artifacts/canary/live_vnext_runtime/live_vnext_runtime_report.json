@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-03-07T13:36:37.635Z",
+  "base_url": "http://localhost:3000",
+  "timeout_ms": 240000,
+  "checks": {
+    "health": {
+      "ok": true,
+      "body": "ok"
+    },
+    "direct_chat_bypass": {
+      "run_id": "dda1ef2b-7d1e-49ad-8201-9bf954b18868",
+      "mode": "direct_reply",
+      "run_status": "completed",
+      "task_count": 0
+    },
+    "approval_reject": {
+      "run_id": "822fdd36-6d2f-4e19-9d54-c9cec4fdebaa",
+      "task_id": "4c1de4ff-01df-47b3-8f61-214f9b919097",
+      "run_status": "failed",
+      "task_status": "failed",
+      "error_code": "APPROVAL_REJECTED"
+    },
+    "approval_approve": {
+      "run_id": "84a16b1c-889d-4712-8de0-a9d305b65d2a",
+      "task_id": "ebd28569-2c55-459b-9e7d-97b7769e8fe8",
+      "run_status": "running",
+      "task_status": "running"
+    }
+  },
+  "overall": "pass"
+}

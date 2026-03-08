@@ -24,36 +24,21 @@ function main() {
   );
   const root = path.resolve(process.cwd(), "artifacts", "canary", "qa_verifier_fixture");
 
-  writeText(
-    path.join(root, "ok", "tests", "test_plan.md"),
-    "# Test Plan\n\n## Verification Steps\n\n## Release Checklist\n"
-  );
-  writeText(
-    path.join(root, "ok", "qa", "smoke_report.md"),
-    "# Smoke Report\n\n## Executed Checks\n\n## Result Summary\n"
-  );
   writeJson(
-    path.join(root, "ok", "qa", "verification.json"),
+    path.join(root, "ok", "verify", "qa_report.json"),
     {
-      verdict: "pass",
-      acceptance_mapping: [
-        { acceptance_id: "A1", status: "pass", evidence: "qa/smoke_report.md" }
+      overall_status: "pass",
+      checks: [
+        { check_id: "det-1", layer: "deterministic", description: "artifacts exist", status: "pass", detail: "ok" },
+        { check_id: "sem-1", layer: "semantic", description: "api consistency", status: "pass", detail: "ok" }
       ],
-      summary: "QA checks passed",
+      verified_artifacts: ["impl/be_changes/server.js", "impl/fe_changes/app.js"]
     }
   );
 
-  writeText(
-    path.join(root, "bad", "tests", "test_plan.md"),
-    "# Test Plan\n"
-  );
-  writeText(
-    path.join(root, "bad", "qa", "smoke_report.md"),
-    "# Smoke Report\n"
-  );
   writeJson(
-    path.join(root, "bad", "qa", "verification.json"),
-    { verdict: "pass" }
+    path.join(root, "bad", "verify", "qa_report.json"),
+    { overall_status: "pass" }
   );
 
   const ok = validateQaVerifierArtifacts({

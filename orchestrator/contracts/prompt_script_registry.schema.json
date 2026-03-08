@@ -15,7 +15,7 @@
           "script_id": { "type": "string", "minLength": 1 },
           "agent_id": { "type": "string", "minLength": 1 },
           "role": { "type": "string", "minLength": 1 },
-          "model": { "type": "string", "minLength": 1 },
+          "llm_role": { "type": "string", "minLength": 1 },
           "input_schema": { "type": "object" },
           "output_schema": { "type": "object" },
           "tool_permissions": {
@@ -30,7 +30,7 @@
           "script_id",
           "agent_id",
           "role",
-          "model",
+          "llm_role",
           "input_schema",
           "output_schema",
           "tool_permissions",

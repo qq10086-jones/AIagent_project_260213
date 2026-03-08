@@ -1,9 +1,9 @@
 {
   "ok": true,
-  "generated_at": "2026-03-06T06:35:40.429Z",
+  "generated_at": "2026-03-08T10:16:02.965Z",
   "request": {
     "adapter_type": "coding_executor",
-    "provider": "qwen",
+    "provider": "opencode",
     "task_type": "coding_execution",
     "payload": {
       "role": "backend",
@@ -11,9 +11,9 @@
       "task_prompt": "Implement backend login API",
       "artifact_root": "artifacts/release/run-1",
       "expected_artifacts": [
-        "patch/diff.patch",
-        "tests/backend_test_report.md",
-        "run/run_backend.md"
+        "impl/be_changes/server.js",
+        "impl/be_notes.md",
+        "handoff/be_to_fe.json"
       ],
       "target_paths": [
         "sandbox/crm_site/"
@@ -26,22 +26,23 @@
           "sandbox/crm_site/"
         ],
         "required_outputs": [
-          "patch/diff.patch",
-          "tests/backend_test_report.md",
-          "run/run_backend.md"
+          "impl/be_changes/server.js",
+          "impl/be_notes.md",
+          "handoff/be_to_fe.json"
         ],
         "input_artifacts": [
           "plan/arch.md",
+          "plan/interfaces.md",
           "risk/risk_report.json",
           "plan/workplan.md",
           "handoff/architect_to_impl.json"
         ],
-        "execution_mode": "patch_and_verify",
-        "verification_hint": "return diff summary, changed files, backend test evidence, and runbook",
-        "provider_hint": "qwen",
+        "execution_mode": "file_output_and_handoff",
+        "verification_hint": "return complete backend files, backend notes, and a typed BE-to-FE handoff manifest",
+        "provider_hint": "opencode",
         "model_hint": "qwen-coder-next"
       },
-      "provider_hint": "qwen",
+      "provider_hint": "opencode",
       "model_hint": ""
     },
     "context": {
@@ -58,12 +59,12 @@
   "result": {
     "ok": true,
     "adapter_type": "coding_executor",
-    "provider": "qwen",
+    "provider": "opencode",
     "result": {
-      "provider_used": "qwen",
+      "provider_used": "opencode",
       "model_used": "qwen-coder-next",
-      "command_used": "qwen_api qwen-coder-next",
-      "command_source": "qwen_api",
+      "command_used": "opencode qwen-coder-next",
+      "command_source": "opencode_cli",
       "diagnostics": {
         "error_code": null,
         "timeout": false

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "coding_team_patch_bundle.schema.json",
+  "title": "Coding Team Patch Bundle",
+  "description": "Structured patch bundle emitted by implementation roles for diff-first execution.",
+  "type": "object",
+  "required": ["bundle_id", "step_id", "mode", "operations", "target_files", "summary"],
+  "additionalProperties": true,
+  "properties": {
+    "bundle_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "step_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["structured_patch", "full_file_fallback"]
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "target_file"],
+        "additionalProperties": true,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["replace_range", "insert_after_anchor", "delete_range", "create_file"]
+          },
+          "target_file": {
+            "type": "string",
+            "minLength": 1
+          },
+          "anchor": {
+            "type": "string",
+            "minLength": 1
+          },
+          "anchor_context_before": {
+            "type": "string"
+          },
+          "anchor_start": {
+            "type": "string",
+            "minLength": 1
+          },
+          "anchor_end": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "file_content": {
+            "type": "string"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": { "const": "replace_range" }
+              }
+            },
+            "then": {
+              "required": ["anchor_start", "anchor_end", "content"]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": { "const": "insert_after_anchor" }
+              }
+            },
+            "then": {
+              "required": ["anchor", "content"]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": { "const": "delete_range" }
+              }
+            },
+            "then": {
+              "required": ["anchor_start", "anchor_end"]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": { "const": "create_file" }
+              }
+            },
+            "then": {
+              "required": ["file_content"]
+            }
+          }
+        ]
+      }
+    },
+    "target_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "workflow_run_id": {
+      "type": "string"
+    }
+  }
+}

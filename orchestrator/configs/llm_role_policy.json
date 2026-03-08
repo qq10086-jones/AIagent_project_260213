@@ -1,0 +1,39 @@
+{
+  "version": "1.1.0",
+  "roles": {
+    "pm": {
+      "provider": "cloud_qwen",
+      "model": "qwen-max"
+    },
+    "architect": {
+      "provider": "cloud_qwen",
+      "model": "qwen-max"
+    },
+    "backend": {
+      "provider": "local_ollama",
+      "model": "deepseek-r1:32b",
+      "secondary_model": "qwen2.5-coder:7b"
+    },
+    "frontend": {
+      "provider": "local_ollama",
+      "model": "deepseek-r1:32b",
+      "secondary_model": "qwen2.5-coder:7b"
+    },
+    "qa": {
+      "provider": "local_ollama",
+      "model": "deepseek-r1:32b",
+      "secondary_model": "qwen2.5-coder:7b"
+    },
+    "release": {
+      "provider": "local_ollama",
+      "model": "deepseek-r1:32b",
+      "secondary_model": "qwen2.5-coder:7b"
+    }
+  },
+  "retry_policy": {
+    "strategy": "exponential_backoff",
+    "retries": 3,
+    "base_delay_ms": 2000
+  },
+  "fallback_policy": "model_fallback"
+}

@@ -4,12 +4,18 @@
     "scripts": [
       "pm.design_doc.v1",
       "architect.system_spec.v1",
-      "qa.test_plan.v1"
+      "backend.impl.v1",
+      "frontend.impl.v1",
+      "qa.verify.v1",
+      "release.pack.v1"
     ],
     "workflow_bindings": {
       "pm_spec": "pm.design_doc.v1",
       "arch_design": "architect.system_spec.v1",
-      "qa_verify": "qa.test_plan.v1"
+      "impl_be": "backend.impl.v1",
+      "impl_fe": "frontend.impl.v1",
+      "qa_verify": "qa.verify.v1",
+      "release_pack": "release.pack.v1"
     }
   }
 }

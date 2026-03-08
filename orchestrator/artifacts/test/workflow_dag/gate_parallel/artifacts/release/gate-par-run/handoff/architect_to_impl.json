@@ -1,0 +1,28 @@
+{
+  "from_step": "arch_design",
+  "to_steps": [
+    "impl_be",
+    "impl_fe"
+  ],
+  "modules": [
+    "auth-service"
+  ],
+  "interfaces": [
+    "POST /api/login"
+  ],
+  "decisions": [
+    {
+      "adr_id": "ADR-001",
+      "title": "Use Postgres",
+      "status": "accepted"
+    }
+  ],
+  "risks": [
+    "auth migration"
+  ],
+  "parallelization": {
+    "fe_safe_parallel": true,
+    "requires_be_handoff": false,
+    "rationale": "Frontend can proceed from architect interfaces without backend typed handoff."
+  }
+}

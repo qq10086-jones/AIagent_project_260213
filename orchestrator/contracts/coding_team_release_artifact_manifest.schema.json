@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "coding_team_release_artifact_manifest.schema.json",
+  "title": "Coding Team Release Artifact Manifest",
+  "description": "Machine-readable manifest produced by the release_pack step. Lists all verified artifacts included in the release.",
+  "type": "object",
+  "required": ["run_id", "workflow_id", "completed_at", "artifacts"],
+  "additionalProperties": true,
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for the workflow run."
+    },
+    "workflow_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Workflow definition identifier (e.g. 'coding_team_v0')."
+    },
+    "completed_at": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ISO 8601 timestamp when the release pack was produced."
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "description": "List of artifacts included in this release.",
+      "items": {
+        "type": "object",
+        "required": ["path", "type", "size_bytes"],
+        "additionalProperties": true,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Relative artifact path."
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Artifact type (e.g. 'markdown', 'json', 'source')."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "File size in bytes."
+          }
+        }
+      }
+    }
+  }
+}

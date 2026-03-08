@@ -1,0 +1,88 @@
+{
+  "generated_at": "2026-03-06T12:16:33.617Z",
+  "total_cases": 16,
+  "passed_cases": 16,
+  "failed_cases": 0,
+  "cases": [
+    {
+      "name": "brain_router_chat",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "brain_router_coding_simple",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "brain_router_coding_complex",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "brain_router_coder_default",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "brain_router_coder_explicit",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "dispatch_response_direct_reply",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "dispatch_response_progress",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "dispatch_response_approval",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "dispatch_response_error",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "http_dispatch_contract_error_shape",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "http_route_chat",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "http_route_coding",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "http_dispatch_chat",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "http_dispatch_coding_simple",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "http_dispatch_coder",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "http_dispatch_error",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

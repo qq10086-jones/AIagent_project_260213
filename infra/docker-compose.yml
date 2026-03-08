@@ -52,6 +52,8 @@ services:
     volumes:
       - ../configs/tools.json:/app/configs/tools.json:ro
       - ../configs/capability_registry.json:/app/configs/capability_registry.json:ro
+      - ../configs/agents:/app/configs/agents:ro
+      - ../configs/prompt_scripts:/app/configs/prompt_scripts:ro
       - ../configs/registry:/app/configs/registry:ro
       - ../configs/runtime:/app/configs/runtime:ro
       - ../orchestrator/src:/app/src

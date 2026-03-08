@@ -1,0 +1,23 @@
+{
+  "from_step": "arch_design",
+  "to_steps": [
+    "impl_be",
+    "impl_fe"
+  ],
+  "modules": [
+    "auth-service"
+  ],
+  "interfaces": [
+    "POST /api/login"
+  ],
+  "decisions": [
+    {
+      "adr_id": "ADR-001",
+      "title": "Use Postgres for auth storage",
+      "status": "accepted"
+    }
+  ],
+  "risks": [
+    "auth migration"
+  ]
+}

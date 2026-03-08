@@ -3,8 +3,8 @@
   "project_type": "webapp_crm",
   "input": {
     "goal": "Build a small browser game with score tracking and restart flow. Keep implementation reviewable and emit all required workflow artifacts.",
-    "provider": "qwen",
-    "model": "qwen-plus",
+    "provider": "opencode",
+    "model": "qwen3-coder-next",
     "fast_mode": true,
     "max_runtime_s": 180
   }

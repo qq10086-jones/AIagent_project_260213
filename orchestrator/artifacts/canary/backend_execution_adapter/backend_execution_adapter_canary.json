@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generated_at": "2026-03-06T06:08:44.733Z",
+  "generated_at": "2026-03-08T10:15:58.532Z",
   "packet": {
     "adapter_id": "backend.execution.v1",
     "role": "backend",
@@ -9,18 +9,19 @@
       "sandbox/crm_site/"
     ],
     "required_outputs": [
-      "patch/diff.patch",
-      "tests/backend_test_report.md",
-      "run/run_backend.md"
+      "impl/be_changes/server.js",
+      "impl/be_notes.md",
+      "handoff/be_to_fe.json"
     ],
     "input_artifacts": [
       "plan/arch.md",
+      "plan/interfaces.md",
       "risk/risk_report.json",
       "plan/workplan.md",
       "handoff/architect_to_impl.json"
     ],
-    "execution_mode": "patch_and_verify",
-    "verification_hint": "return diff summary, changed files, backend test evidence, and runbook",
+    "execution_mode": "file_output_and_handoff",
+    "verification_hint": "return complete backend files, backend notes, and a typed BE-to-FE handoff manifest",
     "provider_hint": "qwen",
     "model_hint": "qwen-coder-next"
   },

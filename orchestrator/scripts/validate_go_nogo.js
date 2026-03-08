@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { validateArtifactPack } from "../src/artifact_pack_validator.js";
-import { loadRegistryOrThrow } from "../src/registry.js";
+import { getDefaultRegistryPath, loadRegistryOrThrow } from "../src/registry.js";
+import { getDefaultWorkspaceRoot } from "./_paths.js";
 
 function argValue(name, fallback = "") {
   const idx = process.argv.indexOf(`--${name}`);
@@ -26,16 +27,7 @@ function safeReadJson(p) {
 function findRegistryPath() {
   const envPath = String(process.env.REGISTRY_PATH || "").trim();
   if (envPath) return envPath;
-  const candidates = [
-    path.join(process.cwd(), "configs", "registry", "capability_registry.json"),
-    path.join(process.cwd(), "..", "configs", "registry", "capability_registry.json"),
-    path.join(process.cwd(), "configs", "capability_registry.json"),
-    path.join(process.cwd(), "..", "configs", "capability_registry.json"),
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  return "";
+  return getDefaultRegistryPath();
 }
 
 function getReleaseRoot({ releaseRootArg = "", runId = "", workspaceRoot = "" }) {
@@ -82,7 +74,7 @@ function printResult(result) {
 }
 
 function main() {
-  const workspaceRoot = path.resolve(argValue("workspace-root", path.resolve(process.cwd(), "..")));
+  const workspaceRoot = path.resolve(argValue("workspace-root", getDefaultWorkspaceRoot()));
   const runIdArg = argValue("run-id", "").trim();
   const workflowRunId = argValue("workflow-run-id", "").trim();
   const releaseRootArg = argValue("release-root", "").trim();

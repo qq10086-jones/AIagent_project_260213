@@ -1,0 +1,50 @@
+{
+  "verdict": "GO",
+  "workflow_run_id": "a75463cb-3ec5-4ce3-bc9d-a610ef61568d",
+  "run_id": "m4-compat-run",
+  "workflow_id": "coding_team_v0",
+  "project_type": "webapp_crm",
+  "strict": true,
+  "generated_at": "2026-03-08T13:09:09.815Z",
+  "total_checks": 7,
+  "passed_checks": 7,
+  "failed_checks": 0,
+  "checks": [
+    {
+      "name": "artifact_pack_validator",
+      "pass": true,
+      "detail": "validator passed"
+    },
+    {
+      "name": "workflow_status",
+      "pass": true,
+      "detail": "manifest.status=succeeded"
+    },
+    {
+      "name": "step_success",
+      "pass": true,
+      "detail": "succeeded=6/6"
+    },
+    {
+      "name": "step_count",
+      "pass": true,
+      "detail": "steps=6 expected=6"
+    },
+    {
+      "name": "acceptance_gate",
+      "pass": true,
+      "detail": "step=qa_verify status=succeeded"
+    },
+    {
+      "name": "strict_canary_verdict",
+      "pass": true,
+      "detail": "verdict=pass"
+    },
+    {
+      "name": "strict_canary_missing_artifacts",
+      "pass": true,
+      "detail": "missing_artifacts_total=0"
+    }
+  ],
+  "reasons": []
+}

@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "cloudResult": {
+    "content": "cloud-ok",
+    "model": "qwen-max",
+    "provider": "cloud_qwen",
+    "latency_ms": 0,
+    "used_fallback": false
+  },
+  "localResult": {
+    "content": "local-ok:deepseek-r1:32b",
+    "model": "deepseek-r1:32b",
+    "provider": "local_ollama",
+    "latency_ms": 10,
+    "used_fallback": false
+  },
+  "overrideResult": {
+    "content": "local-ok:qwen2.5-coder:7b",
+    "model": "qwen2.5-coder:7b",
+    "provider": "local_ollama",
+    "latency_ms": 0,
+    "used_fallback": false
+  },
+  "validation": {
+    "ok": true,
+    "results": [
+      {
+        "provider": "cloud_qwen",
+        "status": "ok",
+        "detail": "env configured"
+      },
+      {
+        "provider": "local_ollama",
+        "status": "ok",
+        "detail": "models=2"
+      }
+    ]
+  },
+  "generated_at": "2026-03-08T09:44:52.429Z"
+}

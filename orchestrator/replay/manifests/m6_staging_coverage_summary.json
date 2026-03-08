@@ -1,0 +1,36 @@
+{
+  "manifest_id": "m6-staging-v1",
+  "generated_at": "2026-03-08T23:30:00Z",
+  "total_cases": 50,
+  "coverage_floors": {
+    "required_total": 50,
+    "actual_total": 50,
+    "status": "PASS"
+  },
+  "by_input_class": {
+    "pm_heavy": { "required": 7, "actual": 7, "ids": ["R001","R002","R003","R004","R005","R006","R007"], "status": "PASS" },
+    "architect_heavy": { "required": 7, "actual": 7, "ids": ["R008","R009","R010","R011","R012","R013","R014"], "status": "PASS" },
+    "be_led": { "required": 7, "actual": 10, "ids": ["R015","R016","R017","R018","R019","R020","R021","R022","R046","R048"], "status": "PASS" },
+    "fe_led": { "required": 7, "actual": 10, "ids": ["R023","R024","R025","R026","R027","R028","R029","R030","R047","R049"], "status": "PASS" },
+    "qa_heavy": { "required": 7, "actual": 7, "ids": ["R031","R032","R033","R034","R035","R036","R037"], "status": "PASS" },
+    "mixed_ambiguous": { "required": 7, "actual": 9, "ids": ["R038","R039","R040","R041","R042","R043","R044","R045","R050"], "status": "PASS" }
+  },
+  "fe_safe_cases": {
+    "required": 10,
+    "actual": 11,
+    "ids": ["R023","R024","R025","R026","R027","R028","R029","R040","R041","R047","R049"],
+    "status": "PASS"
+  },
+  "non_fe_safe_cases": {
+    "required": 10,
+    "actual": 39,
+    "status": "PASS"
+  },
+  "dirty_repo_cases": {
+    "required": 5,
+    "actual": 5,
+    "ids": ["R046","R047","R048","R049","R050"],
+    "status": "PASS"
+  },
+  "overall_status": "PASS"
+}

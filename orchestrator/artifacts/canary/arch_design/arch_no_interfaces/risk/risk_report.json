@@ -1,0 +1,20 @@
+{
+  "risks": [
+    {
+      "level": "medium",
+      "title": "auth migration",
+      "mitigation": "staged rollout behind feature flag"
+    },
+    {
+      "level": "low",
+      "title": "session token rotation",
+      "mitigation": "zero-downtime deploy script"
+    }
+  ],
+  "decision_log": [
+    "Use PostgreSQL as primary persistence layer",
+    "Use Redis for session caching",
+    "Ship auth module first behind feature flag"
+  ],
+  "generated_at": "2026-03-07T13:16:09.471Z"
+}

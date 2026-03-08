@@ -4,6 +4,6 @@
     "request_schema_id": "tool_adapter_request.schema.json",
     "result_schema_id": "tool_adapter_result.schema.json",
     "adapter_type": "coding_executor",
-    "provider": "qwen"
+    "provider": "opencode"
   }
 }

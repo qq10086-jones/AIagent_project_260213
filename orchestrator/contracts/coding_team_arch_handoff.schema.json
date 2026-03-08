@@ -23,12 +23,29 @@
     "decisions": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "object",
+        "required": ["adr_id", "title", "status"],
+        "properties": {
+          "adr_id": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "string" }
+        }
+      }
     },
     "risks": {
       "type": "array",
       "minItems": 1,
       "items": { "type": "string", "minLength": 1 }
+    },
+    "parallelization": {
+      "type": "object",
+      "properties": {
+        "fe_safe_parallel": { "type": "boolean" },
+        "requires_be_handoff": { "type": "boolean" },
+        "rationale": { "type": "string" }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true

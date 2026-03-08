@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-06T12:26:37.830Z",
+  "results": {
+    "startMsg": "🚀 Starting workflow execution. First step: **pm_spec** (pm_agent)...",
+    "progressMsg": "✅ Completed **pm_spec**.\n⏳ Transitioning to **arch_design** (architect_agent)...",
+    "endMsg": "✅ Workflow completed successfully. Preparing final artifacts...",
+    "failMsg": "❌ **Workflow Halted at Step:** `backend_impl`\n👤 **Role:** `backend_agent`\n⚠️ **Error Code:** `COMPILATION_ERROR`\n\n**Details:**\n> Failed to compile TS code\n\n**Diagnostic Logs:**\n```text\nsecret_token=***REDACTED***\nerror TS2322: Type 'string' is not assignable to type 'number'.\n```\n"
+  }
+}

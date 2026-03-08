@@ -21,7 +21,7 @@ function buildPreviewIds(seed = "preview") {
 
 export function buildDispatchContractPreview({
   body = {},
-  analyzerResult = null,
+  analyzerResult = undefined,
   registry,
   routeOverride = null,
   previewSeed = "preview",

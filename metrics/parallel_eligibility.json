@@ -1,0 +1,52 @@
+{
+  "generated_at": "2026-03-08T15:45:40.456Z",
+  "source": "m6_staging_replay (sequential mode — gate evaluated against rollout_master_disabled)",
+  "note": "All cases forced sequential because master_enabled=false. Eligibility rates reflect gate policy logic only. Re-run with master_enabled=true for live eligibility distribution.",
+  "by_input_class": {
+    "pm_heavy": {
+      "total": 14,
+      "eligible": 0,
+      "ineligible": 14,
+      "eligibility_rate": 0
+    },
+    "architect_heavy": {
+      "total": 14,
+      "eligible": 0,
+      "ineligible": 14,
+      "eligibility_rate": 0
+    },
+    "be_led": {
+      "total": 20,
+      "eligible": 0,
+      "ineligible": 20,
+      "eligibility_rate": 0
+    },
+    "fe_led": {
+      "total": 20,
+      "eligible": 0,
+      "ineligible": 20,
+      "eligibility_rate": 0
+    },
+    "qa_heavy": {
+      "total": 14,
+      "eligible": 0,
+      "ineligible": 14,
+      "eligibility_rate": 0
+    },
+    "mixed_ambiguous": {
+      "total": 18,
+      "eligible": 0,
+      "ineligible": 18,
+      "eligibility_rate": 0
+    }
+  },
+  "denial_reasons_categorized": {
+    "replay_runner_sequential_mode": 100
+  },
+  "qualifying_input_classes_at_80pct": [],
+  "go_nogo_threshold": {
+    "required": "at least 1 workflow type at >= 80% eligibility rate",
+    "note": "fe_led is declared FE-safe in policy; with master enabled, all fe_led cases would qualify. Assessment deferred to live run.",
+    "assessment": "DEFERRED"
+  }
+}

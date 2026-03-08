@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { loadRegistryOrThrow } from "../src/registry.js";
+import { getDefaultRegistryPath, loadRegistryOrThrow } from "../src/registry.js";
 import { normalizeInputRequest } from "../src/vnext/input_normalizer.js";
 import { routeTaskRequest } from "../src/vnext/brain_router.js";
 import { buildRouteContractResponse } from "../src/vnext/route_contract.js";
@@ -12,6 +12,11 @@ import {
   makeWorkflowQueuedResponse,
   makeErrorResponse,
 } from "../src/vnext/response_protocol.js";
+import {
+  getDefaultWorkspaceRoot,
+  resolveCanaryInputPath,
+  resolveOrchestratorArtifactPath,
+} from "./_paths.js";
 
 function arg(name, fallback = "") {
   const idx = process.argv.indexOf(`--${name}`);
@@ -158,7 +163,6 @@ function runResponseCase(fixture) {
 function runHttpRouteCase(fixture, registry) {
   const result = buildRouteContractResponse({
     body: fixture.request || {},
-    analyzerResult: null,
     registry,
   });
   const expected = fixture.expected || {};
@@ -173,7 +177,6 @@ function runHttpRouteCase(fixture, registry) {
 function runHttpDispatchCase(fixture, registry) {
   const result = buildDispatchContractPreview({
     body: fixture.request || {},
-    analyzerResult: null,
     registry,
     routeOverride: fixture.route_override || null,
     previewSeed: fixture.name || "preview",
@@ -197,7 +200,7 @@ function runHttpDispatchCase(fixture, registry) {
 
 function main() {
   const strict = parseBool(arg("strict", "true"), true);
-  const workspaceRoot = path.resolve(arg("workspace-root", process.cwd()));
+  const workspaceRoot = path.resolve(arg("workspace-root", getDefaultWorkspaceRoot()));
   const inputs = [
     "brain_router_chat.json",
     "brain_router_coding_simple.json",
@@ -216,7 +219,7 @@ function main() {
     "http_dispatch_coder.json",
     "http_dispatch_error.json",
   ];
-  const registry = loadRegistryOrThrow(path.resolve(process.cwd(), "..", "configs", "registry", "capability_registry.json"));
+  const registry = loadRegistryOrThrow(getDefaultRegistryPath());
   const defaults = {
     provider: "opencode",
     model: DEFAULT_CODER_MODEL,
@@ -224,7 +227,7 @@ function main() {
 
   const cases = [];
   for (const name of inputs) {
-    const fixturePath = path.resolve(process.cwd(), "canary_inputs", name);
+    const fixturePath = resolveCanaryInputPath(name);
     const fixture = loadJson(fixturePath);
     const item = { name: fixture.name || name, ok: true, detail: "" };
     try {
@@ -252,7 +255,7 @@ function main() {
   };
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const outDir = path.resolve(workspaceRoot, "artifacts", "canary", "brain_router", stamp);
+  const outDir = resolveOrchestratorArtifactPath("canary", "brain_router", stamp);
   fs.mkdirSync(outDir, { recursive: true });
   const jsonPath = path.join(outDir, "canary_report.json");
   const mdPath = path.join(outDir, "canary_report.md");

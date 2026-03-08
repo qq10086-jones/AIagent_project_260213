@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { interceptAndDispatch } from "../src/vnext/approval_interceptor.js";
 import { createTaskEnvelope } from "../src/vnext/task_envelope.js";
+import { resolveOrchestratorArtifactPath } from "./_paths.js";
 
 function assertEqual(actual, expected, label) {
   if (actual !== expected) {
@@ -62,7 +63,7 @@ function main() {
   assertEqual(approvedResult.response_mode, "progress_update", "approved mode");
   assertEqual(approvedResult.execution.waiting_approval, false, "approved wait");
 
-  const outDir = path.resolve(process.cwd(), "artifacts", "canary", "approval_interceptor");
+  const outDir = resolveOrchestratorArtifactPath("canary", "approval_interceptor");
   fs.mkdirSync(outDir, { recursive: true });
   
   const reportPath = path.join(outDir, "approval_interceptor_canary.json");

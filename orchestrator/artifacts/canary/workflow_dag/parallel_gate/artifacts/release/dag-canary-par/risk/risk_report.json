@@ -1,0 +1,12 @@
+{
+  "risks": [
+    {
+      "level": "medium",
+      "title": "auth",
+      "mitigation": "staged rollout"
+    }
+  ],
+  "decision_log": [
+    "Use Postgres"
+  ]
+}

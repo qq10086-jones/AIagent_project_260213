@@ -1,0 +1,11 @@
+{
+  "criteria": [
+    "AC-001: User can log in"
+  ],
+  "artifacts": [
+    "plan/spec.md",
+    "plan/milestones.md"
+  ],
+  "owner": "pm_agent",
+  "version": "v1"
+}

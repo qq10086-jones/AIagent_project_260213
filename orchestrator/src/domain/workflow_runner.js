@@ -36,7 +36,7 @@ export function verifyResumePayload(token, secret) {
   if (!body || !sig) return { ok: false, error: "RESUME_INVALID: malformed token" };
   const expected = crypto.createHmac("sha256", secret).update(body).digest("base64url");
   if (expected !== sig) return { ok: false, error: "RESUME_INVALID: bad signature" };
-  let payload = null;
+  let payload;
   try {
     payload = JSON.parse(base64UrlDecode(body));
   } catch {

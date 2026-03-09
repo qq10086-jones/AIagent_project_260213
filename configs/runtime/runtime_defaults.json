@@ -2,10 +2,10 @@
   "version": "1.0",
   "orchestrator": {
     "qwen_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-    "qwen_model": "qwen-plus",
+    "qwen_model": "qwen-flash",
     "coder_provider_default": "opencode",
-    "coder_model_default": "qwen3-coder-next",
-    "quant_llm_model": "deepseek-r1:32b",
+    "coder_model_default": "qwen3-coder-plus-2025-07-22",
+    "quant_llm_model": "qwen-plus-2025-04-28",
     "workflow_step_artifact_audit": true,
     "workflow_strict_step_artifacts": true,
     "approval_token_default": "dev-approval-token"
@@ -16,20 +16,20 @@
   "brain": {
     "llm_provider": "dashscope",
     "qwen_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-    "qwen_model": "qwen-plus",
-    "quant_llm_model": "deepseek-r1:1.5b",
+    "qwen_model": "qwen-flash",
+    "quant_llm_model": "qwen-plus-2025-04-28",
     "ollama_base_url": "http://host.docker.internal:11434",
     "llm_timeout_sec": 60
   },
   "worker_coder": {
     "provider_default": "opencode",
-    "model_default": "qwen3-coder-next",
+    "model_default": "qwen3-coder-plus-2025-07-22",
     "global_task_timeout_ms": 900000
   },
   "worker_quant": {
-    "llm_provider": "ollama",
-    "quant_llm_model": "deepseek-r1:1.5b",
-    "code_llm_model": "glm-4.7-flash:latest",
+    "llm_provider": "dashscope",
+    "quant_llm_model": "qwen-plus-2025-04-28",
+    "code_llm_model": "qwen3-coder-plus-2025-07-22",
     "dash_scope_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
     "openai_base_url": "https://api.openai.com/v1",
     "ollama_base_url": "http://host.docker.internal:11434",

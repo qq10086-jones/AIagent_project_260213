@@ -39,7 +39,7 @@ export function createHandleApproveTask({
       console.warn(`[workflow] handleTaskApproved failed: ${err.message}`);
     });
 
-    let payload = {};
+    let payload;
     try {
       payload = JSON.parse(task.payload_json || "{}");
     } catch {

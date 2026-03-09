@@ -1,0 +1,74 @@
+{
+  "_comment": "WS-31-01: M7 Approved Dynamic Routing Exposure Cohort Definition. Machine-readable. Controls which workflow classes and project types may participate in limited dynamic routing trials. Runtime reads this before any dynamic routing is activated. Changing this file does not require a service restart.",
+  "version": "1.0",
+  "effective_date": "2026-03-09",
+  "milestone": "M7",
+  "approved_by": "pending_architect_sign_off",
+
+  "cohort_id": "m7-dynamic-routing-trial-v1",
+
+  "included_workflow_classes": [
+    "coding_team_v0"
+  ],
+
+  "excluded_high_risk_classes": [
+    "high_risk_release_sensitive",
+    "architectural_orchestration_required"
+  ],
+
+  "allowed_project_types": [
+    "crm"
+  ],
+
+  "allowed_input_classes": [
+    "fe_led"
+  ],
+
+  "explicit_deny_conditions": [
+    {
+      "id": "deny_high_risk_work_shape",
+      "description": "Deny if classifier labels work_shape as high_risk_release_sensitive or architectural_orchestration_required",
+      "enabled": true
+    },
+    {
+      "id": "deny_low_confidence",
+      "description": "Deny if classifier confidence_band is 'low' or 'unavailable'",
+      "enabled": true
+    },
+    {
+      "id": "deny_unapproved_project_type",
+      "description": "Deny if project_type is not in allowed_project_types",
+      "enabled": true
+    },
+    {
+      "id": "deny_unapproved_input_class",
+      "description": "Deny if input_class is not in allowed_input_classes",
+      "enabled": true
+    },
+    {
+      "id": "deny_classifier_unavailable",
+      "description": "Deny (fallback to static-policy-only) if classifier is unreachable, timed out, or circuit-breaker is open",
+      "enabled": true
+    }
+  ],
+
+  "rollback_trigger_thresholds": {
+    "high_risk_misroute_rate_pct":      2.0,
+    "tier_misroute_rate_pct":           5.0,
+    "forced_sequential_spike_pct":      40.0,
+    "circuit_breaker_trigger_rate_pct": 10.0,
+    "description": "If any threshold is breached, operator must evaluate circuit-breaker activation or revert to static_policy_only. Thresholds are directional targets per WS-30-03 reporting."
+  },
+
+  "runtime_controls": {
+    "cohort_enabled":              false,
+    "description": "Set cohort_enabled=true only after Architect sign-off. Requires production_parallel_rollout.json master_enabled=true and dynamic_routing_enabled=true to take effect.",
+    "override_to_static_policy":  false
+  },
+
+  "observability": {
+    "routing_audit_log_required":   true,
+    "waterfall_trace_required":     true,
+    "evaluation_report_frequency":  "per_trial_session"
+  }
+}

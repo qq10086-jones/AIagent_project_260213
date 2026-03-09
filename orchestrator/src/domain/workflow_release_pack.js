@@ -104,7 +104,7 @@ export function createWorkflowReleasePackService({
             source: "release_pack_local",
           },
         });
-      } catch {}
+      } catch { /* ignore: individual asset record insert is non-fatal */ }
     }
 
     for (const item of stepArtifacts || []) {
@@ -137,7 +137,7 @@ export function createWorkflowReleasePackService({
               bucket: art.bucket || null,
             },
           });
-        } catch {}
+        } catch { /* ignore: individual asset record insert is non-fatal */ }
       }
     }
 
@@ -168,7 +168,7 @@ export function createWorkflowReleasePackService({
             local_path: art.local_path || null,
           },
         });
-      } catch {}
+      } catch { /* ignore: individual asset record insert is non-fatal */ }
     }
   }
 

@@ -136,7 +136,7 @@ function setupFixture(fixtureRoot, { includeInterfaces = true } = {}) {
   );
 }
 
-function validateArtifactPresence(fixtureRoot, artifactRoot) {
+function validateArtifactPresence(fixtureRoot, _artifactRoot) {
   const missing = [];
   for (const rel of REQUIRED_ARTIFACT_FILES) {
     const abs = path.resolve(fixtureRoot, rel);

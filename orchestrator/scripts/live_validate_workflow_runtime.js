@@ -26,7 +26,7 @@ function assert(condition, message) {
 async function getJson(url, init = {}) {
   const res = await fetch(url, init);
   const text = await res.text();
-  let json = null;
+  let json;
   try {
     json = text ? JSON.parse(text) : null;
   } catch {

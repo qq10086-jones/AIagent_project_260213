@@ -1,0 +1,43 @@
+# docker-compose.staging.yml — M8 Phase 1 staging override
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+#
+# What this override does:
+#   1. Uses nexus_staging database (isolated from dev/prod data)
+#   2. Mounts staging_parallel_rollout.json (master_enabled=true, dynamic_routing_enabled=true)
+#   3. Mounts m7_exposure_cohorts_staging.json (cohort_enabled=true)
+#   4. Exposes orchestrator on port 3001 (avoids conflict with dev instance on 3000)
+#
+# Rollback: Ctrl+C or docker-compose -f docker-compose.yml -f docker-compose.staging.yml down
+# The nexus_staging DB is isolated — stop/start has no effect on dev data.
+
+services:
+  db:
+    environment:
+      POSTGRES_DB: nexus_staging
+
+  orchestrator:
+    container_name: nexus-orchestrator-staging
+    environment:
+      PGDATABASE: nexus_staging
+    ports:
+      - "3001:3000"
+    volumes:
+      - ../orchestrator/configs/staging_parallel_rollout.json:/app/configs/production_parallel_rollout.json:ro
+      - ../orchestrator/configs/m7_exposure_cohorts_staging.json:/app/configs/m7_exposure_cohorts.json:ro
+
+  brain:
+    container_name: brain-staging
+    environment:
+      PGDATABASE: nexus_staging
+
+  worker-coder:
+    container_name: nexus-worker-coder-staging
+    environment:
+      PGDATABASE: nexus_staging
+
+  worker-quant:
+    container_name: nexus-worker-quant-staging
+    environment:
+      PGDATABASE: nexus_staging

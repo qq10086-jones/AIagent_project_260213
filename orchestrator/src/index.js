@@ -6,7 +6,6 @@ import path from "path";
 import { parseIntent, translate, CURRENT_QWEN_MODEL, setQwenModel } from "./nlp/router.js";
 import { createDiscordGateway } from "./adapters/discord_gateway.js";
 import { analyzeTaskRisk } from "./policy.js";
-import { handleExecuteTool } from "./ingress.js";
 import { getDefaultRegistryPath, loadRegistryOrThrow, validateTaskInputAgainstRegistry } from "./registry.js";
 import { createWorkflowEngine } from "./workflow_engine.js";
 import { getDefaultPromptScriptRegistryPath, loadPromptScriptRegistryOrThrow, validatePromptScriptsAgainstAgents } from "./prompt_script_registry.js";
@@ -21,13 +20,14 @@ import { deliverWorkflowRuntimeNotification } from "./vnext/workflow_notificatio
 import { assertDispatchErrorResponse } from "./vnext/contract_validator.js";
 import { callBrainWithRetry } from "./vnext/local_llm_client.js";
 import { dispatch as dispatchLlm } from "./vnext/llm_dispatcher.js";
-import { planCompositeWorkflowFromText, buildForcedIntentFromRule, detectLanguageQuick, formatCodingDelegateResult, summarizeOutputBrief } from "./vnext/composite_planner.js";
+import { planCompositeWorkflowFromText, buildForcedIntentFromRule, formatCodingDelegateResult, summarizeOutputBrief } from "./vnext/composite_planner.js";
 import { createDiscordMessageHandler } from "./adapters/discord_message_handler.js";
 import { createResultConsumer } from "./vnext/result_consumer.js";
 import { createTaskWatchdog } from "./vnext/task_watchdog.js";
 import { registerCronSchedules } from "./vnext/cron_scheduler.js";
 import { createTaskEnqueuer } from "./vnext/task_enqueuer.js";
 import { createRuntimeConnections } from "./infra/runtime_connections.js";
+import { createWaterfallTraceService } from "./domain/waterfall_trace_service.js";
 import {
   upsertTask as _upsertTask, countPendingTasksForRun as _countPendingTasksForRun,
   countFailedTasksForRun as _countFailedTasksForRun, findRunIdByTaskId as _findRunIdByTaskId,
@@ -129,7 +129,6 @@ function loadRegistryWithFallback() {
   return { path: fallbackPath, registry: loadRegistryOrThrow(fallbackPath) };
 }
 const REGISTRY_LOADED = loadRegistryWithFallback();
-const REGISTRY_CONFIG_PATH = REGISTRY_LOADED.path;
 const REGISTRY = REGISTRY_LOADED.registry;
 const PROMPT_SCRIPT_REGISTRY = loadPromptScriptRegistryOrThrow(getDefaultPromptScriptRegistryPath());
 const AGENT_REGISTRY = loadAgentContractsOrThrow(getDefaultAgentRegistryDir());
@@ -138,8 +137,6 @@ const PROMPT_AGENT_BINDING_CHECK = validatePromptScriptsAgainstAgents({ promptRe
 if (!PROMPT_AGENT_BINDING_CHECK.ok) {
   throw new Error(`prompt script/agent binding invalid: ${PROMPT_AGENT_BINDING_CHECK.errors.join("; ")}`);
 }
-const channelMemory = new Map();
-
 // --- Infra ---
 export const { redis, pool, s3 } = createRuntimeConnections({
   redisUrl: REDIS_URL,
@@ -184,13 +181,13 @@ function listFilesRecursive(rootDir, maxFiles = 400) {
   const stack = [rootDir];
   while (stack.length > 0 && out.length < maxFiles) {
     const cur = stack.pop();
-    let ents = [];
+    let ents;
     try { ents = fs.readdirSync(cur, { withFileTypes: true }); } catch { continue; }
     for (const ent of ents) {
       const full = path.join(cur, ent.name);
       if (ent.isDirectory()) { stack.push(full); }
       else if (ent.isFile()) {
-        try { const st = fs.statSync(full); out.push({ path: full.replace(/\\/g, "/"), bytes: st.size, mtime: st.mtime.toISOString() }); } catch {}
+        try { const st = fs.statSync(full); out.push({ path: full.replace(/\\/g, "/"), bytes: st.size, mtime: st.mtime.toISOString() }); } catch { /* ignore: inaccessible file */ }
       }
       if (out.length >= maxFiles) break;
     }
@@ -223,7 +220,7 @@ async function buildContext(project) {
     const ruleRows = await _listLatestRulesForProject(pool, project, 5);
     if (ruleRows.length > 0) {
       contextStr += "- Soft Rules / Guidelines:\n";
-      ruleRows.forEach((r, idx) => { try { const o = JSON.parse(r.rule_json); if (o.message) contextStr += `  ${idx + 1}. ${o.message}\n`; } catch {} });
+      ruleRows.forEach((r, idx) => { try { const o = JSON.parse(r.rule_json); if (o.message) contextStr += `  ${idx + 1}. ${o.message}\n`; } catch { /* ignore: malformed rule_json */ } });
     }
     const memRows = await _listRecentMemoryItemsForProject(pool, project, 3);
     if (memRows.length > 0) {
@@ -285,10 +282,12 @@ const workflowEngine = createWorkflowEngine({
 });
 
 // --- vNext services ---
+const waterfallTraceService = createWaterfallTraceService({ pool });
 const executeVNextDispatch = createExecuteVNextDispatch({
   ensureRun, parseIntent, registry: REGISTRY, generateBrainDirectReply, pool,
   updateRunStatus: async (_pool, run_id, status) => updateRunStatus(run_id, status),
   enqueueTask, workflowEngine, coderProviderDefault: CODER_PROVIDER_DEFAULT, coderModelDefault: CODER_MODEL_DEFAULT,
+  waterfallTraceService,
 });
 
 const handleApiChat = createHandleApiChat({
@@ -559,8 +558,8 @@ app.post("/traces/:trace_id/feedback", async (req, res) => {
 
 async function main() {
   try { await _ensureOrchestratorSchema(pool); } catch (err) { console.warn("[orchestrator] schema ensure failed:", err.message); }
-  try { await redis.xgroup("CREATE", STREAM_TASK, GROUP_TASK, "$", "MKSTREAM"); } catch {}
-  try { await redis.xgroup("CREATE", STREAM_RESULT, GROUP_RESULT, "$", "MKSTREAM"); } catch {}
+  try { await redis.xgroup("CREATE", STREAM_TASK, GROUP_TASK, "$", "MKSTREAM"); } catch { /* ignore: BUSYGROUP expected after first call */ }
+  try { await redis.xgroup("CREATE", STREAM_RESULT, GROUP_RESULT, "$", "MKSTREAM"); } catch { /* ignore: BUSYGROUP expected after first call */ }
   resultConsumer.start();
   taskWatchdog.start();
   app.listen(3000, () => console.log("Orchestrator listening on :3000"));

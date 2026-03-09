@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 import {
   getDefaultAgentRegistryDir,
   loadAgentContractsOrThrow,
@@ -11,7 +10,6 @@ import {
   validatePromptScriptsAgainstAgents,
 } from "../src/prompt_script_registry.js";
 
-const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 function main() {
   const fixturePath = path.resolve(process.cwd(), "canary_inputs", "agent_contract_layer_min.json");

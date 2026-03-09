@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Routing Decision Contract",
+  "description": "Contract defining the classification and routing decision output from the Brain Router",
+  "type": "object",
+  "properties": {
+    "classifier_version": {
+      "type": "string",
+      "description": "Version of the classifier used"
+    },
+    "feature_snapshot_ref": {
+      "type": "string",
+      "description": "Reference ID to the input feature snapshot"
+    },
+    "work_shape": {
+      "type": "string",
+      "enum": [
+        "single_branch_safe",
+        "dual_branch_parallel_candidate",
+        "architectural_orchestration_required",
+        "high_risk_release_sensitive"
+      ]
+    },
+    "domain_lead": {
+      "type": "string",
+      "enum": [
+        "fe_led",
+        "be_led",
+        "fullstack",
+        "infra",
+        "architecture"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "confidence_band": {
+      "type": "string",
+      "enum": ["high", "medium", "low", "unavailable"]
+    },
+    "parallel_candidate": {
+      "type": "boolean"
+    },
+    "model_tier": {
+      "type": "string",
+      "enum": ["fast_low_cost", "balanced_default", "deep_reasoning"]
+    },
+    "required_contracts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "safety_override_result": {
+      "type": "string",
+      "enum": ["allowed", "denied_by_policy", "denied_by_master"]
+    },
+    "final_execution_decision": {
+      "type": "string",
+      "enum": ["gated_parallel_allowed", "forced_sequential"]
+    },
+    "routing_decision_source": {
+      "type": "string",
+      "enum": [
+        "rollout_master_disabled",
+        "force_sequential_override",
+        "static_eligibility_denied",
+        "dynamic_routing_disabled",
+        "classifier_unavailable_fallback",
+        "classifier_low_confidence_fallback",
+        "classifier_recommended_parallel",
+        "classifier_recommended_sequential"
+      ]
+    },
+    "deny_or_degrade_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "classifier_version",
+    "work_shape",
+    "domain_lead",
+    "confidence",
+    "confidence_band",
+    "parallel_candidate",
+    "final_execution_decision",
+    "routing_decision_source"
+  ]
+}

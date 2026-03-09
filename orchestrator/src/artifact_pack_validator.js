@@ -115,7 +115,7 @@ function validateMiniSchema(value, schema, jsonPath = "$", errors = []) {
   return errors;
 }
 
-function validateMarkdownContent({ relPath, absPath, rule = {} }) {
+function validateMarkdownContent({ relPath: _relPath, absPath, rule = {} }) {
   const out = { ok: true, reasons: [] };
   const raw = fs.readFileSync(absPath, "utf8");
   const lines = nonEmptyLines(raw);
@@ -136,7 +136,7 @@ function validateMarkdownContent({ relPath, absPath, rule = {} }) {
   return out;
 }
 
-function validateJsonContent({ relPath, absPath, rule = {} }) {
+function validateJsonContent({ relPath: _relPath, absPath, rule = {} }) {
   const out = { ok: true, reasons: [] };
   const json = safeReadJson(absPath);
   if (!json || typeof json !== "object") {

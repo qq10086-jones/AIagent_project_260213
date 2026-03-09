@@ -23,6 +23,7 @@ export function createExecuteVNextDispatch({
   routeTaskRequest = defaultRouteTaskRequest,
   coderProviderDefault = "opencode",
   coderModelDefault = "minimax-m2.5",
+  waterfallTraceService = null,
 }) {
   if (typeof ensureRun !== "function") throw new Error("ensureRun is required");
   if (typeof parseIntent !== "function") throw new Error("parseIntent is required");
@@ -44,6 +45,9 @@ export function createExecuteVNextDispatch({
     routeOverride = null,
     context = null,
   }) {
+    // WS-30-02: intake stage start
+    const intakeStart = new Date();
+
     const normalized = normalizeInputRequest(requestBody || {});
     if (!normalized.raw_input) {
       const err = new Error("raw_input/message is required");
@@ -70,11 +74,22 @@ export function createExecuteVNextDispatch({
       }
     }
 
+    // WS-30-02: routing stage — time the brain router classification
+    const routingStart = new Date();
     const routed = routeOverride || routeTaskRequest({
       ...normalized,
       analyzerResult: finalAnalyzerResult,
       registry,
     });
+    const routingEnd = new Date();
+
+    // Persist intake and routing stages (fire-and-forget)
+    if (waterfallTraceService) {
+      waterfallTraceService.recordStage(run_id, "intake", intakeStart, routingStart)
+        .catch((e) => console.warn("[waterfall_trace] intake:", e.message));
+      waterfallTraceService.recordStage(run_id, "routing", routingStart, routingEnd)
+        .catch((e) => console.warn("[waterfall_trace] routing:", e.message));
+    }
     const plan = routed.task_envelope.execution_plan || {};
 
     if (routed.decision === "direct_reply") {
@@ -121,6 +136,8 @@ export function createExecuteVNextDispatch({
 
     if (routed.decision === "orchestrated_workflow") {
       await updateRunStatus(pool, run_id, "running").catch(() => {});
+      // WS-30-02: execution_dispatch stage
+      const dispatchStart = new Date();
       const started = await workflowEngine.startWorkflowRun({
         workflow_id: String(plan.workflow_id || "coding_team_v0"),
         project_type: String(plan.project_type || "webapp_crm"),
@@ -134,6 +151,11 @@ export function createExecuteVNextDispatch({
         },
         context,
       });
+      if (waterfallTraceService) {
+        waterfallTraceService.recordStage(run_id, "execution_dispatch", dispatchStart, new Date(), {
+          workflow_run_id: started.workflow_run_id,
+        }).catch((e) => console.warn("[waterfall_trace] execution_dispatch:", e.message));
+      }
       return assertDispatchSuccessResponse(
         makeWorkflowQueuedResponse({
           run_id,

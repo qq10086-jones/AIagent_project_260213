@@ -3,12 +3,15 @@ import { createWorkflowParallelizationPolicyService } from "./workflow_paralleli
 import { updateRunStatus } from "../data/run_repository.js";
 import { updateWorkflowRunPartialFailure } from "../data/workflow_repository.js";
 
-export function createWorkflowParallelizationRuntime({ registry, workspaceRoot, recordEvent, pool }) {
+export function createWorkflowParallelizationRuntime({ registry, workspaceRoot, recordEvent, pool, routingAuditLogService = null, waterfallTraceService = null }) {
   const parallelizationPolicyService = createWorkflowParallelizationPolicyService({ registry, workspaceRoot });
   const lastParallelizationDecision = new Map();
 
   async function getResolvedWorkflow(run) {
+    // WS-30-02: policy_evaluation stage timing
+    const policyStart = new Date();
     const resolved = parallelizationPolicyService.resolveWorkflowForRun(run);
+    const policyEnd = new Date();
     const decision = resolved?.gateDecision || { allowed: false, mode: "sequential", reason_code: "UNKNOWN" };
     const signature = JSON.stringify(decision);
     if (lastParallelizationDecision.get(run.workflow_run_id) !== signature) {
@@ -19,6 +22,32 @@ export function createWorkflowParallelizationRuntime({ registry, workspaceRoot, 
         project_type: run.project_type,
         ...decision,
       });
+
+      // WS-30-02: Persist policy_evaluation stage (fire-and-forget)
+      if (waterfallTraceService) {
+        const runId = run.run_id || run.workflow_run_id;
+        waterfallTraceService.recordStage(runId, "policy_evaluation", policyStart, policyEnd, {
+          workflow_run_id: run.workflow_run_id,
+        }).catch((e) => console.warn("[waterfall_trace] policy_evaluation:", e.message));
+      }
+
+      // WS-30-01: Persist routing decision audit log (fire-and-forget — must not block routing)
+      if (routingAuditLogService) {
+        let inputObj = run.input;
+        if (!inputObj && typeof run.input_json === "string") {
+          try {
+            inputObj = JSON.parse(run.input_json);
+          } catch (e) {}
+        } else if (!inputObj && typeof run.input_json === "object") {
+          inputObj = run.input_json;
+        }
+
+        const classifierResult =
+          run.classifier_result ?? inputObj?.task_envelope?.classifier_result ?? null;
+        routingAuditLogService
+          .log({ run, gateDecision: decision, classifierResult })
+          .catch((err) => console.warn("[routing_audit] log error:", err.message));
+      }
     }
     return resolved;
   }

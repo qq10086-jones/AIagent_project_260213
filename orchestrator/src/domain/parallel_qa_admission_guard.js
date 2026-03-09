@@ -3,7 +3,6 @@ import { normalizeStepStatus } from "./workflow_state.js";
 const BE_STEP_ID = "impl_be";
 const FE_STEP_ID = "impl_fe";
 const QA_STEP_ID = "qa_verify";
-const RELEASE_STEP_ID = "release_pack";
 
 function getStepStatus(stepRows, stepId) {
   const row = stepRows.find((r) => String(r.step_id || "") === stepId);

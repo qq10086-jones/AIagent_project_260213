@@ -295,43 +295,6 @@ function writeArchArtifacts(rootAbs, { feSafeParallel = false } = {}) {
   writeJson(path.join(rootAbs, "handoff", "architect_to_impl.json"), handoff);
 }
 
-function writeBeArtifacts(rootAbs) {
-  writeText(path.join(rootAbs, "impl", "be_changes", "server.js"), "// stub backend server\nconst express = require('express');\n");
-  writeText(
-    path.join(rootAbs, "impl", "be_notes.md"),
-    "# Backend Notes\n\n## API Contracts\n\nPOST /api/login implemented.\n\n## Shared Types\n\n- User: { id, email }\n\n## Scope Constraints\n\n- No email verification in this sprint.\n\nRun: node server.js\n"
-  );
-  writeJson(path.join(rootAbs, "handoff", "be_to_fe.json"), {
-    from_step: "impl_be",
-    to_step: "impl_fe",
-    be_changes_path: "impl/be_changes",
-    api_contracts: [{ name: "login", method: "POST", path: "/api/login", response_shape: "{ token }" }],
-    shared_types: [{ name: "User", description: "{ id, email }" }],
-    scope_constraints: ["none"],
-  });
-}
-
-function writeFeArtifacts(rootAbs) {
-  writeText(
-    path.join(rootAbs, "impl", "fe_changes", "app.js"),
-    "// stub frontend app\nfetch('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });\n"
-  );
-  writeText(
-    path.join(rootAbs, "impl", "fe_notes.md"),
-    "# Frontend Notes\n\nConsumed POST /api/login from be_to_fe.json.\nRun: npm start\n"
-  );
-  writeJson(path.join(rootAbs, "handoff", "impl_to_qa.json"), {
-    from_steps: ["impl_be", "impl_fe"],
-    to_step: "qa_verify",
-    be_changes_path: "impl/be_changes",
-    fe_changes_path: "impl/fe_changes",
-    run_instructions: "Start backend, start frontend, verify login flow.",
-    known_limitations: ["no email verification"],
-    api_contracts_path: "handoff/be_to_fe.json",
-    run_id: path.basename(rootAbs),
-    workflow_run_id: path.basename(rootAbs),
-  });
-}
 
 async function completeTask(harness, taskIndex, writer = null) {
   const task = harness.pool.state.tasks[taskIndex];

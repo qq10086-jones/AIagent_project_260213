@@ -8,10 +8,6 @@ function assertEqual(actual, expected, label) {
   }
 }
 
-function writeText(absPath, text) {
-  fs.mkdirSync(path.dirname(absPath), { recursive: true });
-  fs.writeFileSync(absPath, text, "utf8");
-}
 
 function writeJson(absPath, value) {
   fs.mkdirSync(path.dirname(absPath), { recursive: true });

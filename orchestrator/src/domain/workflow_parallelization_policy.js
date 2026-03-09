@@ -25,7 +25,20 @@ export function createWorkflowParallelizationPolicyService({ registry, workspace
       return { allowed: false, mode: "workflow_defined", reason_code: "WORKFLOW_METADATA_EXPLICIT" };
     }
 
-    const gateResult = rolloutGate.evaluate({ run, workflow });
+    // WS-29: Extract classifier result from run object (DB load maps input_json to run.input_json)
+    let inputObj = run.input;
+    if (!inputObj && typeof run.input_json === "string") {
+      try {
+        inputObj = JSON.parse(run.input_json);
+      } catch (e) {
+        console.warn("[parallel_policy] failed to parse input_json:", e.message);
+      }
+    } else if (!inputObj && typeof run.input_json === "object") {
+      inputObj = run.input_json;
+    }
+
+    const classifierResult = run.classifier_result || inputObj?.task_envelope?.classifier_result || null;
+    const gateResult = rolloutGate.evaluate({ run, workflow, classifier_result: classifierResult });
     if (gateResult.effective_exposure_decision === "gated_parallel_allowed") {
       return { allowed: true, mode: "gated_parallel", reason_code: "GATED_PARALLEL_ALLOWED", ...gateResult };
     }

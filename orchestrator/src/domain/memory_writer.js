@@ -20,7 +20,7 @@ export function writeTaskHistoryEntry(project_id, entry) {
   try {
     const existing = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (Array.isArray(existing)) history = existing;
-  } catch {}
+  } catch { /* ignore: file may not exist yet */ }
   history.push({ ...entry, created_at: entry.created_at || new Date().toISOString() });
   fs.writeFileSync(filePath, JSON.stringify(history, null, 2));
 }

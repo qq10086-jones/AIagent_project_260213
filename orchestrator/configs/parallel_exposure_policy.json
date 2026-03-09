@@ -3,19 +3,16 @@
   "version": "1.0",
   "effective_date": "2026-03-09",
   "milestone": "M6",
-
   "allowed_workflow_types": [
     "coding_team_v0"
   ],
-
   "allowed_project_types": [
-    "crm"
+    "crm",
+    "webapp_crm"
   ],
-
   "fe_safe_eligible_input_classes": [
     "fe_led"
   ],
-
   "deny_conditions": {
     "ambiguous_routing": {
       "enabled": true,
@@ -50,7 +47,6 @@
       "override_allow": true
     }
   },
-
   "deny_reason_codes": [
     "ambiguous_routing",
     "high_context_overflow_risk",
@@ -60,7 +56,6 @@
     "unapproved_input_class",
     "structural_completion_impossible"
   ],
-
   "observability": {
     "log_allow_decision": true,
     "log_deny_decision": true,

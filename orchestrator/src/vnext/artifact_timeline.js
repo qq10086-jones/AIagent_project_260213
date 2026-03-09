@@ -31,7 +31,7 @@ export async function queryWorkflowTimeline({ pool, workflowRunId }) {
     let outputData = null;
     try {
       if (step.result_json) outputData = JSON.parse(step.result_json);
-    } catch(e) {}
+    } catch { /* ignore: malformed result_json */ }
 
     return {
       step_index: step.step_index,

@@ -56,6 +56,7 @@ services:
       - ../configs/prompt_scripts:/app/configs/prompt_scripts:ro
       - ../configs/registry:/app/configs/registry:ro
       - ../configs/runtime:/app/configs/runtime:ro
+      - ../orchestrator/configs/production_parallel_rollout.json:/app/configs/production_parallel_rollout.json:ro
       - ../orchestrator/src:/app/src
       - ..:/workspace
     depends_on:

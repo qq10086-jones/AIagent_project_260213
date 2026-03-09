@@ -1,0 +1,23 @@
+{
+  "_comment": "M7 production dynamic routing master switch. master_enabled=false keeps coding_team_v0 sequential by default. Change requires Architect approval.",
+  "version": "1.1",
+  "master_enabled": false,
+  "force_sequential": false,
+  "dynamic_routing_enabled": false,
+  "router_mode": "static_policy_only",
+  "circuit_breaker": {
+    "activated": false,
+    "rolling_window_size": 100,
+    "partial_failure_rate_threshold_pct": 25,
+    "rollback_trigger_event_threshold": 3,
+    "alert_destination": "ops-alerts"
+  },
+  "classifier_circuit_breaker": {
+    "activated": false,
+    "rolling_window_size": 100,
+    "failure_rate_threshold_pct": 10,
+    "alert_destination": "ops-alerts"
+  },
+  "limited_exposure_cohort_pct": null,
+  "last_policy_change": "2026-03-09T00:00:00Z"
+}

@@ -3,11 +3,6 @@ import path from "path";
 import { formatTransitionNotification, formatFailureReport } from "../src/vnext/observability_reporter.js";
 import { resolveOrchestratorArtifactPath } from "./_paths.js";
 
-function assertEqual(actual, expected, label) {
-  if (actual !== expected) {
-    throw new Error(`${label} mismatch: expected='${expected}' actual='${actual}'`);
-  }
-}
 
 function main() {
   const startMsg = formatTransitionNotification({

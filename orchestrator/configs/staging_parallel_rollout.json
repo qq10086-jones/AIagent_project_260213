@@ -1,0 +1,24 @@
+{
+  "_comment": "M8 Phase 1 STAGING config. master_enabled=true ONLY in isolated staging environment. Do NOT copy to production without Architect sign-off of live trial evidence.",
+  "version": "1.1-staging",
+  "master_enabled": true,
+  "force_sequential": false,
+  "dynamic_routing_enabled": true,
+  "router_mode": "dynamic_routing_advisory",
+  "circuit_breaker": {
+    "activated": false,
+    "rolling_window_size": 100,
+    "partial_failure_rate_threshold_pct": 25,
+    "rollback_trigger_event_threshold": 3,
+    "alert_destination": "ops-alerts"
+  },
+  "classifier_circuit_breaker": {
+    "activated": false,
+    "rolling_window_size": 100,
+    "failure_rate_threshold_pct": 10,
+    "alert_destination": "ops-alerts"
+  },
+  "limited_exposure_cohort_pct": 100,
+  "last_policy_change": "2026-03-09T00:00:00Z",
+  "_staging_note": "cohort_enabled must also be set to true in m7_exposure_cohorts_staging.json before trial begins"
+}

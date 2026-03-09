@@ -10,7 +10,7 @@ function assertEqual(actual, expected, label) {
 
 function createMockPool() {
   return {
-    async query(sql, params) {
+    async query(sql, _params) {
       if (sql.includes("FROM workflow_runs")) {
         return {
           rows: [

@@ -177,7 +177,7 @@ export async function planCompositeWorkflowFromText(userInput, memory = {}) {
   };
   const localMemory = { ...(memory || {}) };
   for (const clause of clauses) {
-    let intent = null;
+    let intent;
     try { intent = await parseIntent(clause, localMemory); } catch { intent = null; }
     if (intent?.payload?.symbol) localMemory.last_symbol = intent.payload.symbol;
     if (intent?.requires_tools && intent?.tool_name && intent?.confidence >= 0.55) {

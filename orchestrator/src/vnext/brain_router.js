@@ -1,5 +1,6 @@
 import { createTaskEnvelope } from "./task_envelope.js";
 import { applyRoutingPolicy } from "./brain_router_policy.js";
+import { classifyTask } from "./brain_router_classifier.js";
 
 const CODING_RE = /\b(build|implement|feature|fix|bug|patch|refactor|frontend|backend|full[- ]?stack|api|database|repo|code|coding|pm|architect|ui|qa|测试|修复|开发|功能|需求|前端|后端|架构|设计文档)\b/i;
 const QUANT_RE = /\b(quant|ticker|stock|portfolio|market|trading|alpha|strategy|backtest|日股|美股|选股|量化|股票|仓位)\b/i;
@@ -164,6 +165,8 @@ export function routeTaskRequest({
     decision = decisionFromPlan(executionPlan);
   }
 
+  const classifierResult = classifyTask(raw_input);
+
   const requiresOrchestration = decision === "orchestrated_workflow";
   const envelope = createTaskEnvelope({
     source,
@@ -185,6 +188,8 @@ export function routeTaskRequest({
     execution_plan: executionPlan,
   });
 
+  envelope.classifier_result = classifierResult;
+
   return {
     decision,
     route: {
@@ -194,6 +199,7 @@ export function routeTaskRequest({
       requires_orchestration: envelope.requires_orchestration,
       expected_outputs: envelope.expected_outputs,
       execution_plan: executionPlan,
+      classifier_result: classifierResult,
     },
     task_envelope: envelope,
     clarification_prompt: executionPlan.clarification_prompt,

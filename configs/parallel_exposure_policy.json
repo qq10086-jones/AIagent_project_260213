@@ -1,0 +1,67 @@
+{
+  "_comment": "M6 Parallel Exposure Eligibility Policy. Controls which workflow types and project types may enter the FE-safe gated parallel execution path. Runtime reads this after production_parallel_rollout.json permits evaluation. Changing this file does not require a service restart.",
+  "version": "1.0",
+  "effective_date": "2026-03-09",
+  "milestone": "M6",
+  "allowed_workflow_types": [
+    "coding_team_v0"
+  ],
+  "allowed_project_types": [
+    "crm",
+    "webapp_crm"
+  ],
+  "fe_safe_eligible_input_classes": [
+    "fe_led",
+    "be_led",
+    "fullstack",
+    "architecture"
+  ],
+  "deny_conditions": {
+    "ambiguous_routing": {
+      "enabled": true,
+      "description": "Deny if Brain Router confidence score is below threshold or route is mixed/ambiguous",
+      "threshold_min_confidence": 0.85
+    },
+    "high_context_overflow_risk": {
+      "enabled": true,
+      "description": "Deny if any prior step in this workflow class has p90 context usage above budget ceiling",
+      "p90_overflow_threshold_pct": 95
+    },
+    "dirty_repo_anchor_instability": {
+      "enabled": true,
+      "description": "Deny if repo state signals high patch anchor mismatch risk (dirty working tree or active merge conflict)",
+      "mismatch_rate_threshold_pct": 15
+    },
+    "unapproved_workflow_class": {
+      "enabled": true,
+      "description": "Deny if workflow_type is not in allowed_workflow_types"
+    },
+    "unapproved_project_type": {
+      "enabled": true,
+      "description": "Deny if project_type is not in allowed_project_types"
+    },
+    "unapproved_input_class": {
+      "enabled": true,
+      "description": "Deny if input_class is not in fe_safe_eligible_input_classes"
+    },
+    "structural_completion_impossible": {
+      "enabled": true,
+      "description": "Deny if runtime structural guard detects that FE completion requires be_to_fe handoff material not available under the parallel path. This overrides all other allow conditions.",
+      "override_allow": true
+    }
+  },
+  "deny_reason_codes": [
+    "ambiguous_routing",
+    "high_context_overflow_risk",
+    "dirty_repo_anchor_instability",
+    "unapproved_workflow_class",
+    "unapproved_project_type",
+    "unapproved_input_class",
+    "structural_completion_impossible"
+  ],
+  "observability": {
+    "log_allow_decision": true,
+    "log_deny_decision": true,
+    "log_deny_reason_code": true
+  }
+}

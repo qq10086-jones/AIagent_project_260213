@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 import { createWorkflowEngine } from "../src/workflow_engine.js";
 import { getDefaultRegistryPath, loadRegistryOrThrow } from "../src/registry.js";
@@ -393,7 +397,7 @@ async function completeGenericTask(harness, taskIndex) {
 }
 
 test("dag readiness dispatches BE and FE after architect success", async () => {
-  const workspaceRoot = path.resolve("E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_dag/readiness");
+  const workspaceRoot = path.join(__dirname, "../artifacts/test/workflow_dag/readiness");
   ensureDir(workspaceRoot);
   const harness = createHarness(workspaceRoot);
   harness.pool.state.runs.push({ run_id: "dag-readiness-run", status: "running" });
@@ -428,7 +432,7 @@ test("dag readiness dispatches BE and FE after architect success", async () => {
 });
 
 test("dag mixed result enters partial_failure and blocks QA dispatch", async () => {
-  const workspaceRoot = path.resolve("E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_dag/partial_failure");
+  const workspaceRoot = path.join(__dirname, "../artifacts/test/workflow_dag/partial_failure");
   ensureDir(workspaceRoot);
   const harness = createHarness(workspaceRoot);
   harness.pool.state.runs.push({ run_id: "dag-partial-run", status: "running" });
@@ -464,7 +468,7 @@ test("dag mixed result enters partial_failure and blocks QA dispatch", async () 
 });
 
 test("dag BE failure plus FE success enters partial_failure and blocks QA dispatch", async () => {
-  const workspaceRoot = path.resolve("E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_dag/be_failure_fe_success");
+  const workspaceRoot = path.join(__dirname, "../artifacts/test/workflow_dag/be_failure_fe_success");
   ensureDir(workspaceRoot);
   const harness = createHarness(workspaceRoot, createSyntheticDagRegistry());
   harness.pool.state.runs.push({ run_id: "dag-be-fail-run", status: "running" });
@@ -500,7 +504,7 @@ test("dag BE failure plus FE success enters partial_failure and blocks QA dispat
 });
 
 test("dag BE and FE failure ends as failed", async () => {
-  const workspaceRoot = path.resolve("E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_dag/be_fe_failure");
+  const workspaceRoot = path.join(__dirname, "../artifacts/test/workflow_dag/be_fe_failure");
   ensureDir(workspaceRoot);
   const harness = createHarness(workspaceRoot, createSyntheticDagRegistry());
   harness.pool.state.runs.push({ run_id: "dag-dual-fail-run", status: "running" });
@@ -540,7 +544,7 @@ test("dag BE and FE failure ends as failed", async () => {
 test("parallelization gate keeps coding_team_v0 sequential when rollout master is disabled", async () => {
   // WS-24.5-01: hardcoded lock replaced by policy-driven gate.
   // No production_parallel_rollout.json in the test workspace → rollout_master_disabled.
-  const workspaceRoot = path.resolve("E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_dag/gate_sequential");
+  const workspaceRoot = path.join(__dirname, "../artifacts/test/workflow_dag/gate_sequential");
   ensureDir(workspaceRoot);
   const harness = createHarness(workspaceRoot, loadRegistryOrThrow(getDefaultRegistryPath()));
   harness.pool.state.runs.push({ run_id: "gate-seq-run", status: "running" });
@@ -566,7 +570,7 @@ test("parallelization gate keeps coding_team_v0 sequential when rollout master i
 
 test("parallelization gate keeps coding_team_v0 sequential even with registry fe_safe hints when rollout master is disabled", async () => {
   // WS-24.5-01: policy-driven gate ignores legacy registry hints; rollout master is the first layer.
-  const workspaceRoot = path.resolve("E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_dag/gate_parallel");
+  const workspaceRoot = path.join(__dirname, "../artifacts/test/workflow_dag/gate_parallel");
   ensureDir(workspaceRoot);
   const registry = loadRegistryOrThrow(getDefaultRegistryPath());
   const mutated = JSON.parse(JSON.stringify(registry));

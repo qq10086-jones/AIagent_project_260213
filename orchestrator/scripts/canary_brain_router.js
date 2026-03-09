@@ -13,7 +13,6 @@ import {
   makeErrorResponse,
 } from "../src/vnext/response_protocol.js";
 import {
-  getDefaultWorkspaceRoot,
   resolveCanaryInputPath,
   resolveOrchestratorArtifactPath,
 } from "./_paths.js";
@@ -115,7 +114,7 @@ function buildStubEnvelope() {
 
 function runResponseCase(fixture) {
   const stubEnvelope = buildStubEnvelope();
-  let response = null;
+  let response;
   if (fixture.response_case === "direct_reply") {
     response = makeDirectReplyResponse({ run_id: "run-1", task_envelope: stubEnvelope, reply: "ok" });
   } else if (fixture.response_case === "progress_update") {
@@ -200,7 +199,6 @@ function runHttpDispatchCase(fixture, registry) {
 
 function main() {
   const strict = parseBool(arg("strict", "true"), true);
-  const workspaceRoot = path.resolve(arg("workspace-root", getDefaultWorkspaceRoot()));
   const inputs = [
     "brain_router_chat.json",
     "brain_router_coding_simple.json",

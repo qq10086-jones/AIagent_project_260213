@@ -8,14 +8,14 @@ import { analyzeTaskRisk } from "./policy.js";
  */
 
 export async function handleExecuteTool(req, res) {
-  const { tool_name, payload, run_id, risk_level, idempotency_key, context } = req.body || {};
+  const { tool_name, payload, run_id, risk_level, idempotency_key } = req.body || {};
 
   if (!tool_name || !payload) {
     return res.status(400).json({ ok: false, error: "tool_name and payload are required" });
   }
 
   try {
-    const spec = getToolSpec(tool_name);
+    getToolSpec(tool_name);
     const risk = analyzeTaskRisk(tool_name, payload);
     
     const finalRisk = risk_level || risk.risk_level;

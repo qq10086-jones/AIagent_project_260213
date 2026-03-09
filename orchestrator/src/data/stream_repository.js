@@ -24,7 +24,7 @@ export async function enqueueToStream(redis, stream, group, payload) {
   // Best-effort group creation; BUSYGROUP error is expected after first call.
   try {
     await redis.xgroup("CREATE", stream, group, "$", "MKSTREAM");
-  } catch (_) {
+  } catch {
     // group already exists — ignore
   }
 

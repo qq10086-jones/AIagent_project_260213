@@ -1,13 +1,11 @@
-import fs from "fs";
-import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { analyzeTaskRisk } from "./policy.js";
 import { validateToolPermission } from "./vnext/tool_permission_guard.js";
 import { parseJsonSafe } from "./domain/workflow_runner.js";
 import { normalizeStepStatus, validatePromptScriptBinding } from "./domain/workflow_state.js";
-import { classifyArtifactReasons, buildFailurePayload, buildWorkspaceHash } from "./domain/workflow_artifact_audit.js";
+import { classifyArtifactReasons, buildFailurePayload } from "./domain/workflow_artifact_audit.js";
 import { createWorkflowReleasePackService } from "./domain/workflow_release_pack.js";
-import { createStepBuilder, pathForRunArtifacts } from "./domain/workflow_step_builder.js";
+import { createStepBuilder } from "./domain/workflow_step_builder.js";
 import { runStepSuccessValidations } from "./domain/workflow_step_validator.js";
 import { createArtifactPackService } from "./domain/workflow_artifact_pack.js";
 import { createTaskHandlerService } from "./domain/workflow_task_handler.js";
@@ -16,23 +14,24 @@ import { persistWorkflowMemory } from "./domain/memory_writer.js";
 import { createPatchBundleService } from "./domain/patch_bundle_service.js";
 import { createContextBudgetService } from "./domain/context_budget_service.js";
 import { createWorkflowParallelizationRuntime } from "./domain/workflow_parallelization_runtime.js";
+import { createRoutingAuditLogService } from "./domain/routing_audit_log.js";
+import { createWaterfallTraceService } from "./domain/waterfall_trace_service.js";
 import { summarizeDagProgress } from "./domain/dag_scheduler.js";
 import { getTaskPayloadRecord } from "./data/task_repository.js";
 import { updateRunStatus } from "./data/run_repository.js";
+import { createWorkflowStepArtifactHelpers } from "./domain/workflow_step_artifacts.js";
+import { createWorkflowCheckpointService } from "./domain/workflow_checkpoint.js";
 import {
   failWorkflowStepIfNotSucceeded,
   getWorkflowRunById,
   getWorkflowStepByIndex,
   getWorkflowStepGateByIndex,
-  insertWorkflowCheckpoint,
   insertWorkflowRun,
   insertWorkflowStep,
   listWorkflowCheckpoints,
   listWorkflowSteps,
-  setWorkflowStepCheckpoint,
   updateWorkflowRunCurrentStep,
   updateWorkflowRunFailed,
-  updateWorkflowRunLastCheckpoint,
   updateWorkflowRunSucceeded,
   updateWorkflowStepDispatchState,
   updateWorkflowStepFailed,
@@ -55,6 +54,7 @@ export function createWorkflowEngine({
   minio = null,
   onStepTransition = null,
   runtimeConfig = {},
+  waterfallTraceService = null,
 }) {
   const { archiveReleasePackToMinio, indexReleasePackToDb, minioBucket } =
     createWorkflowReleasePackService({ pool, recordEvent, workspaceRoot, minio });
@@ -62,49 +62,13 @@ export function createWorkflowEngine({
   const { buildStepPayload } = createStepBuilder({ registry, promptScriptRegistry, handoffContracts, workspaceRoot, runtimeConfig });
   const patchBundleService = createPatchBundleService({ workspaceRoot });
   const contextBudgetService = createContextBudgetService();
-  const parallelizationRuntime = createWorkflowParallelizationRuntime({ registry, workspaceRoot, recordEvent, pool });
+  const routingAuditLogService = createRoutingAuditLogService({ pool, workspaceRoot });
+  const _waterfallSvc = waterfallTraceService ?? createWaterfallTraceService({ pool });
+  const parallelizationRuntime = createWorkflowParallelizationRuntime({ registry, workspaceRoot, recordEvent, pool, routingAuditLogService, waterfallTraceService: _waterfallSvc });
 
-  function buildContextBudgetArtifactPath(payload) {
-    const relRoot = String(payload?.artifact_root || "").trim().replace(/\\/g, "/");
-    return path.resolve(workspaceRoot, relRoot, "metrics", `context_budget_${String(payload?.step_id || "step")}.json`);
-  }
-
-  function writeContextBudgetReport(payload) {
-    const reportPath = buildContextBudgetArtifactPath(payload);
-    const report = contextBudgetService.buildReport({
-      stepId: payload?.step_id,
-      role: payload?.role,
-      prompt: payload?.task_prompt || payload?.prompt || "",
-      injectedContext: Array.isArray(payload?.target_file_context)
-        ? payload.target_file_context.map((item) => `${item.path}\n${item.content}`).join("\n")
-        : "",
-      artifactPaths: [],
-      runId: payload?.run_id,
-      workflowRunId: payload?.workflow_run_id,
-    });
-    fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-    fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf8");
-    return {
-      report,
-      report_path: path.relative(workspaceRoot, reportPath).replace(/\\/g, "/"),
-    };
-  }
-
-  function applyStructuredPatchIfPresent(payload) {
-    const relRoot = String(payload?.artifact_root || "").trim().replace(/\\/g, "/");
-    const stepId = String(payload?.step_id || "");
-    const patchFileName = stepId === "impl_be" ? "be_patch_bundle.json" : stepId === "impl_fe" ? "fe_patch_bundle.json" : "";
-    if (!patchFileName || !relRoot) return null;
-    const bundlePath = path.resolve(workspaceRoot, relRoot, "impl", patchFileName);
-    if (!fs.existsSync(bundlePath)) return null;
-    const result = patchBundleService.applyPatchBundleFromFile(bundlePath);
-    return {
-      bundle_path: path.relative(workspaceRoot, bundlePath).replace(/\\/g, "/"),
-      mode: String(result?.bundle?.mode || result?.mode || ""),
-      written_files: Array.isArray(result?.written_files) ? result.written_files : [],
-      operation_count: Number(result?.operation_count || 0),
-    };
-  }
+  const { writeContextBudgetReport, applyStructuredPatchIfPresent } =
+    createWorkflowStepArtifactHelpers({ workspaceRoot, contextBudgetService, patchBundleService });
+  const { createCheckpoint } = createWorkflowCheckpointService({ pool });
 
   async function getRun(workflow_run_id) {
     return getWorkflowRunById(pool, workflow_run_id);
@@ -335,30 +299,6 @@ export function createWorkflowEngine({
       return { state: "failed", failed_steps: failedSteps };
     }
     return { state: "idle" };
-  }
-
-  async function createCheckpoint({ workflow_run_id, stepIndex, step_id, task_id, status, output }) {
-    const artifacts = Array.isArray(output?.artifacts)
-      ? output.artifacts.map((a) => ({
-          bucket: a?.bucket || null, object_key: a?.object_key || null,
-          name: a?.name || null, sha256: a?.sha256 || null, mime: a?.mime || null,
-        }))
-      : [];
-    const workspace_hash = buildWorkspaceHash({ workflow_run_id, step_index: stepIndex, task_id, status, artifacts });
-    const checkpoint_id = uuidv4();
-    await insertWorkflowCheckpoint(pool, {
-      checkpoint_id,
-      workflow_run_id,
-      step_index: stepIndex,
-      step_id,
-      task_id,
-      workspace_hash,
-      artifact_refs: artifacts,
-      checkpoint_json: { workflow_run_id, step_index: stepIndex, step_id, task_id, status, artifacts },
-    });
-    await setWorkflowStepCheckpoint(pool, workflow_run_id, stepIndex, checkpoint_id);
-    await updateWorkflowRunLastCheckpoint(pool, workflow_run_id, checkpoint_id);
-    return { checkpoint_id, workspace_hash, artifacts };
   }
 
   async function startWorkflowRun({ workflow_id, project_type, run_id, input = {}, context = null }) {

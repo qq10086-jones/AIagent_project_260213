@@ -1,0 +1,123 @@
+{
+  "generated_at": "2026-03-09T15:47:58.103Z",
+  "mode": "apply",
+  "target": "m7_phase_a_advisory",
+  "files": {
+    "rollout_path": "E:\\AIagent_project_260213\\orchestrator\\configs\\production_parallel_rollout.json",
+    "cohort_path": "E:\\AIagent_project_260213\\orchestrator\\configs\\m7_exposure_cohorts.json"
+  },
+  "before": {
+    "rollout": {
+      "_comment": "M8 Go/No-Go APPROVED 2026-03-09. master_enabled=true activates M6 GO_LIMITED_EXPOSURE (static policy, fe_led/crm/coding_team_v0 whitelist only). dynamic_routing_enabled remains false — M7 dynamic routing on HOLD pending production baseline data. See docs/governance/m8_go_no_go.md § 6.",
+      "version": "1.2",
+      "master_enabled": true,
+      "force_sequential": false,
+      "dynamic_routing_enabled": false,
+      "router_mode": "static_policy_only",
+      "circuit_breaker": {
+        "activated": false,
+        "rolling_window_size": 100,
+        "partial_failure_rate_threshold_pct": 25,
+        "rollback_trigger_event_threshold": 3,
+        "alert_destination": "ops-alerts"
+      },
+      "classifier_circuit_breaker": {
+        "activated": false,
+        "rolling_window_size": 100,
+        "failure_rate_threshold_pct": 10,
+        "alert_destination": "ops-alerts"
+      },
+      "limited_exposure_cohort_pct": null,
+      "last_policy_change": "2026-03-09T00:00:00Z"
+    },
+    "cohort": {
+      "_comment": "Post-M8 production cohort definition for M7 dynamic routing. Keep cohort_enabled=false until PM + Architect approve Phase A advisory-only enablement.",
+      "version": "2.0",
+      "cohort_id": "m7_dynamic_routing_phase_a_production",
+      "description": "Narrow production cohort for post-M8 M7 advisory-only enablement",
+      "allowed_workflow_types": [
+        "coding_team_v0"
+      ],
+      "allowed_project_types": [
+        "crm"
+      ],
+      "allowed_input_classes": [
+        "fe_led"
+      ],
+      "excluded_workflow_classes": [
+        "high_risk_release_sensitive",
+        "architectural_orchestration_required"
+      ],
+      "rollback_trigger_thresholds": {
+        "high_risk_misroute_pct": 2,
+        "tier_misroute_pct": 5,
+        "forced_sequential_spike_pct": 40,
+        "circuit_breaker_trigger_pct": 10
+      },
+      "runtime_controls": {
+        "cohort_enabled": false,
+        "approved_by": null,
+        "approval_date": null,
+        "environment": "production",
+        "live_traffic": true
+      }
+    }
+  },
+  "after": {
+    "rollout": {
+      "_comment": "M8 Go/No-Go APPROVED 2026-03-09. master_enabled=true activates M6 GO_LIMITED_EXPOSURE (static policy, fe_led/crm/coding_team_v0 whitelist only). dynamic_routing_enabled remains false — M7 dynamic routing on HOLD pending production baseline data. See docs/governance/m8_go_no_go.md § 6.",
+      "version": "1.2",
+      "master_enabled": true,
+      "force_sequential": false,
+      "dynamic_routing_enabled": true,
+      "router_mode": "dynamic_routing_advisory",
+      "circuit_breaker": {
+        "activated": false,
+        "rolling_window_size": 100,
+        "partial_failure_rate_threshold_pct": 25,
+        "rollback_trigger_event_threshold": 3,
+        "alert_destination": "ops-alerts"
+      },
+      "classifier_circuit_breaker": {
+        "activated": false,
+        "rolling_window_size": 100,
+        "failure_rate_threshold_pct": 10,
+        "alert_destination": "ops-alerts"
+      },
+      "limited_exposure_cohort_pct": null,
+      "last_policy_change": "2026-03-09T15:47:58.103Z"
+    },
+    "cohort": {
+      "_comment": "Post-M8 production cohort definition for M7 dynamic routing. Keep cohort_enabled=false until PM + Architect approve Phase A advisory-only enablement.",
+      "version": "2.0",
+      "cohort_id": "m7_dynamic_routing_phase_a_production",
+      "description": "Narrow production cohort for post-M8 M7 advisory-only enablement",
+      "allowed_workflow_types": [
+        "coding_team_v0"
+      ],
+      "allowed_project_types": [
+        "crm"
+      ],
+      "allowed_input_classes": [
+        "fe_led"
+      ],
+      "excluded_workflow_classes": [
+        "high_risk_release_sensitive",
+        "architectural_orchestration_required"
+      ],
+      "rollback_trigger_thresholds": {
+        "high_risk_misroute_pct": 2,
+        "tier_misroute_pct": 5,
+        "forced_sequential_spike_pct": 40,
+        "circuit_breaker_trigger_pct": 10
+      },
+      "runtime_controls": {
+        "cohort_enabled": true,
+        "approved_by": "PM+Architect",
+        "approval_date": "2026-03-10",
+        "environment": "production",
+        "live_traffic": true
+      }
+    }
+  }
+}

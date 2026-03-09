@@ -13,7 +13,7 @@
  * every gate evaluation, fire-and-forget (non-blocking to routing path).
  */
 
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -23,9 +23,20 @@ import {
 } from "../data/routing_audit_repository.js";
 
 /** @param {string} workspaceRoot */
+function resolveConfigPath(workspaceRoot, relativePath) {
+  const candidates = [
+    resolve(workspaceRoot || "", relativePath),
+    resolve(process.cwd(), relativePath),
+    resolve(process.cwd(), "..", relativePath),
+  ];
+  const normalized = [...new Set(candidates)];
+  return normalized.find((candidate) => existsSync(candidate)) || normalized[0];
+}
+
+/** @param {string} workspaceRoot */
 function loadRouterConfig(workspaceRoot) {
   try {
-    const p = resolve(workspaceRoot, "configs/production_parallel_rollout.json");
+    const p = resolveConfigPath(workspaceRoot, "configs/production_parallel_rollout.json");
     return JSON.parse(readFileSync(p, "utf8"));
   } catch {
     return {};

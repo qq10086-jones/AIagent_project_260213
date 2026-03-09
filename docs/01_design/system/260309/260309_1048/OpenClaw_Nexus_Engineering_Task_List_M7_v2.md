@@ -1,7 +1,7 @@
 # OpenClaw Nexus vNext
 ## Engineering Task List — Milestone 7 (M7)
-## Version: v2
-## Date: 2026-03-09
+## Version: v2.1
+## Date: 2026-03-10
 ## Type: Engineering Task List
 ## Author: PM / Architecture Review Draft
 ## Design Authority: OpenClaw_Nexus_Design_Document_v4.md
@@ -24,6 +24,8 @@
 | Section 8 | Added directional thresholds for safety and routing quality metrics |
 | Section 9 | Added R-19 (classifier unavailability) and R-20 (insufficient M6 evidence base) |
 | Section 10 | Added explicit boundary for merge conflict stretch item |
+| Section 12 | Clarified that milestone closure is not production activation authority |
+| Section 13 (NEW) | Added post-M8 controlled enablement note for production activation |
 
 ---
 
@@ -684,3 +686,34 @@ Until then:
 - M6 governance remains authoritative
 - production `coding_team_v0` remains governed by existing rollout controls
 - no M7 implementation should begin
+
+After M7 milestone closure, any move from `static_policy_only` toward production dynamic routing must be governed by a separate post-M8 enablement review. Closure of this task list is not equivalent to production activation approval.
+
+---
+
+## 13. Post-M8 Controlled Enablement Note (NEW)
+
+This task list remains the implementation authority for M7, but it is no longer sufficient by itself to authorize production enablement.
+
+As of 2026-03-10:
+
+- M7 implementation is complete
+- M8 staging/live evidence is complete
+- accelerated validation evidence exists
+- production still remains at:
+  - `master_enabled=true`
+  - `dynamic_routing_enabled=false`
+  - `router_mode=static_policy_only`
+
+Therefore, the next step after milestone closure is not additional M7 implementation work. The next step is controlled production enablement under separate governance.
+
+The authoritative enablement direction is:
+
+1. start with `Phase A: advisory-only`
+2. restrict to approved cohort only
+3. require PM + Architect sign-off before any enforced mode
+4. preserve rollback through runtime config only
+
+Reference:
+
+- `docs/governance/post_m8_m7_controlled_enablement_plan_2026-03-10.md`

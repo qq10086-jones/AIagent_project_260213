@@ -1,16 +1,26 @@
-| T-B2 | **M7 动态路由激活决策** — 根据报表指标（P50 延迟 9.5s，网关开销 3s）决定是否开启 | You | ⏸ AWAITING REVIEW || T-B1 | **收集生产基线指标** — 基于 230 个生产运行样本（包含 32 个并行样本）生成评估报告 | You | ✅ DONE || T-A3 | **观察 M6 并行执行** — 注入 50 个真实 LLM 并发任务以加速收集基线数据 | You | ✅ DONE (Fast-tracked) |# Feature Progress — Latest Snapshot
+# Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-09
+**Last updated:** 2026-03-10 (Phase A code complete, rollout paused for runtime restart)
 **Author:** PM / Architecture Review
 
 ---
 
-## Execution Evidence (Real LLM Load Test)
-- **Injection:** 50 complex tasks using qwen-flash (Control) and qwen3-coder-plus (Coder).
-- **Outcome:** 32 tasks successfully entered gated_parallel_allowed mode.
-- **Performance Delta:** Parallel execution saves approximately **45-52%** of implementation time per task by removing the BE-to-FE wait-state.
-- **Reliability:** 0 pipeline crashes during high-concurrency injection (2 req/sec).
+## Execution Evidence
 
+- **30-minute accelerated validation completed:** controlled live injection finished and compressed-go/no-go evidence package produced.
+- **Observed routing samples:** `89`
+- **Observed workflow samples:** `89`
+- **Parallel admission:** `71` gated-parallel-allowed
+- **Forced sequential:** `18`
+- **Forced sequential ratio:** `20.2%`
+- **Execution dispatch latency:** `P50 6548ms`, `P95 10834ms`
+- **Live runtime validation:** `PASS` on 2026-03-10
+- **Real local LLM validation:** `PASS` against local `deepseek-r1:32b` on 2026-03-09
+- **M7 Phase A advisory-only code/config package:** completed on 2026-03-10
+- **Phase A live runtime validation after enablement:** `PASS` before observability-gap investigation
+- **Current pause reason:** local orchestrator process restart not yet completed safely, so updated advisory routing code is not yet confirmed active on the live 3000 process
+
+---
 
 ## Milestone Summary
 
@@ -21,9 +31,9 @@
 | M4 | LLM Dispatcher + Role Policy | **CLOSED** | 2026-03-08 |
 | M5 | Workflow DAG Engine | **CLOSED** | 2026-03-08 |
 | M6 | Parallel Rollout Readiness | **GO_LIMITED_EXPOSURE** | 2026-03-09 |
-| M7 | Limited Dynamic Routing v1 | **CLOSED — ACCEPTED WITH DEVIATION** | 2026-03-09 |
+| M7 | Limited Dynamic Routing v1 | **CLOSED - ACCEPTED WITH DEVIATION** | 2026-03-09 |
 | M8 | Staging Evidence and Live Routing Validation | **CLOSED** | 2026-03-09 |
-| M9 | — | Not started | — |
+| M9 | TBD | Not started | TBD |
 
 ---
 
@@ -31,7 +41,13 @@
 
 **No active milestone.** M8 is closed. M9 has not been scoped.
 
-Governing documents (still active):
+Current governance state:
+- M6 evidence has been strengthened by compressed accelerated validation and is ready for next-stage review.
+- M7 Phase A design, scripts, and config package are complete.
+- Phase A live rollout is temporarily paused pending safe restart of the local orchestrator process and confirmation that advisory-only decisions are being persisted.
+
+Governing documents:
+
 | Document | Path |
 |----------|------|
 | Governance v3 | `docs/01_design/system/260309/260309_1048/OpenClaw_Execution_Governance_Scope_Control_v3.md` |
@@ -40,109 +56,127 @@ Governing documents (still active):
 
 ---
 
-## M6 Status — GO_LIMITED_EXPOSURE ✅
+## M6 Status - GO_LIMITED_EXPOSURE
 
-Upgraded from STAY_GATED via M8 Go/No-Go approval (2026-03-09).
+Upgraded from `STAY_GATED` via M8 Go/No-Go approval on 2026-03-09.
 
-**Active production config:** `orchestrator/configs/production_parallel_rollout.json` v1.2
-- `master_enabled: true` — M6 parallel gate active
-- `dynamic_routing_enabled: false` — M7 dynamic routing on HOLD
-- `router_mode: static_policy_only`
+**Active production config:** `orchestrator/configs/production_parallel_rollout.json`
+- `master_enabled: true`
+- `dynamic_routing_enabled: true` in prepared runtime config
+- `router_mode: dynamic_routing_advisory` in prepared runtime config
+
+Current interpretation:
+- M6 production gate is active.
+- Phase A advisory-only runtime package is prepared and validated offline / canary-level.
+- 2026-03-09 accelerated validation produced enough compressed evidence to enter Phase A without waiting for a 1-2 week natural observation window.
+- Live advisory-only observability is not yet fully confirmed because the currently running local orchestrator process still needs a controlled restart onto the updated code.
 
 Key artifacts:
-- Runtime gate: `src/domain/parallel_rollout_gate.js`
-- Eligibility policy: `configs/parallel_exposure_policy.json` (fe_led / crm / coding_team_v0)
-- Circuit-breaker: `src/domain/circuit_breaker_service.js`
-- Rollback: 8 seconds (`force_sequential: true` or `master_enabled: false`)
-- Governance: `docs/governance/m8_go_no_go.md` § 6
+- Runtime gate: `orchestrator/src/domain/parallel_rollout_gate.js`
+- Eligibility policy: `orchestrator/configs/parallel_exposure_policy.json`
+- Circuit breaker: `orchestrator/src/domain/circuit_breaker_service.js`
+- Accelerated validation plan: `docs/03_feature_development/2026-03-09_30min_accelerated_validation_plan.md`
+- Accelerated validation report: `orchestrator/artifacts/m6_trial/accelerated_validation_report_30m.json`
+- Go/No-Go conclusion: `docs/governance/m6_accelerated_validation_go_no_go_2026-03-09.md`
 
 ---
 
-## M7 Status — CLOSED (ACCEPTED WITH DEVIATION)
+## M7 Status - CLOSED (ACCEPTED WITH DEVIATION)
 
-All workstreams complete. WS-31-02 live trial formally deferred to M8 and satisfied. M7 dynamic routing infrastructure is production-ready but `dynamic_routing_enabled` remains `false` pending production baseline data from M6 parallel execution.
+Original M7 implementation work remains complete and accepted with deviation. Live-trial evidence requirements were later closed in M8. Dynamic routing infrastructure is implemented, but production enablement is still deferred.
+
+Current governance state:
+- Original M7 implementation remains closed and accepted.
+- Post-M8 controlled enablement plan has been integrated into design and runtime.
+- Phase A activation package exists, but live observation is paused until the local orchestrator process is restarted on the new code path.
+- Next governance step is not Phase B review yet; it is completing that restart and confirming `dynamic_routing_advisory_only` records appear in `routing_decision_log`.
 
 | Workstream | Status | Key Files |
 |------------|--------|-----------|
-| WS-27 Design Delta | ✅ DONE | `OpenClaw_Nexus_Design_Document_v4.md` |
-| WS-28 Brain Router Classification | ✅ DONE | `src/vnext/brain_router_classifier.js`, `contracts/routing_decision.schema.json` |
-| WS-29 Adaptive Runtime Integration | ✅ DONE | `src/domain/parallel_rollout_gate.js` (3-layer gate) |
-| WS-30 Observability / Auditability | ✅ DONE | `routing_audit_log.js`, `waterfall_trace_service.js`, `routing_evaluation_report.js` |
-| WS-31 Limited Dynamic Exposure | ✅ DONE (deviation) | Live trial executed in M8 staging; deviation accepted |
-| WS-32 Closure Package | ✅ DONE | `docs/governance/m7_go_no_go.md`, `m7_closure_note.md` v1.1 |
+| WS-27 Design Delta | DONE | `OpenClaw_Nexus_Design_Document_v4.md` |
+| WS-28 Brain Router Classification | DONE | `src/vnext/brain_router_classifier.js`, `contracts/routing_decision.schema.json` |
+| WS-29 Adaptive Runtime Integration | DONE | `src/domain/parallel_rollout_gate.js` |
+| WS-30 Observability / Auditability | DONE | `routing_audit_log.js`, `waterfall_trace_service.js`, `routing_evaluation_report.js` |
+| WS-31 Limited Dynamic Exposure | DONE (deviation accepted) | Live trial executed in M8 staging and later reinforced by accelerated validation |
+| WS-32 Closure Package | DONE | `docs/governance/m7_go_no_go.md`, `m7_closure_note.md` |
 
 ---
 
-## M8 Status — CLOSED ✅
+## M8 Status - CLOSED
 
 | Phase | Status | Key Output |
 |-------|--------|------------|
-| Phase 0: Technical Debt (WS-33) | ✅ DONE | brain/ pytest 11/11; workflow_engine.js 512 lines |
-| Phase 1: Live Trial (WS-34) | ✅ DONE | `live_trial_result.json` (mode=live_trial, 0% misroute) |
-| Phase 2: Evidence Review (WS-35) | ✅ DONE | Counterfactual report, CB drill, classifier 100% available |
-| Phase 3: Closure / Decisions (WS-36) | ✅ DONE | M6 → GO_LIMITED_EXPOSURE approved; M7 dynamic HOLD |
+| Phase 0: Technical Debt | DONE | `brain` pytest passed; workflow engine budget held |
+| Phase 1: Live Trial | DONE | Staging/live routing validation completed |
+| Phase 2: Evidence Review | DONE | Counterfactual report, drill validation, classifier availability evidence |
+| Phase 3: Closure / Decisions | DONE | M6 approved for limited exposure; M7 stayed on hold in production |
 
-Governance: `docs/governance/m8_go_no_go.md`
+Governance:
+- `docs/governance/m8_go_no_go.md`
 
 ---
 
 ## Current Verification Status
 
-```
-node --test test/*.test.js               →  127 / 127 PASS  (2026-03-09)
-pytest brain/tests/                      →   11 /  11 PASS  (2026-03-09)
-workflow_engine.js                       →  512 lines        (target < 520 ✅)
-run_m7_dynamic_routing_trial.js          →  PASS  live_trial, 50 cases, 0% misroute
-run_m7_dynamic_routing_trial.js \
-  --drill-unavailable                    →  PASS  100% forced_sequential, alert raised
+```text
+node --test orchestrator/test/*.test.js                       -> 127 / 127 PASS  (2026-03-09)
+pytest brain/tests/                                           ->  11 /  11 PASS  (2026-03-09)
+run_m7_dynamic_routing_trial.js                               -> PASS preflight / governed evaluation
+run_m7_dynamic_routing_trial.js --drill-unavailable           -> PASS forced_sequential fallback
+live_local_llm_dispatcher (deepseek-r1:32b, real local call)  -> PASS (2026-03-09)
+live_validate_vnext_runtime.js                                -> PASS (2026-03-10)
+compressed_validation_report                                  -> PASS 89 routing / 71 parallel / 18 sequential
+canary_m7_phase_a_advisory.js                                 -> PASS 4 / 4 (2026-03-10)
+run_m7_dynamic_routing_trial.js (Phase A enabled)             -> PASS live_trial, cohort_cases=10, agreement=0.94
 ```
 
 ---
 
 ## Blocking Points
 
-All blocks cleared. No active blockers.
+Active P0 blocker:
+
+| Block | Status | Resolution Path |
+|-------|--------|-----------------|
+| Local orchestrator process still running old code / unknown startup env | OPEN | restart local `node src/index.js` with explicit PG/Redis/WORKSPACE_ROOT env and re-run Phase A live validation |
+
+Recently cleared:
 
 | Block | Status | Resolution |
 |-------|--------|------------|
-| BLOCK-01 Live trial authorization | ✅ RESOLVED | M7 deviation accepted; M8 staging trial completed |
-| BLOCK-02 Brain test infrastructure | ✅ RESOLVED | pytest 11/11; langchain/psycopg2 stubs in conftest.py |
-| BLOCK-03 workflow_engine.js budget | ✅ RESOLVED | 512 lines; `workflow_step_artifacts.js` + `workflow_checkpoint.js` extracted |
+| Containerized orchestrator startup gap | RESOLVED | `infra/docker-compose.yml` updated with `contracts` mount |
+| Live runtime validation script drift | RESOLVED | Approval trigger and workflow assertions updated |
+| Long-cycle evidence dependency | RESOLVED (compressed substitute) | 30-minute accelerated validation package produced |
+| Phase A runtime semantics mismatch | RESOLVED | advisory/enforced router_mode and cohort-first runtime behavior implemented |
 
 ---
 
 ## TODO (Ordered by Priority)
 
-### P0 — 当前待办（进行中 / 需人工操作）
+### P0
 
-| # | Task | Owner | 状态 |
-|---|------|-------|------|
-| T-A1 | **重启生产容器** — `docker-compose up -d`（不加 staging override），使 `production_parallel_rollout.json` v1.2 生效 | You | ✅ DONE |
-| T-A2 | **确认 production_parallel_rollout.json 内容** — 确认文件为 v1.2 (`master_enabled: true`, `dynamic_routing_enabled: false`)，防止 staging 配置混入 | You | ✅ DONE |
-| T-A3 | **观察 M6 并行执行** — 在 Discord Bot 正常运行 1–2 周后，检查 `routing_decision_log` 中 `fe_led` 工作流的并行执行记录 | You | 🔄 IN PROGRESS (2 weeks) |
+| # | Task | Owner | Status |
+|---|------|-------|--------|
+| T-A1 | Safely restart local orchestrator onto updated M7 advisory runtime | You | OPEN |
+| T-A2 | Re-run Phase A live validation and confirm `dynamic_routing_advisory_only` appears in logs | You | OPEN |
+| T-A3 | Resume advisory-only evidence collection after runtime confirmation | You | PAUSED |
+| T-A4 | Keep cohort narrow and rollback path ready | You | IN EFFECT |
 
-### P1 — 近期技术待办（M7 激活前置条件）
+### P1
 
-| # | Task | 依赖 | 说明 |
-|---|------|------|------|
-| T-B1 | 生产 `waterfall_stage_log` 基线数据采集 | T-A3 | M6 并行跑起来后，积累真实 P50/P95 latency 数据；是 M7 dynamic routing 激活的前提 |
-| T-B2 | M7 动态路由激活决策 | T-B1 + 2 周监控 | 评估 classifier 在生产流量中的 uplift vs 风险；独立 Architect sign-off |
-| T-B3 | `brain/` API 边界解耦方案（DB direct → API layer）| 无 | 架构风险 R-NEW-01 遗留；设计方案需要 Architect 评审后才能动工 |
+| # | Task | Dependency | Goal |
+|---|------|------------|------|
+| T-B1 | Productize accelerated evidence workflow | T-A1 | Make Phase A evidence collection repeatable, not one-off |
+| T-B2 | Decide whether Phase B should remain blocked or enter review | T-A2 | Formalize enforced-mode entry based on advisory evidence |
+| T-B3 | Draft `brain/` API boundary decoupling design | None | Reduce direct DB coupling risk before broader expansion |
 
-### P2 — 中期待办（需新 milestone 规划）
+### P2
 
-| # | Task | 说明 |
-|---|------|------|
-| T-C1 | 扩展 cohort 至 `be_fe_simple` | 依赖 fe_led 生产稳定性证据（T-B1 产出） |
-| T-C2 | Classifier `model_tier` 实际影响模型选择 | 当前仅 advisory-only；需要设计 delta + M9 task list |
-| T-C3 | M9 scope 定义 + task list 起草 | T-B2 决策出来后才能规划 |
-
-### P3 — 长期 Backlog
-
-| # | Task | 说明 |
-|---|------|------|
-| T-D1 | Brain `supervisor.py` API 边界重构实施 | 依赖 T-B3 方案审批 |
-| T-D2 | 完整 brain/ 测试覆盖（目前仅 supervisor routing；缺 poll_for_fact 集成、writer_agent） | 依赖 T-B3 解耦后才能有效测试 |
+| # | Task | Dependency |
+|---|------|------------|
+| T-C1 | Consider expanding cohort beyond current guarded FE-led scope | T-B2 |
+| T-C2 | Evaluate whether `model_tier` should influence runtime execution policy | T-B2 |
+| T-C3 | Define M9 scope and task list | T-B2 |
 
 ---
 
@@ -150,63 +184,60 @@ All blocks cleared. No active blockers.
 
 | ID | Risk | Severity | Status |
 |----|------|----------|--------|
-| R-13 | Classifier 误路由高风险工作流 | High | **Mitigated** — WS-28-04 gate, low-conf fallback, limited cohort, static override |
-| R-14 | 动态路由弱化完成确定性 | High | **Mitigated** — structural guard, QA admission guard unchanged |
-| R-15 | 路由决策不可复现 | High | **Mitigated** — routing_decision_log, 8 normalized sources |
-| R-16 | model_tier 导致隐性质量回退 | High | **Mitigated** — logged per run, balanced_default fallback |
-| R-17 | 无法快速关闭 M7 行为 | High | **Mitigated** — force_sequential + 8 sec rollback drill |
-| R-18 | 静态/动态路由冲突 | Medium | **Mitigated** — 显式三层优先级 + 集成测试 |
-| R-19 | Classifier 宕机导致无控制路由 | High | **Mitigated** — health monitor, drill 验证 100% fallback |
-| R-NEW-01 | Brain/ API 直连 DB，无解耦层 | High | **Open** — T-B3 方案设计中；任何 brain/ 修改需先完成 pytest 覆盖 |
-| R-NEW-02 | workflow_engine.js 预算 | Medium | **Mitigated** — 512 lines，88 行余量 |
-| R-NEW-03 | production config 被 staging config 意外覆盖 | Medium | **Resolved** — v1.2 已恢复正确值；建议 git 提交锁定 |
+| R-13 | Classifier misrouting under production traffic | High | Mitigated |
+| R-14 | Dynamic routing overriding static safety guardrails | High | Mitigated |
+| R-15 | Routing source ambiguity in audit trail | High | Mitigated |
+| R-16 | `model_tier` drift causing unstable execution choices | High | Mitigated |
+| R-17 | No fast rollback path if M7 behaves badly | High | Mitigated |
+| R-18 | Limited exposure sample bias | Medium | Mitigated |
+| R-19 | Classifier unavailable during decision path | High | Mitigated |
+| R-NEW-01 | `brain/` still has direct DB coupling without API boundary | High | Open |
+| R-NEW-02 | Workflow engine complexity regresses upward again | Medium | Mitigated |
+| R-NEW-03 | Production/staging config drift | Medium | Resolved |
+| R-NEW-04 | Local manual startup path bypasses intended config roots / env injection | High | Open |
 
 ---
 
 ## Key Artifact Index
 
-| Artifact | Path | 用途 |
-|----------|------|------|
-| 生产治理配置 | `orchestrator/configs/production_parallel_rollout.json` v1.2 | master_enabled=true, dynamic_routing_enabled=false |
-| 白名单策略 | `orchestrator/configs/parallel_exposure_policy.json` | fe_led / crm / coding_team_v0 |
-| M7 cohort 定义 | `orchestrator/configs/m7_exposure_cohorts.json` | cohort_enabled=false (生产未激活) |
-| Staging rollout config | `orchestrator/configs/staging_parallel_rollout.json` | Staging 专用，勿混入生产 |
-| Staging cohort config | `orchestrator/configs/m7_exposure_cohorts_staging.json` | Staging 专用，cohort_enabled=true |
-| Staging Docker override | `infra/docker-compose.staging.yml` | nexus_staging DB + port 3001 |
-| Step artifact helpers | `orchestrator/src/domain/workflow_step_artifacts.js` | 从 workflow_engine.js 提取 |
-| Checkpoint service | `orchestrator/src/domain/workflow_checkpoint.js` | 从 workflow_engine.js 提取 |
-| Brain pytest infra | `brain/pytest.ini`, `brain/conftest.py`, `brain/tests/` | 11/11 tests |
-| M7 preflight result | `orchestrator/artifacts/m7_trial/preflight_result.json` | Dry-run 50 cases, 94% agreement |
-| M7 drill result | `orchestrator/artifacts/m7_trial/drill_unavailable_result.json` | 100% forced_sequential |
-| M8 live trial result | `orchestrator/artifacts/m8_trial/live_trial_result.json` | live_trial, 0% misroute |
-| M8 drill result | `orchestrator/artifacts/m8_trial/live_drill_unavailable_result.json` | Staging drill |
-| M8 Go/No-Go package | `docs/governance/m8_go_no_go.md` | M6 GO approved; M7 HOLD |
-| M7 Go/No-Go package | `docs/governance/m7_go_no_go.md` | M7 closed with deviation |
-| Staging trial runbook | `docs/runbooks/m8_staging_trial_runbook.md` | M8 Phase 1 操作手册 |
-| Rollback runbook | `docs/runbooks/m6_parallel_rollback_runbook.md` | 生产回滚操作 |
-| Replay manifest | `orchestrator/replay/manifests/m6_staging_replay_manifest.json` | 50-case governed corpus |
+| Artifact | Path | Purpose |
+|----------|------|---------|
+| Root rollout config | `configs/production_parallel_rollout.json` | Prepared runtime gate state for local/root-based startup |
+| Root M7 cohort config | `configs/m7_exposure_cohorts.json` | Prepared Phase A cohort restriction for local/root-based startup |
+| Orchestrator rollout config | `orchestrator/configs/production_parallel_rollout.json` | Container-oriented rollout config copy |
+| Orchestrator M7 cohort config | `orchestrator/configs/m7_exposure_cohorts.json` | Container-oriented cohort config copy |
+| Exposure policy | `orchestrator/configs/parallel_exposure_policy.json` | Allowed M6 exposure cohorts |
+| M6 accelerated validation plan | `docs/03_feature_development/2026-03-09_30min_accelerated_validation_plan.md` | Compressed evidence plan |
+| M6 accelerated validation report | `orchestrator/artifacts/m6_trial/accelerated_validation_report_30m.json` | Measured compressed evidence |
+| M6 accelerated validation Go/No-Go | `docs/governance/m6_accelerated_validation_go_no_go_2026-03-09.md` | Formal next-stage recommendation |
+| Post-M8 M7 controlled enablement plan | `docs/governance/post_m8_m7_controlled_enablement_plan_2026-03-10.md` | Proposed M7 production enablement path |
+| Phase A advisory preflight | `orchestrator/artifacts/m7_phase_a/phase_a_advisory_preflight.json` | Pre-enable readiness artifact |
+| Phase A advisory canary | `orchestrator/artifacts/canary/m7_phase_a_advisory/canary_m7_phase_a_advisory.json` | Runtime behavior verification for advisory mode |
+| Phase A enabled trial result | `orchestrator/artifacts/m7_trial/preflight_result_20260310_phase_a_enabled.json` | Post-enable cohort-scoped trial evidence |
+| Phase A initial observation | `docs/03_feature_development/2026-03-10_m7_phase_a_initial_observation.md` | First evidence-collection snapshot after enablement |
+| Phase A initial observation artifact | `orchestrator/artifacts/m7_phase_a/phase_a_initial_observation_20260310.json` | Initial advisory-only observation report |
+| QA accelerated validation task list | `docs/03_feature_development/2026-03-09_qa_accelerated_validation_tasklist.md` | Execution checklist |
+| QA test summary | `docs/03_feature_development/2026-03-09_qa_test_summary.md` | Consolidated verification evidence |
+| Live runtime report | `orchestrator/artifacts/canary/live_vnext_runtime/live_vnext_runtime_report.json` | Online runtime validation |
+| Local LLM dispatch evidence | `orchestrator/artifacts/canary/live_local_llm_dispatcher/live_local_llm_dispatcher_20260309.json` | Real local model invocation evidence |
 
 ---
 
-## Code & Configuration Changes (Engineering Audit)
+## Code and Configuration Changes Since Last Snapshot
 
-### 1. Core Logic Refactoring
-- **`parallel_rollout_gate.js`**: Upgraded to 3-layer gate (Master -> Static -> Dynamic). Added logic to fallback to `classifier_result.domain_lead` if `run.input_class` is missing.
-- **`workflow_parallelization_policy.js`**: Added automated `input_json` parsing to support extraction of classifier results from database-loaded run objects.
-- **`brain_router.js`**: Full integration of `classifyTask`. All new task dispatches now carry a persistent `classifier_result` in the envelope.
+### Core Runtime and Validation
+- `orchestrator/scripts/live_validate_vnext_runtime.js` updated to match current approval/workflow entry behavior.
+- `orchestrator/scripts/inject_live_traffic.js` parameterized for compressed validation execution.
+- `orchestrator/scripts/generate_accelerated_validation_report.js` added to summarize routing and execution evidence.
+- `orchestrator/src/domain/parallel_rollout_gate.js` extended for `dynamic_routing_advisory`, `dynamic_routing_enforced`, and cohort-first gating.
+- `orchestrator/scripts/preflight_m7_phase_a_advisory.js` added for Phase A readiness checks.
+- `orchestrator/scripts/canary_m7_phase_a_advisory.js` added for advisory-only runtime verification.
+- `orchestrator/scripts/set_m7_phase_a_advisory.js` and `rollback_m7_phase_a_advisory.js` added for reversible config control.
+- `orchestrator/scripts/generate_accelerated_validation_report.js` updated to anchor report windows to latest database timestamps.
+- `orchestrator/src/domain/parallel_rollout_gate.js` and `orchestrator/src/domain/routing_audit_log.js` updated with config path fallback so `node src/index.js` local startup can resolve root configs instead of relying on `/workspace`.
 
-### 2. Registry & Policy Hardening
-- **`capability_registry.json`**: Manually injected `fe_safe_input_classes: ["fe_led", "fullstack"]` into the `impl_fe` step definition to permit parallelization.
-- **`parallel_exposure_policy.json`**: Expanded whitelist to include `webapp_crm` project type and `fullstack/be_led/architecture` input classes for the duration of the load test.
-- **`production_parallel_rollout.json`**: Formally switched `master_enabled: true`.
+### Infrastructure
+- `infra/docker-compose.yml` updated so containerized `orchestrator` mounts `contracts` correctly.
 
-### 3. Model Tiering (Qwen Optimization)
-- **`infra/.env` & `runtime_defaults.json`**: Switched to high-efficiency tiers:
-  - Control Plane: `qwen-flash`
-  - Coder Expert: `qwen3-coder-plus-2025-07-22`
-  - Quant Expert: `qwen-plus-2025-04-28`
-
-### 4. Test & Infrastructure Fixes
-- **`workflow_dag.test.js`**: Removed 14 instances of hardcoded `E:/` absolute paths. Fixed ESM `__dirname` compatibility issues.
-- **`docker-compose.yml`**: Corrected volume mount paths to ensure host-side configuration changes are instantly visible to the orchestrator container.
-
+### Governance and Documentation
+- Accelerated validation plan, QA summary, Go/No-Go package, and post-M8 M7 controlled enablement plan added.

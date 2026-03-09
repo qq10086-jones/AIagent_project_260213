@@ -3,7 +3,7 @@
   "artifact_count": 0,
   "bytes_total": 0,
   "largest_artifact_bytes": 0,
-  "prompt_chars": 1334,
+  "prompt_chars": 1452,
   "injected_context_bytes": 0,
   "status": "ok",
   "threshold_source": "role_overrides.architect",
@@ -16,5 +16,5 @@
     "overflow_risk_injected_context_bytes": 300000
   },
   "run_id": "gate-par-run",
-  "workflow_run_id": "bd1b1b91-6373-45ac-92ef-be635a258354"
+  "workflow_run_id": "5b52bed4-cb85-47a1-bb22-5aff61c4384f"
 }

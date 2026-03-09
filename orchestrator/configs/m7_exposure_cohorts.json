@@ -1,12 +1,22 @@
 {
-  "_comment": "M8 Phase 1 STAGING cohort config. cohort_enabled=true only in staging. Mirrors production cohort definition but with runtime controls unlocked.",
-  "version": "1.0-staging",
-  "cohort_id": "m7_dynamic_routing_alpha_staging",
-  "description": "M8 Phase 1 staging trial — fe_led workflow class only",
-  "included_workflow_classes": ["fe_led"],
-  "excluded_workflow_classes": ["high_risk_release_sensitive", "architectural_orchestration_required"],
-  "allowed_project_types": ["web_app", "spa", "frontend_only"],
-  "allowed_input_classes": ["ui_change", "styling", "component_refactor", "layout"],
+  "_comment": "Post-M8 production cohort definition for M7 dynamic routing. Keep cohort_enabled=false until PM + Architect approve Phase A advisory-only enablement.",
+  "version": "2.0",
+  "cohort_id": "m7_dynamic_routing_phase_a_production",
+  "description": "Narrow production cohort for post-M8 M7 advisory-only enablement",
+  "allowed_workflow_types": [
+    "coding_team_v0"
+  ],
+  "allowed_project_types": [
+    "crm",
+    "webapp_crm"
+  ],
+  "allowed_input_classes": [
+    "fe_led"
+  ],
+  "excluded_workflow_classes": [
+    "high_risk_release_sensitive",
+    "architectural_orchestration_required"
+  ],
   "rollback_trigger_thresholds": {
     "high_risk_misroute_pct": 2,
     "tier_misroute_pct": 5,
@@ -15,9 +25,9 @@
   },
   "runtime_controls": {
     "cohort_enabled": true,
-    "approved_by": "Architect — M8 Phase 1 staging trial authorization",
-    "approval_date": "2026-03-09",
-    "environment": "staging",
-    "live_traffic": false
+    "approved_by": "PM+Architect",
+    "approval_date": "2026-03-10",
+    "environment": "production",
+    "live_traffic": true
   }
 }

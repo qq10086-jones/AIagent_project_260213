@@ -1,0 +1,80 @@
+{
+  "generated_at": "2026-03-09T23:24:53.362Z",
+  "window": {
+    "anchor_mode": "latest_db",
+    "anchor_time": "2026-03-09T23:24:44.101Z",
+    "since_minutes": 20,
+    "from": "2026-03-09T23:04:44.101Z",
+    "to": "2026-03-09T23:24:44.101Z"
+  },
+  "summary": {
+    "routing_samples": 8,
+    "run_samples": 11,
+    "workflow_run_samples": 8,
+    "gated_parallel_allowed": 5,
+    "forced_sequential": 3,
+    "forced_sequential_ratio": 0.375
+  },
+  "routing": {
+    "by_final_execution_decision": {
+      "gated_parallel_allowed": 5,
+      "forced_sequential": 3
+    },
+    "by_decision_source": {
+      "dynamic_routing_disabled": 8
+    },
+    "deny_or_degrade_reasons": {
+      "Work shape does not require parallel execution": 5,
+      "(null)": 3
+    }
+  },
+  "execution": {
+    "run_status_counts": {
+      "failed": 8,
+      "completed": 2,
+      "running": 1
+    },
+    "workflow_status_counts": {
+      "failed": 7,
+      "running": 1
+    }
+  },
+  "latency": {
+    "by_stage": {
+      "intake": {
+        "sample_size": 11,
+        "p50_ms": 0,
+        "p95_ms": 8
+      },
+      "routing": {
+        "sample_size": 11,
+        "p50_ms": 0,
+        "p95_ms": 0
+      },
+      "policy_evaluation": {
+        "sample_size": 8,
+        "p50_ms": 0,
+        "p95_ms": 1
+      },
+      "execution_dispatch": {
+        "sample_size": 8,
+        "p50_ms": 5918,
+        "p95_ms": 8438
+      }
+    }
+  },
+  "compressed_go_no_go": {
+    "target_window_minutes": 30,
+    "thresholds": {
+      "min_routing_samples": 60,
+      "max_high_risk_misroutes": 0,
+      "max_forced_sequential_ratio": 0.85,
+      "require_execution_dispatch_samples": true
+    },
+    "evaluation": {
+      "enough_routing_samples": false,
+      "execution_dispatch_observed": true,
+      "forced_sequential_ratio_within_limit": true
+    }
+  }
+}

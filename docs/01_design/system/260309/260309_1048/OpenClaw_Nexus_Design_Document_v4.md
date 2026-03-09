@@ -1,7 +1,7 @@
 # OpenClaw Nexus vNext
-## Design Document v4.0
-## Date: 2026-03-09
-## Type: Design Addendum for M7
+## Design Document v4.1
+## Date: 2026-03-10
+## Type: Design Addendum for M7 + Post-M8 Enablement Baseline
 ## Supplements: OpenClaw_Nexus_Design_Document_v3.2.md
 
 ---
@@ -24,6 +24,7 @@
 | Section 13 | Approval requirement updated for M7 |
 | Section 14 (NEW) | Brain Router classification design contract |
 | Section 15 (NEW) | Adaptive routing safety degradation model |
+| Section 16 (NEW) | Post-M8 controlled enablement path for M7 production activation |
 
 Review source: `OpenClaw_Nexus_Engineering_Task_List_M7_v2.md`
 
@@ -44,6 +45,14 @@ M7 does not change these baseline truths:
 - static eligibility policy is demoted in priority but not deleted
 - deny-by-default remains the governing principle for all routing decisions
 - rollback to sequential execution must remain operational through runtime controls
+
+As of 2026-03-10, the authoritative production state is:
+
+- `master_enabled=true`
+- `dynamic_routing_enabled=false`
+- `router_mode=static_policy_only`
+
+This means M7 implementation is present, but production behavior remains on the M6 safety baseline until a post-M8 controlled enablement review explicitly approves change.
 
 ---
 
@@ -156,7 +165,7 @@ The routing decision path feeds into the exposure decision path. Routing recomme
 All M6 controls remain required. M7 adds:
 
 - `dynamic_routing_enabled` (global enable/disable)
-- `router_mode` (`dynamic` or `static_policy_only`)
+- `router_mode` (`static_policy_only`, `dynamic_routing_advisory`, or `dynamic_routing_enforced`)
 - optional workflow/project cohort gating for dynamic routing
 - classifier health circuit-breaker
 
@@ -174,8 +183,9 @@ The required evaluation order is:
 6. evaluate Brain Router classification result (Layer 3 — dynamic routing advisory)
 7. if classifier is unavailable or degraded, treat as low-confidence and fall back to static eligibility result (see Section 5.4)
 8. if classifier confidence is below approved threshold, fall back to static eligibility result
-9. if classifier recommends and confidence is sufficient, apply recommendation subject to completion boundary check
-10. final decision is one of: `gated_parallel_allowed` or `forced_sequential`
+9. if `router_mode=dynamic_routing_advisory`, log recommendation and comparison fields but keep static eligibility result as the final execution decision
+10. if `router_mode=dynamic_routing_enforced` and classifier recommendation is approved with sufficient confidence, apply recommendation subject to completion boundary check
+11. final decision is one of: `gated_parallel_allowed` or `forced_sequential`
 
 No implementation may invert this order. Layers 1 and 2 always have veto authority over Layer 3.
 
@@ -202,6 +212,7 @@ Additional normalized values for M7:
   - `force_sequential_override`
   - `static_eligibility_denied`
   - `dynamic_routing_disabled`
+  - `dynamic_routing_advisory_only`
   - `classifier_unavailable_fallback`
   - `classifier_low_confidence_fallback`
   - `classifier_recommended_parallel`
@@ -359,6 +370,7 @@ M7 is successful only when:
     - expand exposure
     - rollback to static-policy-only
     - defer wider rollout
+11. If M7 is reopened for production activation after closure, the next action must be a phased enablement review rather than an unrestricted switch-on.
 
 ---
 
@@ -376,6 +388,7 @@ All M6 risks remain open unless explicitly closed by M6 retrospective.
 | R-18 | Static policy and dynamic routing conflict in undefined ways | Medium | explicit three-layer precedence order, integration tests for all precedence branches, normalized decision source logging | Open until M7 closure |
 | R-19 (NEW) | Classifier unavailability causes uncontrolled routing behavior | High | explicit degradation semantics (Section 5.4), circuit-breaker, dedicated integration tests, operational alert | Open until M7 closure |
 | R-20 (NEW) | M7 launched on insufficient M6 evidence base | High | quantified M6 entry criteria (minimum replay coverage and gated-parallel run counts), M6 retrospective required | Open until M7 closure |
+| R-21 (NEW) | Post-closure M7 production enablement expands faster than observability and rollback authority can support | High | phased enablement, advisory-only first, approved cohort restriction, explicit rollback modes, PM + Architect sign-off before enforced mode | Open until post-M8 enablement review |
 
 ---
 
@@ -387,8 +400,9 @@ All M6 risks remain open unless explicitly closed by M6 retrospective.
 | Context budget tracking | M5 | Complete and governed | M5 WS-20 |
 | BE + FE parallel execution readiness | M5 | Complete as readiness only | M5 WS-21 |
 | Controlled production parallel exposure | M6 | In progress or complete (per M6 retrospective) | M6 WS-23 to WS-26 |
-| Brain Router LLM classification v1 | M7 | Active | M7 WS-28 |
-| Adaptive model routing (limited) | M7 | Active | M7 WS-29 |
+| Brain Router LLM classification v1 | M7 | Implemented | M7 WS-28 |
+| Adaptive model routing (limited) | M7 | Implemented, production-held | M7 WS-29 |
+| Post-M8 advisory-only M7 enablement | Post-M8 | Proposed | `docs/governance/post_m8_m7_controlled_enablement_plan_2026-03-10.md` |
 | Full adaptive model routing | Future | Deferred | Future milestone |
 | AI merge conflict resolution (write-back) | Future | Deferred | Future milestone |
 | Multi-vendor provider orchestration | Future | Deferred | Future milestone |
@@ -404,6 +418,8 @@ Until then:
 - M6 governance remains authoritative
 - production `coding_team_v0` remains governed by existing M6 rollout controls
 - no M7 implementation should begin
+
+After M7 closure, any move from `static_policy_only` toward production dynamic routing must additionally satisfy the post-M8 controlled enablement review defined in Section 16. Milestone closure alone is not production activation authority.
 
 ---
 
@@ -504,3 +520,115 @@ Integration tests must cover:
 - recovery from Level 1 to Level 0
 - correct routing behavior at each level
 - correct logging at each level
+
+---
+
+## 16. Post-M8 Controlled Enablement Path for M7 Production Activation (NEW)
+
+This section defines how the already-implemented M7 routing capability may be introduced into production after milestone closure.
+
+### 16.1 Purpose
+
+Post-M8 enablement is a governance and runtime-operations problem, not an implementation-completeness problem.
+
+Its purpose is to:
+
+- constrain blast radius
+- preserve M6 as the default production safety baseline
+- provide explicit rollback authority
+- require machine-readable evidence before each enablement step
+
+### 16.2 Phased Enablement Model
+
+**Phase A - Advisory-Only Production Enablement**
+
+- `dynamic_routing_enabled=true`
+- `router_mode=dynamic_routing_advisory`
+- classifier output is logged in production
+- runtime execution behavior remains aligned with static-policy result
+- scope is limited to approved cohort only
+
+**Phase B - Limited Enforced Enablement**
+
+- `dynamic_routing_enabled=true`
+- `router_mode=dynamic_routing_enforced`
+- classifier recommendation may influence execution outcome
+- static safety and completion boundaries still retain veto authority
+- scope remains limited to approved cohort only
+
+**Phase C - Expansion Review**
+
+- no automatic expansion is allowed
+- cohort expansion, project-type expansion, or model-tier influence changes require a separate review
+
+### 16.3 Approved First Cohort
+
+The recommended first production cohort is:
+
+- `workflow_type = coding_team_v0`
+- `project_type = crm`
+- `input_class = fe_led`
+
+The following remain excluded unless separately approved:
+
+- `high_risk_release_sensitive`
+- `architectural_orchestration_required`
+- low-confidence classifications
+- classifier unavailable cases
+- non-approved project types
+
+### 16.4 Entry Gates
+
+**Gate G1 - Before Phase A**
+
+All of the following must be true:
+
+1. compressed validation evidence is approved
+2. live runtime validation passes
+3. rollback controls are validated
+4. `routing_decision_log` and `waterfall_stage_log` are confirmed writable and queryable
+5. PM + Architect approval is recorded
+
+**Gate G2 - Exit from Phase A**
+
+Minimum evidence:
+
+- routing sample size `>= 60`
+- classifier availability `>= 90%`
+- high-risk misroute count `= 0`
+- low-confidence and unavailable cases degrade correctly
+- no P0/P1 production incident
+
+**Gate G3 - Entry to Phase B**
+
+All of the following must be true:
+
+- G2 is complete
+- `forced_sequential_ratio` shows no unexplained spike
+- `execution_dispatch` and downstream workflow states remain observable
+- advisory recommendation uplift is measurable and not risk-dominant
+- Architect explicitly signs off
+
+### 16.5 Rollback Contract
+
+Rollback must remain operator-simple and must use runtime controls before any code rollback path.
+
+Supported rollback actions, in priority order:
+
+1. set `router_mode=static_policy_only`
+2. if needed, set `dynamic_routing_enabled=false`
+3. if needed, set `force_sequential=true`
+
+Target operational expectation:
+
+- rollback takes effect within 30 seconds after operator action and reload/restart path
+
+### 16.6 Design Interpretation
+
+M7 implementation completeness does not authorize global production dynamic routing.
+
+The authoritative interpretation is:
+
+- M7 implementation is complete
+- M8 evidence and accelerated validation have reduced readiness uncertainty
+- production enablement must still proceed through phased, cohort-limited, reversible review

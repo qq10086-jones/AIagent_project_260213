@@ -254,8 +254,11 @@ A Change Request must include:
 5. Layer impact (does this require cross-layer changes?)
 6. Complexity budget impact (does this push a module over its budget?)
 7. LLM role impact (does this change which model a role uses, or add a new role?) (NEW)
+8. Production activation impact (does this change runtime enablement state, cohort scope, or rollback semantics for an already-implemented feature?) (NEW)
 
 Changes are approved only if they improve the current pipeline stage.
+
+Milestone closure does not automatically authorize production activation of a capability that remains runtime-gated. Any post-closure move from implemented-but-disabled to enabled-in-production must go through explicit change control with rollout scope, evidence, and rollback authority recorded.
 
 ---
 

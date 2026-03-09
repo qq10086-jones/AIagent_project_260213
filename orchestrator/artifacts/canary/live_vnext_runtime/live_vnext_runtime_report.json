@@ -1,28 +1,28 @@
 {
-  "generated_at": "2026-03-07T13:36:37.635Z",
+  "generated_at": "2026-03-09T23:26:47.249Z",
   "base_url": "http://localhost:3000",
-  "timeout_ms": 240000,
+  "timeout_ms": 180000,
   "checks": {
     "health": {
       "ok": true,
       "body": "ok"
     },
     "direct_chat_bypass": {
-      "run_id": "dda1ef2b-7d1e-49ad-8201-9bf954b18868",
+      "run_id": "39ff346f-1319-4915-a9dc-cd8fd27797cb",
       "mode": "direct_reply",
       "run_status": "completed",
       "task_count": 0
     },
     "approval_reject": {
-      "run_id": "822fdd36-6d2f-4e19-9d54-c9cec4fdebaa",
-      "task_id": "4c1de4ff-01df-47b3-8f61-214f9b919097",
+      "run_id": "0769bbaa-6d17-4323-96c4-3b2bf1ce122a",
+      "task_id": "a848d679-8718-4b69-8ac8-7dd5bd966836",
       "run_status": "failed",
       "task_status": "failed",
       "error_code": "APPROVAL_REJECTED"
     },
     "approval_approve": {
-      "run_id": "84a16b1c-889d-4712-8de0-a9d305b65d2a",
-      "task_id": "ebd28569-2c55-459b-9e7d-97b7769e8fe8",
+      "run_id": "cd35fb17-6bd4-4d81-8804-dc0795a436d8",
+      "task_id": "d7e5e744-b381-4a49-afc6-65ecf8e5c3b7",
       "run_status": "running",
       "task_status": "running"
     }

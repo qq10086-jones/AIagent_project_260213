@@ -42,7 +42,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const APPROVAL_TRIGGER_MESSAGE = "Fix repo bug by running rm -rf on old build files and build the service again";
+const APPROVAL_TRIGGER_MESSAGE = "/coder: Fix repo bug by running rm -rf on old build files and build the service again";
 
 async function checkHealth(baseUrl) {
   const res = await fetch(`${baseUrl}/health`);
@@ -87,11 +87,11 @@ async function validateApprovalReject(baseUrl, approvalToken) {
     }),
   });
   assert(chatRes.ok, `approval reject request failed: ${chatRes.status}`);
-  assert(chatRes.json?.mode === "task", `expected task mode, got ${chatRes.json?.mode}`);
+  assert(chatRes.json?.mode === "workflow", `expected workflow mode, got ${chatRes.json?.mode}`);
   assert(chatRes.json?.waiting_approval === true, "expected waiting_approval=true");
 
   const runId = String(chatRes.json?.run_id || "");
-  const taskId = String(chatRes.json?.task_id || "");
+  const taskId = String(chatRes.json?.first_step?.task_id || "");
   assert(runId && taskId, "approval reject run/task id missing");
 
   const pending = await getJson(`${baseUrl}/approvals/pending?limit=50`);
@@ -138,11 +138,11 @@ async function validateApprovalApprove(baseUrl, approvalToken) {
     }),
   });
   assert(chatRes.ok, `approval approve request failed: ${chatRes.status}`);
-  assert(chatRes.json?.mode === "task", `expected task mode, got ${chatRes.json?.mode}`);
+  assert(chatRes.json?.mode === "workflow", `expected workflow mode, got ${chatRes.json?.mode}`);
   assert(chatRes.json?.waiting_approval === true, "expected waiting_approval=true");
 
   const runId = String(chatRes.json?.run_id || "");
-  const taskId = String(chatRes.json?.task_id || "");
+  const taskId = String(chatRes.json?.first_step?.task_id || "");
   assert(runId && taskId, "approval approve run/task id missing");
 
   const approveRes = await getJson(`${baseUrl}/tasks/${encodeURIComponent(taskId)}/approve`, {

@@ -1,0 +1,23 @@
+{
+  "_comment": "Root-level runtime cohort definition for M7 Phase A advisory-only enablement. This file is consumed when WORKSPACE_ROOT points at the repo root.",
+  "version": "2.0",
+  "cohort_id": "m7_dynamic_routing_phase_a_root_runtime",
+  "description": "Narrow production-shaped cohort for advisory-only M7 routing at repo-root runtime",
+  "allowed_workflow_types": ["coding_team_v0"],
+  "allowed_project_types": ["crm", "webapp_crm"],
+  "allowed_input_classes": ["fe_led", "fullstack", "architecture"],
+  "excluded_workflow_classes": ["high_risk_release_sensitive", "architectural_orchestration_required"],
+  "rollback_trigger_thresholds": {
+    "high_risk_misroute_pct": 2,
+    "tier_misroute_pct": 5,
+    "forced_sequential_spike_pct": 40,
+    "circuit_breaker_trigger_pct": 10
+  },
+  "runtime_controls": {
+    "cohort_enabled": true,
+    "approved_by": "PM+Architect",
+    "approval_date": "2026-03-10",
+    "environment": "production",
+    "live_traffic": true
+  }
+}

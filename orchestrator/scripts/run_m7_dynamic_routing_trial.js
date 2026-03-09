@@ -40,6 +40,23 @@ function loadJson(filePath) {
   catch { return null; }
 }
 
+function allowedSet(primary, legacy) {
+  return new Set([...(primary ?? []), ...(legacy ?? [])]);
+}
+
+function isInDynamicCohort(replayCase, cohorts, { respectRuntimeControl = true } = {}) {
+  if (!cohorts) return false;
+  if (respectRuntimeControl && cohorts.runtime_controls?.cohort_enabled !== true) return false;
+  const workflowTypes = allowedSet(cohorts.allowed_workflow_types, cohorts.included_workflow_classes);
+  const projectTypes = allowedSet(cohorts.allowed_project_types, null);
+  const inputClasses = allowedSet(cohorts.allowed_input_classes, null);
+  return (
+    workflowTypes.has(replayCase.workflow_type) &&
+    projectTypes.has(replayCase.project_type) &&
+    inputClasses.has(replayCase.input_class)
+  );
+}
+
 // ── Prerequisite check ────────────────────────────────────────────────────────
 
 function checkPrerequisites() {
@@ -50,6 +67,9 @@ function checkPrerequisites() {
   if (!rollout)                              issues.push("production_parallel_rollout.json not found");
   if (rollout && !rollout.master_enabled)    issues.push("production_parallel_rollout.json: master_enabled=false (requires Architect sign-off)");
   if (rollout && !rollout.dynamic_routing_enabled) issues.push("production_parallel_rollout.json: dynamic_routing_enabled=false");
+  if (rollout && !["dynamic_routing_advisory", "dynamic_routing_enforced", "dynamic"].includes(String(rollout.router_mode || ""))) {
+    issues.push("production_parallel_rollout.json: router_mode not set to advisory/enforced dynamic mode");
+  }
   if (!cohorts)                              issues.push("configs/m7_exposure_cohorts.json not found");
   if (cohorts && !cohorts.runtime_controls?.cohort_enabled) issues.push("m7_exposure_cohorts.json: cohort_enabled=false (requires Architect sign-off)");
 
@@ -64,9 +84,7 @@ function checkPrerequisites() {
 // ── Gate evaluation (mirrors parallel_rollout_gate.js Layer-2 static path) ───
 
 function evaluateStaticGate(replayCase, { cohorts }) {
-  const allowed = cohorts?.included_workflow_classes?.includes(replayCase.workflow_type) &&
-                  cohorts?.allowed_project_types?.includes(replayCase.project_type) &&
-                  cohorts?.allowed_input_classes?.includes(replayCase.input_class);
+  const allowed = isInDynamicCohort(replayCase, cohorts, { respectRuntimeControl: false });
   return allowed ? "gated_parallel_allowed" : "forced_sequential";
 }
 
@@ -85,10 +103,11 @@ function evaluateDynamicGate(replayCase, { healthMonitor }) {
 
 function evaluateThresholds(results, cohorts) {
   const thresholds = cohorts?.rollback_trigger_thresholds ?? {};
-  const total = results.length;
+  const scoped = results.filter((r) => r.in_dynamic_cohort);
+  const total = scoped.length;
   if (total === 0) return { breached: false };
 
-  const forcedSeq = results.filter((r) => r.dynamic_decision === "forced_sequential").length;
+  const forcedSeq = scoped.filter((r) => r.dynamic_decision === "forced_sequential").length;
   const forcedSeqPct = (forcedSeq / total) * 100;
   const limit = thresholds.forced_sequential_spike_pct ?? 40;
 
@@ -153,12 +172,14 @@ async function main() {
 
     const staticDec = evaluateStaticGate(c, prereq);
     const { decision: dynDec, source: dynSource } = evaluateDynamicGate(c, { healthMonitor });
+    const inDynamicCohort = isInDynamicCohort(c, prereq.cohorts, { respectRuntimeControl: false });
 
     results.push({
       replay_id:       c.replay_id,
       input_class:     c.input_class,
       project_type:    c.project_type,
       workflow_type:   c.workflow_type,
+      in_dynamic_cohort: inDynamicCohort,
       expected_parallel: Boolean(c.fe_parallel_eligible_expected),
       static_decision:   staticDec,
       dynamic_decision:  dynDec,
@@ -186,6 +207,7 @@ async function main() {
 
     summary: {
       total_cases:            results.length,
+      cohort_cases:           results.filter((r) => r.in_dynamic_cohort).length,
       static_gated_parallel:  results.filter((r) => r.static_decision  === "gated_parallel_allowed").length,
       dynamic_gated_parallel: results.filter((r) => r.dynamic_decision === "gated_parallel_allowed").length,
       agreement_count:        results.filter((r) => r.agreement).length,

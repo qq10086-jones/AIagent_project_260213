@@ -6,7 +6,7 @@
  *  2. queryByRunId returns the persisted record
  *  3. getLatestForWorkflowRun returns the correct record
  *  4. Audit log failure is non-fatal (does not throw)
- *  5. All eight normalized routing_decision_source values are accepted
+ *  5. Normalized routing_decision_source values are accepted
  *  6. Classifier unavailability fallback is recorded correctly
  *  7. Static-policy-only path is recorded correctly
  */
@@ -265,15 +265,15 @@ test("WS-30-01: getLatestForWorkflowRun() delegates to repository", async () => 
   cleanup(dir);
 });
 
-test("WS-30-01: log() reads router_mode and dynamic_routing_enabled from workspace config", async () => {
-  const dir = makeWorkspace({ router_mode: "dynamic", dynamic_routing_enabled: true });
+test("WS-30-01: log() reads advisory router_mode and dynamic_routing_enabled from workspace config", async () => {
+  const dir = makeWorkspace({ router_mode: "dynamic_routing_advisory", dynamic_routing_enabled: true });
   const pool = makeMockPool();
   const svc = createRoutingAuditLogService({ pool, workspaceRoot: dir });
 
   await svc.log({ run: STUB_RUN, gateDecision: STUB_GATE_PARALLEL, classifierResult: null });
 
   const params = pool.calls[0].params;
-  assert.equal(params[4], "dynamic", "router_mode must reflect workspace config");
+  assert.equal(params[4], "dynamic_routing_advisory", "router_mode must reflect workspace config");
   assert.equal(params[5], true, "dynamic_routing_enabled must reflect workspace config");
 
   cleanup(dir);
@@ -282,14 +282,39 @@ test("WS-30-01: log() reads router_mode and dynamic_routing_enabled from workspa
 test("WS-30-01: log() handles missing workspace config gracefully (defaults to static_policy_only)", async () => {
   // Workspace with no config file — should not throw, should default router_mode
   const dir = fs.mkdtempSync(path.join(__dirname, "tmp_audit_noconfig_"));
+  const isolatedCwd = fs.mkdtempSync(path.join(__dirname, "tmp_audit_cwd_"));
+  const previousCwd = process.cwd();
   const pool = makeMockPool();
-  const svc = createRoutingAuditLogService({ pool, workspaceRoot: dir });
+  try {
+    process.chdir(isolatedCwd);
+    const svc = createRoutingAuditLogService({ pool, workspaceRoot: dir });
 
-  await svc.log({ run: STUB_RUN, gateDecision: STUB_GATE_SEQUENTIAL, classifierResult: null });
+    await svc.log({ run: STUB_RUN, gateDecision: STUB_GATE_SEQUENTIAL, classifierResult: null });
 
-  const params = pool.calls[0].params;
-  assert.equal(params[4], "static_policy_only", "router_mode must default when config is missing");
-  assert.equal(params[5], false, "dynamic_routing_enabled must default to false");
+    const params = pool.calls[0].params;
+    assert.equal(params[4], "static_policy_only", "router_mode must default when config is missing");
+    assert.equal(params[5], false, "dynamic_routing_enabled must default to false");
+  } finally {
+    process.chdir(previousCwd);
+    cleanup(isolatedCwd);
+    cleanup(dir);
+  }
+});
 
-  cleanup(dir);
+test("WS-30-01: log() falls back to cwd parent configs when workspaceRoot points to legacy /workspace path", async () => {
+  const dir = makeWorkspace({ router_mode: "dynamic_routing_advisory", dynamic_routing_enabled: true });
+  const previousCwd = process.cwd();
+  const pool = makeMockPool();
+  try {
+    fs.mkdirSync(path.join(dir, "orchestrator"), { recursive: true });
+    process.chdir(path.join(dir, "orchestrator"));
+    const svc = createRoutingAuditLogService({ pool, workspaceRoot: "/workspace" });
+    await svc.log({ run: STUB_RUN, gateDecision: STUB_GATE_PARALLEL, classifierResult: null });
+    const params = pool.calls[0].params;
+    assert.equal(params[4], "dynamic_routing_advisory");
+    assert.equal(params[5], true);
+  } finally {
+    process.chdir(previousCwd);
+    cleanup(dir);
+  }
 });

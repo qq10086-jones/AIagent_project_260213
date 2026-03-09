@@ -3,8 +3,8 @@
   "version": "1.2",
   "master_enabled": true,
   "force_sequential": false,
-  "dynamic_routing_enabled": false,
-  "router_mode": "static_policy_only",
+  "dynamic_routing_enabled": true,
+  "router_mode": "dynamic_routing_advisory",
   "circuit_breaker": {
     "activated": false,
     "rolling_window_size": 100,
@@ -19,5 +19,5 @@
     "alert_destination": "ops-alerts"
   },
   "limited_exposure_cohort_pct": null,
-  "last_policy_change": "2026-03-09T00:00:00Z"
+  "last_policy_change": "2026-03-10T00:00:00Z"
 }

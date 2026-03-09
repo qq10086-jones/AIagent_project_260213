@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 
 function loadJson(filePath) {
@@ -7,6 +7,16 @@ function loadJson(filePath) {
   } catch {
     return null;
   }
+}
+
+function resolveConfigPath(workspaceRoot, relativePath) {
+  const candidates = [
+    resolve(workspaceRoot || "", relativePath),
+    resolve(process.cwd(), relativePath),
+    resolve(process.cwd(), "..", relativePath),
+  ];
+  const normalized = [...new Set(candidates)];
+  return normalized.find((candidate) => existsSync(candidate)) || normalized[0];
 }
 
 function result(decision, decision_source, routing_source, deny_reason_code = null, model_tier = "balanced_default") {
@@ -24,6 +34,16 @@ function forced(source, routing_source, deny_reason_code, model_tier) {
   return result("forced_sequential", source, routing_source, deny_reason_code, model_tier);
 }
 
+function parseRouterMode(rollout) {
+  const routerMode = rollout?.router_mode ?? "static_policy_only";
+  return {
+    routerMode,
+    dynamicEnabled: rollout?.dynamic_routing_enabled === true,
+    advisoryOnly: routerMode === "dynamic_routing_advisory",
+    enforced: routerMode === "dynamic_routing_enforced" || routerMode === "dynamic",
+  };
+}
+
 /**
  * WS-29-01 / WS-29-02
  * Three-layer Policy-driven parallel rollout gate.
@@ -34,8 +54,26 @@ function forced(source, routing_source, deny_reason_code, model_tier) {
  *   4. structural guard                  (independent of policy correctness)
  */
 export function createParallelRolloutGate({ workspaceRoot }) {
-  const rolloutPath = resolve(workspaceRoot, "configs/production_parallel_rollout.json");
-  const eligibilityPath = resolve(workspaceRoot, "configs/parallel_exposure_policy.json");
+  const rolloutPath = resolveConfigPath(workspaceRoot, "configs/production_parallel_rollout.json");
+  const eligibilityPath = resolveConfigPath(workspaceRoot, "configs/parallel_exposure_policy.json");
+  const cohortPath = resolveConfigPath(workspaceRoot, "configs/m7_exposure_cohorts.json");
+
+  function isInDynamicCohort(cohorts, { workflowId, projectType, inputClass }) {
+    if (!cohorts || cohorts.runtime_controls?.cohort_enabled !== true) return false;
+
+    const allowedWorkflowTypes =
+      cohorts.allowed_workflow_types ??
+      cohorts.included_workflow_classes ??
+      [];
+    const allowedProjectTypes = cohorts.allowed_project_types ?? [];
+    const allowedInputClasses = cohorts.allowed_input_classes ?? [];
+
+    return (
+      allowedWorkflowTypes.includes(workflowId) &&
+      allowedProjectTypes.includes(projectType) &&
+      allowedInputClasses.includes(inputClass)
+    );
+  }
 
   function evaluate({ run, workflow, classifier_result }) {
     const runWorkflowId = String(run?.workflow_id || "");
@@ -79,10 +117,18 @@ export function createParallelRolloutGate({ workspaceRoot }) {
     }
 
     // ── Layer 3: Dynamic routing advisory ─────────────────────────────────
-    const dynamicEnabled = rollout.dynamic_routing_enabled === true;
-    const isDynamicMode = rollout.router_mode === "dynamic";
-    
-    if (!dynamicEnabled || !isDynamicMode) {
+    const mode = parseRouterMode(rollout);
+    const cohorts = loadJson(cohortPath);
+
+    if (!mode.dynamicEnabled || (!mode.advisoryOnly && !mode.enforced)) {
+      return applyStructuralGuard(workflow, runInputClass, "eligibility_policy_allowed", "dynamic_routing_disabled", "balanced_default");
+    }
+
+    if (!isInDynamicCohort(cohorts, {
+      workflowId: runWorkflowId,
+      projectType: runProjectType,
+      inputClass: runInputClass,
+    })) {
       return applyStructuralGuard(workflow, runInputClass, "eligibility_policy_allowed", "dynamic_routing_disabled", "balanced_default");
     }
 
@@ -96,6 +142,11 @@ export function createParallelRolloutGate({ workspaceRoot }) {
     }
 
     const recommendedTier = classifier_result.model_tier || "balanced_default";
+
+    if (mode.advisoryOnly) {
+      // In advisory-only mode, classifier output is logged but execution remains on the static-policy path.
+      return applyStructuralGuard(workflow, runInputClass, "eligibility_policy_allowed", "dynamic_routing_advisory_only", recommendedTier);
+    }
 
     if (classifier_result.final_execution_decision === "forced_sequential") {
        return forced("eligibility_policy_allowed", "classifier_recommended_sequential", classifier_result.deny_or_degrade_reason, recommendedTier);

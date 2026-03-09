@@ -1,0 +1,31 @@
+{
+  "canary": "canary_m7_phase_a_advisory",
+  "milestone": "post_m8_m7_phase_a",
+  "timestamp": "2026-03-09T15:30:07.376Z",
+  "total": 4,
+  "passed": 4,
+  "failed": 0,
+  "status": "PASS",
+  "results": [
+    {
+      "label": "Advisory-only mode keeps static allow even when classifier recommends sequential",
+      "status": "PASS",
+      "detail": "model_tier=deep_reasoning"
+    },
+    {
+      "label": "Advisory-only mode still falls back safely on classifier unavailability",
+      "status": "PASS",
+      "detail": "fallback preserved"
+    },
+    {
+      "label": "Dynamic routing stays disabled outside approved cohort even when static policy would allow it",
+      "status": "PASS",
+      "detail": "cohort restriction enforced"
+    },
+    {
+      "label": "Legacy dynamic mode is not required for Phase A advisory canary",
+      "status": "PASS",
+      "detail": "new advisory router_mode active"
+    }
+  ]
+}

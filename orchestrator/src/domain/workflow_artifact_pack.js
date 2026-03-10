@@ -73,6 +73,18 @@ export function createArtifactPackService({
     };
   }
 
+  function collectContextArtifacts(steps = []) {
+    return (steps || []).map((step) => {
+      const result = parseJsonSafe(step?.result_json, {});
+      return {
+        step_index: Number(step?.step_index),
+        step_id: String(step?.step_id || ""),
+        context_packet_path: String(result?.context_packet_path || "").trim().replace(/\\/g, "/") || null,
+        repo_map_path: String(result?.repo_map_path || "").trim().replace(/\\/g, "/") || null,
+      };
+    });
+  }
+
   async function generateArtifactPack(run) {
     const steps = await getSteps(run.workflow_run_id);
     const checkpoints = await listWorkflowCheckpoints(pool, run.workflow_run_id);
@@ -91,6 +103,7 @@ export function createArtifactPackService({
 
     const stepArtifacts = buildStepArtifactsFromCheckpoints(steps, checkpoints, parseJsonSafe);
     const contextBudget = collectContextBudgetReports(steps);
+    const contextArtifacts = collectContextArtifacts(steps);
     const releasePaths = buildReleasePackPaths(workspaceRoot, run);
     const { manifest_path: manifestPath, summary_path: summaryPath,
             strict_canary_json_path: canaryJsonPath, strict_canary_report_path: canaryMdPath,
@@ -113,6 +126,7 @@ export function createArtifactPackService({
       step_artifacts: stepArtifacts,
       context_budget_reports: contextBudget.reports,
       context_budget_summary: contextBudget.summary,
+      context_artifacts: contextArtifacts,
       steps: steps.map((s) => ({
         step_index: Number(s.step_index),
         step_id: s.step_id,
@@ -162,6 +176,9 @@ export function createArtifactPackService({
         `- warning: ${Number(contextBudget.summary.warning || 0)}`,
         `- overflow_risk: ${Number(contextBudget.summary.overflow_risk || 0)}`,
         `- missing: ${Number(contextBudget.summary.missing || 0)}`, ``,
+        `## Context Artifacts`,
+        `- context_packets: ${contextArtifacts.filter((item) => item.context_packet_path).length}`,
+        `- repo_maps: ${contextArtifacts.filter((item) => item.repo_map_path).length}`, ``,
         `## Steps`,
         ...manifest.steps.map((s) => `- [${s.status === "succeeded" ? "OK" : "FAIL"}] ${s.step_index}:${s.step_id} (${s.tool_name})`),
       ];
@@ -214,6 +231,9 @@ export function createArtifactPackService({
         ...contextBudget.reports
           .map((item) => (item.report_path ? path.resolve(workspaceRoot, item.report_path) : ""))
           .filter(Boolean),
+        ...contextArtifacts.flatMap((item) => [item.context_packet_path, item.repo_map_path])
+          .filter(Boolean)
+          .map((rel) => path.resolve(workspaceRoot, rel)),
       ],
     });
     await indexReleasePackToDb({
@@ -225,6 +245,9 @@ export function createArtifactPackService({
         ...contextBudget.reports
           .map((item) => (item.report_path ? path.resolve(workspaceRoot, item.report_path) : ""))
           .filter(Boolean),
+        ...contextArtifacts.flatMap((item) => [item.context_packet_path, item.repo_map_path])
+          .filter(Boolean)
+          .map((rel) => path.resolve(workspaceRoot, rel)),
       ],
       stepArtifacts, minioArchived,
     });
@@ -295,8 +318,14 @@ export function createArtifactPackService({
       .filter(Boolean)
       .map((rel) => path.resolve(workspaceRoot, rel))
       .filter((p) => fs.existsSync(p));
-    const archived = await archiveReleasePackToMinio({ run, manifestPath, summaryPath, extraPaths: [...extraPaths, ...contextBudgetPaths] });
-    await indexReleasePackToDb({ run, manifestPath, summaryPath, extraPaths: [...extraPaths, ...contextBudgetPaths], stepArtifacts, minioArchived: archived });
+    const contextArtifactPaths = steps
+      .map((step) => parseJsonSafe(step?.result_json, {}))
+      .flatMap((result) => [String(result?.context_packet_path || "").trim(), String(result?.repo_map_path || "").trim()])
+      .filter(Boolean)
+      .map((rel) => path.resolve(workspaceRoot, rel))
+      .filter((p) => fs.existsSync(p));
+    const archived = await archiveReleasePackToMinio({ run, manifestPath, summaryPath, extraPaths: [...extraPaths, ...contextBudgetPaths, ...contextArtifactPaths] });
+    await indexReleasePackToDb({ run, manifestPath, summaryPath, extraPaths: [...extraPaths, ...contextBudgetPaths, ...contextArtifactPaths], stepArtifacts, minioArchived: archived });
     await recordEvent(workflow_run_id, "artifact.pack.minio.archived", {
       workflow_run_id, count: archived.length, bucket: minioBucket,
     });

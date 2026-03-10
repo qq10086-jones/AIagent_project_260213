@@ -22,6 +22,7 @@ import {
 import { buildCodingExecutorRequest, validateCodingExecutorRequest } from "../coding_executor.js";
 import { parseJsonSafe } from "./workflow_runner.js";
 import { createContextBudgetService } from "./context_budget_service.js";
+import { createRepoContextService } from "./repo_context_service.js";
 
 export function pathForRunArtifacts(run_id) {
   return `artifacts/release/${run_id || "unknown-run"}`;
@@ -63,6 +64,36 @@ function buildTargetFileContextBlock(targetFileContext = []) {
     lines.push("```");
     lines.push(String(item.content || ""));
     lines.push("```");
+  }
+  return lines.join("\n");
+}
+
+function buildCodingContextBlock({ contextPacket = null, repoMap = null }) {
+  if (!contextPacket || typeof contextPacket !== "object") return "";
+  const lines = ["", "[Coding Context Packet]"];
+  lines.push(`Step: ${String(contextPacket.step_id || "")}`);
+  lines.push(`Role: ${String(contextPacket.role || "")}`);
+  if (Array.isArray(contextPacket.target_paths) && contextPacket.target_paths.length > 0) {
+    lines.push(`Target Paths: ${contextPacket.target_paths.join(", ")}`);
+  }
+  if (Array.isArray(contextPacket.entrypoints) && contextPacket.entrypoints.length > 0) {
+    lines.push(`Entrypoints: ${contextPacket.entrypoints.join(", ")}`);
+  }
+  if (Array.isArray(contextPacket.related_tests) && contextPacket.related_tests.length > 0) {
+    lines.push(`Related Tests: ${contextPacket.related_tests.join(", ")}`);
+  }
+  if (Array.isArray(contextPacket.recent_changed_files) && contextPacket.recent_changed_files.length > 0) {
+    lines.push(`Recent Changed Files: ${contextPacket.recent_changed_files.join(", ")}`);
+  }
+  if (Array.isArray(contextPacket.memory_hints) && contextPacket.memory_hints.length > 0) {
+    lines.push("Memory Hints:");
+    for (const hint of contextPacket.memory_hints) lines.push(`- ${String(hint)}`);
+  }
+  if (repoMap && Array.isArray(repoMap.candidate_files) && repoMap.candidate_files.length > 0) {
+    lines.push(`Candidate Files: ${repoMap.candidate_files.slice(0, 12).join(", ")}`);
+  }
+  if (repoMap && Array.isArray(repoMap.key_config_files) && repoMap.key_config_files.length > 0) {
+    lines.push(`Key Config Files: ${repoMap.key_config_files.join(", ")}`);
   }
   return lines.join("\n");
 }
@@ -155,6 +186,7 @@ export function buildArchitectMemoryContext({ projectContext = null, priorADRs =
  */
 export function createStepBuilder({ registry, promptScriptRegistry, handoffContracts, workspaceRoot = ".", runtimeConfig = {} }) {
   const contextBudgetService = createContextBudgetService();
+  const repoContextService = createRepoContextService({ workspaceRoot });
   function buildStepPayload({ run, stepDef, stepIndex }) {
     const input = parseJsonSafe(run.input_json, {});
     const artifactRoot = pathForRunArtifacts(run.run_id);
@@ -204,6 +236,8 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     payload.context_budget_preview = implMode.contextBudgetPreview;
     payload.target_file_context = implMode.targetFileContext;
     payload.prompt_script_id = implMode.promptScriptId;
+    payload.context_packet = null;
+    payload.repo_map = null;
 
     if (String(stepDef.id || "") === "impl_be" && payload.execution_mode_requested === "structured_patch") {
       payload.expected_artifacts = ["impl/be_patch_bundle.json", "impl/be_notes.md", "handoff/be_to_fe.json"];
@@ -239,20 +273,6 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         throw err;
       }
       payload.execution_adapter_packet = executionPacket;
-      const toolAdapterRequest = buildCodingExecutorRequest({
-        provider: input.provider || payload.provider || "",
-        payload,
-        executionPacket,
-        role: effectiveStepDef.role,
-        stepId: effectiveStepDef.id,
-      });
-      const requestChecked = validateCodingExecutorRequest(toolAdapterRequest);
-      if (!requestChecked.ok) {
-        const err = new Error(`coding executor request invalid: ${requestChecked.errors.join("; ")}`);
-        err.code = "CODING_EXECUTOR_REQUEST_INVALID";
-        throw err;
-      }
-      payload.tool_adapter_request = toolAdapterRequest;
     }
 
     if (String(stepDef.id || "") === "impl_fe") {
@@ -269,20 +289,6 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         throw err;
       }
       payload.execution_adapter_packet = executionPacket;
-      const toolAdapterRequest = buildCodingExecutorRequest({
-        provider: input.provider || payload.provider || "",
-        payload,
-        executionPacket,
-        role: effectiveStepDef.role,
-        stepId: effectiveStepDef.id,
-      });
-      const requestChecked = validateCodingExecutorRequest(toolAdapterRequest);
-      if (!requestChecked.ok) {
-        const err = new Error(`coding executor request invalid: ${requestChecked.errors.join("; ")}`);
-        err.code = "CODING_EXECUTOR_REQUEST_INVALID";
-        throw err;
-      }
-      payload.tool_adapter_request = toolAdapterRequest;
     }
 
     if (stepDef.tool === "coding.delegate") {
@@ -324,6 +330,47 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       }
       if ((stepDef.id === "impl_be" || stepDef.id === "impl_fe") && payload.execution_adapter_packet) {
         payload.target_paths = payload.execution_adapter_packet.target_paths;
+      }
+      if (["impl_be", "impl_fe", "qa_verify"].includes(String(stepDef.id || ""))) {
+        const memoryProjectId = String(run.run_id || run.workflow_run_id || "default");
+        const recentTaskHistory = getTaskHistory(memoryProjectId, 3);
+        const memoryHints = recentTaskHistory.map((entry) => {
+          const stepId = String(entry?.step_id || entry?.task_id || "unknown");
+          const status = String(entry?.status || "unknown");
+          const summary = String(entry?.summary || entry?.result || entry?.note || "").trim();
+          return summary ? `${stepId} | ${status} | ${summary}` : `${stepId} | ${status}`;
+        });
+        payload.repo_map = repoContextService.buildRepoMap({
+          targetPaths: payload.target_paths,
+          recentChangedFiles: payload.target_paths,
+        });
+        payload.context_packet = repoContextService.buildContextPacket({
+          role: effectiveStepDef.role,
+          stepId: effectiveStepDef.id,
+          targetPaths: payload.target_paths,
+          recentChangedFiles: payload.target_paths,
+          memoryHints,
+        });
+        payload.task_prompt = `${payload.task_prompt}${buildCodingContextBlock({
+          contextPacket: payload.context_packet,
+          repoMap: payload.repo_map,
+        })}`;
+      }
+      if (["impl_be", "impl_fe"].includes(String(stepDef.id || "")) && payload.execution_adapter_packet) {
+        const toolAdapterRequest = buildCodingExecutorRequest({
+          provider: input.provider || payload.provider || "",
+          payload,
+          executionPacket: payload.execution_adapter_packet,
+          role: effectiveStepDef.role,
+          stepId: effectiveStepDef.id,
+        });
+        const requestChecked = validateCodingExecutorRequest(toolAdapterRequest);
+        if (!requestChecked.ok) {
+          const err = new Error(`coding executor request invalid: ${requestChecked.errors.join("; ")}`);
+          err.code = "CODING_EXECUTOR_REQUEST_INVALID";
+          throw err;
+        }
+        payload.tool_adapter_request = toolAdapterRequest;
       }
     }
 

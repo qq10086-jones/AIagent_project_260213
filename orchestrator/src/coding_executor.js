@@ -21,6 +21,8 @@ export function buildCodingExecutorRequest({
       artifact_root: String(payload?.artifact_root || ""),
       expected_artifacts: Array.isArray(payload?.expected_artifacts) ? payload.expected_artifacts : [],
       target_paths: Array.isArray(payload?.target_paths) ? payload.target_paths : [],
+      context_packet: payload?.context_packet || null,
+      repo_map: payload?.repo_map || null,
       execution_adapter_packet: executionPacket || payload?.execution_adapter_packet || null,
       provider_hint: String(payload?.provider || provider || ""),
       model_hint: String(payload?.model || ""),

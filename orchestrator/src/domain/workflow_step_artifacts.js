@@ -17,6 +17,16 @@ export function createWorkflowStepArtifactHelpers({ workspaceRoot, contextBudget
     return path.resolve(workspaceRoot, relRoot, "metrics", `context_budget_${String(payload?.step_id || "step")}.json`);
   }
 
+  function buildContextPacketArtifactPath(payload) {
+    const relRoot = String(payload?.artifact_root || "").trim().replace(/\\/g, "/");
+    return path.resolve(workspaceRoot, relRoot, "context", `context_packet_${String(payload?.step_id || "step")}.json`);
+  }
+
+  function buildRepoMapArtifactPath(payload) {
+    const relRoot = String(payload?.artifact_root || "").trim().replace(/\\/g, "/");
+    return path.resolve(workspaceRoot, relRoot, "context", `repo_map_${String(payload?.step_id || "step")}.json`);
+  }
+
   function writeContextBudgetReport(payload) {
     const reportPath = buildContextBudgetArtifactPath(payload);
     const report = contextBudgetService.buildReport({
@@ -38,6 +48,26 @@ export function createWorkflowStepArtifactHelpers({ workspaceRoot, contextBudget
     };
   }
 
+  function writeContextArtifacts(payload) {
+    const result = {
+      context_packet_path: null,
+      repo_map_path: null,
+    };
+    if (payload?.context_packet && typeof payload.context_packet === "object") {
+      const packetPath = buildContextPacketArtifactPath(payload);
+      fs.mkdirSync(path.dirname(packetPath), { recursive: true });
+      fs.writeFileSync(packetPath, JSON.stringify(payload.context_packet, null, 2), "utf8");
+      result.context_packet_path = path.relative(workspaceRoot, packetPath).replace(/\\/g, "/");
+    }
+    if (payload?.repo_map && typeof payload.repo_map === "object") {
+      const repoMapPath = buildRepoMapArtifactPath(payload);
+      fs.mkdirSync(path.dirname(repoMapPath), { recursive: true });
+      fs.writeFileSync(repoMapPath, JSON.stringify(payload.repo_map, null, 2), "utf8");
+      result.repo_map_path = path.relative(workspaceRoot, repoMapPath).replace(/\\/g, "/");
+    }
+    return result;
+  }
+
   function applyStructuredPatchIfPresent(payload) {
     const relRoot = String(payload?.artifact_root || "").trim().replace(/\\/g, "/");
     const stepId = String(payload?.step_id || "");
@@ -54,5 +84,5 @@ export function createWorkflowStepArtifactHelpers({ workspaceRoot, contextBudget
     };
   }
 
-  return { writeContextBudgetReport, applyStructuredPatchIfPresent };
+  return { writeContextBudgetReport, writeContextArtifacts, applyStructuredPatchIfPresent };
 }

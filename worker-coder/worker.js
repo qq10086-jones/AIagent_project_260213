@@ -128,6 +128,7 @@ async function processTask(msgId, task) {
         workspaceRoot: WORKSPACE_ROOT,
         file_path: payload.file_path,
         edit_block: payload.edit_block,
+        target_paths: Array.isArray(payload.target_paths) ? payload.target_paths : [],
         task_id,
         run_id
       });
@@ -159,6 +160,7 @@ async function processTask(msgId, task) {
         artifact_root: payload.artifact_root || "",
         expected_artifacts: Array.isArray(payload.expected_artifacts) ? payload.expected_artifacts : [],
         step_id: payload.step_id || "",
+        target_paths: Array.isArray(payload.target_paths) ? payload.target_paths : [],
         provider: payload.provider || DEFAULT_PROVIDER,
         model: payload.model || DEFAULT_MODEL || null,
         run_id,

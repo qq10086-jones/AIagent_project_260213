@@ -66,7 +66,7 @@ export function createWorkflowEngine({
   const _waterfallSvc = waterfallTraceService ?? createWaterfallTraceService({ pool });
   const parallelizationRuntime = createWorkflowParallelizationRuntime({ registry, workspaceRoot, recordEvent, pool, routingAuditLogService, waterfallTraceService: _waterfallSvc });
 
-  const { writeContextBudgetReport, applyStructuredPatchIfPresent } =
+  const { writeContextBudgetReport, writeContextArtifacts, applyStructuredPatchIfPresent } =
     createWorkflowStepArtifactHelpers({ workspaceRoot, contextBudgetService, patchBundleService });
   const { createCheckpoint } = createWorkflowCheckpointService({ pool });
 
@@ -385,6 +385,7 @@ export function createWorkflowEngine({
 
     if (status === "succeeded") {
       const budgetMetrics = writeContextBudgetReport(payload);
+      const contextArtifacts = writeContextArtifacts(payload);
       let patchApplication = null;
       if (["impl_be", "impl_fe"].includes(step_id)) {
         try {
@@ -414,6 +415,8 @@ export function createWorkflowEngine({
             "full_file_fallback",
           context_budget_report_path: budgetMetrics.report_path,
           context_budget_report: budgetMetrics.report,
+          context_packet_path: contextArtifacts.context_packet_path,
+          repo_map_path: contextArtifacts.repo_map_path,
           patch_application: patchApplication,
         };
       }

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
+import crypto from 'crypto';
 import { applyEditBlocks } from './patch_manager.js';
 import { v4 as uuidv4 } from 'uuid';
 import { executeCodingAdapter } from './coding_executor_runtime.js';
@@ -15,6 +16,7 @@ function payloadToAdapterRequest({
     artifact_root,
     expected_artifacts,
     step_id,
+    target_paths,
     execution_adapter_packet,
     model,
     run_id,
@@ -29,6 +31,7 @@ function payloadToAdapterRequest({
             task_prompt: String(task_prompt || ""),
             artifact_root: String(artifact_root || ""),
             expected_artifacts: Array.isArray(expected_artifacts) ? expected_artifacts : [],
+            target_paths: Array.isArray(target_paths) ? target_paths : [],
             execution_adapter_packet: execution_adapter_packet || null,
             model_hint: String(model || ""),
         },
@@ -47,7 +50,20 @@ export const CodingService = {
      * Applies a patch and records artifacts.
      */
     applyPatch: async (params) => {
-        const { workspaceRoot, file_path, edit_block, task_id, run_id } = params;
+        const { workspaceRoot, file_path, edit_block, task_id, run_id, target_paths = [] } = params;
+
+        const scopeCheck = validateRequestedWrite({
+            workspaceRoot,
+            targetPath: file_path,
+            allowedTargetPaths: target_paths,
+        });
+        if (!scopeCheck.ok) {
+            return {
+                success: false,
+                message: scopeCheck.error,
+                error_code: "E_UNAUTHORIZED_WRITE",
+            };
+        }
 
         const result = applyEditBlocks(workspaceRoot, file_path, edit_block);
 
@@ -152,6 +168,7 @@ export const CodingService = {
             artifact_root = "",
             expected_artifacts = [],
             step_id = "",
+            target_paths = [],
             provider = "auto",
             model = null,
             run_id,
@@ -172,6 +189,24 @@ export const CodingService = {
             };
         }
         const preferredProvider = providerRequested === "auto" ? "opencode" : providerRequested;
+        const effectiveTargetPaths = Array.isArray(execution_adapter_packet?.target_paths) && execution_adapter_packet.target_paths.length > 0
+            ? execution_adapter_packet.target_paths
+            : target_paths;
+        const scopeRootsCheck = validateAllowedTargetPaths({
+            workspaceRoot,
+            allowedTargetPaths: effectiveTargetPaths,
+        });
+        if (!scopeRootsCheck.ok) {
+            return {
+                ok: false,
+                error: scopeRootsCheck.error,
+                diagnostics: {
+                    error_code: "E_UNAUTHORIZED_WRITE",
+                    provider_requested: providerRequested,
+                    target_paths: effectiveTargetPaths,
+                },
+            };
+        }
 
         const runDir = path.join(workspaceRoot, 'artifacts', 'runs', run_id || 'default');
         const taskDir = path.join(runDir, `task_${task_id || 'unknown'}`);
@@ -182,7 +217,7 @@ export const CodingService = {
             return { ok: false, error: `Failed to prepare artifacts dir: ${e.message}` };
         }
 
-        const baselineFiles = await getGitStatusFiles(workspaceRoot);
+        const baselineSnapshot = captureScopedSnapshot(workspaceRoot, effectiveTargetPaths);
         const started = new Date().toISOString();
         const adapterRequest = payloadToAdapterRequest({
             provider: preferredProvider,
@@ -190,6 +225,7 @@ export const CodingService = {
             artifact_root,
             expected_artifacts,
             step_id,
+            target_paths: effectiveTargetPaths,
             execution_adapter_packet,
             model,
             run_id,
@@ -226,7 +262,7 @@ export const CodingService = {
             fs.writeFileSync(stderrPath, redactedStderr, "utf8");
         } catch {}
 
-        const gitSummary = await gatherGitSummary(workspaceRoot, taskDir, baselineFiles);
+        const gitSummary = await gatherGitSummary(workspaceRoot, taskDir, baselineSnapshot, effectiveTargetPaths);
         const finalGitSummary = result?.ok
             ? await ensureImplementationDelta({
                 workspaceRoot,
@@ -235,10 +271,84 @@ export const CodingService = {
                 executionAdapterPacket: execution_adapter_packet,
                 taskPrompt: task_prompt,
                 taskDir,
-                baselineFiles,
+                baselineSnapshot,
                 current: gitSummary,
             })
             : gitSummary;
+        const changedScopeCheck = validateChangedFilesWithinScope({
+            filesChanged: finalGitSummary?.filesChanged,
+            allowedTargetPaths: effectiveTargetPaths,
+        });
+        if (result?.ok && !changedScopeCheck.ok) {
+            return {
+                ok: false,
+                provider_used: result.provider_used || preferredProvider,
+                model_used: result.model_used || null,
+                summary: `blocked unauthorized write outside target_paths`,
+                files_changed: Array.isArray(finalGitSummary?.filesChanged) ? finalGitSummary.filesChanged : [],
+                diff_stats: finalGitSummary?.diffStats || { added: 0, deleted: 0, files: 0 },
+                test_result: "skipped",
+                git: finalGitSummary?.git || { base_ref: "HEAD", branch: "main", commit_sha: null, dirty: false },
+                rollback_performed: false,
+                artifacts: {
+                    diff_bundle: finalGitSummary?.diffPath || null,
+                    patch_file: null,
+                    test_log: null,
+                    raw_stdout: stdoutPath,
+                    raw_stderr: stderrPath,
+                },
+                diagnostics: {
+                    ...(result.diagnostics || {}),
+                    provider_requested: providerRequested,
+                    target_paths: effectiveTargetPaths,
+                    error_code: "E_UNAUTHORIZED_WRITE",
+                },
+                error: changedScopeCheck.error,
+                command_used: result.command_used || null,
+                command_source: result.command_source || "unknown",
+                started_at: started,
+                finished_at: new Date().toISOString(),
+            };
+        }
+        const staticCheck = result?.ok
+            ? await runStaticChecks({
+                workspaceRoot,
+                filesChanged: finalGitSummary?.filesChanged || [],
+                taskDir,
+            })
+            : { checked: false, ok: true, commands: [], logPath: null };
+        if (result?.ok && staticCheck.checked && !staticCheck.ok) {
+            return {
+                ok: false,
+                provider_used: result.provider_used || preferredProvider,
+                model_used: result.model_used || null,
+                summary: `static checks failed after delegation`,
+                files_changed: Array.isArray(finalGitSummary?.filesChanged) ? finalGitSummary.filesChanged : [],
+                diff_stats: finalGitSummary?.diffStats || { added: 0, deleted: 0, files: 0 },
+                test_result: "failed",
+                git: finalGitSummary?.git || { base_ref: "HEAD", branch: "main", commit_sha: null, dirty: false },
+                rollback_performed: false,
+                artifacts: {
+                    diff_bundle: finalGitSummary?.diffPath || null,
+                    patch_file: null,
+                    test_log: staticCheck.logPath,
+                    raw_stdout: stdoutPath,
+                    raw_stderr: stderrPath,
+                },
+                diagnostics: {
+                    ...(result.diagnostics || {}),
+                    provider_requested: providerRequested,
+                    target_paths: effectiveTargetPaths,
+                    error_code: "E_STATIC_CHECK_FAILED",
+                    static_check: staticCheck,
+                },
+                error: staticCheck.error || "static check failed",
+                command_used: result.command_used || null,
+                command_source: result.command_source || "unknown",
+                started_at: started,
+                finished_at: new Date().toISOString(),
+            };
+        }
         const summary = {
             ok: !!result.ok,
             provider_used: result.provider_used || preferredProvider,
@@ -254,7 +364,7 @@ export const CodingService = {
             artifacts: {
                 diff_bundle: finalGitSummary.diffPath,
                 patch_file: null,
-                test_log: null,
+                test_log: staticCheck.logPath || null,
                 raw_stdout: stdoutPath,
                 raw_stderr: stderrPath,
             },
@@ -264,6 +374,7 @@ export const CodingService = {
                 artifact_scaffold: artifactScaffold || null,
                 execution_adapter_packet: execution_adapter_packet || null,
                 tool_adapter_request: adapterRequest,
+                static_check: staticCheck,
                 parse_error: false,
                 truncated: false,
             },
@@ -326,86 +437,257 @@ async function execCapture(command, cwd) {
     });
 }
 
-async function gatherGitSummary(workspaceRoot, taskDir, baselineFiles = new Set()) {
-    const inRepo = await execCapture("git rev-parse --is-inside-work-tree", workspaceRoot);
-    if (!inRepo.ok || !inRepo.stdout.trim().includes("true")) {
+function normalizeRelPath(value) {
+    return String(value || "").replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+function isProtectedRoot(relPath) {
+    const safe = normalizeRelPath(relPath).replace(/\/+$/, "");
+    return [".git", "infra", "docker-compose.yml", "configs", "orchestrator", "worker-coder", "worker-quant"].some((item) => {
+        if (!item.includes("/")) return safe === item || safe.startsWith(`${item}/`);
+        return safe === item;
+    });
+}
+
+async function execFileCapture(command, args, cwd) {
+    return new Promise((resolve) => {
+        const child = exec(`"${command}" ${args.map((item) => `"${String(item).replace(/"/g, '\\"')}"`).join(" ")}`, { cwd, timeout: 30000 }, (error, stdout, stderr) => {
+            resolve({
+                ok: !error,
+                stdout: String(stdout || ""),
+                stderr: String(stderr || ""),
+                exitCode: error?.code ?? 0,
+            });
+        });
+        child.on("error", (err) => {
+            resolve({
+                ok: false,
+                stdout: "",
+                stderr: String(err?.message || err || ""),
+                exitCode: null,
+            });
+        });
+    });
+}
+
+function validateAllowedTargetPaths({ workspaceRoot, allowedTargetPaths = [] }) {
+    const workspaceAbs = path.resolve(workspaceRoot);
+    const safeTargets = Array.isArray(allowedTargetPaths) ? allowedTargetPaths : [];
+    if (safeTargets.length === 0) {
+        return { ok: false, error: "E_UNAUTHORIZED_WRITE: target_paths required for write-capable coding task." };
+    }
+    for (const rel of safeTargets) {
+        const normalized = normalizeRelPath(rel);
+        if (!normalized) {
+            return { ok: false, error: "E_UNAUTHORIZED_WRITE: empty target path is not allowed." };
+        }
+        if (isProtectedRoot(normalized)) {
+            return { ok: false, error: `E_UNAUTHORIZED_WRITE: protected target path '${normalized}' is not allowed.` };
+        }
+        const abs = path.resolve(workspaceAbs, normalized);
+        if (!abs.startsWith(workspaceAbs)) {
+            return { ok: false, error: `E_UNAUTHORIZED_WRITE: target path '${normalized}' escapes workspace root.` };
+        }
+    }
+    return { ok: true };
+}
+
+function validateRequestedWrite({ workspaceRoot, targetPath, allowedTargetPaths = [] }) {
+    const rootsCheck = validateAllowedTargetPaths({ workspaceRoot, allowedTargetPaths });
+    if (!rootsCheck.ok) return rootsCheck;
+    const normalized = normalizeRelPath(targetPath);
+    const inScope = allowedTargetPaths
+        .map((item) => normalizeRelPath(item).replace(/\/+$/, ""))
+        .some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
+    if (!inScope) {
+        return { ok: false, error: `E_UNAUTHORIZED_WRITE: '${normalized}' is outside allowed target_paths.` };
+    }
+    return { ok: true };
+}
+
+function validateChangedFilesWithinScope({ filesChanged = [], allowedTargetPaths = [] }) {
+    if (!Array.isArray(filesChanged) || filesChanged.length === 0) {
+        return { ok: true };
+    }
+    const prefixes = (Array.isArray(allowedTargetPaths) ? allowedTargetPaths : [])
+        .map((item) => normalizeRelPath(item).replace(/\/+$/, ""))
+        .filter(Boolean);
+    if (prefixes.length === 0) {
+        return { ok: false, error: "E_UNAUTHORIZED_WRITE: changed files present but target_paths missing." };
+    }
+    const outOfScope = filesChanged
+        .map((item) => normalizeRelPath(item))
+        .filter((file) => !prefixes.some((prefix) => file === prefix || file.startsWith(`${prefix}/`)));
+    if (outOfScope.length > 0) {
         return {
-            filesChanged: [],
-            diffStats: { added: 0, deleted: 0, files: 0 },
-            diffPath: null,
-            git: { base_ref: "unknown", branch: "unknown", commit_sha: null, dirty: false },
+            ok: false,
+            error: `E_UNAUTHORIZED_WRITE: changed files outside scope: ${outOfScope.join(", ")}`,
         };
     }
+    return { ok: true };
+}
 
-    const branch = await execCapture("git rev-parse --abbrev-ref HEAD", workspaceRoot);
-    const commit = await execCapture("git rev-parse HEAD", workspaceRoot);
-    const status = await execCapture("git status --porcelain -uall", workspaceRoot);
-    const numstat = await execCapture("git diff --numstat", workspaceRoot);
-    const diff = await execCapture("git diff", workspaceRoot);
-    const currentFiles = await getGitStatusFiles(workspaceRoot);
+async function runStaticChecks({ workspaceRoot, filesChanged = [], taskDir }) {
+    const changed = Array.isArray(filesChanged) ? filesChanged.map((item) => normalizeRelPath(item)).filter(Boolean) : [];
+    if (changed.length === 0) {
+        return { checked: false, ok: true, commands: [], logPath: null };
+    }
+    const records = [];
+    for (const rel of changed) {
+        const abs = path.resolve(workspaceRoot, rel);
+        if (!abs.startsWith(path.resolve(workspaceRoot)) || !fs.existsSync(abs)) continue;
+        const ext = path.extname(rel).toLowerCase();
+        if ([".js", ".mjs", ".cjs"].includes(ext)) {
+            const proc = await execFileCapture("node", ["--check", abs], workspaceRoot);
+            records.push({ file: rel, kind: "node_syntax", ok: proc.ok, exit_code: proc.exitCode, stderr: proc.stderr.trim() });
+            if (!proc.ok) return flushStaticCheck(taskDir, records, "E_STATIC_CHECK_FAILED: node syntax check failed");
+            continue;
+        }
+        if (ext === ".json") {
+            try {
+                JSON.parse(fs.readFileSync(abs, "utf8"));
+                records.push({ file: rel, kind: "json_parse", ok: true, exit_code: 0, stderr: "" });
+            } catch (err) {
+                records.push({ file: rel, kind: "json_parse", ok: false, exit_code: 1, stderr: String(err?.message || err || "") });
+                return flushStaticCheck(taskDir, records, "E_STATIC_CHECK_FAILED: json parse failed");
+            }
+            continue;
+        }
+        if (ext === ".py") {
+            const proc = await execFileCapture("python", ["-m", "py_compile", abs], workspaceRoot);
+            records.push({ file: rel, kind: "py_compile", ok: proc.ok, exit_code: proc.exitCode, stderr: proc.stderr.trim() });
+            if (!proc.ok) return flushStaticCheck(taskDir, records, "E_STATIC_CHECK_FAILED: python compile failed");
+            continue;
+        }
+    }
+    return flushStaticCheck(taskDir, records, null);
+}
 
-    const filesChangedRaw = [...currentFiles].filter((f) => !baselineFiles.has(f));
-    const filesChanged = filesChangedRaw.filter((f) => !String(f).startsWith("artifacts/runs/"));
-    const filesChangedSet = new Set(filesChanged);
+function flushStaticCheck(taskDir, records, error) {
+    let logPath = null;
+    try {
+        logPath = path.join(taskDir, `static_check_${Date.now()}.json`);
+        fs.writeFileSync(logPath, JSON.stringify({
+            generated_at: new Date().toISOString(),
+            ok: !error,
+            records,
+            error: error || null,
+        }, null, 2), "utf8");
+    } catch {
+        logPath = null;
+    }
+    return {
+        checked: records.length > 0,
+        ok: !error,
+        commands: records.map((item) => `${item.kind}:${item.file}`),
+        records,
+        error: error || null,
+        logPath,
+    };
+}
 
+function shouldSkipScopedEntry(relPath) {
+    const safe = normalizeRelPath(relPath);
+    return (
+        safe.startsWith("artifacts/runs/") ||
+        safe.startsWith("node_modules/") ||
+        safe.startsWith(".git/") ||
+        safe.startsWith("dist/") ||
+        safe.startsWith("build/")
+    );
+}
+
+function hashFile(filePath) {
+    const buf = fs.readFileSync(filePath);
+    return crypto.createHash("sha1").update(buf).digest("hex");
+}
+
+function walkScopedFiles(workspaceRoot, relPath, bucket) {
+    const safeRel = normalizeRelPath(relPath);
+    if (!safeRel || shouldSkipScopedEntry(safeRel)) return;
+    const abs = path.resolve(workspaceRoot, safeRel);
+    if (!abs.startsWith(path.resolve(workspaceRoot)) || !fs.existsSync(abs)) return;
+    const stat = fs.statSync(abs);
+    if (stat.isFile()) {
+        bucket.push(safeRel);
+        return;
+    }
+    const entries = fs.readdirSync(abs, { withFileTypes: true });
+    for (const entry of entries) {
+        const childRel = normalizeRelPath(path.posix.join(safeRel, entry.name));
+        if (entry.isDirectory()) {
+            if (shouldSkipScopedEntry(childRel)) continue;
+            walkScopedFiles(workspaceRoot, childRel, bucket);
+        } else if (entry.isFile()) {
+            if (shouldSkipScopedEntry(childRel)) continue;
+            bucket.push(childRel);
+        }
+    }
+}
+
+function captureScopedSnapshot(workspaceRoot, targetPaths = []) {
+    const files = [];
+    for (const rel of Array.isArray(targetPaths) ? targetPaths : []) {
+        walkScopedFiles(workspaceRoot, rel, files);
+    }
+    const snapshot = new Map();
+    for (const rel of files) {
+        const abs = path.resolve(workspaceRoot, rel);
+        try {
+            const stat = fs.statSync(abs);
+            snapshot.set(rel, {
+                hash: hashFile(abs),
+                size: Number(stat.size || 0),
+            });
+        } catch {
+            // ignore volatile files
+        }
+    }
+    return snapshot;
+}
+
+async function gatherGitSummary(workspaceRoot, taskDir, baselineSnapshot = new Map(), targetPaths = []) {
+    const currentSnapshot = captureScopedSnapshot(workspaceRoot, targetPaths);
+    const filesChanged = [];
     let added = 0;
     let deleted = 0;
-    for (const line of (numstat.stdout || "").split(/\r?\n/)) {
-        const s = line.trim();
-        if (!s) continue;
-        const parts = s.split(/\s+/);
-        if (parts.length >= 3) {
-            const filePath = parts.slice(2).join(" ");
-            if (!filesChangedSet.has(filePath)) {
-                continue;
-            }
-            const a = Number(parts[0]);
-            const d = Number(parts[1]);
-            if (Number.isFinite(a)) added += a;
-            if (Number.isFinite(d)) deleted += d;
+
+    for (const [rel, meta] of currentSnapshot.entries()) {
+        const before = baselineSnapshot.get(rel);
+        if (!before || before.hash !== meta.hash) {
+            filesChanged.push(rel);
+            added += Number(meta.size || 0);
+        }
+    }
+    for (const [rel, meta] of baselineSnapshot.entries()) {
+        if (!currentSnapshot.has(rel)) {
+            filesChanged.push(rel);
+            deleted += Number(meta.size || 0);
         }
     }
 
+    const dedupChanged = Array.from(new Set(filesChanged)).sort();
     let diffPath = null;
     try {
         diffPath = path.join(taskDir, `delegate_diff_${Date.now()}.patch`);
-        if (filesChanged.length > 0) {
-            const fileArgs = filesChanged.map((f) => `"${f.replace(/"/g, '\\"')}"`).join(" ");
-            const scopedDiff = await execCapture(`git diff -- ${fileArgs}`, workspaceRoot);
-            fs.writeFileSync(diffPath, scopedDiff.stdout || "", "utf8");
-        } else {
-            fs.writeFileSync(diffPath, diff.stdout || "", "utf8");
-        }
+        const summary = {
+            generated_at: new Date().toISOString(),
+            target_paths: Array.isArray(targetPaths) ? targetPaths : [],
+            files_changed: dedupChanged,
+            baseline_count: baselineSnapshot.size,
+            current_count: currentSnapshot.size,
+        };
+        fs.writeFileSync(diffPath, JSON.stringify(summary, null, 2), "utf8");
     } catch {
         diffPath = null;
     }
 
     return {
-        filesChanged,
-        diffStats: { added, deleted, files: filesChanged.length },
+        filesChanged: dedupChanged,
+        diffStats: { added, deleted, files: dedupChanged.length },
         diffPath,
-        git: {
-            base_ref: "HEAD",
-            branch: branch.stdout.trim() || "unknown",
-            commit_sha: commit.stdout.trim() || null,
-            dirty: !!status.stdout.trim(),
-        },
+        git: { base_ref: "SCOPED_SNAPSHOT", branch: "scoped", commit_sha: null, dirty: dedupChanged.length > 0 },
     };
-}
-
-async function getGitStatusFiles(workspaceRoot) {
-    const status = await execCapture("git status --porcelain -uall", workspaceRoot);
-    if (!status.ok) return new Set();
-    const files = new Set();
-    for (const line of (status.stdout || "").split(/\r?\n/)) {
-        const s = line.trim();
-        if (!s) continue;
-        const m = s.match(/^[A-Z? ]{2}\s+(.+)$/);
-        if (m && m[1]) {
-            files.add(m[1].trim());
-        }
-    }
-    return files;
 }
 
 async function ensureImplementationDelta({
@@ -415,7 +697,7 @@ async function ensureImplementationDelta({
     executionAdapterPacket,
     taskPrompt,
     taskDir,
-    baselineFiles,
+    baselineSnapshot,
     current,
 }) {
     const safeStepId = String(stepId || "");
@@ -451,7 +733,7 @@ async function ensureImplementationDelta({
         }, null, 2)};\n`,
         "utf8"
     );
-    return gatherGitSummary(workspaceRoot, taskDir, baselineFiles);
+    return gatherGitSummary(workspaceRoot, taskDir, baselineSnapshot, targetPaths);
 }
 
 function redactSensitiveText(value) {

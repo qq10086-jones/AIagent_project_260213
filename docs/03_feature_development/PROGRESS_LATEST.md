@@ -1,6 +1,6 @@
 # Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-10 (Phase A code complete, rollout paused for runtime restart)
+**Last updated:** 2026-03-10 (M9 coding guardrails in progress)
 **Author:** PM / Architecture Review
 
 ---
@@ -18,7 +18,7 @@
 - **Real local LLM validation:** `PASS` against local `deepseek-r1:32b` on 2026-03-09
 - **M7 Phase A advisory-only code/config package:** completed on 2026-03-10
 - **Phase A live runtime validation after enablement:** `PASS` before observability-gap investigation
-- **Current pause reason:** local orchestrator process restart not yet completed safely, so updated advisory routing code is not yet confirmed active on the live 3000 process
+- **Current coding focus:** M9 execution hardening for `worker-coder` is now in progress
 
 ---
 
@@ -33,18 +33,18 @@
 | M6 | Parallel Rollout Readiness | **GO_LIMITED_EXPOSURE** | 2026-03-09 |
 | M7 | Limited Dynamic Routing v1 | **CLOSED - ACCEPTED WITH DEVIATION** | 2026-03-09 |
 | M8 | Staging Evidence and Live Routing Validation | **CLOSED** | 2026-03-09 |
-| M9 | TBD | Not started | TBD |
+| M9 | Coding Precision & Sandbox Guardrails | **IN PROGRESS** | 2026-03-10 |
 
 ---
 
 ## Active Design Authority
 
-**No active milestone.** M8 is closed. M9 has not been scoped.
+**Active milestone:** M9 is in progress.
 
 Current governance state:
 - M6 evidence has been strengthened by compressed accelerated validation and is ready for next-stage review.
 - M7 Phase A design, scripts, and config package are complete.
-- Phase A live rollout is temporarily paused pending safe restart of the local orchestrator process and confirmation that advisory-only decisions are being persisted.
+- M9 coding execution hardening has started on the `worker-coder` path without changing the M6/M7 governance baseline.
 
 Governing documents:
 
@@ -53,6 +53,7 @@ Governing documents:
 | Governance v3 | `docs/01_design/system/260309/260309_1048/OpenClaw_Execution_Governance_Scope_Control_v3.md` |
 | Architect Contract | `docs/01_design/system/260307/Architect_Engineer_Role_Contract.md` |
 | M8 Engineering Task List v1 | `docs/01_design/system/260309/260309_M8/OpenClaw_Nexus_Engineering_Task_List_M8_v1.md` |
+| M9 Engineering Task List v1 | `docs/01_design/system/260310/OpenClaw_Nexus_Engineering_Task_List_M9_v1.md` |
 
 ---
 
@@ -116,6 +117,30 @@ Governance:
 
 ---
 
+## M9 Status - IN PROGRESS
+
+Current interpretation:
+- M9 is focused on `worker-coder` execution quality, not on routing/governance expansion.
+- The first coding hardening slice is already landed in code.
+- Scope is currently limited to context grounding, write-scope enforcement, scoped file-delta capture, and fast static checks.
+
+Completed so far:
+- Task-scoped context packet generation for coding steps
+- Lightweight repo map generation and artifact persistence
+- Context packet / repo map injection into coding execution payloads
+- `target_paths`-based write guardrails in `worker-coder`
+- Scoped snapshot-based `files_changed` recovery without full-repo `git status`
+- Fast static checks before success return (`node --check`, JSON parse, `python -m py_compile`)
+- Default coding runtime aligned to `provider=opencode`, `model=qwen3-coder-plus-2025-07-22`
+
+Not yet done:
+- `verification_command` execution loop
+- coding failure memory
+- auto-fix retry budgeting
+- full evidence-contract upgrade for M9
+
+---
+
 ## Current Verification Status
 
 ```text
@@ -138,14 +163,14 @@ Active P0 blocker:
 
 | Block | Status | Resolution Path |
 |-------|--------|-----------------|
-| Local orchestrator process still running old code / unknown startup env | OPEN | restart local `node src/index.js` with explicit PG/Redis/WORKSPACE_ROOT env and re-run Phase A live validation |
+| Local orchestrator process still running old code / unknown startup env | RESOLVED | Migrated fully to containerized `docker-compose` stack. Fixed git lock bottlenecks in worker and mapped Qwen models correctly. Phase A live validation now generates `dynamic_routing_advisory_only` records successfully. |
 
 Recently cleared:
 
 | Block | Status | Resolution |
 |-------|--------|------------|
 | Containerized orchestrator startup gap | RESOLVED | `infra/docker-compose.yml` updated with `contracts` mount |
-| Live runtime validation script drift | RESOLVED | Approval trigger and workflow assertions updated |
+| Live runtime validation script drift | RESOLVED | Approval trigger and workflow assertions updated; timeout logic fixed to handle `succeeded` status correctly. |
 | Long-cycle evidence dependency | RESOLVED (compressed substitute) | 30-minute accelerated validation package produced |
 | Phase A runtime semantics mismatch | RESOLVED | advisory/enforced router_mode and cohort-first runtime behavior implemented |
 
@@ -157,9 +182,9 @@ Recently cleared:
 
 | # | Task | Owner | Status |
 |---|------|-------|--------|
-| T-A1 | Safely restart local orchestrator onto updated M7 advisory runtime | You | OPEN |
-| T-A2 | Re-run Phase A live validation and confirm `dynamic_routing_advisory_only` appears in logs | You | OPEN |
-| T-A3 | Resume advisory-only evidence collection after runtime confirmation | You | PAUSED |
+| T-A1 | Safely restart local orchestrator onto updated M7 advisory runtime | You | DONE |
+| T-A2 | Re-run Phase A live validation and confirm `dynamic_routing_advisory_only` appears in logs | You | DONE |
+| T-A3 | Resume advisory-only evidence collection after runtime confirmation | You | IN PROGRESS |
 | T-A4 | Keep cohort narrow and rollback path ready | You | IN EFFECT |
 
 ### P1
@@ -169,6 +194,7 @@ Recently cleared:
 | T-B1 | Productize accelerated evidence workflow | T-A1 | Make Phase A evidence collection repeatable, not one-off |
 | T-B2 | Decide whether Phase B should remain blocked or enter review | T-A2 | Formalize enforced-mode entry based on advisory evidence |
 | T-B3 | Draft `brain/` API boundary decoupling design | None | Reduce direct DB coupling risk before broader expansion |
+| T-B4 | Complete M9 verification-command and auto-fix loop | None | Move coding success criteria from syntax-only to execute-and-verify |
 
 ### P2
 
@@ -176,7 +202,7 @@ Recently cleared:
 |---|------|------------|
 | T-C1 | Consider expanding cohort beyond current guarded FE-led scope | T-B2 |
 | T-C2 | Evaluate whether `model_tier` should influence runtime execution policy | T-B2 |
-| T-C3 | Define M9 scope and task list | T-B2 |
+| T-C3 | Expand M9 evidence and memory contracts | T-B4 |
 
 ---
 
@@ -238,6 +264,16 @@ Recently cleared:
 
 ### Infrastructure
 - `infra/docker-compose.yml` updated so containerized `orchestrator` mounts `contracts` correctly.
+
+### Coding / M9
+- `orchestrator/src/domain/repo_context_service.js` added for task-scoped context packet and repo map generation.
+- `orchestrator/src/domain/workflow_step_builder.js` updated to inject coding context and persist `context_packet` / `repo_map` into execution requests.
+- `orchestrator/src/domain/workflow_step_artifacts.js` updated to write context artifacts under release packs.
+- `orchestrator/src/domain/workflow_artifact_pack.js` updated to archive/index context artifacts.
+- `worker-coder/coding_service.js` updated with `target_paths` write guardrails, scoped snapshot diff recovery, and fast static checks.
+- `worker-coder/worker.js` updated to pass `target_paths` into patch/delegate operations.
+- `configs/runtime/runtime_defaults.json`, `infra/docker-compose.yml`, and `orchestrator/src/index.js` aligned to `opencode + qwen3-coder-plus-2025-07-22`.
+- `docs/03_feature_development/2026-03-10_opencode_qwen_runtime_note.md` added as the current coding runtime note.
 
 ### Governance and Documentation
 - Accelerated validation plan, QA summary, Go/No-Go package, and post-M8 M7 controlled enablement plan added.

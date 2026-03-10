@@ -15,6 +15,6 @@
       "adapter_type": "coding_executor",
       "task_type": "coding_execution"
     },
-    "error": "Unsupported provider 'unsupported-provider'. Use auto/opencode/codex/qwen."
+    "error": "Unsupported provider 'unsupported-provider'. Use auto/opencode/codex."
   }
 }

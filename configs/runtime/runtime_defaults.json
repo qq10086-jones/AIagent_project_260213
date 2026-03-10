@@ -29,7 +29,7 @@
   "worker_quant": {
     "llm_provider": "dashscope",
     "quant_llm_model": "qwen-plus-2025-04-28",
-    "code_llm_model": "qwen3-coder-plus-2025-07-22",
+    "code_llm_model": "qwen-flash-2025-07-28",
     "dash_scope_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
     "openai_base_url": "https://api.openai.com/v1",
     "ollama_base_url": "http://host.docker.internal:11434",

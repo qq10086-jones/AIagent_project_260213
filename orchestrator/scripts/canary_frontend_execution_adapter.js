@@ -18,7 +18,7 @@ function main() {
       expected_artifacts: ["impl/fe_changes/app.js", "impl/fe_notes.md"],
       target_paths: ["sandbox/crm_site/"],
     },
-    provider: "qwen",
+    provider: "opencode",
     model: "qwen-coder-next",
   });
   const checked = validateFrontendExecutionPacket(packet);

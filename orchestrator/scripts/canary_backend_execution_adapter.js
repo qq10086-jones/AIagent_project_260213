@@ -18,7 +18,7 @@ function main() {
       expected_artifacts: ["impl/be_changes/server.js", "impl/be_notes.md", "handoff/be_to_fe.json"],
       target_paths: ["sandbox/crm_site/"],
     },
-    provider: "qwen",
+    provider: "opencode",
     model: "qwen-coder-next",
   });
   const checked = validateBackendExecutionPacket(packet);

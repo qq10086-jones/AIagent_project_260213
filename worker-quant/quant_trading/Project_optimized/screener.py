@@ -33,6 +33,8 @@ class ScreenConfig:
     min_vol: float = 0.005            # 0.5% daily
     max_vol: float = 0.06             # 6% daily
     top_k: int = 50                   # keep best K by score (after hard filters)
+    lot_size_default: int = 100       # 日本股票标准手数
+    max_cost_per_lot: float = 150_000 # 1手成本上限(JPY)；100万日元需持≥6只才能分散
     version: str = "screener_v1"
 
 def _asof_str(s: Optional[str]) -> str:
@@ -40,7 +42,14 @@ def _asof_str(s: Optional[str]) -> str:
         return s
     return date.today().strftime("%Y-%m-%d")
 
-def screen(db_path: str, symbols: Optional[List[str]], asof: str, out_path: str, cfg: ScreenConfig, write_db: bool=True) -> Dict:
+def screen(
+    db_path: str,
+    symbols: Optional[List[str]],
+    asof: str,
+    out_path: Optional[str],
+    cfg: ScreenConfig,
+    write_db: bool = True,
+) -> Dict:
     db = MarketDB(db_path)
 
     # universe
@@ -66,6 +75,7 @@ def screen(db_path: str, symbols: Optional[List[str]], asof: str, out_path: str,
     adv = (close * vol).rolling(cfg.adv_window).mean()   # proxy currency volume
     adv_last = adv.iloc[-1]
     vol_last = vol_d.iloc[-1]
+    close_last = close.iloc[-1]   # latest close price for lot-cost filter
     missing = close.isna().mean()
 
     rows = []
@@ -73,6 +83,7 @@ def screen(db_path: str, symbols: Optional[List[str]], asof: str, out_path: str,
         m_missing = float(missing.get(sym, 1.0))
         m_adv = float(adv_last.get(sym, np.nan))
         m_vol = float(vol_last.get(sym, np.nan))
+        m_close = float(close_last.get(sym, np.nan))
 
         reasons = []
         hard_fail = False
@@ -86,6 +97,12 @@ def screen(db_path: str, symbols: Optional[List[str]], asof: str, out_path: str,
         if not np.isfinite(m_vol) or (m_vol < cfg.min_vol) or (m_vol > cfg.max_vol):
             hard_fail = True
             reasons.append(f"vol_out_of_range({cfg.min_vol:.3f}-{cfg.max_vol:.3f})")
+        # 1手成本过滤：确保100万日元可持有至少6只，提供有效分散
+        if np.isfinite(m_close):
+            cost_per_lot = m_close * cfg.lot_size_default
+            if cost_per_lot > cfg.max_cost_per_lot:
+                hard_fail = True
+                reasons.append(f"1手成本过高:{cost_per_lot:,.0f}JPY>{cfg.max_cost_per_lot:,.0f}")
 
         # score: prefer high ADV, moderate vol, low missing
         # Normalize with logs; robust to outliers
@@ -96,9 +113,10 @@ def screen(db_path: str, symbols: Optional[List[str]], asof: str, out_path: str,
             score -= abs(np.log(max(m_vol, 1e-8)) - np.log(0.02))  # prefer ~2% daily vol
         score -= m_missing * 50.0
 
-        rows.append((sym, score, hard_fail, "; ".join(reasons), m_adv, m_vol, m_missing))
+        cost_per_lot = m_close * cfg.lot_size_default if np.isfinite(m_close) else np.nan
+        rows.append((sym, score, hard_fail, "; ".join(reasons), m_adv, m_vol, m_missing, m_close, cost_per_lot))
 
-    df = pd.DataFrame(rows, columns=["symbol","score","hard_fail","reason","adv","vol","missing"]).sort_values("score", ascending=False)
+    df = pd.DataFrame(rows, columns=["symbol","score","hard_fail","reason","adv","vol","missing","close","cost_per_lot"]).sort_values("score", ascending=False)
 
     # Hard filter then top_k
     kept = df.loc[~df["hard_fail"]].head(cfg.top_k).copy()
@@ -116,11 +134,14 @@ def screen(db_path: str, symbols: Optional[List[str]], asof: str, out_path: str,
             "min_vol": cfg.min_vol,
             "max_vol": cfg.max_vol,
             "top_k": cfg.top_k,
+            "lot_size_default": cfg.lot_size_default,
+            "max_cost_per_lot": cfg.max_cost_per_lot,
         }
     }
 
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    if out_path:
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
 
     if write_db:
         try:
@@ -138,6 +159,8 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="selected_tickers.json")
     ap.add_argument("--topk", type=int, default=50)
     ap.add_argument("--minadv", type=float, default=20_000_000)
+    ap.add_argument("--maxcost", type=float, default=150_000,
+                    help="Maximum cost per standard lot in JPY")
     ap.add_argument("--symbols", default=None, help="comma-separated symbols (optional)")
     ap.add_argument("--no_db_write", action="store_true")
     args = ap.parse_args()
@@ -148,7 +171,11 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    cfg = ScreenConfig(top_k=args.topk, min_adv=args.minadv)
+    cfg = ScreenConfig(
+        top_k=args.topk,
+        min_adv=args.minadv,
+        max_cost_per_lot=args.maxcost,
+    )
     syms = [s.strip() for s in args.symbols.split(",")] if args.symbols else None
     asof = _asof_str(args.asof)
 

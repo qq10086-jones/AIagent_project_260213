@@ -1,0 +1,77 @@
+{
+  "replay_id": "R046",
+  "input_class": "be_led",
+  "workflow_type": "coding_team_v0",
+  "project_type": "crm",
+  "dirty_repo_case": true,
+  "fe_parallel_eligible_expected": false,
+  "execution_mode_requested": "sequential",
+  "execution_mode_actual": "sequential",
+  "gate_decision": {
+    "effective_exposure_decision": "forced_sequential",
+    "effective_exposure_decision_source": "replay_runner_sequential_mode"
+  },
+  "workflow_outcome": "succeeded",
+  "partial_failure": false,
+  "step_results": [
+    {
+      "step_id": "pm_spec",
+      "status": "succeeded",
+      "context_budget_used_pct": 72,
+      "diff_first_used": false,
+      "diff_first_succeeded": true,
+      "patch_anchor_mismatch": false
+    },
+    {
+      "step_id": "arch_design",
+      "status": "succeeded",
+      "context_budget_used_pct": 43,
+      "diff_first_used": false,
+      "diff_first_succeeded": true,
+      "patch_anchor_mismatch": false
+    },
+    {
+      "step_id": "impl_be",
+      "status": "succeeded",
+      "context_budget_used_pct": 57,
+      "diff_first_used": true,
+      "diff_first_succeeded": true,
+      "patch_anchor_mismatch": false
+    },
+    {
+      "step_id": "impl_fe",
+      "status": "succeeded",
+      "context_budget_used_pct": 44,
+      "diff_first_used": true,
+      "diff_first_succeeded": true,
+      "patch_anchor_mismatch": false
+    },
+    {
+      "step_id": "qa_verify",
+      "status": "succeeded",
+      "context_budget_used_pct": 42,
+      "diff_first_used": false,
+      "diff_first_succeeded": true,
+      "patch_anchor_mismatch": false
+    },
+    {
+      "step_id": "release_pack",
+      "status": "succeeded",
+      "context_budget_used_pct": 40,
+      "diff_first_used": false,
+      "diff_first_succeeded": true,
+      "patch_anchor_mismatch": false
+    }
+  ],
+  "context_budget": {
+    "pm_pct": 72,
+    "arch_pct": 43,
+    "be_pct": 57,
+    "fe_pct": 44,
+    "qa_pct": 42
+  },
+  "diff_first_hit": 2,
+  "diff_first_fallback": 0,
+  "patch_mismatch_count": 0,
+  "timestamp": "2026-03-09T02:29:34.960Z"
+}

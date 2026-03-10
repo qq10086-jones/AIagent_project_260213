@@ -13,6 +13,8 @@ import subprocess
 import sqlite3
 from pathlib import Path
 
+from trade_schema import connect, ensure_learning_tables, ensure_trade_tables, save_screening_history
+
 def load_cfg(path: str) -> dict:
     p = Path(path)
     if not p.exists():
@@ -50,8 +52,16 @@ def main(cfg_path: str):
     asof = scr.get("asof", None) or db_latest
     top_k = int(scr.get("top_k", 50))
     min_adv = float(scr.get("min_adv", 20_000_000))
+    max_cost_per_lot = float(scr.get("max_cost_per_lot", 150_000))
     out_json = "selected_tickers.json"
-    cmd = ["python", "screener.py", "--db", db_path, "--topk", str(top_k), "--minadv", str(min_adv), "--out", out_json]
+    cmd = [
+        "python", "screener.py",
+        "--db", db_path,
+        "--topk", str(top_k),
+        "--minadv", str(min_adv),
+        "--maxcost", str(max_cost_per_lot),
+        "--out", out_json,
+    ]
     if asof:
         cmd += ["--asof", str(asof)]
     print(">>", " ".join(cmd))
@@ -62,6 +72,11 @@ def main(cfg_path: str):
     symbols = sel.get("symbols", [])
     if not symbols:
         raise RuntimeError("Screener produced empty symbols list.")
+    with connect(db_path) as conn:
+        ensure_trade_tables(conn)
+        ensure_learning_tables(conn)
+        saved = save_screening_history(conn, sel)
+    print(f"Saved screening_history: {saved} rows for {sel.get('asof')}")
 
     # 3) Model/backtest
     model = cfg.get("model", {})
@@ -84,15 +99,24 @@ def main(cfg_path: str):
     env["SS6_OUTPUT_DIR"] = str(output_dir)
 
     # exec params
-    env["SS6_INITIAL_CAPITAL"] = str(float(exec_cfg.get("initial_capital", 200000)))
-    env["SS6_LOT_SIZE_DEFAULT"] = str(int(exec_cfg.get("lot_size_default", 1)))
-    env["SS6_FEE_BPS"] = str(float(exec_cfg.get("fee_bps", 3.0)))
-    env["SS6_SLIPPAGE_BPS"] = str(float(exec_cfg.get("slippage_bps", 0.0)))
-    env["SS6_IMPACT_K"] = str(float(exec_cfg.get("impact_k", 0.0)))
+    env["SS6_INITIAL_CAPITAL"] = str(float(exec_cfg.get("initial_capital", 1000000)))
+    env["SS6_LOT_SIZE_DEFAULT"] = str(int(exec_cfg.get("lot_size_default", 100)))
+    env["SS6_FEE_BPS"] = str(float(exec_cfg.get("fee_bps", 5.0)))
+    env["SS6_SLIPPAGE_BPS"] = str(float(exec_cfg.get("slippage_bps", 5.0)))
+    env["SS6_IMPACT_K"] = str(float(exec_cfg.get("impact_k", 0.5)))
     env["SS6_MAX_ADV_FRAC"] = str(float(exec_cfg.get("max_adv_frac", 1.0)))
     env["SS6_CASH_RATE_DAILY"] = str(float(exec_cfg.get("cash_rate_daily", 0.0)))
+    env["SS6_STOP_LOSS_PCT"] = str(float(exec_cfg.get("stop_loss_pct", 0.08)))
+    env["SS6_MAX_DD_HALF"] = str(float(exec_cfg.get("max_dd_half", 0.12)))
+    env["SS6_MAX_DD_FULL"] = str(float(exec_cfg.get("max_dd_full", 0.18)))
 
-    print(">> python ss6_sqlite.py (env-driven)")
+    # news overlay (optional)
+    news_cfg = model.get("news", {})
+    news_csv = str(news_cfg.get("csv_path", ""))
+    env["SS6_NEWS_ON"] = "1" if (news_cfg.get("enabled", False) and news_csv) else "0"
+    env["SS6_NEWS_CSV"] = news_csv
+
+    print(">> python ss7_sqlite_news_overlay.py (env-driven)")
     subprocess.check_call(cmd, env=env)
 
     # 4) Publish to Obsidian

@@ -19,7 +19,7 @@ import math
 import os
 import sys
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -29,6 +29,7 @@ import yfinance as yf
 from market_db_v2 import MarketDB
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from trade_schema import connect, ensure_learning_tables, ensure_trade_tables, save_factor_signal_snapshot
 
 
 # =========================================================
@@ -104,23 +105,55 @@ def slope_log_price(close: pd.Series, window: int = 60) -> pd.Series:
     out[~np.isfinite(out)] = np.nan
     return pd.Series(out, index=close.index)
 
-def make_features(prices: pd.DataFrame) -> pd.DataFrame:
+def make_features(prices: pd.DataFrame, volumes: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     feats = {}
     for tkr in prices.columns:
         c = prices[tkr]
         df = pd.DataFrame(index=prices.index)
-        df["ret1"] = c.pct_change()
-        df["ret5"] = c.pct_change(5)
-        df["ret20"] = c.pct_change(20)
-        df["ret60"] = c.pct_change(60)
-        df["vol20"] = df["ret1"].rolling(20).std()
-        df["vol60"] = df["ret1"].rolling(60).std()
-        ma50 = c.rolling(50).mean()
-        ma200 = c.rolling(200).mean()
-        df["ma_gap"] = (ma50 / (ma200 + 1e-12)) - 1.0
-        df["z_20"] = (c - c.rolling(20).mean()) / (c.rolling(20).std() + 1e-12)
-        df["rsi14"] = rsi(c, 14) / 100.0
+
+        # ── original 10 factors ──────────────────────────────────────────
+        df["ret1"]    = c.pct_change()
+        df["ret5"]    = c.pct_change(5)
+        df["ret20"]   = c.pct_change(20)
+        df["ret60"]   = c.pct_change(60)
+        df["vol20"]   = df["ret1"].rolling(20).std()
+        df["vol60"]   = df["ret1"].rolling(60).std()
+        ma50          = c.rolling(50).mean()
+        ma200         = c.rolling(200).mean()
+        df["ma_gap"]  = (ma50 / (ma200 + 1e-12)) - 1.0
+        df["z_20"]    = (c - c.rolling(20).mean()) / (c.rolling(20).std() + 1e-12)
+        df["rsi14"]   = rsi(c, 14) / 100.0
         df["slope60"] = slope_log_price(c, 60)
+
+        # ── NEW: academic alpha factors ───────────────────────────────────
+        # 1) 12-1 momentum: 12-month return minus most recent 1-month.
+        #    Bypasses short-term reversal; strongest documented factor in Japan
+        #    (Jegadeesh & Titman 1993, replication: Japanese market)
+        df["mom_12_1"]      = c.pct_change(252) - c.pct_change(21)
+
+        # 2) 52-week high ratio (George & Hwang 2004): anchoring bias premium.
+        #    Stocks near 52-week high outperform; investors anchor to that level
+        df["high52w"]       = (c / c.rolling(252).max().clip(lower=1e-6)) - 1.0
+
+        # 3) Volatility-adjusted momentum (Sharpe ratio proxy).
+        #    Risk-normalised momentum is more robust across vol regimes
+        df["vol_adj_mom20"] = df["ret20"] / (df["vol20"] + 1e-12)
+
+        # 4) Momentum consistency: fraction of trading days up in past 63 days (3 months).
+        #    Captures persistent up-trend vs noisy momentum
+        df["mom_consist"]   = df["ret1"].rolling(63).apply(
+            lambda x: float((x > 0).mean()), raw=True
+        )
+
+        # 5) Volume anomaly: log-volume z-score vs 60-day baseline.
+        #    High volume + price move = confirmed signal (Blume et al. 1994)
+        if volumes is not None and tkr in volumes.columns:
+            v      = volumes[tkr].replace(0, np.nan)
+            log_v  = np.log(v.clip(lower=1.0))
+            df["vol_z"] = (log_v - log_v.rolling(60).mean()) / (log_v.rolling(60).std() + 1e-12)
+        else:
+            df["vol_z"] = 0.0
+
         feats[tkr] = df
     out = pd.concat(feats, axis=1).sort_index()
     return out
@@ -236,7 +269,7 @@ def execute_rebalance(
     """
     tickers = list(target_w.index)
     px = prices.reindex(tickers).astype(float)
-    px = px.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill")
+    px = px.replace([np.inf, -np.inf], np.nan).ffill().bfill()
     px = px.clip(lower=1e-6)
 
     # Current portfolio value
@@ -569,6 +602,8 @@ class BTConfig:
     end: Optional[str] = None
     db_path: str | None = None  # if set, load OHLCV from SQLite instead of yfinance
     output_dir: str = "reports"      # where to write HTML reports
+    signal_mode: str = "ridge"
+    compare_signal_modes: List[str] = field(default_factory=list)
 
 
     H: int = 20
@@ -589,12 +624,141 @@ class BTConfig:
     # plotting safety
 
     # news overlay (optional)
-    news: NewsConfig = NewsConfig()  # set news.enabled=True and news.csv_path to use
+    news: NewsConfig = field(default_factory=NewsConfig)  # set news.enabled=True and news.csv_path to use
     safe_plot: bool = True
     heatmap_max_points: int = 350            # downsample weights heatmap if more points than this
     bar_max_points: int = 600                # downsample bars if too many points
 
+    # 风险管理参数
+    stop_loss_pct: float = 0.08      # 单只股票止损：持仓亏损超过8%强制平仓
+    max_dd_half: float = 0.12        # 组合回撤超过12%：降至半仓
+    max_dd_full: float = 0.18        # 组合回撤超过18%：全部平仓退场
+
+    # 行业集中度约束
+    max_sector_weight: float = 0.35  # 单一行业最大权重
+
+    # 特征 burn-in 期（新增长回溯因子如 mom_12_1=252d 的预热时间）
+    # start_i = train_window + H + feature_burnin，保证训练窗口全有效
+    feature_burnin: int = 252
+
+
+SHADOW_SIGNAL_FACTORS: List[str] = [
+    "mom_consist",
+    "rsi14",
+    "vol_adj_mom20",
+    "ret20",
+    "slope60",
+]
+
+SHADOW_IC_WEIGHTS: Dict[str, float] = {
+    "mom_consist": 2.168137,
+    "rsi14": 2.104142,
+    "vol_adj_mom20": 2.036905,
+    "ret20": 1.912044,
+    "slope60": 1.772308,
+}
+
+# ── sector cap helper ─────────────────────────────────────────────────────────
+def apply_sector_cap(
+    w: np.ndarray,
+    tickers: List[str],
+    sector_map: Dict[str, str],
+    max_weight: float = 0.35,
+) -> np.ndarray:
+    """Iteratively redistribute weight from over-concentrated sectors.
+
+    One iteration suffices unless two sectors both exceed limit simultaneously;
+    three iterations is conservative and always converges.
+    """
+    w = w.copy()
+    for _ in range(3):
+        sectors = [sector_map.get(t, "Unknown") for t in tickers]
+        changed = False
+        for sec in set(sectors):
+            idx = [i for i, s in enumerate(sectors) if s == sec]
+            sec_w = w[idx].sum()
+            if sec_w > max_weight + 1e-9:
+                excess_per = (sec_w - max_weight) / len(idx)
+                w[idx] -= excess_per
+                # proportionally redistribute excess to other tickers
+                other = [i for i in range(len(tickers)) if i not in idx]
+                if other:
+                    other_w = w[other].sum()
+                    extra = sec_w - max_weight
+                    if other_w > 1e-9:
+                        w[other] += extra * (w[other] / other_w)
+                changed = True
+        w = np.clip(w, 0.0, None)
+        s = w.sum()
+        if s > 1e-9:
+            w /= s
+        if not changed:
+            break
+    return w
+
+
+def build_factor_signal_rows(
+    dt: pd.Timestamp,
+    tickers: List[str],
+    feature_row: pd.Series,
+    pred_return: np.ndarray,
+) -> List[Dict[str, float | str | None]]:
+    """Build per-factor rows from the exact feature vector seen by the model."""
+    feat_today = pd.DataFrame({tkr: feature_row[tkr] for tkr in tickers}).T
+    feat_today = feat_today.apply(pd.to_numeric, errors="coerce")
+    z_today = (feat_today - feat_today.mean(axis=0)) / (feat_today.std(axis=0) + 1e-12)
+
+    asof = pd.Timestamp(dt).strftime("%Y-%m-%d")
+    pred_map = {tkr: float(pred_return[i]) for i, tkr in enumerate(tickers)}
+    rows: List[Dict[str, float | str | None]] = []
+    for tkr in tickers:
+        for factor_name in feat_today.columns:
+            raw_score = float(feat_today.at[tkr, factor_name]) if pd.notna(feat_today.at[tkr, factor_name]) else None
+            z_score = float(z_today.at[tkr, factor_name]) if pd.notna(z_today.at[tkr, factor_name]) else None
+            if raw_score is None and z_score is None:
+                continue
+            rows.append(
+                {
+                    "asof": asof,
+                    "symbol": tkr,
+                    "factor_name": str(factor_name),
+                    "raw_score": raw_score,
+                    "z_score": z_score,
+                    "pred_return": pred_map.get(tkr),
+                }
+            )
+    return rows
+
+
+def composite_signal_from_row(
+    feature_row: pd.Series,
+    tickers: List[str],
+    factor_names: List[str],
+    weight_map: Optional[Dict[str, float]] = None,
+) -> np.ndarray:
+    """Build a cross-sectional composite from selected factors on a single date."""
+    scores = pd.Series(0.0, index=tickers, dtype=float)
+    total_w = 0.0
+    for factor_name in factor_names:
+        vals = pd.Series(
+            [float(feature_row[tkr].get(factor_name, np.nan)) for tkr in tickers],
+            index=tickers,
+            dtype=float,
+        )
+        valid = vals.dropna()
+        if len(valid) < 2:
+            continue
+        z = (vals - valid.mean()) / (valid.std() + 1e-12)
+        w = float(weight_map.get(factor_name, 1.0)) if weight_map else 1.0
+        scores = scores.add(z.fillna(0.0) * w, fill_value=0.0)
+        total_w += abs(w)
+    if total_w > 1e-12:
+        scores = scores / total_w
+    return scores.reindex(tickers).fillna(0.0).to_numpy(dtype=float)
+
+
 def backtest(bt: BTConfig, ex: ExecConfig):
+    mode = str(bt.signal_mode or "ridge").lower()
     print(f"1) Download data (incl. benchmark {bt.benchmark_ticker}) ...")
     all_tickers = list(dict.fromkeys(list(bt.tickers) + [bt.benchmark_ticker]))
     close, vol = (load_ohlcv_from_sqlite(bt.db_path, all_tickers, start=bt.start, end=bt.end)
@@ -617,8 +781,20 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     trade_px = close[trade_tickers]
     bench_px = close[bt.benchmark_ticker]
 
+    # ── load sector map from DB (for concentration constraint) ────────────────
+    sector_map: Dict[str, str] = {}
+    if bt.db_path:
+        try:
+            import sqlite3 as _sq
+            with _sq.connect(bt.db_path) as _sc:
+                rows = _sc.execute("SELECT symbol, sector FROM tickers").fetchall()
+                sector_map = {r[0]: (r[1] or "Unknown") for r in rows}
+        except Exception:
+            pass
+
     print(f"2) Build features/targets (n={len(trade_tickers)}) ...")
-    feats = make_features(trade_px)
+    trade_vol = vol.reindex(columns=trade_tickers)
+    feats = make_features(trade_px, volumes=trade_vol)
     y = make_target(trade_px, H=bt.H)
     ret1 = trade_px.pct_change()
     ret_next = ret1.shift(-1)
@@ -637,6 +813,7 @@ def backtest(bt: BTConfig, ex: ExecConfig):
 
     dates = idx
     n = len(trade_tickers)
+    signal_rows: List[Dict[str, float | str | None]] = []
 
     # ---- optional news overlay precompute ----
     F_news = A_news = U_news = None
@@ -666,10 +843,23 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         return np.vstack(X_list), np.asarray(y_list, dtype=float)
 
     model = PanelRidge(alpha=bt.alpha)
+    learn_conn = None
+    if bt.db_path:
+        try:
+            learn_conn = connect(bt.db_path)
+            ensure_trade_tables(learn_conn)
+            ensure_learning_tables(learn_conn)
+        except Exception:
+            learn_conn = None
 
     # holdings/cash
     holdings = pd.Series(0, index=trade_tickers, dtype=int)
     cash = float(ex.initial_capital)
+
+    # 风险管理状态
+    entry_px: Dict[str, float] = {}          # 各持仓成本价（止损用）
+    peak_equity_abs: float = float(ex.initial_capital)  # 历史最高NAV（回撤控制用）
+    stop_loss_log = []   # 记录每日止损触发的ticker
 
     equity_idx = []
     equity_val = []
@@ -682,14 +872,17 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     costs_paid = []
     gross_ret = []
     net_ret = []
+    stop_loss_log = []
 
     # IMPORTANT: fix look-ahead
     # At decision time i (close of dates[i]), labels for a training date t need prices up to t+H.
     # So the latest label we can safely use is dates[i-H].
-    start_i = max(int(bt.train_window) + int(bt.H), 1)
+    # feature_burnin ensures the *entire* training window has valid factor values
+    # for long-lookback factors (e.g. mom_12_1 = pct_change(252) needs 252d history).
+    start_i = max(int(bt.train_window) + int(bt.H) + int(bt.feature_burnin), 1)
     end_i = len(dates) - 1  # we need next day for PnL
 
-    print("3) Walk-forward backtest ...")
+    print(f"3) Walk-forward backtest [{mode}] ...")
     for i in range(start_i, end_i):
         dt = dates[i]
         next_dt = dates[i + 1]
@@ -699,8 +892,33 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         ma_b = float(bench_ma.loc[dt]) if np.isfinite(bench_ma.loc[dt]) else np.nan
         risk_off = (not np.isfinite(ma_b)) or (px_b < ma_b)
 
+        # ── 最大回撤控制 ──────────────────────────────────────────────
+        px_t_cur = trade_px.loc[dt].astype(float).clip(lower=1e-6)
+        cur_equity_abs = float((holdings.astype(float) * px_t_cur).sum() + cash)
+        peak_equity_abs = max(peak_equity_abs, cur_equity_abs)
+        dd_ratio = (cur_equity_abs - peak_equity_abs) / peak_equity_abs if peak_equity_abs > 0 else 0.0
+        if dd_ratio < -bt.max_dd_full:
+            dd_scale = 0.0   # 全平仓
+        elif dd_ratio < -bt.max_dd_half:
+            dd_scale = 0.5   # 降至半仓
+        else:
+            dd_scale = 1.0
+
+        # ── 单只股票止损检查 ──────────────────────────────────────────
+        stop_loss_tickers = set()
+        for tkr in trade_tickers:
+            qty = int(holdings.get(tkr, 0))
+            if qty <= 0:
+                continue
+            ep = entry_px.get(tkr)
+            if ep is None or ep <= 0:
+                continue
+            cur_price = float(px_t_cur.get(tkr, ep))
+            if (cur_price - ep) / ep < -bt.stop_loss_pct:
+                stop_loss_tickers.add(tkr)
+
         # compute target weights
-        if risk_off:
+        if risk_off or dd_scale == 0.0:
             w_target = pd.Series(0.0, index=trade_tickers)
         else:
             if (i - start_i) % int(bt.rebalance_every) == 0:
@@ -719,10 +937,28 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 for k, tkr in enumerate(trade_tickers):
                     x = row[tkr].to_numpy(dtype=float).reshape(1, -1)
                     mu_ra[k] = 0.0 if np.any(~np.isfinite(x)) else float(model.predict(x)[0])
+                if learn_conn is not None and mode == "ridge":
+                    signal_rows.extend(build_factor_signal_rows(dt, trade_tickers, row, mu_ra))
 
                 vol20 = feats.loc[dt].xs("vol20", level=1).reindex(trade_tickers).to_numpy(dtype=float)
                 vol20 = np.nan_to_num(vol20, nan=0.01, posinf=0.01, neginf=0.01)
-                mu = mu_ra * vol20
+                if mode == "ridge":
+                    mu = mu_ra * vol20
+                elif mode == "shadow_eq":
+                    mu = composite_signal_from_row(
+                        feature_row=row,
+                        tickers=trade_tickers,
+                        factor_names=SHADOW_SIGNAL_FACTORS,
+                    )
+                elif mode == "shadow_ic":
+                    mu = composite_signal_from_row(
+                        feature_row=row,
+                        tickers=trade_tickers,
+                        factor_names=SHADOW_SIGNAL_FACTORS,
+                        weight_map=SHADOW_IC_WEIGHTS,
+                    )
+                else:
+                    raise ValueError(f"Unknown signal_mode: {bt.signal_mode}")
 
                 # covariance
                 rwin = ret1.iloc[max(i - int(bt.cov_lookback), 0): i][trade_tickers].dropna()
@@ -742,7 +978,20 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                     w_prev = np.ones(n, dtype=float) / n
 
                 w_opt = solve_long_only_meanvar(mu, Sigma, w_prev=w_prev, lam=bt.lam, gamma=bt.gamma)
+                # 行业集中度约束（≤35%每行业）
+                if sector_map:
+                    w_opt = apply_sector_cap(w_opt, trade_tickers, sector_map, bt.max_sector_weight)
                 w_target = pd.Series(w_opt, index=trade_tickers)
+                # 应用止损：将触发止损的持仓权重置0
+                for tkr in stop_loss_tickers:
+                    if tkr in w_target.index:
+                        w_target[tkr] = 0.0
+                wsum_after = float(w_target.sum())
+                if wsum_after > 1e-12:
+                    w_target = w_target / wsum_after
+
+                # 应用最大回撤缩减（多余部分保留为现金）
+                w_target = w_target * dd_scale
             else:
                 # no rebalance: keep implicit target as current weights (no trade)
                 px_t = trade_px.loc[dt].astype(float).clip(lower=1e-6)
@@ -752,6 +1001,11 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                     w_target = (cur_val_vec / cur_total).astype(float)
                 else:
                     w_target = pd.Series(0.0, index=trade_tickers)
+                # 非调仓日也应用止损和回撤控制
+                for tkr in stop_loss_tickers:
+                    if tkr in w_target.index:
+                        w_target[tkr] = 0.0
+                w_target = w_target * dd_scale
 
 
         # ---- apply news overlay (gate/scale target weights) ----
@@ -785,7 +1039,7 @@ def backtest(bt: BTConfig, ex: ExecConfig):
 
         # PnL next day: holdings carry to next close (simple close-to-close)
         px_next = trade_px.loc[next_dt].astype(float)
-        px_next = px_next.replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").clip(lower=1e-6)
+        px_next = px_next.replace([np.inf, -np.inf], np.nan).ffill().bfill().clip(lower=1e-6)
 
         # cash accrues (optional)
         cash_new = cash_new * (1.0 + float(ex.cash_rate_daily))
@@ -809,6 +1063,23 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         gross_ret.append(g_ret)
         net_ret.append(n_ret)
 
+        # ── 更新成本价（止损用）────────────────────────────────────────
+        for tkr in trade_tickers:
+            new_qty = int(holdings_new.get(tkr, 0))
+            old_qty = int(holdings.get(tkr, 0))
+            price = float(px_today.get(tkr, 0.0))
+            if new_qty > old_qty and price > 0:
+                added = new_qty - old_qty
+                if old_qty <= 0:
+                    entry_px[tkr] = price
+                else:
+                    old_cost = entry_px.get(tkr, price) * old_qty
+                    entry_px[tkr] = (old_cost + price * added) / new_qty
+            elif new_qty <= 0:
+                entry_px.pop(tkr, None)
+
+        stop_loss_log.append(list(stop_loss_tickers))
+
         holdings, cash = holdings_new, cash_new
 
     w_df = pd.DataFrame(
@@ -824,10 +1095,19 @@ def backtest(bt: BTConfig, ex: ExecConfig):
             "turnover_notional": turnover_notional,
             "cost_paid": costs_paid,
             "risk_off": risk_off_hist,
-            "news_gate": news_gate_hist
+            "news_gate": news_gate_hist,
+            "stop_loss_count": [len(s) for s in stop_loss_log],
         },
         index=w_df.index
     )
+    if learn_conn is not None and mode == "ridge":
+        try:
+            saved = save_factor_signal_snapshot(learn_conn, signal_rows)
+            print(f"Saved production factor_signals: {saved} rows")
+        finally:
+            learn_conn.close()
+    elif learn_conn is not None:
+        learn_conn.close()
     return close, trade_tickers, w_df, equity, stats
 
 # =========================================================
@@ -916,6 +1196,17 @@ def make_reports(
         w_heat.update_layout(height=500, title_text="Weights Heatmap (downsampled for safety)", template="plotly_dark")
         w_heat.write_html(str(out_dir / "weights_heatmap.html"))
 
+
+def summary_from_equity(equity: pd.Series, initial_capital: float) -> Dict[str, float]:
+    final_equity = float(equity.iloc[-1]) * float(initial_capital)
+    ret_pct = (final_equity - float(initial_capital)) / float(initial_capital) * 100.0
+    max_dd = max_drawdown(equity) * 100.0
+    return {
+        "final_equity": final_equity,
+        "total_return_pct": ret_pct,
+        "max_drawdown_pct": max_dd,
+    }
+
 # =========================================================
 # 8) Main
 # =========================================================
@@ -923,19 +1214,19 @@ def make_reports(
 if __name__ == "__main__":
     # -------- user knobs --------
     # Allow pipeline/env-driven runs
-    INITIAL_CAPITAL = float(os.getenv("SS6_INITIAL_CAPITAL", "200000"))
+    INITIAL_CAPITAL = float(os.getenv("SS6_INITIAL_CAPITAL", "1000000"))
     # change to 20w / 2000w to see differences due to integer shares/impact/adv caps
-    TICKERS = os.getenv("SS6_TICKERS", "9432.T,9433.T,2914.T,3382.T").split(",")
+    TICKERS = os.getenv("SS6_TICKERS", "9432.T,9433.T,2914.T,3382.T,8604.T,7201.T").split(",")
     TICKERS = [t.strip() for t in TICKERS if t.strip()]  # from env or default
     BENCHMARK = os.getenv("SS6_BENCHMARK", "1321.T")
 
     # If you trade JP stocks in board lots, you probably want lot_size_default=100
     ex = ExecConfig(
         initial_capital=INITIAL_CAPITAL,
-        lot_size_default=int(os.getenv("SS6_LOT_SIZE_DEFAULT", "1")),        # set 100 for most JP stocks if required
-        fee_bps=float(os.getenv("SS6_FEE_BPS", "3.0")),
-        slippage_bps=float(os.getenv("SS6_SLIPPAGE_BPS", "0.0")),
-        impact_k=float(os.getenv("SS6_IMPACT_K", "0.0")),              # e.g. 5.0 penalize large trades
+        lot_size_default=int(os.getenv("SS6_LOT_SIZE_DEFAULT", "100")),        # set 100 for most JP stocks if required
+        fee_bps=float(os.getenv("SS6_FEE_BPS", "5.0")),
+        slippage_bps=float(os.getenv("SS6_SLIPPAGE_BPS", "5.0")),
+        impact_k=float(os.getenv("SS6_IMPACT_K", "0.5")),              # e.g. 5.0 penalize large trades
         max_adv_frac=float(os.getenv("SS6_MAX_ADV_FRAC", "1.0")),          # e.g. 0.05 limit to 5% ADV
         cash_rate_daily=float(os.getenv("SS6_CASH_RATE_DAILY", "0.0")),
     )
@@ -950,6 +1241,14 @@ if __name__ == "__main__":
         safe_plot=(os.getenv("SS6_SAFE_PLOT","1") != "0"),
         output_dir=os.getenv("SS6_OUTPUT_DIR","reports"),
         db_path=os.getenv("SS6_DB_PATH", None),
+        stop_loss_pct=float(os.getenv("SS6_STOP_LOSS_PCT", "0.08")),
+        max_dd_half=float(os.getenv("SS6_MAX_DD_HALF", "0.12")),
+        max_dd_full=float(os.getenv("SS6_MAX_DD_FULL", "0.18")),
+        signal_mode=os.getenv("SS6_SIGNAL_MODE", "ridge"),
+        compare_signal_modes=[
+            m.strip() for m in os.getenv("SS6_COMPARE_SIGNAL_MODES", "shadow_eq,shadow_ic").split(",")
+            if m.strip()
+        ],
     )
 
     # ---- optional: News overlay (external gating/risk layer) ----
@@ -976,34 +1275,77 @@ if __name__ == "__main__":
     print(f"Initial capital: {int(ex.initial_capital):,}")
     print("=" * 70)
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        close, trade_tickers, w_df, equity, stats = backtest(bt, ex)
-    # ---- EXTRA OUTPUT (non-breaking): export today's target weights ----
+    compare_modes = []
+    for mode in [bt.signal_mode] + list(bt.compare_signal_modes):
+        mode = str(mode).strip().lower()
+        if mode and mode not in compare_modes:
+            compare_modes.append(mode)
+
+    run_results = []
+    for mode in compare_modes:
+        bt_mode = BTConfig(**{**bt.__dict__, "signal_mode": mode, "compare_signal_modes": []})
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            close, trade_tickers, w_df, equity, stats = backtest(bt_mode, ex)
+        result = {
+            "mode": mode,
+            "close": close,
+            "trade_tickers": trade_tickers,
+            "w_df": w_df,
+            "equity": equity,
+            "stats": stats,
+        }
+        result.update(summary_from_equity(equity, ex.initial_capital))
+        run_results.append(result)
+
     out_dir = Path(bt.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # last row as "today" target weights
-    w_last = w_df.iloc[-1].copy()
-    tw = pd.DataFrame({"symbol": w_last.index, "target_weight": w_last.values})
-    tw.to_csv(out_dir / "target_weights.csv", index=False)
-
-    # optional: full history for audit
-    w_df.to_csv(out_dir / "weights_history.csv", index_label="date")
+    primary = next(r for r in run_results if r["mode"] == bt.signal_mode)
+    pd.DataFrame(
+        {"symbol": primary["w_df"].columns, "target_weight": primary["w_df"].iloc[-1].values}
+    ).to_csv(out_dir / "target_weights.csv", index=False)
+    primary["w_df"].to_csv(out_dir / "weights_history.csv", index_label="date")
     print(f"Saved: {out_dir / 'target_weights.csv'}")
 
-    final_equity = float(equity.iloc[-1]) * float(ex.initial_capital)
-    ret_pct = (final_equity - float(ex.initial_capital)) / float(ex.initial_capital) * 100.0
-    max_dd = max_drawdown(equity) * 100.0
+    compare_df = pd.DataFrame(
+        [
+            {
+                "mode": r["mode"],
+                "final_equity": r["final_equity"],
+                "total_return_pct": r["total_return_pct"],
+                "max_drawdown_pct": r["max_drawdown_pct"],
+            }
+            for r in run_results
+        ]
+    ).sort_values("total_return_pct", ascending=False)
+    compare_df.to_csv(out_dir / "signal_mode_compare.csv", index=False)
+    for r in run_results:
+        pd.DataFrame(
+            {"symbol": r["w_df"].columns, "target_weight": r["w_df"].iloc[-1].values}
+        ).to_csv(out_dir / f"target_weights_{r['mode']}.csv", index=False)
 
-    print("\n📊 Summary")
-    print(f"Final equity: {int(final_equity):,}")
-    print(f"Total return: {ret_pct:.2f}%")
-    print(f"Max drawdown: {max_dd:.2f}%")
+    print("\nSummary")
+    print(f"Primary mode: {bt.signal_mode}")
+    print(f"Final equity: {int(primary['final_equity']):,}")
+    print(f"Total return: {primary['total_return_pct']:.2f}%")
+    print(f"Max drawdown: {primary['max_drawdown_pct']:.2f}%")
+    if len(run_results) > 1:
+        print("\nSignal mode comparison:")
+        print(compare_df.to_string(index=False))
     print(f"Reports: {Path(bt.output_dir) / 'strategy_report.html'}, {Path(bt.output_dir) / 'strategy_report_extras.html'}, {Path(bt.output_dir) / 'weights_heatmap.html'}")
 
-    make_reports(close, trade_tickers, BENCHMARK, w_df, equity, stats, bt, ex)
+    make_reports(
+        primary["close"],
+        primary["trade_tickers"],
+        BENCHMARK,
+        primary["w_df"],
+        primary["equity"],
+        primary["stats"],
+        bt,
+        ex,
+    )
 
-    print("\n🛡️ AMD 7900XTX note:")
+    print("\nAMD 7900XTX note:")
     print("This script is CPU-only. If your browser/GPU driver is unstable when opening Plotly HTML,")
     print("keep safe_plot=True (default) and avoid opening multiple heavy HTML pages at once.")

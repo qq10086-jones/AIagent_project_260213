@@ -11,6 +11,7 @@ Design goals:
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
@@ -189,6 +190,162 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE fills ADD COLUMN source TEXT")
     except Exception:
         pass
+
+
+def ensure_learning_tables(conn: sqlite3.Connection) -> None:
+    """Create Learning M1 tables if missing. Idempotent.
+
+    Tables:
+      factor_signals   — per-factor z-scores per (date, ticker)
+      factor_registry  — EWMA IC weights per factor (the 'memory')
+      risk_rules       — codified risk rules (currently static, future: auto-derived)
+      learning_audit   — immutable log of every IC update / rule change
+    """
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS factor_signals (
+          asof        TEXT NOT NULL,
+          symbol      TEXT NOT NULL,
+          factor_name TEXT NOT NULL,
+          raw_score   REAL,
+          z_score     REAL,
+          created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (asof, symbol, factor_name)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_fs_asof_factor ON factor_signals(asof, factor_name);")
+    try:
+        conn.execute("ALTER TABLE factor_signals ADD COLUMN pred_return REAL")
+    except Exception:
+        pass
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS factor_registry (
+          factor_name    TEXT PRIMARY KEY,
+          ic_mean        REAL DEFAULT 0.0,
+          ic_std         REAL DEFAULT 1.0,
+          icir           REAL DEFAULT 0.0,
+          weight         REAL DEFAULT 1.0,
+          n_observations INTEGER DEFAULT 0,
+          last_updated   TEXT,
+          is_active      INTEGER DEFAULT 1
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS risk_rules (
+          rule_id     TEXT PRIMARY KEY,
+          rule_type   TEXT NOT NULL,
+          description TEXT,
+          threshold   REAL,
+          action      TEXT,
+          priority    INTEGER DEFAULT 5,
+          is_active   INTEGER DEFAULT 1,
+          created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS learning_audit (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          asof        TEXT NOT NULL,
+          event_type  TEXT NOT NULL,
+          factor_name TEXT,
+          old_value   REAL,
+          new_value   REAL,
+          ic_value    REAL,
+          notes       TEXT,
+          created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_la_asof ON learning_audit(asof);")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS screening_history (
+          asof             TEXT NOT NULL,
+          symbol           TEXT NOT NULL,
+          rank             INTEGER NOT NULL,
+          score            REAL,
+          selected         INTEGER DEFAULT 1,
+          adv              REAL,
+          vol              REAL,
+          missing          REAL,
+          close            REAL,
+          cost_per_lot     REAL,
+          screen_version   TEXT,
+          filters_json     TEXT,
+          created_at       TEXT DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (asof, symbol)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sh_asof_rank ON screening_history(asof, rank);")
+    conn.commit()
+
+
+def save_screening_history(conn: sqlite3.Connection, payload: Dict[str, Any]) -> int:
+    """Persist the actual selected screener universe for a given asof date."""
+    asof = str(payload.get("asof"))
+    version = str(payload.get("version", "unknown"))
+    filters_json = json.dumps(payload.get("filters", {}), ensure_ascii=False, sort_keys=True)
+    details = payload.get("details", [])
+    rows = []
+    for idx, row in enumerate(details, start=1):
+        rows.append(
+            (
+                asof,
+                str(row.get("symbol")),
+                idx,
+                row.get("score"),
+                1,
+                row.get("adv"),
+                row.get("vol"),
+                row.get("missing"),
+                row.get("close"),
+                row.get("cost_per_lot"),
+                version,
+                filters_json,
+            )
+        )
+
+    conn.execute("DELETE FROM screening_history WHERE asof=?", (asof,))
+    if rows:
+        conn.executemany(
+            """
+            INSERT INTO screening_history (
+              asof, symbol, rank, score, selected, adv, vol, missing,
+              close, cost_per_lot, screen_version, filters_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+    conn.commit()
+    return len(rows)
+
+
+def save_factor_signal_snapshot(conn: sqlite3.Connection, rows: list[Dict[str, Any]]) -> int:
+    """Persist factor snapshots captured at signal-generation time."""
+    if not rows:
+        return 0
+    conn.executemany(
+        """
+        INSERT OR REPLACE INTO factor_signals
+        (asof, symbol, factor_name, raw_score, z_score, pred_return)
+        VALUES (:asof, :symbol, :factor_name, :raw_score, :z_score, :pred_return)
+        """,
+        rows,
+    )
+    conn.commit()
+    return len(rows)
 
 
 def get_latest_trading_day(conn: sqlite3.Connection) -> Optional[str]:

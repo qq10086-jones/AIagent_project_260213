@@ -8,8 +8,8 @@ Usage:
 
 The config format is the same as run_pipeline.py. Extra keys (optional):
   decision:
-    cash: 200000
-    lot: 1
+    cash: 1000000
+    lot: 100
     min_trade: 5000
     out_dir: artifacts/decision
 
@@ -22,10 +22,14 @@ Outputs:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import subprocess
 import sqlite3
 from pathlib import Path
+
+from trade_schema import connect, ensure_learning_tables, ensure_trade_tables, save_screening_history
 
 
 def load_cfg(path: str) -> dict:
@@ -81,6 +85,7 @@ def main():
     scr = cfg.get("screener", {})
     top_k = int(scr.get("top_k", 50))
     min_adv = float(scr.get("min_adv", 20_000_000))
+    max_cost_per_lot = float(scr.get("max_cost_per_lot", 150_000))
     out_json = str(scr.get("out", "selected_tickers.json"))
     cmd = [
         "python", "screener.py",
@@ -88,26 +93,64 @@ def main():
         "--asof", asof,
         "--topk", str(top_k),
         "--minadv", str(min_adv),
+        "--maxcost", str(max_cost_per_lot),
         "--out", out_json,
     ]
     print(">>", " ".join(cmd))
     run_and_capture(cmd)
 
-    # 3) Model/backtest
+    # 3) Model/backtest (ss7_sqlite_news_overlay — env-var driven)
     model = cfg.get("model", {})
     exec_cfg = (model.get("exec") or {})
-    cmd = ["python", "ss6_sqlite.py", "--db", db_path]
-    if exec_cfg.get("cash") is not None:
-        cmd += ["--cash", str(exec_cfg["cash"])]
-    if exec_cfg.get("cost_bps") is not None:
-        cmd += ["--cost_bps", str(exec_cfg["cost_bps"])]
-    if exec_cfg.get("h") is not None:
-        cmd += ["--h", str(exec_cfg["h"])]
-    cmd += ["--tickers", out_json]
     out_dir = str(model.get("output_dir", "reports"))
-    cmd += ["--output_dir", out_dir]
-    print(">>", " ".join(cmd))
-    run_and_capture(cmd)
+
+    import json as _json
+    sel = _json.loads(Path(out_json).read_text(encoding="utf-8"))
+    symbols = sel.get("symbols", [])
+    if not symbols:
+        raise RuntimeError("Screener produced empty symbols list.")
+    with connect(db_path) as conn:
+        ensure_trade_tables(conn)
+        ensure_learning_tables(conn)
+        saved = save_screening_history(conn, sel)
+    print(f"Saved screening_history: {saved} rows for {sel.get('asof')}")
+
+    env = os.environ.copy()
+    env["SS6_DB_PATH"] = db_path
+    env["SS6_TICKERS"] = ",".join(symbols)
+    env["SS6_BENCHMARK"] = str(model.get("benchmark_ticker", "1321.T"))
+    env["SS6_START"] = str(model.get("start", "2020-01-01"))
+    env["SS6_END"] = "" if model.get("end") is None else str(model["end"])
+    env["SS6_H"] = str(int(model.get("H", 20)))
+    env["SS6_TRAIN_WINDOW"] = str(int(model.get("train_window", 252)))
+    env["SS6_REBALANCE_EVERY"] = str(int(model.get("rebalance_every", 20)))
+    env["SS6_SAFE_PLOT"] = "1" if bool(model.get("safe_plot", True)) else "0"
+    env["SS6_OUTPUT_DIR"] = out_dir
+    env["SS6_INITIAL_CAPITAL"] = str(float(exec_cfg.get("initial_capital", 1_000_000)))
+    env["SS6_LOT_SIZE_DEFAULT"] = str(int(exec_cfg.get("lot_size_default", 100)))
+    env["SS6_FEE_BPS"] = str(float(exec_cfg.get("fee_bps", 5.0)))
+    env["SS6_SLIPPAGE_BPS"] = str(float(exec_cfg.get("slippage_bps", 5.0)))
+    env["SS6_IMPACT_K"] = str(float(exec_cfg.get("impact_k", 0.5)))
+    env["SS6_MAX_ADV_FRAC"] = str(float(exec_cfg.get("max_adv_frac", 1.0)))
+    env["SS6_CASH_RATE_DAILY"] = str(float(exec_cfg.get("cash_rate_daily", 0.0)))
+    env["SS6_STOP_LOSS_PCT"] = str(float(exec_cfg.get("stop_loss_pct", 0.08)))
+    env["SS6_MAX_DD_HALF"] = str(float(exec_cfg.get("max_dd_half", 0.12)))
+    env["SS6_MAX_DD_FULL"] = str(float(exec_cfg.get("max_dd_full", 0.18)))
+
+    # news overlay (optional)
+    news_cfg = model.get("news", {})
+    news_csv = str(news_cfg.get("csv_path", ""))
+    env["SS6_NEWS_ON"] = "1" if (news_cfg.get("enabled", False) and news_csv) else "0"
+    env["SS6_NEWS_CSV"] = news_csv
+
+    cmd = ["python", "ss7_sqlite_news_overlay.py"]
+    print(">> python ss7_sqlite_news_overlay.py (env-driven)")
+    p = subprocess.run(cmd, env=env, text=True, capture_output=True)
+    print(p.stdout)
+    if p.stderr.strip():
+        print(p.stderr)
+    if p.returncode != 0:
+        raise RuntimeError(f"ss7_sqlite_news_overlay.py failed (rc={p.returncode})")
 
     # 4) Package decision
     dec = cfg.get("decision", {})
@@ -116,8 +159,8 @@ def main():
         "--db", db_path,
         "--asof", asof,
         "--reports_dir", out_dir,
-        "--cash", str(dec.get("cash", exec_cfg.get("cash", 200000))),
-        "--lot", str(dec.get("lot", 1)),
+        "--cash", str(dec.get("cash", exec_cfg.get("initial_capital", 1_000_000))),
+        "--lot", str(dec.get("lot", exec_cfg.get("lot_size_default", 100))),
         "--min_trade", str(dec.get("min_trade", 5000)),
         "--out_dir", str(dec.get("out_dir", "artifacts/decision")),
     ]
@@ -130,6 +173,28 @@ def main():
         print(f"✅ Daily run complete. asof={asof} run_id={run_id}")
     else:
         print(f"✅ Daily run complete. asof={asof} (run_id not parsed; see output above)")
+
+    # 5) Learning M1: compute IC and update factor_registry (optional)
+    learn = cfg.get("learning", {})
+    if learn.get("enabled", True):
+        H = int(model.get("H", 20))
+        rebal = int(model.get("rebalance_every", 20))
+        lookback = int(learn.get("lookback_periods", 60))
+        min_cross_n = int(learn.get("min_cross_section_n", 25))
+        shadow_flag = ["--shadow"] if learn.get("shadow", False) else []
+        cmd = [
+            "python", "compute_ic.py",
+            "--db", db_path,
+            "--H", str(H),
+            "--rebalance_every", str(rebal),
+            "--lookback_periods", str(lookback),
+            "--min_cross_section_n", str(min_cross_n),
+        ] + shadow_flag
+        print(">>", " ".join(cmd))
+        try:
+            run_and_capture(cmd)
+        except RuntimeError as e:
+            print(f"⚠️  compute_ic.py failed (non-fatal): {e}")
 
 
 if __name__ == "__main__":

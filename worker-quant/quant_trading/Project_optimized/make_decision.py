@@ -205,8 +205,11 @@ def main():
     ap.add_argument("--db", default="japan_market.db")
     ap.add_argument("--asof", default=None, help="YYYY-MM-DD, default=latest trading day in DB")
     ap.add_argument("--reports_dir", default="reports")
-    ap.add_argument("--cash", type=float, default=200000.0, help="cash used for sizing (manual mode)")
-    ap.add_argument("--lot", type=int, default=1, help="board lot; ETFs often 1, many JP stocks 100")
+    ap.add_argument("--cash", type=float, default=1000000.0, help="cash used for sizing (manual mode); default=1M JPY")
+    ap.add_argument("--lot", type=int, default=100, help="board lot; ETFs often 1, most JP stocks 100")
+    ap.add_argument("--peak_nav", type=float, default=None, help="historical peak NAV for drawdown check (JPY); if omitted, no DD check")
+    ap.add_argument("--dd_half", type=float, default=0.12, help="drawdown threshold for half-position (default 12%%)")
+    ap.add_argument("--dd_full", type=float, default=0.18, help="drawdown threshold for full exit (default 18%%)")
     ap.add_argument("--min_trade", type=float, default=5000.0, help="ignore trades smaller than this notional (JPY)")
     ap.add_argument("--out_dir", default="artifacts/decision")
     args = ap.parse_args()
@@ -241,11 +244,46 @@ def main():
     ensure_trade_tables(conn)
 
     try:
+        # drawdown check: scale orders if portfolio drawdown exceeds thresholds
+        dd_scale = 1.0
+        dd_status = "OK"
+        if args.peak_nav is not None and args.peak_nav > 0:
+            # Estimate current NAV from DB positions + cash
+            _, cur_pos = _latest_positions(conn, asof)
+            cur_nav = float(args.cash)
+            for sym, qty in cur_pos.items():
+                _, px = _last_close(conn, sym, asof)
+                if px is not None:
+                    cur_nav += float(qty) * float(px)
+            drawdown = (cur_nav - args.peak_nav) / args.peak_nav
+            if drawdown < -args.dd_full:
+                dd_scale = 0.0
+                dd_status = f"FULL_EXIT (DD={drawdown:.1%} < -{args.dd_full:.0%})"
+                print(f"⛔ 最大回撤触发全平仓: 当前NAV={cur_nav:,.0f} 峰值={args.peak_nav:,.0f} 回撤={drawdown:.1%}")
+            elif drawdown < -args.dd_half:
+                dd_scale = 0.5
+                dd_status = f"HALF_POSITION (DD={drawdown:.1%} < -{args.dd_half:.0%})"
+                print(f"⚠️  回撤触发半仓: 当前NAV={cur_nav:,.0f} 峰值={args.peak_nav:,.0f} 回撤={drawdown:.1%}")
+
         # build orders
         orders, info = build_orders(
             conn, asof, target_weights, cash_jpy=args.cash,
             lot_size=args.lot, min_trade_notional=args.min_trade
         )
+
+        # Apply drawdown scaling: reduce all BUY quantities proportionally
+        if dd_scale < 1.0:
+            scaled_orders = []
+            for o in orders:
+                if o.side == "BUY":
+                    new_qty = int(o.qty * dd_scale // args.lot) * args.lot
+                    if new_qty <= 0:
+                        continue
+                    o.qty = new_qty
+                    o.est_notional = o.qty * (o.est_notional / max(o.qty / dd_scale if dd_scale > 0 else 1, 1))
+                    o.comment = f"rebalance(dd_scale={dd_scale:.0%})"
+                scaled_orders.append(o)
+            orders = scaled_orders
 
         orders_csv = out_run / "orders_proposal.csv"
 
@@ -284,6 +322,9 @@ def main():
                 "lot_size": args.lot,
                 "missing_symbols": info["missing_symbols"],
                 "weights_sum_before_norm": info["weights_sum_before_norm"],
+                "drawdown_scale": dd_scale,
+                "drawdown_status": dd_status,
+                "peak_nav_input": args.peak_nav,
             },
         }
 

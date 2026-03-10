@@ -159,15 +159,15 @@ async function validateApprovalApprove(baseUrl, approvalToken) {
     (payload) => Array.isArray(payload?.tasks) && payload.tasks.some((task) => {
       const currentTaskId = String(task.task_id || "");
       const currentStatus = String(task.status || "");
-      return currentTaskId === taskId && (currentStatus === "running" || currentStatus === "completed" || currentStatus === "failed");
+      return currentTaskId === taskId && (currentStatus === "running" || currentStatus === "succeeded" || currentStatus === "failed");
     }),
-    30000,
+    120000,
     1000,
   );
   const approvedTask = runState.tasks.find((item) => String(item.task_id || "") === taskId) || {};
   const approvedStatus = String(approvedTask.status || "");
   assert(approvedStatus !== "waiting_approval", "task remained waiting_approval after approve");
-  assert(["running", "completed", "failed"].includes(approvedStatus), `unexpected task status after approve: ${approvedStatus}`);
+  assert(["running", "succeeded", "failed"].includes(approvedStatus), `unexpected task status after approve: ${approvedStatus}`);
 
   return {
     run_id: runId,

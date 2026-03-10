@@ -1,31 +1,26 @@
 {
-  "generated_at": "2026-03-09T23:26:47.249Z",
+  "generated_at": "2026-03-10T04:05:03.251Z",
   "base_url": "http://localhost:3000",
-  "timeout_ms": 180000,
+  "timeout_ms": 600000,
   "checks": {
     "health": {
       "ok": true,
       "body": "ok"
     },
     "direct_chat_bypass": {
-      "run_id": "39ff346f-1319-4915-a9dc-cd8fd27797cb",
+      "run_id": "e8c67c3d-ce43-46e0-94f8-850ef952b158",
       "mode": "direct_reply",
       "run_status": "completed",
       "task_count": 0
     },
     "approval_reject": {
-      "run_id": "0769bbaa-6d17-4323-96c4-3b2bf1ce122a",
-      "task_id": "a848d679-8718-4b69-8ac8-7dd5bd966836",
+      "run_id": "07937101-3026-4331-af82-cd765c9fe150",
+      "task_id": "b3c57b6e-18f3-4d79-95fb-27575fb30d40",
       "run_status": "failed",
       "task_status": "failed",
       "error_code": "APPROVAL_REJECTED"
-    },
-    "approval_approve": {
-      "run_id": "cd35fb17-6bd4-4d81-8804-dc0795a436d8",
-      "task_id": "d7e5e744-b381-4a49-afc6-65ecf8e5c3b7",
-      "run_status": "running",
-      "task_status": "running"
     }
   },
-  "overall": "pass"
+  "overall": "fail",
+  "error": "timeout waiting run 1449bc6c-dd62-46b7-81c8-29b25e09f7c7"
 }

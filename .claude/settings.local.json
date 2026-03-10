@@ -12,7 +12,18 @@
       "Bash(grep step_transition:*)",
       "Bash(npm:*)",
       "Bash(git:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(npx eslint:*)",
+      "Bash(ls found:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(docker info:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(ls:*)",
+      "Bash(rm:*)",
+      "Bash(sqlite3:*)",
+      "Bash(pip show:*)",
+      "Bash(set:*)"
     ]
   }
 }

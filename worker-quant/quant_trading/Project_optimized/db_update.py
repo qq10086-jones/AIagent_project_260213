@@ -21,50 +21,138 @@ import yfinance as yf
 
 from market_db_v2 import MarketDB
 
-# Default universe (same as your v1)
+# Default universe - TSE Prime前300流动性股票（扩展至约100只）
+# 筛选标准：流动性好、覆盖多行业、含较多1手成本<15万JPY的品种（由screener进一步过滤）
 TARGET_UNIVERSE: List[Tuple[str, str, str]] = [
-    # --- 现有核心：光伏/能源/化学 ---
+    # --- 半导体/AI/精密仪器 ---
     ("4063.T", "Shin-Etsu Chemical", "Semicon/Chemical"),
-    ("6367.T", "Daikin", "Machinery"),
-    ("5020.T", "ENEOS", "Energy"),
-    
-    # --- 现有核心：半导体/AI ---
     ("8035.T", "Tokyo Electron", "Semicon Equip"),
     ("6857.T", "Advantest", "Semicon Test"),
     ("6146.T", "Disco", "Semicon Process"),
-    ("6758.T", "Sony Group", "Tech/Entertainment"), # 新增：索尼（感光元件+娱乐）
-    ("6861.T", "Keyence", "Automation"),           # 新增：基恩士（超高利润率，工厂自动化）
+    ("6861.T", "Keyence", "Automation"),
+    ("6723.T", "Renesas Electronics", "Semicon"),
+    ("7735.T", "Screen Holdings", "Semicon Equip"),
+    ("6920.T", "Lasertec", "Semicon Equip"),
 
-    # --- 现有核心：高股息/商社 (巴菲特概念) ---
+    # --- 电子/电机/机械 ---
+    ("6758.T", "Sony Group", "Tech/Entertainment"),
+    ("6501.T", "Hitachi", "Conglomerate"),
+    ("6503.T", "Mitsubishi Electric", "Electrical Equip"),
+    ("6702.T", "Fujitsu", "IT Services"),
+    ("6752.T", "Panasonic Holdings", "Electronics"),
+    ("6367.T", "Daikin", "Machinery"),
+    ("6301.T", "Komatsu", "Construction Mach"),
+    ("6326.T", "Kubota", "Machinery"),
+    ("6506.T", "Yaskawa Electric", "Robotics"),
+    ("6988.T", "Nitto Denko", "Materials"),
+    ("4901.T", "Fujifilm Holdings", "Imaging/Healthcare"),
+    ("7751.T", "Canon", "Electronics"),
+    ("7733.T", "Olympus", "Medical Devices"),
+    ("6471.T", "NSK", "Bearings"),
+    ("6770.T", "Alps Alpine", "Electronic Parts"),
+
+    # --- 重工/国防/航天 ---
+    ("7011.T", "Mitsubishi Heavy", "Defense/Space"),
+    ("7012.T", "Kawasaki Heavy", "Machinery"),
+    ("1963.T", "JGC Holdings", "Engineering"),
+
+    # --- 商社/贸易 (巴菲特概念) ---
     ("8058.T", "Mitsubishi Corp", "Trading"),
     ("8001.T", "Itochu", "Trading"),
-    ("8031.T", "Mitsui & Co", "Trading"),          # 新增：三井物产（能源资源强）
-    ("8002.T", "Marubeni", "Trading"),             # 新增：丸红（农业/电力）
+    ("8031.T", "Mitsui & Co", "Trading"),
+    ("8002.T", "Marubeni", "Trading"),
+    ("8053.T", "Sumitomo Corp", "Trading"),
 
-    # --- 金融/保险 (日本加息最大受益者) ---
+    # --- 金融/银行/保险/证券 ---
     ("8306.T", "MUFG", "Bank"),
     ("8316.T", "SMBC", "Bank"),
-    ("8766.T", "Tokio Marine", "Insurance"),       # 新增：东京海上（全球顶级财险，非常稳健）
-    ("8591.T", "ORIX", "Financial Serv"),          # 新增：欧力士（高股息，业务多元）
+    ("8411.T", "Mizuho FG", "Bank"),
+    ("8766.T", "Tokio Marine", "Insurance"),
+    ("8591.T", "ORIX", "Financial Serv"),
+    ("8604.T", "Nomura Holdings", "Securities"),
+    ("8630.T", "Sompo Holdings", "Insurance"),
+    ("8725.T", "MS&AD Insurance", "Insurance"),
+    ("8697.T", "Japan Exchange Group", "Exchange"),
+    ("8309.T", "SMTB", "Financial"),
 
-    # --- 重工/国防 (地缘政治对冲) ---
-    ("7011.T", "Mitsubishi Heavy", "Defense/Space"), # 新增：三菱重工（国防、核能、燃气轮机）
-    ("7012.T", "Kawasaki Heavy", "Machinery"),       # 新增：川崎重工（液氢运输、摩托、机器人）
+    # --- 汽车/零部件 (出口敏感) ---
+    ("7203.T", "Toyota Motor", "Auto"),
+    ("7267.T", "Honda Motor", "Auto"),
+    ("7201.T", "Nissan Motor", "Auto"),
+    ("7269.T", "Suzuki Motor", "Auto"),
+    ("7261.T", "Mazda Motor", "Auto"),
+    ("7270.T", "Subaru", "Auto"),
+    ("7211.T", "Mitsubishi Motors", "Auto"),
 
-    # --- 汽车/运输 (出口与汇率敏感) ---
-    ("7203.T", "Toyota Motor", "Auto"),              # 新增：丰田（日本市值的定海神针）
-    ("9101.T", "NYK Line", "Shipping"),              # 新增：日本邮船（航运周期股，高波动高分红）
+    # --- 运输/物流/航运 ---
+    ("9101.T", "NYK Line", "Shipping"),
+    ("9104.T", "Mitsui OSK Lines", "Shipping"),
+    ("9107.T", "Kawasaki Kisen", "Shipping"),
+    ("9020.T", "JR East", "Railway"),
+    ("9201.T", "Japan Airlines", "Aviation"),
+    ("9202.T", "ANA Holdings", "Aviation"),
 
-    # --- 消费/内需 (防御性板块) ---
+    # --- 能源/化工 ---
+    ("5020.T", "ENEOS", "Energy"),
+    ("1605.T", "Inpex", "Oil & Gas"),
+    ("4005.T", "Sumitomo Chemical", "Chemical"),
+    ("4183.T", "Mitsui Chemicals", "Chemical"),
+    ("5713.T", "Sumitomo Metal Mining", "Mining"),
+    ("5714.T", "Dowa Holdings", "Metals"),
+
+    # --- 钢铁/基础材料 ---
+    ("5401.T", "Nippon Steel", "Steel"),
+    ("5411.T", "JFE Holdings", "Steel"),
+
+    # --- 电力/公用事业 (防御性) ---
+    ("9501.T", "Tokyo Electric Power", "Utility"),
+    ("9502.T", "Chubu Electric Power", "Utility"),
+    ("9503.T", "Kansai Electric Power", "Utility"),
+
+    # --- 电信 ---
     ("9432.T", "NTT", "Telecom"),
-    ("2914.T", "JT", "Tobacco"),
-    ("9983.T", "Fast Retailing", "Retail"),          # 新增：优衣库母公司（日经225权重第一，影响指数极大）
-    ("7974.T", "Nintendo", "Gaming"),                # 新增：任天堂（拥有最强IP，且现金流充裕）
-    ("4661.T", "Oriental Land", "Leisure"),          # 新增：迪士尼运营方（日本最强旅游/体验经济）
+    ("9433.T", "KDDI", "Telecom"),
+    ("9434.T", "SoftBank Corp", "Telecom"),
 
-    # --- 基准 ---
+    # --- 消费/食品/饮料/日用品 ---
+    ("2914.T", "JT", "Tobacco"),
+    ("2502.T", "Asahi Group Holdings", "Beverage"),
+    ("2503.T", "Kirin Holdings", "Beverage"),
+    ("2801.T", "Kikkoman", "Food"),
+    ("2282.T", "Nippon Ham", "Food"),
+    ("4452.T", "Kao", "Consumer Goods"),
+
+    # --- 零售 ---
+    ("9983.T", "Fast Retailing", "Retail"),
+    ("3382.T", "Seven & i Holdings", "Retail"),
+    ("8267.T", "Aeon", "Retail"),
+
+    # --- 不动产 ---
+    ("8801.T", "Mitsui Fudosan", "Real Estate"),
+    ("8802.T", "Mitsubishi Estate", "Real Estate"),
+    ("8830.T", "Sumitomo Realty", "Real Estate"),
+
+    # --- 制药/医疗 ---
+    ("4502.T", "Takeda Pharmaceutical", "Pharma"),
+    ("4503.T", "Astellas Pharma", "Pharma"),
+    ("4568.T", "Daiichi Sankyo", "Pharma"),
+    ("4523.T", "Eisai", "Pharma"),
+    ("4519.T", "Chugai Pharmaceutical", "Pharma"),
+    ("4578.T", "Ono Pharmaceutical", "Pharma"),
+
+    # --- 互联网/平台/娱乐 ---
+    ("4755.T", "Rakuten Group", "Internet"),
+    ("6098.T", "Recruit Holdings", "HR/Internet"),
+    ("3659.T", "Nexon", "Gaming"),
+    ("7974.T", "Nintendo", "Gaming"),
+    ("7832.T", "Bandai Namco", "Entertainment"),
+    ("4661.T", "Oriental Land", "Leisure"),
+    ("2413.T", "M3 Inc", "Medical Internet"),
+
+    # --- 基准（不参与交易，仅供benchmark对比和screener数据收集） ---
     ("1321.T", "Nikkei 225 ETF", "Benchmark"),
-    ("1570.T", "Nikkei Lev", "Benchmark_2x"),        # 新增：日经2倍杠杆（用于观察高beta情绪，不一定交易）
+    ("1570.T", "Nikkei Lev", "Benchmark_2x"),
+    ("1306.T", "TOPIX ETF", "Benchmark_TOPIX"),
 ]
 
 def _date_to_str(d: date) -> str:

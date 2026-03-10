@@ -42,6 +42,7 @@ import {
   failRunningTaskIfStillRunning as _failRunningTaskIfStillRunning,
 } from "./data/task_repository.js";
 import { listEventsForTaskIds as _listEventsForTaskIds } from "./data/event_repository.js";
+import { findLatestFactForRun as _findLatestFactForRun } from "./data/fact_repository.js";
 import { ensureOrchestratorSchema as _ensureOrchestratorSchema } from "./data/schema_repository.js";
 import { listRecentMemoryItemsForProject as _listRecentMemoryItemsForProject, insertMemoryItem as _insertMemoryItem } from "./data/memory_store_repository.js";
 import { completeRunWithCostLedger as _completeRunWithCostLedger, ensureRun as _ensureRun, findRunIdByClientMsgId as _findRunIdByClientMsgId, getRunById as _getRunById, getRunInputText as _getRunInputText, updateRunStatus as _updateRunStatus, updateRunStatusIfNotFailed as _updateRunStatusIfNotFailed } from "./data/run_repository.js";
@@ -518,6 +519,60 @@ app.get("/runs/:run_id/artifacts", async (req, res) => {
     const runtimeDir = path.join(WORKSPACE_ROOT, "artifacts", "runs", run_id);
     return res.json({ ok: true, run_id, roots: { release: releaseDir.replace(/\\/g, "/"), runtime: runtimeDir.replace(/\\/g, "/") }, release_files: listFilesRecursive(releaseDir), runtime_files: listFilesRecursive(runtimeDir) });
   } catch (err) { return res.status(500).json({ ok: false, error: err.message || "artifacts query failed" }); }
+});
+
+app.get("/brain/facts/latest", async (req, res) => {
+  try {
+    const run_id = String(req.query.run_id || "").trim();
+    const agent_name = String(req.query.agent_name || "").trim();
+    const tool_name = String(req.query.tool_name || "").trim();
+    if (!run_id || !agent_name) {
+      return res.status(400).json({ ok: false, error: "run_id and agent_name are required" });
+    }
+    const row = await _findLatestFactForRun(pool, { run_id, agent_name, tool_name });
+    if (!row) {
+      return res.status(404).json({ ok: false, error: "fact not found" });
+    }
+    let payload = row.payload_json;
+    try {
+      payload = typeof row.payload_json === "string" ? JSON.parse(row.payload_json) : row.payload_json;
+    } catch {
+      payload = { raw: String(row.payload_json || "") };
+    }
+    return res.json({
+      ok: true,
+      fact: {
+        fact_id: row.fact_id,
+        run_id: row.run_id,
+        agent_name: row.agent_name,
+        kind: row.kind,
+        created_at: row.created_at,
+        payload,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || "brain fact query failed" });
+  }
+});
+
+app.post("/brain/routing-decisions", async (req, res) => {
+  try {
+    const run_id = String(req.body?.run_id || "").trim();
+    const workflow_run_id = String(req.body?.workflow_run_id || "").trim();
+    const event_name = String(req.body?.event_name || "brain.routing.decision").trim();
+    const payload = req.body?.payload && typeof req.body.payload === "object" ? req.body.payload : {};
+    if (!run_id && !workflow_run_id) {
+      return res.status(400).json({ ok: false, error: "run_id or workflow_run_id is required" });
+    }
+    await recordEvent(workflow_run_id || run_id, event_name, {
+      run_id: run_id || null,
+      workflow_run_id: workflow_run_id || null,
+      ...payload,
+    });
+    return res.json({ ok: true, event_name });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || "brain routing decision ingest failed" });
+  }
 });
 
 app.get("/approvals/pending", async (req, res) => {

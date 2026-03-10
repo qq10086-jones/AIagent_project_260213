@@ -10,7 +10,7 @@ Covers:
   4. supervisor_node — discovery mode, intel fact present → routes to "screening"
   5. supervisor_node — analysis mode (default), no facts → routes to "quant"
   6. supervisor_node — analysis mode, quant fact present, browser disabled → routes to "writer"
-  7. poll_for_fact — DB exception → returns None without crashing (unavailability path)
+  7. poll_for_fact — gateway exception → returns None without crashing (unavailability path)
   8. get_llm — no API key set in environment → returns None (low-confidence: no LLM available)
 """
 
@@ -97,18 +97,30 @@ class TestSupervisorNodeAnalysisMode:
 # ── poll_for_fact — unavailability path ───────────────────────────────────────
 
 class TestPollForFactUnavailability:
-    def test_db_exception_returns_none(self):
-        """Unavailability path: DB connection failure → returns None, no crash."""
-        with patch("supervisor.get_db_conn", side_effect=Exception("connection refused")):
-            # Use a very short timeout so the test doesn't hang
+    def test_gateway_exception_returns_none(self):
+        """Unavailability path: fact gateway failure → returns None, no crash."""
+        with patch("supervisor.requests.get", side_effect=Exception("connection refused")):
             result = poll_for_fact("run-001", "quant", timeout=0.1)
         assert result is None
 
-    def test_db_no_rows_returns_none(self, patch_db_conn, mock_cursor):
-        """Low-confidence path: DB available but no rows for agent → returns None."""
-        mock_cursor.fetchone.return_value = None
+    def test_gateway_no_rows_returns_none(self, patch_requests_get):
+        """Low-confidence path: gateway available but no rows for agent → returns None."""
         result = poll_for_fact("run-002", "quant", timeout=0.1)
         assert result is None
+
+    def test_gateway_payload_returns_dict(self, patch_requests_get):
+        """Happy path: gateway returns a payload object."""
+        patched, mock_resp = patch_requests_get
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "ok": True,
+            "fact": {
+                "payload": {"agent": "quant", "data": {"symbol": "AAPL"}}
+            },
+        }
+        result = poll_for_fact("run-003", "quant", timeout=0.1)
+        assert result == {"agent": "quant", "data": {"symbol": "AAPL"}}
+        assert patched.called
 
 
 # ── get_llm — no API key (low-confidence / unavailability) ────────────────────

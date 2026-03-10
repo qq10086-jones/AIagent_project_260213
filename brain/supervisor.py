@@ -2,7 +2,6 @@ import os
 import json
 import requests
 import time
-import psycopg2
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from state import AgentState
@@ -24,38 +23,30 @@ OLLAMA_GENERATE_API = f"{OLLAMA_BASE_URL}/api/generate"
 LOCAL_WRITER_MODEL = LOCAL_MODEL_DEFAULT
 QWEN_MODEL = QWEN_MODEL_DEFAULT
 
-def get_db_conn():
-    return psycopg2.connect(
-        host=os.getenv("PGHOST", "db"),
-        user=os.getenv("PGUSER", "nexus"),
-        password=os.getenv("PGPASSWORD", "nexus"),
-        database=os.getenv("PGDATABASE", "nexus")
-    )
-
 def poll_for_fact(run_id, agent_name, timeout=120, tool_name=None):
-        """Wait for a specific agent (and optionally a specific tool) to write a result into the DB."""
+        """Wait for a specific agent (and optionally a specific tool) via orchestrator HTTP."""
         start_time = time.time()
         print(f"[Brain] Polling for {agent_name} {tool_name or ''} results (run_id: {run_id})...")
         while time.time() - start_time < timeout:
             try:
-                conn = get_db_conn()
-                cur = conn.cursor()
-                if tool_name:
-                    # payload_json contains tool_name
-                    cur.execute(
-                        "SELECT payload_json FROM fact_items WHERE run_id = %s AND agent_name = %s AND payload_json::text LIKE %s ORDER BY created_at DESC LIMIT 1",
-                        (run_id, agent_name, f'%"{tool_name}"%'),
-                    )
-                else:
-                    cur.execute(
-                        "SELECT payload_json FROM fact_items WHERE run_id = %s AND agent_name = %s ORDER BY created_at DESC LIMIT 1",
-                        (run_id, agent_name),
-                    )
-                row = cur.fetchone()
-                cur.close()
-                conn.close()
-                if row:
-                    payload = row[0]
+                resp = requests.get(
+                    f"{ORCHESTRATOR_URL}/brain/facts/latest",
+                    params={
+                        "run_id": run_id,
+                        "agent_name": agent_name,
+                        "tool_name": tool_name or "",
+                    },
+                    timeout=10,
+                )
+                if resp.status_code == 404:
+                    time.sleep(2)
+                    continue
+                if resp.status_code >= 300:
+                    raise RuntimeError(f"brain facts gateway failed {resp.status_code}: {resp.text[:200]}")
+                data = resp.json() or {}
+                fact = data.get("fact") or {}
+                payload = fact.get("payload")
+                if payload is not None:
                     if isinstance(payload, dict):
                         return payload
                     try:
@@ -63,7 +54,7 @@ def poll_for_fact(run_id, agent_name, timeout=120, tool_name=None):
                     except Exception:
                         return {"raw": str(payload)}
             except Exception as e:
-                print(f"DB Poll error: {e}")
+                print(f"Fact poll error: {e}")
             time.sleep(2)
         return None
 

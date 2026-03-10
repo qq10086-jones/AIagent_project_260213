@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node worker.js",
-    "test:adapter": "node tests/codex_adapter.test.js && node tests/opencode_adapter.test.js"
+    "test:adapter": "node tests/codex_adapter.test.js && node tests/opencode_adapter.test.js && node tests/verification_command.test.js",
+    "canary:m9_autofix_retry": "node scripts/canary_m9_autofix_retry.js"
   },
   "dependencies": {
     "ioredis": "^5.4.1",

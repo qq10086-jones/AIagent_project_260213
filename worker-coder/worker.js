@@ -1,7 +1,7 @@
 import Redis from "ioredis";
 import pg from "pg";
-import { v4 as uuidv4 } from "uuid";
-import { CodingService } from "./coding_service.js";
+import crypto from "crypto";
+import { CodingService, validateSafeCommand } from "./coding_service.js";
 import { loadRuntimeConfig } from "./runtime_config.js";
 
 const {
@@ -17,7 +17,7 @@ const {
 const STREAM_TASK = process.env.STREAM_TASK || "stream:task:coding";
 const STREAM_RESULT = "stream:result";
 const GROUP = process.env.GROUP_TASK || "cg:workers:coding";
-const CONSUMER = `coder-${uuidv4().slice(0, 8)}`;
+const CONSUMER = `coder-${crypto.randomUUID().slice(0, 8)}`;
 const RUNTIME = loadRuntimeConfig();
 const RUNTIME_CODER = RUNTIME.config?.worker_coder || {};
 const DEFAULT_PROVIDER = String(process.env.CODER_PROVIDER_DEFAULT || RUNTIME_CODER.provider_default || "auto").toLowerCase();
@@ -36,54 +36,6 @@ const pool = new pg.Pool({
   database: PGDATABASE,
 });
 
-const ALLOWED_CMD_PREFIXES = new Set([
-  "python",
-  "pytest",
-  "npm",
-  "node",
-  "git",
-  "ls",
-  "cat",
-  "echo",
-  "pwd",
-  "grep",
-  "rg",
-  "fd",
-  "ruff",
-  "black",
-]);
-
-function splitCommandChain(command) {
-  return String(command || "")
-    .split("&&")
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-
-function validateExecuteCommand(command) {
-  const raw = String(command || "").trim();
-  if (!raw) return { ok: false, error: "Command blocked: empty command." };
-  // Only allow chained commands through "&&". Block other shell-control/meta chars.
-  if (/[;|><`$(){}[\]\\*?~\n\r]/.test(raw)) {
-    return { ok: false, error: "Command blocked: forbidden shell meta-character detected." };
-  }
-  // Reject a standalone '&' that is not part of a "&&" chain.
-  if (/(^|[^&])&([^&]|$)/.test(raw)) {
-    return { ok: false, error: "Command blocked: unsupported '&' operator." };
-  }
-  const segments = splitCommandChain(raw);
-  if (segments.length === 0) {
-    return { ok: false, error: "Command blocked: empty command segment." };
-  }
-  for (const segment of segments) {
-    const cmdPrefix = segment.trim().split(/\s+/)[0];
-    if (!ALLOWED_CMD_PREFIXES.has(cmdPrefix)) {
-      return { ok: false, error: `Command blocked: '${cmdPrefix}' is not whitelisted.` };
-    }
-  }
-  return { ok: true };
-}
-
 async function emitResult(task_id, status, output, error) {
   const msg = { task_id, status };
   if (output) msg.output = JSON.stringify(output);
@@ -93,7 +45,7 @@ async function emitResult(task_id, status, output, error) {
 
 async function writeFact(run_id, agent_name, payload) {
   try {
-    const fact_id = uuidv4();
+    const fact_id = crypto.randomUUID();
     await pool.query(
       "INSERT INTO fact_items (fact_id, run_id, agent_name, kind, payload_json) VALUES ($1, $2, $3, $4, $5)",
       [fact_id, run_id, agent_name, "tool_result", JSON.stringify(payload)]
@@ -137,7 +89,7 @@ async function processTask(msgId, task) {
       if (!isSuccess) error = result.message;
     } else if (tool_name === "coding.execute") {
       const command = String(payload.command || "").trim();
-      const checked = validateExecuteCommand(command);
+      const checked = validateSafeCommand(command);
       if (!checked.ok) throw new Error(checked.error);
 
       const result = await CodingService.executeCommand({
@@ -166,9 +118,15 @@ async function processTask(msgId, task) {
         run_id,
         task_id,
         max_runtime_s: payload.max_runtime_s || 600,
+        max_attempts: payload.max_attempts || 1,
+        same_error_repeat_limit: payload.same_error_repeat_limit || 2,
+        wall_clock_timeout_s: payload.wall_clock_timeout_s || 0,
         codex_command: Array.isArray(payload.codex_command) ? payload.codex_command : null,
         opencode_command: Array.isArray(payload.opencode_command) ? payload.opencode_command : null,
+        verification_command: payload.verification_command || "",
         execution_adapter_packet: payload.execution_adapter_packet || null,
+        context_packet: payload.context_packet || null,
+        repo_map: payload.repo_map || null,
       });
       output = result;
       isSuccess = !!result.ok;

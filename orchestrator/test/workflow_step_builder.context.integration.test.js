@@ -29,7 +29,14 @@ function makeBuilder(workspaceRoot) {
       },
     },
     handoffContracts: { handoffs: {} },
-    runtimeConfig: { execution: { diff_first_enabled: true } },
+    runtimeConfig: {
+      execution: { diff_first_enabled: true },
+      worker_coder: {
+        max_attempts_default: 2,
+        same_error_repeat_limit_default: 2,
+        wall_clock_timeout_s_default: 480,
+      },
+    },
   });
 }
 
@@ -65,4 +72,12 @@ test("impl_be payload includes context packet, repo map, and coding context bloc
   assert.match(payload.task_prompt, /Target Paths:/);
   assert.match(payload.tool_adapter_request.payload.task_prompt, /\[Coding Context Packet\]/);
   assert.equal(payload.tool_adapter_request.payload.context_packet.step_id, "impl_be");
+  assert.equal(payload.verification_command, "node --check sandbox/crm_site/server.js");
+  assert.equal(payload.max_attempts, 2);
+  assert.equal(payload.same_error_repeat_limit, 2);
+  assert.equal(payload.wall_clock_timeout_s, 480);
+  assert.equal(payload.tool_adapter_request.payload.verification_command, "node --check sandbox/crm_site/server.js");
+  assert.equal(payload.tool_adapter_request.payload.max_attempts, 2);
+  assert.equal(payload.tool_adapter_request.payload.same_error_repeat_limit, 2);
+  assert.equal(payload.tool_adapter_request.payload.wall_clock_timeout_s, 480);
 });

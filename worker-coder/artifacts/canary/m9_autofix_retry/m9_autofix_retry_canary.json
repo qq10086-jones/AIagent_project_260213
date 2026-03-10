@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-10T13:58:48.813Z",
+  "workspace_root": "C:/Users/jones/AppData/Local/Temp/worker-coder-autofix-DVNo7v",
+  "retry_summary": {
+    "attempts_used": 2,
+    "max_attempts": 2,
+    "same_error_repeat_limit": 2,
+    "wall_clock_timeout_s": 600,
+    "repairs_attempted": 1,
+    "repaired_after_retry": true
+  },
+  "verification": {
+    "checked": true,
+    "ok": true,
+    "command": "node --check sandbox/crm_site/app.js",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "",
+    "error": null,
+    "error_code": null,
+    "logPath": "C:\\Users\\jones\\AppData\\Local\\Temp\\worker-coder-autofix-DVNo7v\\artifacts\\runs\\run-autofix\\task_task-autofix\\verification_1773151128813.json"
+  },
+  "prompt_contract": {
+    "contract_version": "execution_contract_v1",
+    "target_paths": [
+      "sandbox/crm_site/"
+    ],
+    "required_outputs": [],
+    "verification_command": "node --check sandbox/crm_site/app.js",
+    "execution_mode": "default",
+    "prompt_sha1": "2b4c35648dfb55d33d7345f02f12c411a4f80945",
+    "attempt": 2
+  },
+  "test_log": "C:\\Users\\jones\\AppData\\Local\\Temp\\worker-coder-autofix-DVNo7v\\artifacts\\runs\\run-autofix\\task_task-autofix\\verification_1773151128813.json",
+  "files_changed": [
+    "sandbox/crm_site/app.js"
+  ]
+}

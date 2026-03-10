@@ -121,10 +121,22 @@ Completed:
 - `target_paths` write guardrails are implemented in `worker-coder`
 - scoped snapshot-based `files_changed` recovery is implemented as a replacement for expensive full-repo git scanning
 - fast static checks are implemented before success return for changed `.js/.json/.py` files
+- `verification_command` execution is implemented and recorded as structured evidence
+- coding failure memory is persisted under run-scoped artifacts
+- coding failure memory is copied into orchestrator durable memory roots on successful workflow closure
+- system prompt hardening is implemented as an execution contract block with scope/output/verification constraints
+- bounded auto-fix controls are implemented in `worker-coder` with `max_attempts` and `same_error_repeat_limit`
+- auto-fix budgeting now includes `wall_clock_timeout_s` and terminal `final_failure_summary`
+- orchestrator step payloads now productize `verification_command` and retry controls for implementation steps
+- release-pack evidence now indexes verification logs, retry summaries, and coding failure memory paths
+- release-pack evidence now indexes prompt-contract artifacts and final-failure summaries
+- local M9 coding guardrails canary exists and passes
+- worker-level auto-fix canary now passes in sandbox using an inline mocked provider path
 - coding runtime defaults are aligned to `provider=opencode`, `model=qwen3-coder-plus-2025-07-22`
+- `brain` fact polling no longer reads PostgreSQL directly; it uses orchestrator HTTP gateway endpoints
+- live container stack validation passed for orchestrator startup, brain `/run`, and fact-gateway lookup after compose refresh
 
 Next:
-- add `verification_command` execution support
-- persist coding failure memory
-- add bounded repair / auto-fix loop controls
-- strengthen evidence contract for M9 release quality
+- strengthen live-stack M9 validation beyond the current boundary/smoke checks into richer workflow scenarios
+- expand the orchestrator-side brain gateway if additional fact/query endpoints are needed
+- decide whether brain routing decision callbacks should be promoted from event ingestion to a typed contract

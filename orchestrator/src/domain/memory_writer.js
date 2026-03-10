@@ -48,7 +48,46 @@ function copyAdrMarkdownFiles(project_id, releaseRoot) {
   return copied;
 }
 
-export function persistWorkflowMemory({ run, releaseRoot }) {
+function appendJsonlFile(sourcePath, targetPath) {
+  if (!sourcePath || !fs.existsSync(sourcePath)) return false;
+  ensureDir(path.dirname(targetPath));
+  const content = fs.readFileSync(sourcePath, "utf8");
+  if (!content.trim()) return false;
+  fs.appendFileSync(targetPath, content.endsWith("\n") ? content : `${content}\n`, "utf8");
+  return true;
+}
+
+function copyCodingFailureMemory(project_id, runtimeRoot) {
+  if (!runtimeRoot) {
+    return {
+      copied: false,
+      task_failure_jsonl_path: null,
+      task_failure_latest_path: null,
+    };
+  }
+  const sourceJsonl = path.join(runtimeRoot, "memory", "coding_failures.jsonl");
+  const sourceLatest = path.join(runtimeRoot, "memory", "coding_failure_latest.json");
+  const targetDir = memoryPath(project_id, "coding_failures");
+  ensureDir(targetDir);
+
+  const targetJsonl = path.join(targetDir, "coding_failures.jsonl");
+  const copiedJsonl = appendJsonlFile(sourceJsonl, targetJsonl);
+
+  let copiedLatest = false;
+  const targetLatest = path.join(targetDir, "coding_failure_latest.json");
+  if (fs.existsSync(sourceLatest)) {
+    fs.copyFileSync(sourceLatest, targetLatest);
+    copiedLatest = true;
+  }
+
+  return {
+    copied: copiedJsonl || copiedLatest,
+    task_failure_jsonl_path: copiedJsonl ? targetJsonl.replace(/\\/g, "/") : null,
+    task_failure_latest_path: copiedLatest ? targetLatest.replace(/\\/g, "/") : null,
+  };
+}
+
+export function persistWorkflowMemory({ run, releaseRoot, runtimeRoot = "" }) {
   const projectId = String(run?.run_id || run?.workflow_run_id || "default");
   const historyEntry = {
     workflow_run_id: String(run?.workflow_run_id || ""),
@@ -62,10 +101,12 @@ export function persistWorkflowMemory({ run, releaseRoot }) {
   };
   writeTaskHistoryEntry(projectId, historyEntry);
   const copiedAdrPaths = copyAdrMarkdownFiles(projectId, releaseRoot);
+  const codingFailureMemory = copyCodingFailureMemory(projectId, runtimeRoot);
   return {
     ok: true,
     project_id: projectId,
     task_history_path: memoryPath(projectId, "task_history.json").replace(/\\/g, "/"),
     copied_adr_paths: copiedAdrPaths.map((item) => item.replace(/\\/g, "/")),
+    coding_failure_memory: codingFailureMemory,
   };
 }

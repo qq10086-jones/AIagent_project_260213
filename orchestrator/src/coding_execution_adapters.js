@@ -37,6 +37,10 @@ export function buildBackendExecutionPacket({ stepDef, payload = {}, provider = 
     verification_hint: diffFirst
       ? "return a structured backend patch bundle, backend notes, and a typed BE-to-FE handoff manifest"
       : "return complete backend files, backend notes, and a typed BE-to-FE handoff manifest",
+    verification_command: String(payload?.verification_command || ""),
+    max_attempts: Number(payload?.max_attempts || 1),
+    same_error_repeat_limit: Number(payload?.same_error_repeat_limit || 1),
+    wall_clock_timeout_s: Number(payload?.wall_clock_timeout_s || 0),
     provider_hint: String(provider || ""),
     model_hint: String(model || ""),
   };
@@ -76,6 +80,10 @@ export function buildFrontendExecutionPacket({ stepDef, payload = {}, provider =
     verification_hint: diffFirst
       ? "return a structured frontend patch bundle and frontend notes that match the backend handoff contract"
       : "return complete frontend files and frontend notes that match the backend handoff contract",
+    verification_command: String(payload?.verification_command || ""),
+    max_attempts: Number(payload?.max_attempts || 1),
+    same_error_repeat_limit: Number(payload?.same_error_repeat_limit || 1),
+    wall_clock_timeout_s: Number(payload?.wall_clock_timeout_s || 0),
     provider_hint: String(provider || ""),
     model_hint: String(model || ""),
   };

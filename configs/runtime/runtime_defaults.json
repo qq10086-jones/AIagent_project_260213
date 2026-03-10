@@ -24,7 +24,11 @@
   "worker_coder": {
     "provider_default": "opencode",
     "model_default": "qwen3-coder-plus-2025-07-22",
-    "global_task_timeout_ms": 900000
+    "global_task_timeout_ms": 900000,
+    "verification_command_default": "",
+    "max_attempts_default": 2,
+    "same_error_repeat_limit_default": 2,
+    "wall_clock_timeout_s_default": 480
   },
   "worker_quant": {
     "llm_provider": "dashscope",

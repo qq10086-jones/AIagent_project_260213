@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "generated_at": "2026-03-10T13:57:12.487Z",
+  "workspace_root": "C:/Users/jones/AppData/Local/Temp/ocn-canary-m9-EiKU5r",
+  "payload_summary": {
+    "verification_command": "node --check sandbox/crm_site/server.js",
+    "max_attempts": 2,
+    "same_error_repeat_limit": 2
+  },
+  "manifest_paths": {
+    "run_manifest_path": "C:/Users/jones/AppData/Local/Temp/ocn-canary-m9-EiKU5r/artifacts/release/run-m9-canary/meta/run_manifest.json",
+    "summary_path": "C:/Users/jones/AppData/Local/Temp/ocn-canary-m9-EiKU5r/artifacts/release/run-m9-canary/summary/run_summary.md"
+  },
+  "coding_execution_summary": {
+    "total_steps": 1,
+    "verification_checked": 1,
+    "verification_passed": 1,
+    "verification_failed": 0,
+    "test_logs_present": 1,
+    "retry_enabled_steps": 1,
+    "retry_attempted_steps": 1,
+    "final_failures_present": 0,
+    "failure_memory_entries": 1
+  },
+  "archived_paths": [
+    "C:/Users/jones/AppData/Local/Temp/ocn-canary-m9-EiKU5r/artifacts/release/run-m9-canary/qa/strict_canary_report.json",
+    "C:/Users/jones/AppData/Local/Temp/ocn-canary-m9-EiKU5r/artifacts/release/run-m9-canary/qa/strict_canary_report.md",
+    "C:/Users/jones/AppData/Local/Temp/ocn-canary-m9-EiKU5r/artifacts/release/run-m9-canary/qa/go_no_go_result.json",
+    "C:/Users/jones/AppData/Local/Temp/ocn-canary-m9-EiKU5r/artifacts/runs/run-m9-canary/task_task-impl-be/verification_attempt2.json",
+    "C:/Users/jones/AppData/Local/Temp/ocn-canary-m9-EiKU5r/artifacts/runs/run-m9-canary/memory/coding_failure_latest.json",
+    "C:/Users/jones/AppData/Local/Temp/ocn-canary-m9-EiKU5r/artifacts/runs/run-m9-canary/memory/coding_failures.jsonl"
+  ]
+}

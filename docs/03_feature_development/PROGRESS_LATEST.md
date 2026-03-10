@@ -1,6 +1,6 @@
 # Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-10 (M9 coding guardrails in progress)
+**Last updated:** 2026-03-10 (M9 coding guardrails baseline closed in code)
 **Author:** PM / Architecture Review
 
 ---
@@ -121,8 +121,8 @@ Governance:
 
 Current interpretation:
 - M9 is focused on `worker-coder` execution quality, not on routing/governance expansion.
-- The first coding hardening slice is already landed in code.
-- Scope is currently limited to context grounding, write-scope enforcement, scoped file-delta capture, and fast static checks.
+- The core coding hardening slice is now landed in code and validated locally with passing canaries/tests.
+- Scope now covers context grounding, write-scope enforcement, scoped file-delta capture, fast static checks, verification execution, coding failure memory, hardened execution contracts, bounded retry controls, durable memory write-back, and release-pack evidence visibility.
 
 Completed so far:
 - Task-scoped context packet generation for coding steps
@@ -131,13 +131,23 @@ Completed so far:
 - `target_paths`-based write guardrails in `worker-coder`
 - Scoped snapshot-based `files_changed` recovery without full-repo `git status`
 - Fast static checks before success return (`node --check`, JSON parse, `python -m py_compile`)
+- `verification_command` execution support with structured verification logs
+- Append-only coding failure memory under run-scoped artifacts
+- Coding failure memory copied into orchestrator durable memory roots on workflow closure
+- Hardened execution contract block injected into coding prompts to constrain scope/output format
+- Bounded auto-fix loop controls (`max_attempts`, `same_error_repeat_limit`, `wall_clock_timeout_s`) in `worker-coder`
+- Terminal `final_failure_summary` emitted for bounded retry failures
+- Orchestrator-side payload productization for `verification_command` and retry controls
+- Release-pack evidence contract extended with verification, retry, final-failure, prompt-contract, and failure-memory visibility
 - Default coding runtime aligned to `provider=opencode`, `model=qwen3-coder-plus-2025-07-22`
+- Local canary coverage for M9 coding guardrails (`canary:m9_coding_guardrails`)
+- Worker-level auto-fix retry canary passes in sandbox via inline mocked provider (`worker-coder canary:m9_autofix_retry`)
+- `brain` fact polling is decoupled from direct PostgreSQL access through orchestrator HTTP gateway endpoints
+- Live stack validation completed for the new M9/brain boundary path after container refresh and config mount fix
 
 Not yet done:
-- `verification_command` execution loop
-- coding failure memory
-- auto-fix retry budgeting
-- full evidence-contract upgrade for M9
+- broader M9 release-quality validation against richer end-to-end business scenarios
+- typed brain gateway expansion beyond latest-fact lookup / event ingestion if future workflows need more surface area
 
 ---
 
@@ -153,6 +163,12 @@ live_validate_vnext_runtime.js                                -> PASS (2026-03-1
 compressed_validation_report                                  -> PASS 89 routing / 71 parallel / 18 sequential
 canary_m7_phase_a_advisory.js                                 -> PASS 4 / 4 (2026-03-10)
 run_m7_dynamic_routing_trial.js (Phase A enabled)             -> PASS live_trial, cohort_cases=10, agreement=0.94
+canary_m9_coding_guardrails.js                                -> PASS local end-to-end evidence contract / retry visibility (2026-03-10)
+worker-coder canary:m9_autofix_retry                          -> PASS inline mocked first-fail / retry-success path (2026-03-10)
+pytest brain/tests/test_supervisor_routing.py                 -> 12 / 12 PASS after HTTP fact-gateway decoupling (2026-03-10)
+validate:live_vnext_runtime                                   -> PASS after orchestrator/brain container refresh (2026-03-10)
+curl /brain/facts/latest + synthetic DB fact                  -> PASS live HTTP gateway lookup (2026-03-10)
+POST brain /run                                               -> PASS on refreshed brain container (2026-03-10)
 ```
 
 ---
@@ -194,7 +210,7 @@ Recently cleared:
 | T-B1 | Productize accelerated evidence workflow | T-A1 | Make Phase A evidence collection repeatable, not one-off |
 | T-B2 | Decide whether Phase B should remain blocked or enter review | T-A2 | Formalize enforced-mode entry based on advisory evidence |
 | T-B3 | Draft `brain/` API boundary decoupling design | None | Reduce direct DB coupling risk before broader expansion |
-| T-B4 | Complete M9 verification-command and auto-fix loop | None | Move coding success criteria from syntax-only to execute-and-verify |
+| T-B4 | Extend M9 validation from local canary to worker/live integration | None | DONE in local mocked-worker scope; next step is full live runtime confidence |
 
 ### P2
 
@@ -202,7 +218,7 @@ Recently cleared:
 |---|------|------------|
 | T-C1 | Consider expanding cohort beyond current guarded FE-led scope | T-B2 |
 | T-C2 | Evaluate whether `model_tier` should influence runtime execution policy | T-B2 |
-| T-C3 | Expand M9 evidence and memory contracts | T-B4 |
+| T-C3 | Expand M9 evidence and memory contracts into durable orchestration memory | T-B4 |
 
 ---
 
@@ -217,7 +233,7 @@ Recently cleared:
 | R-17 | No fast rollback path if M7 behaves badly | High | Mitigated |
 | R-18 | Limited exposure sample bias | Medium | Mitigated |
 | R-19 | Classifier unavailable during decision path | High | Mitigated |
-| R-NEW-01 | `brain/` still has direct DB coupling without API boundary | High | Open |
+| R-NEW-01 | `brain/` still has direct DB coupling without API boundary | High | Mitigated |
 | R-NEW-02 | Workflow engine complexity regresses upward again | Medium | Mitigated |
 | R-NEW-03 | Production/staging config drift | Medium | Resolved |
 | R-NEW-04 | Local manual startup path bypasses intended config roots / env injection | High | Open |

@@ -5,6 +5,5 @@ langchain-ollama
 langchain-core
 langchain-openai
 pydantic
-psycopg2-binary
 redis
 pyyaml

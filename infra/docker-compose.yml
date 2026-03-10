@@ -56,6 +56,8 @@ services:
       - ../configs/prompt_scripts:/app/configs/prompt_scripts:ro
       - ../configs/registry:/app/configs/registry:ro
       - ../configs/runtime:/app/configs/runtime:ro
+      - ../orchestrator/configs/llm_providers.json:/app/configs/llm_providers.json:ro
+      - ../orchestrator/configs/llm_role_policy.json:/app/configs/llm_role_policy.json:ro
       - ../orchestrator/configs/production_parallel_rollout.json:/app/configs/production_parallel_rollout.json:ro
       - ../orchestrator/contracts:/app/contracts:ro
       - ../orchestrator/src:/app/src

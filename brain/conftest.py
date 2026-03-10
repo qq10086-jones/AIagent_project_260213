@@ -4,9 +4,9 @@ conftest.py — pytest fixtures for brain/ test suite.
 WS-33-01: Brain Directory Test Infrastructure.
 
 Provides:
-  - mock_db_conn: a fully mocked psycopg2 connection (no real DB needed)
   - mock_llm: a mocked ChatOpenAI instance (no real API calls)
-  - mock_requests: patches the requests module in supervisor (no real HTTP)
+  - patch_requests_get: patches fact-gateway reads in supervisor (no real HTTP)
+  - patch_requests_post: patches tool-trigger writes in supervisor (no real HTTP)
 
 Module stubs:
   langchain_openai, langgraph, and related packages are heavy Docker-only
@@ -50,26 +50,13 @@ for _pkg in ["langchain_core", "langchain_core.messages"]:
 
 
 @pytest.fixture
-def mock_cursor():
-    """A mock psycopg2 cursor with configurable fetchone result."""
-    cursor = MagicMock()
-    cursor.fetchone.return_value = None  # default: no rows
-    return cursor
-
-
-@pytest.fixture
-def mock_db_conn(mock_cursor):
-    """A mock psycopg2 connection that returns mock_cursor on cursor()."""
-    conn = MagicMock()
-    conn.cursor.return_value = mock_cursor
-    return conn
-
-
-@pytest.fixture
-def patch_db_conn(mock_db_conn):
-    """Patches supervisor.get_db_conn to return mock_db_conn."""
-    with patch("supervisor.get_db_conn", return_value=mock_db_conn) as patched:
-        yield patched
+def patch_requests_get():
+    """Patches requests.get in supervisor for fact polling."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 404
+    mock_resp.json.return_value = {"ok": False}
+    with patch("supervisor.requests.get", return_value=mock_resp) as patched:
+        yield patched, mock_resp
 
 
 @pytest.fixture

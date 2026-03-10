@@ -3,8 +3,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import crypto from 'crypto';
+import vm from 'vm';
 import { applyEditBlocks } from './patch_manager.js';
-import { v4 as uuidv4 } from 'uuid';
 import { executeCodingAdapter } from './coding_executor_runtime.js';
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -17,7 +17,11 @@ function payloadToAdapterRequest({
     expected_artifacts,
     step_id,
     target_paths,
+    verification_command,
+    wall_clock_timeout_s,
     execution_adapter_packet,
+    context_packet,
+    repo_map,
     model,
     run_id,
     task_id,
@@ -32,7 +36,11 @@ function payloadToAdapterRequest({
             artifact_root: String(artifact_root || ""),
             expected_artifacts: Array.isArray(expected_artifacts) ? expected_artifacts : [],
             target_paths: Array.isArray(target_paths) ? target_paths : [],
+            verification_command: String(verification_command || ""),
+            wall_clock_timeout_s: Number(wall_clock_timeout_s || 0),
             execution_adapter_packet: execution_adapter_packet || null,
+            context_packet: context_packet || null,
+            repo_map: repo_map || null,
             model_hint: String(model || ""),
         },
         context: {
@@ -174,18 +182,44 @@ export const CodingService = {
             run_id,
             task_id,
             max_runtime_s = 600,
+            max_attempts = 1,
+            same_error_repeat_limit = 2,
+            wall_clock_timeout_s = 0,
             codex_command = null,
             opencode_command = null,
+            verification_command = "",
             execution_adapter_packet = null,
+            context_packet = null,
+            repo_map = null,
         } = params;
 
         const providerRequested = String(provider || "auto").toLowerCase();
         const supportedProviders = new Set(["auto", "opencode", "codex"]);
         if (!supportedProviders.has(providerRequested)) {
+            const failureMemory = persistCodingFailureMemory({
+                workspaceRoot,
+                runId: run_id,
+                taskId: task_id,
+                stepId: step_id,
+                providerRequested: providerRequested,
+                providerUsed: null,
+                targetPaths: target_paths,
+                failedPhase: "provider_validation",
+                terminalOutcome: "failed",
+                errorCode: "E_PROVIDER_UNAVAILABLE",
+                error: `Unsupported provider '${providerRequested}'. Use auto/opencode/codex.`,
+                attemptedFixes: [],
+                filesChanged: [],
+                artifactPaths: {},
+            });
             return {
                 ok: false,
                 error: `Unsupported provider '${providerRequested}'. Use auto/opencode/codex.`,
-                diagnostics: { error_code: "E_PROVIDER_UNAVAILABLE", provider_requested: providerRequested }
+                diagnostics: {
+                    error_code: "E_PROVIDER_UNAVAILABLE",
+                    provider_requested: providerRequested,
+                    coding_failure_memory: failureMemory,
+                }
             };
         }
         const preferredProvider = providerRequested === "auto" ? "opencode" : providerRequested;
@@ -197,6 +231,22 @@ export const CodingService = {
             allowedTargetPaths: effectiveTargetPaths,
         });
         if (!scopeRootsCheck.ok) {
+            const failureMemory = persistCodingFailureMemory({
+                workspaceRoot,
+                runId: run_id,
+                taskId: task_id,
+                stepId: step_id,
+                providerRequested: providerRequested,
+                providerUsed: null,
+                targetPaths: effectiveTargetPaths,
+                failedPhase: "scope_guard",
+                terminalOutcome: "failed",
+                errorCode: "E_UNAUTHORIZED_WRITE",
+                error: scopeRootsCheck.error,
+                attemptedFixes: [],
+                filesChanged: [],
+                artifactPaths: {},
+            });
             return {
                 ok: false,
                 error: scopeRootsCheck.error,
@@ -204,6 +254,7 @@ export const CodingService = {
                     error_code: "E_UNAUTHORIZED_WRITE",
                     provider_requested: providerRequested,
                     target_paths: effectiveTargetPaths,
+                    coding_failure_memory: failureMemory,
                 },
             };
         }
@@ -219,187 +270,378 @@ export const CodingService = {
 
         const baselineSnapshot = captureScopedSnapshot(workspaceRoot, effectiveTargetPaths);
         const started = new Date().toISOString();
-        const adapterRequest = payloadToAdapterRequest({
-            provider: preferredProvider,
-            task_prompt,
-            artifact_root,
-            expected_artifacts,
-            step_id,
-            target_paths: effectiveTargetPaths,
-            execution_adapter_packet,
-            model,
-            run_id,
-            task_id,
-        });
-        const result = await executeCodingAdapter({
-            workspaceRoot,
-            adapterRequest,
-            provider: preferredProvider,
-            model,
-            maxRuntimeS: max_runtime_s,
-            codexCommand: codex_command,
-            opencodeCommand: opencode_command,
-        });
-        const fallbackFrom = result?.diagnostics?.fallback_from || null;
+        const startedMs = Date.now();
+        const maxAttemptsSafe = clampInt(max_attempts, 1, 3, 1);
+        const sameErrorRepeatLimitSafe = clampInt(same_error_repeat_limit, 1, 3, 2);
+        const wallClockTimeoutSafe = clampInt(
+            wall_clock_timeout_s,
+            Math.max(30, max_runtime_s || 30),
+            3600,
+            Math.max(max_runtime_s || 30, 300),
+        );
+        const attemptRecords = [];
+        const errorCounts = new Map();
+        let finalSummary = null;
+        let finalFallbackFrom = null;
+        let terminalRetryReason = "completed";
 
-        let artifactScaffold = null;
-        if (result?.ok) {
-            artifactScaffold = ensureExpectedArtifacts({
+        for (let attemptIndex = 1; attemptIndex <= maxAttemptsSafe; attemptIndex++) {
+            const remainingMs = (startedMs + (wallClockTimeoutSafe * 1000)) - Date.now();
+            if (remainingMs <= 0) {
+                terminalRetryReason = "wall_clock_timeout_exhausted";
+                finalSummary = buildDelegateFailureSummary({
+                    workspaceRoot,
+                    runId: run_id,
+                    taskId: task_id,
+                    stepId: step_id,
+                    providerRequested,
+                    providerUsed: preferredProvider,
+                    targetPaths: effectiveTargetPaths,
+                    finalGitSummary: await gatherGitSummary(workspaceRoot, taskDir, baselineSnapshot, effectiveTargetPaths),
+                    stdoutPath: null,
+                    stderrPath: null,
+                    staticCheck: null,
+                    verification: null,
+                    adapterResult: null,
+                    verificationCommand: verification_command,
+                    promptContract: null,
+                    redactedStdout: "",
+                    redactedStderr: "",
+                    startedAt: started,
+                    phase: "retry_budget",
+                    summaryText: "wall clock timeout reached before another repair attempt could start",
+                    testResult: "skipped",
+                    errorCode: "E_WALL_CLOCK_TIMEOUT",
+                    error: `wall_clock_timeout_s budget exhausted after ${Date.now() - startedMs}ms`,
+                });
+                break;
+            }
+            const priorFailure = attemptRecords.length > 0 ? attemptRecords[attemptRecords.length - 1] : null;
+            const promptSeed = attemptIndex === 1
+                ? task_prompt
+                : buildAutoFixPrompt({
+                    originalPrompt: task_prompt,
+                    previousFailure: priorFailure,
+                    attemptIndex,
+                });
+            const promptContract = writePromptContractArtifact({
                 workspaceRoot,
-                artifactRoot: artifact_root,
-                expectedArtifacts: expected_artifacts,
+                taskDir,
+                attemptIndex,
                 stepId: step_id,
-                taskPrompt: task_prompt,
+                basePrompt: promptSeed,
+                targetPaths: effectiveTargetPaths,
+                expectedArtifacts: expected_artifacts,
+                verificationCommand: verification_command,
+                executionAdapterPacket: execution_adapter_packet,
+                contextPacket: context_packet,
+                repoMap: repo_map,
+            });
+            const effectivePrompt = promptContract.prompt;
+            const adapterRequest = payloadToAdapterRequest({
+                provider: preferredProvider,
+                task_prompt: effectivePrompt,
+                artifact_root,
+                expected_artifacts,
+                step_id,
+                target_paths: effectiveTargetPaths,
+                verification_command,
+                wall_clock_timeout_s: wallClockTimeoutSafe,
+                execution_adapter_packet,
+                context_packet,
+                repo_map,
+                model,
+                run_id,
+                task_id,
+            });
+            const result = await executeCodingAdapter({
+                workspaceRoot,
+                adapterRequest,
+                provider: preferredProvider,
+                model,
+                maxRuntimeS: Math.max(1, Math.min(
+                    Number(max_runtime_s || 600),
+                    Math.max(1, Math.floor(remainingMs / 1000)),
+                )),
+                codexCommand: codex_command,
+                opencodeCommand: opencode_command,
+            });
+            finalFallbackFrom = finalFallbackFrom || result?.diagnostics?.fallback_from || null;
+
+            let artifactScaffold = null;
+            if (result?.ok) {
+                artifactScaffold = ensureExpectedArtifacts({
+                    workspaceRoot,
+                    artifactRoot: artifact_root,
+                    expectedArtifacts: expected_artifacts,
+                    stepId: step_id,
+                    taskPrompt: effectivePrompt,
+                });
+            }
+
+            const stdoutPath = path.join(taskDir, `delegate_stdout_attempt${attemptIndex}_${Date.now()}.log`);
+            const stderrPath = path.join(taskDir, `delegate_stderr_attempt${attemptIndex}_${Date.now()}.log`);
+            const redactedStdout = redactSensitiveText(result.stdout || "");
+            const redactedStderr = redactSensitiveText(result.stderr || "");
+            try {
+                fs.writeFileSync(stdoutPath, redactedStdout, "utf8");
+                fs.writeFileSync(stderrPath, redactedStderr, "utf8");
+            } catch {}
+
+            const gitSummary = await gatherGitSummary(workspaceRoot, taskDir, baselineSnapshot, effectiveTargetPaths);
+            const finalGitSummary = result?.ok
+                ? await ensureImplementationDelta({
+                    workspaceRoot,
+                    stepId: step_id,
+                    taskId: task_id,
+                    executionAdapterPacket: execution_adapter_packet,
+                    taskPrompt: effectivePrompt,
+                    taskDir,
+                    baselineSnapshot,
+                    current: gitSummary,
+                })
+                : gitSummary;
+            const changedScopeCheck = validateChangedFilesWithinScope({
+                filesChanged: finalGitSummary?.filesChanged,
+                allowedTargetPaths: effectiveTargetPaths,
+            });
+            if (result?.ok && !changedScopeCheck.ok) {
+                finalSummary = buildDelegateFailureSummary({
+                    workspaceRoot,
+                    runId: run_id,
+                    taskId: task_id,
+                    stepId: step_id,
+                    providerRequested,
+                    providerUsed: result.provider_used || preferredProvider,
+                    targetPaths: effectiveTargetPaths,
+                    finalGitSummary,
+                    stdoutPath,
+                    stderrPath,
+                    staticCheck: null,
+                    verification: null,
+                    adapterResult: result,
+                    verificationCommand: verification_command,
+                    promptContract,
+                    redactedStdout,
+                    redactedStderr,
+                    startedAt: started,
+                    phase: "scope_guard",
+                    summaryText: "blocked unauthorized write outside target_paths",
+                    testResult: "skipped",
+                    errorCode: "E_UNAUTHORIZED_WRITE",
+                    error: changedScopeCheck.error,
+                });
+                break;
+            }
+
+            const staticCheck = result?.ok
+                ? await runStaticChecks({
+                    workspaceRoot,
+                    filesChanged: finalGitSummary?.filesChanged || [],
+                    taskDir,
+                })
+                : { checked: false, ok: true, commands: [], logPath: null };
+
+            const verification = result?.ok
+                ? await runVerificationCommand({
+                    workspaceRoot,
+                    verificationCommand: verification_command,
+                    taskDir,
+                })
+                : { checked: false, ok: true, command: "", logPath: null };
+
+            if (result?.ok && staticCheck.checked && !staticCheck.ok) {
+                finalSummary = buildDelegateFailureSummary({
+                    workspaceRoot,
+                    runId: run_id,
+                    taskId: task_id,
+                    stepId: step_id,
+                    providerRequested,
+                    providerUsed: result.provider_used || preferredProvider,
+                    targetPaths: effectiveTargetPaths,
+                    finalGitSummary,
+                    stdoutPath,
+                    stderrPath,
+                    staticCheck,
+                    verification,
+                    adapterResult: result,
+                    verificationCommand: verification_command,
+                    redactedStdout,
+                    redactedStderr,
+                    startedAt: started,
+                    phase: "static_check",
+                    summaryText: "static checks failed after delegation",
+                    testResult: "failed",
+                    errorCode: "E_STATIC_CHECK_FAILED",
+                    error: staticCheck.error || "static check failed",
+                });
+            } else if (result?.ok && verification.checked && !verification.ok) {
+                finalSummary = buildDelegateFailureSummary({
+                    workspaceRoot,
+                    runId: run_id,
+                    taskId: task_id,
+                    stepId: step_id,
+                    providerRequested,
+                    providerUsed: result.provider_used || preferredProvider,
+                    targetPaths: effectiveTargetPaths,
+                    finalGitSummary,
+                    stdoutPath,
+                    stderrPath,
+                    staticCheck,
+                    verification,
+                    adapterResult: result,
+                    verificationCommand: verification.command || verification_command,
+                    promptContract,
+                    redactedStdout,
+                    redactedStderr: `${redactedStderr}\n${String(verification.stderr || "")}`.trim(),
+                    startedAt: started,
+                    phase: "verification",
+                    summaryText: "verification command failed after delegation",
+                    testResult: "failed",
+                    errorCode: verification.errorCode || "E_VERIFICATION_FAILED",
+                    error: verification.error || "verification command failed",
+                });
+            } else if (!result?.ok) {
+                finalSummary = buildDelegateFailureSummary({
+                    workspaceRoot,
+                    runId: run_id,
+                    taskId: task_id,
+                    stepId: step_id,
+                    providerRequested,
+                    providerUsed: result.provider_used || preferredProvider,
+                    targetPaths: effectiveTargetPaths,
+                    finalGitSummary,
+                    stdoutPath,
+                    stderrPath,
+                    staticCheck,
+                    verification,
+                    adapterResult: result,
+                    verificationCommand: verification_command,
+                    promptContract,
+                    redactedStdout,
+                    redactedStderr,
+                    startedAt: started,
+                    phase: "delegate",
+                    summaryText: `${result.provider_used || preferredProvider} delegation failed: ${result.error || "unknown error"}`,
+                    testResult: "skipped",
+                    errorCode: result?.diagnostics?.error_code || "E_DELEGATE_FAILED",
+                    error: redactSensitiveText(result.error || "") || `${result.provider_used || preferredProvider} delegation failed`,
+                });
+            } else {
+                finalSummary = {
+                    ok: true,
+                    provider_used: result.provider_used || preferredProvider,
+                    model_used: result.model_used || null,
+                    summary: `${result.provider_used || preferredProvider} delegation finished.`,
+                    files_changed: finalGitSummary.filesChanged,
+                    diff_stats: finalGitSummary.diffStats,
+                    test_result: verification.checked ? "passed" : "skipped",
+                    git: finalGitSummary.git,
+                    rollback_performed: false,
+                    artifacts: {
+                        diff_bundle: finalGitSummary.diffPath,
+                        patch_file: null,
+                        test_log: verification.logPath || staticCheck.logPath || null,
+                        prompt_contract: promptContract.path || null,
+                        raw_stdout: stdoutPath,
+                        raw_stderr: stderrPath,
+                    },
+                    diagnostics: {
+                        ...(result.diagnostics || {}),
+                        provider_requested: providerRequested,
+                        artifact_scaffold: artifactScaffold || null,
+                        execution_adapter_packet: execution_adapter_packet || null,
+                        tool_adapter_request: adapterRequest,
+                        prompt_contract: promptContract.diagnostics,
+                        static_check: staticCheck,
+                        verification,
+                        retry_summary: {
+                            attempts_used: attemptIndex,
+                            max_attempts: maxAttemptsSafe,
+                            same_error_repeat_limit: sameErrorRepeatLimitSafe,
+                            wall_clock_timeout_s: wallClockTimeoutSafe,
+                            repairs_attempted: Math.max(0, attemptIndex - 1),
+                            repaired_after_retry: attemptIndex > 1,
+                        },
+                        parse_error: false,
+                        truncated: false,
+                    },
+                    error: redactSensitiveText(result.error || "") || null,
+                    command_used: result.command_used || null,
+                    command_source: result.command_source || "unknown",
+                    started_at: started,
+                    finished_at: new Date().toISOString(),
+                };
+                break;
+            }
+
+            finalSummary.diagnostics.retry_summary = {
+                attempts_used: attemptIndex,
+                max_attempts: maxAttemptsSafe,
+                same_error_repeat_limit: sameErrorRepeatLimitSafe,
+                repairs_attempted: Math.max(0, attemptIndex - 1),
+                repaired_after_retry: false,
+            };
+
+            const retryDecision = shouldRetryAutoFix({
+                summary: finalSummary,
+                attemptIndex,
+                maxAttempts: maxAttemptsSafe,
+                sameErrorRepeatLimit: sameErrorRepeatLimitSafe,
+                attemptRecords,
+                errorCounts,
+            });
+            attemptRecords.push({
+                attempt: attemptIndex,
+                phase: finalSummary?.diagnostics?.failed_phase || "delegate",
+                error_code: finalSummary?.diagnostics?.error_code || "E_DELEGATE_FAILED",
+                error: String(finalSummary?.error || ""),
+                command_used: finalSummary?.command_used || null,
+                verification_command: verification_command || null,
+            });
+            if (!retryDecision.retry) {
+                terminalRetryReason = retryDecision.reason;
+                break;
+            }
+        }
+
+        if (finalSummary && !finalSummary.ok) {
+            finalSummary.diagnostics.retry_summary = {
+                ...(finalSummary.diagnostics.retry_summary || {}),
+                attempts_used: attemptRecords.length || Number(finalSummary?.diagnostics?.retry_summary?.attempts_used || 1),
+                max_attempts: maxAttemptsSafe,
+                same_error_repeat_limit: sameErrorRepeatLimitSafe,
+                wall_clock_timeout_s: wallClockTimeoutSafe,
+                repairs_attempted: Math.max(0, (attemptRecords.length || 1) - 1),
+                repaired_after_retry: false,
+                terminal_reason: terminalRetryReason,
+            };
+            finalSummary.diagnostics.final_failure_summary = buildFinalFailureSummary({
+                summary: finalSummary,
+                attemptRecords,
+                maxAttempts: maxAttemptsSafe,
+                sameErrorRepeatLimit: sameErrorRepeatLimitSafe,
+                wallClockTimeoutS: wallClockTimeoutSafe,
+                terminalReason: terminalRetryReason,
+                startedAt: started,
             });
         }
 
-        const stdoutPath = path.join(taskDir, `delegate_stdout_${Date.now()}.log`);
-        const stderrPath = path.join(taskDir, `delegate_stderr_${Date.now()}.log`);
-        const redactedStdout = redactSensitiveText(result.stdout || "");
-        const redactedStderr = redactSensitiveText(result.stderr || "");
-        try {
-            fs.writeFileSync(stdoutPath, redactedStdout, "utf8");
-            fs.writeFileSync(stderrPath, redactedStderr, "utf8");
-        } catch {}
-
-        const gitSummary = await gatherGitSummary(workspaceRoot, taskDir, baselineSnapshot, effectiveTargetPaths);
-        const finalGitSummary = result?.ok
-            ? await ensureImplementationDelta({
-                workspaceRoot,
-                stepId: step_id,
-                taskId: task_id,
-                executionAdapterPacket: execution_adapter_packet,
-                taskPrompt: task_prompt,
-                taskDir,
-                baselineSnapshot,
-                current: gitSummary,
-            })
-            : gitSummary;
-        const changedScopeCheck = validateChangedFilesWithinScope({
-            filesChanged: finalGitSummary?.filesChanged,
-            allowedTargetPaths: effectiveTargetPaths,
-        });
-        if (result?.ok && !changedScopeCheck.ok) {
-            return {
-                ok: false,
-                provider_used: result.provider_used || preferredProvider,
-                model_used: result.model_used || null,
-                summary: `blocked unauthorized write outside target_paths`,
-                files_changed: Array.isArray(finalGitSummary?.filesChanged) ? finalGitSummary.filesChanged : [],
-                diff_stats: finalGitSummary?.diffStats || { added: 0, deleted: 0, files: 0 },
-                test_result: "skipped",
-                git: finalGitSummary?.git || { base_ref: "HEAD", branch: "main", commit_sha: null, dirty: false },
-                rollback_performed: false,
-                artifacts: {
-                    diff_bundle: finalGitSummary?.diffPath || null,
-                    patch_file: null,
-                    test_log: null,
-                    raw_stdout: stdoutPath,
-                    raw_stderr: stderrPath,
-                },
-                diagnostics: {
-                    ...(result.diagnostics || {}),
-                    provider_requested: providerRequested,
-                    target_paths: effectiveTargetPaths,
-                    error_code: "E_UNAUTHORIZED_WRITE",
-                },
-                error: changedScopeCheck.error,
-                command_used: result.command_used || null,
-                command_source: result.command_source || "unknown",
-                started_at: started,
-                finished_at: new Date().toISOString(),
-            };
-        }
-        const staticCheck = result?.ok
-            ? await runStaticChecks({
-                workspaceRoot,
-                filesChanged: finalGitSummary?.filesChanged || [],
-                taskDir,
-            })
-            : { checked: false, ok: true, commands: [], logPath: null };
-        if (result?.ok && staticCheck.checked && !staticCheck.ok) {
-            return {
-                ok: false,
-                provider_used: result.provider_used || preferredProvider,
-                model_used: result.model_used || null,
-                summary: `static checks failed after delegation`,
-                files_changed: Array.isArray(finalGitSummary?.filesChanged) ? finalGitSummary.filesChanged : [],
-                diff_stats: finalGitSummary?.diffStats || { added: 0, deleted: 0, files: 0 },
-                test_result: "failed",
-                git: finalGitSummary?.git || { base_ref: "HEAD", branch: "main", commit_sha: null, dirty: false },
-                rollback_performed: false,
-                artifacts: {
-                    diff_bundle: finalGitSummary?.diffPath || null,
-                    patch_file: null,
-                    test_log: staticCheck.logPath,
-                    raw_stdout: stdoutPath,
-                    raw_stderr: stderrPath,
-                },
-                diagnostics: {
-                    ...(result.diagnostics || {}),
-                    provider_requested: providerRequested,
-                    target_paths: effectiveTargetPaths,
-                    error_code: "E_STATIC_CHECK_FAILED",
-                    static_check: staticCheck,
-                },
-                error: staticCheck.error || "static check failed",
-                command_used: result.command_used || null,
-                command_source: result.command_source || "unknown",
-                started_at: started,
-                finished_at: new Date().toISOString(),
-            };
-        }
-        const summary = {
-            ok: !!result.ok,
-            provider_used: result.provider_used || preferredProvider,
-            model_used: result.model_used || null,
-            summary: result.ok
-                ? `${result.provider_used || preferredProvider} delegation finished.`
-                : `${result.provider_used || preferredProvider} delegation failed: ${result.error || "unknown error"}`,
-            files_changed: finalGitSummary.filesChanged,
-            diff_stats: finalGitSummary.diffStats,
-            test_result: "skipped",
-            git: finalGitSummary.git,
-            rollback_performed: false,
-            artifacts: {
-                diff_bundle: finalGitSummary.diffPath,
-                patch_file: null,
-                test_log: staticCheck.logPath || null,
-                raw_stdout: stdoutPath,
-                raw_stderr: stderrPath,
-            },
-            diagnostics: {
-                ...(result.diagnostics || {}),
-                provider_requested: providerRequested,
-                artifact_scaffold: artifactScaffold || null,
-                execution_adapter_packet: execution_adapter_packet || null,
-                tool_adapter_request: adapterRequest,
-                static_check: staticCheck,
-                parse_error: false,
-                truncated: false,
-            },
-            error: redactSensitiveText(result.error || "") || null,
-            command_used: result.command_used || null,
-            command_source: result.command_source || "unknown",
-            started_at: started,
-            finished_at: new Date().toISOString(),
-        };
-
         try {
             const timelinePath = path.join(runDir, 'timeline.md');
-            const status = summary.ok ? "PASS" : "FAIL";
-            const line = `- ${new Date().toISOString()} | task: ${task_id || 'unknown'} | Delegated: ${summary.provider_used} (requested=${providerRequested}${fallbackFrom ? `,fallback_from=${fallbackFrom}` : ""}) | STATUS: ${status}\n`;
+            const status = finalSummary?.ok ? "PASS" : "FAIL";
+            const line = `- ${new Date().toISOString()} | task: ${task_id || 'unknown'} | Delegated: ${finalSummary?.provider_used || preferredProvider} (requested=${providerRequested}${finalFallbackFrom ? `,fallback_from=${finalFallbackFrom}` : ""}) | STATUS: ${status}\n`;
             fs.appendFileSync(timelinePath, line);
         } catch {}
 
-        return summary;
+        return finalSummary;
     },
 
     /**
      * Placeholder for starting a task.
      */
     startTask: async (task_prompt, workspaceRoot) => {
-        const run_id = uuidv4();
+        const run_id = crypto.randomUUID();
         const runDir = path.join(workspaceRoot, 'artifacts', 'runs', run_id);
 
         try {
@@ -441,6 +683,52 @@ function normalizeRelPath(value) {
     return String(value || "").replace(/\\/g, "/").replace(/^\/+/, "");
 }
 
+const ALLOWED_CMD_PREFIXES = new Set([
+    "python",
+    "pytest",
+    "npm",
+    "node",
+    "git",
+    "ls",
+    "cat",
+    "echo",
+    "pwd",
+    "grep",
+    "rg",
+    "fd",
+    "ruff",
+    "black",
+]);
+
+function splitCommandChain(command) {
+    return String(command || "")
+        .split("&&")
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+export function validateSafeCommand(command) {
+    const raw = String(command || "").trim();
+    if (!raw) return { ok: false, error: "Command blocked: empty command." };
+    if (/[;|><`$(){}[\]\\*?~\n\r]/.test(raw)) {
+        return { ok: false, error: "Command blocked: forbidden shell meta-character detected." };
+    }
+    if (/(^|[^&])&([^&]|$)/.test(raw)) {
+        return { ok: false, error: "Command blocked: unsupported '&' operator." };
+    }
+    const segments = splitCommandChain(raw);
+    if (segments.length === 0) {
+        return { ok: false, error: "Command blocked: empty command segment." };
+    }
+    for (const segment of segments) {
+        const prefix = segment.trim().split(/\s+/)[0];
+        if (!ALLOWED_CMD_PREFIXES.has(prefix)) {
+            return { ok: false, error: `Command blocked: '${prefix}' is not whitelisted.` };
+        }
+    }
+    return { ok: true };
+}
+
 function isProtectedRoot(relPath) {
     const safe = normalizeRelPath(relPath).replace(/\/+$/, "");
     return [".git", "infra", "docker-compose.yml", "configs", "orchestrator", "worker-coder", "worker-quant"].some((item) => {
@@ -450,15 +738,29 @@ function isProtectedRoot(relPath) {
 }
 
 async function execFileCapture(command, args, cwd) {
+    if (String(command || "").trim() === "node" && Array.isArray(args) && args[0] === "--check" && args[1]) {
+        return runInlineNodeSyntaxCheck(String(args[1]));
+    }
     return new Promise((resolve) => {
-        const child = exec(`"${command}" ${args.map((item) => `"${String(item).replace(/"/g, '\\"')}"`).join(" ")}`, { cwd, timeout: 30000 }, (error, stdout, stderr) => {
-            resolve({
-                ok: !error,
-                stdout: String(stdout || ""),
-                stderr: String(stderr || ""),
-                exitCode: error?.code ?? 0,
+        let child = null;
+        try {
+            child = exec(`"${command}" ${args.map((item) => `"${String(item).replace(/"/g, '\\"')}"`).join(" ")}`, { cwd, timeout: 30000 }, (error, stdout, stderr) => {
+                resolve({
+                    ok: !error,
+                    stdout: String(stdout || ""),
+                    stderr: String(stderr || ""),
+                    exitCode: error?.code ?? 0,
+                });
             });
-        });
+        } catch (err) {
+            resolve({
+                ok: false,
+                stdout: "",
+                stderr: String(err?.message || err || ""),
+                exitCode: null,
+            });
+            return;
+        }
         child.on("error", (err) => {
             resolve({
                 ok: false,
@@ -468,6 +770,30 @@ async function execFileCapture(command, args, cwd) {
             });
         });
     });
+}
+
+async function runInlineNodeSyntaxCheck(filePath) {
+    try {
+        const code = fs.readFileSync(filePath, "utf8");
+        if (typeof vm.SourceTextModule === "function") {
+            new vm.SourceTextModule(code, { identifier: filePath });
+        } else {
+            new vm.Script(code, { filename: filePath });
+        }
+        return {
+            ok: true,
+            stdout: "",
+            stderr: "",
+            exitCode: 0,
+        };
+    } catch (err) {
+        return {
+            ok: false,
+            stdout: "",
+            stderr: String(err?.message || err || ""),
+            exitCode: 1,
+        };
+    }
 }
 
 function validateAllowedTargetPaths({ workspaceRoot, allowedTargetPaths = [] }) {
@@ -584,6 +910,393 @@ function flushStaticCheck(taskDir, records, error) {
         error: error || null,
         logPath,
     };
+}
+
+async function runVerificationCommand({ workspaceRoot, verificationCommand, taskDir }) {
+    const command = String(verificationCommand || "").trim();
+    if (!command) {
+        return { checked: false, ok: true, command: "", logPath: null };
+    }
+    const checked = validateSafeCommand(command);
+    if (!checked.ok) {
+        return flushVerificationResult(taskDir, {
+            checked: true,
+            ok: false,
+            command,
+            exit_code: null,
+            stdout: "",
+            stderr: "",
+            error: checked.error,
+            error_code: "E_VERIFICATION_COMMAND_INVALID",
+        });
+    }
+    let proc = null;
+    const inlineNodeCheckMatch = command.match(/^node\s+--check\s+(.+)$/);
+    if (inlineNodeCheckMatch) {
+        const targetPath = inlineNodeCheckMatch[1].trim().replace(/^"|"$/g, "");
+        proc = await runInlineNodeSyntaxCheck(path.resolve(workspaceRoot, targetPath));
+    } else {
+        proc = await execCapture(command, workspaceRoot);
+    }
+    return flushVerificationResult(taskDir, {
+        checked: true,
+        ok: proc.ok,
+        command,
+        exit_code: proc.ok ? 0 : 1,
+        stdout: redactSensitiveText(proc.stdout || ""),
+        stderr: redactSensitiveText(proc.stderr || ""),
+        error: proc.ok ? null : `verification command failed: ${command}`,
+        error_code: proc.ok ? null : "E_VERIFICATION_FAILED",
+    });
+}
+
+function flushVerificationResult(taskDir, payload) {
+    let logPath = null;
+    try {
+        logPath = path.join(taskDir, `verification_${Date.now()}.json`);
+        fs.writeFileSync(logPath, JSON.stringify({
+            generated_at: new Date().toISOString(),
+            ...payload,
+        }, null, 2), "utf8");
+    } catch {
+        logPath = null;
+    }
+    return {
+        ...payload,
+        logPath,
+    };
+}
+
+function clampInt(value, min, max, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.trunc(n)));
+}
+
+function buildAutoFixPrompt({ originalPrompt, previousFailure, attemptIndex }) {
+    const lines = [
+        String(originalPrompt || "").trim(),
+        "",
+        `[Auto-Fix Retry]`,
+        `Attempt: ${attemptIndex}`,
+        `Repair objective: fix the previously failed coding attempt without expanding scope.`,
+    ];
+    if (previousFailure?.phase) lines.push(`Previous failed phase: ${String(previousFailure.phase)}`);
+    if (previousFailure?.error_code) lines.push(`Previous error code: ${String(previousFailure.error_code)}`);
+    if (previousFailure?.error) lines.push(`Previous error: ${String(previousFailure.error)}`);
+    if (previousFailure?.command_used) lines.push(`Previous command used: ${String(previousFailure.command_used)}`);
+    lines.push(`Instructions: preserve target_paths, fix the reported failure, and return only the minimum necessary change set.`);
+    return lines.join("\n");
+}
+
+function buildExecutionPromptContract({
+    stepId,
+    targetPaths = [],
+    expectedArtifacts = [],
+    verificationCommand = "",
+    executionAdapterPacket = null,
+    contextPacket = null,
+    repoMap = null,
+}) {
+    const safeTargetPaths = Array.isArray(targetPaths) ? targetPaths.filter(Boolean) : [];
+    const safeArtifacts = Array.isArray(expectedArtifacts) ? expectedArtifacts.filter(Boolean) : [];
+    const inputArtifacts = Array.isArray(executionAdapterPacket?.input_artifacts)
+        ? executionAdapterPacket.input_artifacts.filter(Boolean)
+        : [];
+    const lines = [
+        `[Execution Contract v1]`,
+        `- step_id: ${String(stepId || "unknown")}`,
+        `- target_paths: ${safeTargetPaths.length > 0 ? safeTargetPaths.join(", ") : "none"}`,
+        `- required_outputs: ${safeArtifacts.length > 0 ? safeArtifacts.join(", ") : "none"}`,
+        `- input_artifacts: ${inputArtifacts.length > 0 ? inputArtifacts.join(", ") : "none"}`,
+        `- verification_command: ${String(verificationCommand || "").trim() || "none"}`,
+        `- execution_mode: ${String(executionAdapterPacket?.execution_mode || "default")}`,
+        `Rules:`,
+        `1. Only modify files under target_paths.`,
+        `2. Produce the minimum patch needed to satisfy the task.`,
+        `3. Do not edit infrastructure, CI, git metadata, or unrelated roots.`,
+        `4. Prefer deterministic file outputs over conversational prose.`,
+        `5. If a required artifact is requested, generate it at the exact relative path.`,
+    ];
+    if (contextPacket && typeof contextPacket === "object") {
+        const entrypoints = Array.isArray(contextPacket.entrypoints) ? contextPacket.entrypoints.filter(Boolean).slice(0, 6) : [];
+        const relatedTests = Array.isArray(contextPacket.related_tests) ? contextPacket.related_tests.filter(Boolean).slice(0, 6) : [];
+        if (entrypoints.length > 0) lines.push(`- entrypoints: ${entrypoints.join(", ")}`);
+        if (relatedTests.length > 0) lines.push(`- related_tests: ${relatedTests.join(", ")}`);
+    }
+    if (repoMap && typeof repoMap === "object") {
+        const candidateFiles = Array.isArray(repoMap.candidate_files) ? repoMap.candidate_files.filter(Boolean).slice(0, 8) : [];
+        if (candidateFiles.length > 0) lines.push(`- candidate_files: ${candidateFiles.join(", ")}`);
+    }
+    return lines.join("\n");
+}
+
+function writePromptContractArtifact({
+    workspaceRoot,
+    taskDir,
+    attemptIndex,
+    stepId,
+    basePrompt,
+    targetPaths,
+    expectedArtifacts,
+    verificationCommand,
+    executionAdapterPacket,
+    contextPacket,
+    repoMap,
+}) {
+    const contractBlock = buildExecutionPromptContract({
+        stepId,
+        targetPaths,
+        expectedArtifacts,
+        verificationCommand,
+        executionAdapterPacket,
+        contextPacket,
+        repoMap,
+    });
+    const prompt = `${String(basePrompt || "").trim()}\n\n${contractBlock}\n`;
+    const diagnostics = {
+        contract_version: "execution_contract_v1",
+        target_paths: Array.isArray(targetPaths) ? targetPaths : [],
+        required_outputs: Array.isArray(expectedArtifacts) ? expectedArtifacts : [],
+        verification_command: String(verificationCommand || "").trim() || null,
+        execution_mode: String(executionAdapterPacket?.execution_mode || "default"),
+        prompt_sha1: crypto.createHash("sha1").update(prompt).digest("hex"),
+        attempt: attemptIndex,
+    };
+    let relPath = null;
+    try {
+        const outPath = path.join(taskDir, `prompt_contract_attempt${attemptIndex}_${Date.now()}.json`);
+        fs.writeFileSync(outPath, JSON.stringify({
+            generated_at: new Date().toISOString(),
+            prompt,
+            ...diagnostics,
+        }, null, 2), "utf8");
+        relPath = path.relative(workspaceRoot, outPath).replace(/\\/g, "/");
+    } catch {}
+    return {
+        prompt,
+        path: relPath,
+        diagnostics,
+    };
+}
+
+function shouldRetryAutoFix({ summary, attemptIndex, maxAttempts, sameErrorRepeatLimit, attemptRecords, errorCounts }) {
+    if (!summary || summary.ok) return { retry: false, reason: "already_succeeded" };
+    if (attemptIndex >= maxAttempts) return { retry: false, reason: "attempt_budget_exhausted" };
+    const phase = String(summary?.diagnostics?.failed_phase || "");
+    if (!["delegate", "static_check", "verification"].includes(phase)) {
+        return { retry: false, reason: "phase_not_retryable" };
+    }
+    const key = `${String(summary?.diagnostics?.error_code || "")}|${String(summary?.error || "")}`;
+    const sameErrorCount = Number(errorCounts.get(key) || 0) + 1;
+    errorCounts.set(key, sameErrorCount);
+    if (sameErrorCount >= sameErrorRepeatLimit) {
+        return { retry: false, reason: "same_error_repeat_limit_reached" };
+    }
+    const previousAttempt = attemptRecords.length > 0 ? attemptRecords[attemptRecords.length - 1] : null;
+    if (previousAttempt && previousAttempt.error_code === summary?.diagnostics?.error_code && previousAttempt.error === summary?.error) {
+        return { retry: false, reason: "same_error_repeated_consecutively" };
+    }
+    return { retry: true, reason: "repair_retry_allowed" };
+}
+
+function buildDelegateFailureSummary({
+    workspaceRoot,
+    runId,
+    taskId,
+    stepId,
+    providerRequested,
+    providerUsed,
+    targetPaths,
+    finalGitSummary,
+    stdoutPath,
+    stderrPath,
+    staticCheck,
+    verification,
+    adapterResult,
+    verificationCommand,
+    promptContract,
+    redactedStdout,
+    redactedStderr,
+    startedAt,
+    phase,
+    summaryText,
+    testResult,
+    errorCode,
+    error,
+}) {
+    const failureMemory = persistCodingFailureMemory({
+        workspaceRoot,
+        runId,
+        taskId,
+        stepId,
+        providerRequested,
+        providerUsed,
+        targetPaths,
+        failedPhase: phase,
+        terminalOutcome: "failed",
+        errorCode,
+        error,
+        commandUsed: adapterResult?.command_used || null,
+        verificationCommand,
+        stderrText: redactedStderr,
+        stdoutText: redactedStdout,
+        attemptedFixes: buildAttemptedFixes({ adapterResult, staticCheck, verification }),
+        filesChanged: Array.isArray(finalGitSummary?.filesChanged) ? finalGitSummary.filesChanged : [],
+        artifactPaths: {
+            diff_bundle: finalGitSummary?.diffPath || null,
+            test_log: verification?.logPath || staticCheck?.logPath || null,
+            prompt_contract: promptContract?.path || null,
+            raw_stdout: stdoutPath,
+            raw_stderr: stderrPath,
+        },
+    });
+    return {
+        ok: false,
+        provider_used: providerUsed || null,
+        model_used: adapterResult?.model_used || null,
+        summary: summaryText,
+        files_changed: Array.isArray(finalGitSummary?.filesChanged) ? finalGitSummary.filesChanged : [],
+        diff_stats: finalGitSummary?.diffStats || { added: 0, deleted: 0, files: 0 },
+        test_result: testResult,
+        git: finalGitSummary?.git || { base_ref: "HEAD", branch: "main", commit_sha: null, dirty: false },
+        rollback_performed: false,
+        artifacts: {
+            diff_bundle: finalGitSummary?.diffPath || null,
+            patch_file: null,
+            test_log: verification?.logPath || staticCheck?.logPath || null,
+            prompt_contract: promptContract?.path || null,
+            raw_stdout: stdoutPath,
+            raw_stderr: stderrPath,
+        },
+        diagnostics: {
+            ...(adapterResult?.diagnostics || {}),
+            provider_requested: providerRequested,
+            target_paths: targetPaths,
+            error_code: errorCode,
+            failed_phase: phase,
+            prompt_contract: promptContract?.diagnostics || null,
+            static_check: staticCheck || { checked: false, ok: true, commands: [], logPath: null },
+            verification: verification || { checked: false, ok: true, command: "", logPath: null },
+            coding_failure_memory: failureMemory,
+        },
+        error,
+        command_used: adapterResult?.command_used || null,
+        command_source: adapterResult?.command_source || "unknown",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+    };
+}
+
+function buildAttemptedFixes({ adapterResult = null, staticCheck = null, verification = null }) {
+    const attempts = [];
+    attempts.push("delegate_once");
+    if (adapterResult?.diagnostics?.fallback_from) {
+        attempts.push(`provider_fallback:${String(adapterResult.diagnostics.fallback_from)}->${String(adapterResult.provider_used || "")}`);
+    }
+    if (staticCheck?.checked) {
+        attempts.push(`static_check:${staticCheck.ok ? "passed" : "failed"}`);
+    }
+    if (verification?.checked) {
+        attempts.push(`verification:${verification.ok ? "passed" : "failed"}`);
+    }
+    return attempts;
+}
+
+function buildFinalFailureSummary({
+    summary,
+    attemptRecords = [],
+    maxAttempts,
+    sameErrorRepeatLimit,
+    wallClockTimeoutS,
+    terminalReason,
+    startedAt,
+}) {
+    const lastAttempt = attemptRecords.length > 0 ? attemptRecords[attemptRecords.length - 1] : null;
+    return {
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        attempts_used: attemptRecords.length > 0 ? attemptRecords.length : 1,
+        max_attempts: Number(maxAttempts || 1),
+        same_error_repeat_limit: Number(sameErrorRepeatLimit || 1),
+        wall_clock_timeout_s: Number(wallClockTimeoutS || 0),
+        terminal_reason: String(terminalReason || "failed"),
+        failed_phase: String(summary?.diagnostics?.failed_phase || "delegate"),
+        error_code: String(summary?.diagnostics?.error_code || ""),
+        error: String(summary?.error || ""),
+        command_used: summary?.command_used || null,
+        verification_command: summary?.diagnostics?.verification?.command || null,
+        last_attempt: lastAttempt,
+    };
+}
+
+function summarizeTerminalText(value, maxLines = 50, maxChars = 4000) {
+    const text = redactSensitiveText(String(value || "").trim());
+    if (!text) return "";
+    const lines = text.split(/\r?\n/);
+    const tail = lines.slice(Math.max(0, lines.length - maxLines)).join("\n");
+    return tail.slice(-maxChars);
+}
+
+function persistCodingFailureMemory({
+    workspaceRoot,
+    runId,
+    taskId,
+    stepId,
+    providerRequested,
+    providerUsed,
+    targetPaths = [],
+    failedPhase,
+    terminalOutcome,
+    errorCode,
+    error,
+    commandUsed = null,
+    verificationCommand = "",
+    stderrText = "",
+    stdoutText = "",
+    attemptedFixes = [],
+    filesChanged = [],
+    artifactPaths = {},
+}) {
+    try {
+        const runDir = path.join(workspaceRoot, "artifacts", "runs", runId || "default");
+        const memoryDir = path.join(runDir, "memory");
+        fs.mkdirSync(memoryDir, { recursive: true });
+        const entry = {
+            failure_id: `cf_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`,
+            recorded_at: new Date().toISOString(),
+            run_id: String(runId || ""),
+            task_id: String(taskId || ""),
+            step_id: String(stepId || ""),
+            provider_requested: String(providerRequested || ""),
+            provider_used: providerUsed ? String(providerUsed) : null,
+            failed_phase: String(failedPhase || "delegate"),
+            terminal_outcome: String(terminalOutcome || "failed"),
+            error_code: String(errorCode || ""),
+            error: redactSensitiveText(String(error || "")),
+            command_used: commandUsed ? String(commandUsed) : null,
+            verification_command: verificationCommand ? String(verificationCommand) : null,
+            stderr_summary: summarizeTerminalText(stderrText),
+            stdout_summary: summarizeTerminalText(stdoutText, 20, 2000),
+            target_paths: Array.isArray(targetPaths) ? targetPaths : [],
+            files_changed: Array.isArray(filesChanged) ? filesChanged : [],
+            attempted_fixes: Array.isArray(attemptedFixes) ? attemptedFixes : [],
+            artifacts: artifactPaths || {},
+        };
+        const jsonlPath = path.join(memoryDir, "coding_failures.jsonl");
+        fs.appendFileSync(jsonlPath, `${JSON.stringify(entry)}\n`, "utf8");
+        const latestPath = path.join(memoryDir, "coding_failure_latest.json");
+        fs.writeFileSync(latestPath, JSON.stringify(entry, null, 2), "utf8");
+        return {
+            jsonl_path: path.relative(workspaceRoot, jsonlPath).replace(/\\/g, "/"),
+            latest_path: path.relative(workspaceRoot, latestPath).replace(/\\/g, "/"),
+            failure_id: entry.failure_id,
+        };
+    } catch (err) {
+        return {
+            error: `coding failure memory write failed: ${String(err?.message || err || "")}`,
+        };
+    }
 }
 
 function shouldSkipScopedEntry(relPath) {

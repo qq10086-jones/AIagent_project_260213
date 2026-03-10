@@ -134,12 +134,14 @@ export function createWorkflowEngine({
     });
     try {
       const releaseRoot = path.dirname(path.dirname(pack.run_manifest_path || ""));
-      const memoryWrite = persistWorkflowMemory({ run, releaseRoot });
+      const runtimeRoot = path.join(path.dirname(path.dirname(releaseRoot)), "runs", String(run.run_id || ""));
+      const memoryWrite = persistWorkflowMemory({ run, releaseRoot, runtimeRoot });
       await recordEvent(run.workflow_run_id, "memory.write.succeeded", {
         workflow_run_id: run.workflow_run_id,
         project_id: memoryWrite.project_id,
         task_history_path: memoryWrite.task_history_path,
         copied_adr_paths: memoryWrite.copied_adr_paths,
+        coding_failure_memory: memoryWrite.coding_failure_memory,
       });
     } catch (err) {
       await recordEvent(run.workflow_run_id, "memory.write.failed", {

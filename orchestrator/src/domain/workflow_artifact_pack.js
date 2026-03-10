@@ -85,6 +85,50 @@ export function createArtifactPackService({
     });
   }
 
+  function collectCodingExecutionEvidence(steps = []) {
+    const items = (steps || []).map((step) => {
+      const result = parseJsonSafe(step?.result_json, {});
+      const diagnostics = result?.diagnostics && typeof result.diagnostics === "object"
+        ? result.diagnostics
+        : {};
+      const retrySummary = diagnostics?.retry_summary && typeof diagnostics.retry_summary === "object"
+        ? diagnostics.retry_summary
+        : null;
+      const finalFailureSummary = diagnostics?.final_failure_summary && typeof diagnostics.final_failure_summary === "object"
+        ? diagnostics.final_failure_summary
+        : null;
+      const failureMemory = diagnostics?.coding_failure_memory && typeof diagnostics.coding_failure_memory === "object"
+        ? diagnostics.coding_failure_memory
+        : null;
+      return {
+        step_index: Number(step?.step_index),
+        step_id: String(step?.step_id || ""),
+        test_result: String(result?.test_result || "").trim() || null,
+        test_log_path: String(result?.artifacts?.test_log || "").trim().replace(/\\/g, "/") || null,
+        verification_checked: Boolean(diagnostics?.verification?.checked),
+        verification_ok: diagnostics?.verification?.checked ? Boolean(diagnostics?.verification?.ok) : null,
+        verification_command: String(diagnostics?.verification?.command || "").trim() || null,
+        retry_summary: retrySummary,
+        final_failure_summary: finalFailureSummary,
+        prompt_contract_path: String(result?.artifacts?.prompt_contract || "").trim().replace(/\\/g, "/") || null,
+        coding_failure_memory_latest_path: String(failureMemory?.latest_path || "").trim().replace(/\\/g, "/") || null,
+        coding_failure_memory_jsonl_path: String(failureMemory?.jsonl_path || "").trim().replace(/\\/g, "/") || null,
+      };
+    });
+    const summary = {
+      total_steps: items.length,
+      verification_checked: items.filter((item) => item.verification_checked).length,
+      verification_passed: items.filter((item) => item.verification_ok === true).length,
+      verification_failed: items.filter((item) => item.verification_ok === false).length,
+      test_logs_present: items.filter((item) => item.test_log_path).length,
+      retry_enabled_steps: items.filter((item) => Number(item?.retry_summary?.max_attempts || 1) > 1).length,
+      retry_attempted_steps: items.filter((item) => Number(item?.retry_summary?.attempts_used || 1) > 1).length,
+      final_failures_present: items.filter((item) => item.final_failure_summary).length,
+      failure_memory_entries: items.filter((item) => item.coding_failure_memory_latest_path || item.coding_failure_memory_jsonl_path).length,
+    };
+    return { items, summary };
+  }
+
   async function generateArtifactPack(run) {
     const steps = await getSteps(run.workflow_run_id);
     const checkpoints = await listWorkflowCheckpoints(pool, run.workflow_run_id);
@@ -104,6 +148,7 @@ export function createArtifactPackService({
     const stepArtifacts = buildStepArtifactsFromCheckpoints(steps, checkpoints, parseJsonSafe);
     const contextBudget = collectContextBudgetReports(steps);
     const contextArtifacts = collectContextArtifacts(steps);
+    const codingExecutionEvidence = collectCodingExecutionEvidence(steps);
     const releasePaths = buildReleasePackPaths(workspaceRoot, run);
     const { manifest_path: manifestPath, summary_path: summaryPath,
             strict_canary_json_path: canaryJsonPath, strict_canary_report_path: canaryMdPath,
@@ -127,6 +172,8 @@ export function createArtifactPackService({
       context_budget_reports: contextBudget.reports,
       context_budget_summary: contextBudget.summary,
       context_artifacts: contextArtifacts,
+      coding_execution_evidence: codingExecutionEvidence.items,
+      coding_execution_summary: codingExecutionEvidence.summary,
       steps: steps.map((s) => ({
         step_index: Number(s.step_index),
         step_id: s.step_id,
@@ -179,6 +226,13 @@ export function createArtifactPackService({
         `## Context Artifacts`,
         `- context_packets: ${contextArtifacts.filter((item) => item.context_packet_path).length}`,
         `- repo_maps: ${contextArtifacts.filter((item) => item.repo_map_path).length}`, ``,
+        `## Coding Execution Evidence`,
+        `- verification_checked: ${Number(codingExecutionEvidence.summary.verification_checked || 0)}`,
+        `- verification_passed: ${Number(codingExecutionEvidence.summary.verification_passed || 0)}`,
+        `- verification_failed: ${Number(codingExecutionEvidence.summary.verification_failed || 0)}`,
+        `- retry_enabled_steps: ${Number(codingExecutionEvidence.summary.retry_enabled_steps || 0)}`,
+        `- retry_attempted_steps: ${Number(codingExecutionEvidence.summary.retry_attempted_steps || 0)}`,
+        `- failure_memory_entries: ${Number(codingExecutionEvidence.summary.failure_memory_entries || 0)}`, ``,
         `## Steps`,
         ...manifest.steps.map((s) => `- [${s.status === "succeeded" ? "OK" : "FAIL"}] ${s.step_index}:${s.step_id} (${s.tool_name})`),
       ];
@@ -234,6 +288,10 @@ export function createArtifactPackService({
         ...contextArtifacts.flatMap((item) => [item.context_packet_path, item.repo_map_path])
           .filter(Boolean)
           .map((rel) => path.resolve(workspaceRoot, rel)),
+        ...codingExecutionEvidence.items
+          .flatMap((item) => [item.test_log_path, item.prompt_contract_path, item.coding_failure_memory_latest_path, item.coding_failure_memory_jsonl_path])
+          .filter(Boolean)
+          .map((rel) => path.resolve(workspaceRoot, rel)),
       ],
     });
     await indexReleasePackToDb({
@@ -246,6 +304,10 @@ export function createArtifactPackService({
           .map((item) => (item.report_path ? path.resolve(workspaceRoot, item.report_path) : ""))
           .filter(Boolean),
         ...contextArtifacts.flatMap((item) => [item.context_packet_path, item.repo_map_path])
+          .filter(Boolean)
+          .map((rel) => path.resolve(workspaceRoot, rel)),
+        ...codingExecutionEvidence.items
+          .flatMap((item) => [item.test_log_path, item.prompt_contract_path, item.coding_failure_memory_latest_path, item.coding_failure_memory_jsonl_path])
           .filter(Boolean)
           .map((rel) => path.resolve(workspaceRoot, rel)),
       ],
@@ -324,8 +386,24 @@ export function createArtifactPackService({
       .filter(Boolean)
       .map((rel) => path.resolve(workspaceRoot, rel))
       .filter((p) => fs.existsSync(p));
-    const archived = await archiveReleasePackToMinio({ run, manifestPath, summaryPath, extraPaths: [...extraPaths, ...contextBudgetPaths, ...contextArtifactPaths] });
-    await indexReleasePackToDb({ run, manifestPath, summaryPath, extraPaths: [...extraPaths, ...contextBudgetPaths, ...contextArtifactPaths], stepArtifacts, minioArchived: archived });
+    const codingEvidencePaths = steps
+      .map((step) => parseJsonSafe(step?.result_json, {}))
+      .flatMap((result) => {
+        const diagnostics = result?.diagnostics && typeof result.diagnostics === "object" ? result.diagnostics : {};
+        const memory = diagnostics?.coding_failure_memory && typeof diagnostics.coding_failure_memory === "object"
+          ? diagnostics.coding_failure_memory
+          : {};
+        return [
+          String(result?.artifacts?.test_log || "").trim(),
+          String(memory?.latest_path || "").trim(),
+          String(memory?.jsonl_path || "").trim(),
+        ];
+      })
+      .filter(Boolean)
+      .map((rel) => path.resolve(workspaceRoot, rel))
+      .filter((p) => fs.existsSync(p));
+    const archived = await archiveReleasePackToMinio({ run, manifestPath, summaryPath, extraPaths: [...extraPaths, ...contextBudgetPaths, ...contextArtifactPaths, ...codingEvidencePaths] });
+    await indexReleasePackToDb({ run, manifestPath, summaryPath, extraPaths: [...extraPaths, ...contextBudgetPaths, ...contextArtifactPaths, ...codingEvidencePaths], stepArtifacts, minioArchived: archived });
     await recordEvent(workflow_run_id, "artifact.pack.minio.archived", {
       workflow_run_id, count: archived.length, bucket: minioBucket,
     });

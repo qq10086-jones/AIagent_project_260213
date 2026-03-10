@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { spawn } from "child_process";
 
 function runProcess({ command, args = [], cwd, timeoutMs = 600000, stdinText = "" }) {
@@ -63,9 +65,23 @@ export function buildOpenCodeInvocation({
   opencodeCommand,
 }) {
   if (Array.isArray(opencodeCommand) && opencodeCommand.length > 0) {
+    const promptText = String(taskPrompt || "").trim();
+    const commandName = String(opencodeCommand[0]);
+    if (commandName === "mock-inline-autofix") {
+      return {
+        command: commandName,
+        args: opencodeCommand.slice(1).map((x) => String(x)
+          .replace(/\{\{task_prompt\}\}/g, promptText)
+          .replace(/\{\{model\}\}/g, String(model || ""))),
+        stdinText: "",
+        commandSource: "payload.opencode_command",
+      };
+    }
     return {
-      command: String(opencodeCommand[0]),
-      args: opencodeCommand.slice(1).map((x) => String(x)),
+      command: commandName,
+      args: opencodeCommand.slice(1).map((x) => String(x)
+        .replace(/\{\{task_prompt\}\}/g, promptText)
+        .replace(/\{\{model\}\}/g, String(model || ""))),
       stdinText: "",
       commandSource: "payload.opencode_command",
     };
@@ -82,6 +98,31 @@ export function buildOpenCodeInvocation({
     args,
     stdinText: "",
     commandSource: "default",
+  };
+}
+
+async function runInlineMockProcess({ cwd, args = [] }) {
+  const targetRel = String(args[0] || "sandbox/crm_site/app.js").replace(/\\/g, "/");
+  const prompt = String(args[1] || "");
+  const targetAbs = path.resolve(cwd, targetRel);
+  fs.mkdirSync(path.dirname(targetAbs), { recursive: true });
+  if (prompt.includes("[Auto-Fix Retry]")) {
+    fs.writeFileSync(targetAbs, "const status = 'fixed';\nmodule.exports = { status };\n", "utf8");
+    return {
+      ok: true,
+      exitCode: 0,
+      stdout: "inline mock autofix provider: repaired file\n",
+      stderr: "",
+      timedOut: false,
+    };
+  }
+  fs.writeFileSync(targetAbs, "const status = ;\nmodule.exports = { status };\n", "utf8");
+  return {
+    ok: true,
+    exitCode: 0,
+    stdout: "inline mock autofix provider: wrote broken file\n",
+    stderr: "",
+    timedOut: false,
   };
 }
 
@@ -121,35 +162,37 @@ export async function runOpenCodeTask({
       opencodeCommand,
     });
 
-    const proc = await runProcess({
-      command: invocation.command,
-      args: invocation.args,
-      cwd: workspaceRoot,
-      timeoutMs: Math.max(1, Number(maxRuntimeS || 600)) * 1000,
-      stdinText: invocation.stdinText,
-    });
+    const effectiveProc = invocation.command === "mock-inline-autofix"
+      ? await runInlineMockProcess({ cwd: workspaceRoot, args: invocation.args })
+      : await runProcess({
+        command: invocation.command,
+        args: invocation.args,
+        cwd: workspaceRoot,
+        timeoutMs: Math.max(1, Number(maxRuntimeS || 600)) * 1000,
+        stdinText: invocation.stdinText,
+      });
 
-    const errorCode = mapErrorCode({ proc, command: invocation.command });
-    const errorMsg = proc.ok
+    const errorCode = mapErrorCode({ proc: effectiveProc, command: invocation.command });
+    const errorMsg = effectiveProc.ok
       ? null
-      : (proc.timedOut
+      : (effectiveProc.timedOut
         ? "OpenCode command timed out"
         : (errorCode === "E_APPLY_FAILED"
           ? "OpenCode apply phase failed"
           : "OpenCode command failed"));
 
     return {
-      ok: proc.ok,
+      ok: effectiveProc.ok,
       provider_used: "opencode",
       model_used: model || null,
       command_used: [invocation.command, ...invocation.args].join(" "),
       command_source: invocation.commandSource,
-      stdout: proc.stdout,
-      stderr: proc.stderr,
+      stdout: effectiveProc.stdout,
+      stderr: effectiveProc.stderr,
       diagnostics: {
         error_code: errorCode,
-        exit_code: proc.exitCode,
-        timeout: proc.timedOut,
+        exit_code: effectiveProc.exitCode,
+        timeout: effectiveProc.timedOut,
       },
       error: errorMsg,
     };

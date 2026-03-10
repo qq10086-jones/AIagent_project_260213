@@ -139,6 +139,37 @@ function chooseImplementationMode({
   };
 }
 
+function clampInt(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
+}
+
+function inferVerificationCommand({ stepId, targetPaths = [], workspaceRoot }) {
+  const safeStepId = String(stepId || "");
+  const safeTargets = Array.isArray(targetPaths) ? targetPaths : [];
+  for (const targetPath of safeTargets) {
+    const rel = String(targetPath || "").replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!rel) continue;
+    const abs = path.resolve(workspaceRoot, rel);
+    if (!abs.startsWith(path.resolve(workspaceRoot)) || !fs.existsSync(abs)) continue;
+    if (fs.statSync(abs).isDirectory()) {
+      const entries = fs.readdirSync(abs, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        const relFile = path.posix.join(rel, entry.name);
+        if (entry.name.endsWith(".js") && safeStepId === "impl_fe") return `node --check ${relFile}`;
+        if (entry.name.endsWith(".js") && safeStepId === "impl_be") return `node --check ${relFile}`;
+        if (entry.name.endsWith(".py")) return `python -m py_compile ${relFile}`;
+      }
+    } else if (fs.statSync(abs).isFile()) {
+      if (rel.endsWith(".js")) return `node --check ${rel}`;
+      if (rel.endsWith(".py")) return `python -m py_compile ${rel}`;
+    }
+  }
+  return "";
+}
+
 function formatMemoryValue(value) {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
@@ -325,11 +356,40 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         const configured = Number(input.max_runtime_s || 0);
         payload.max_runtime_s = configured > 0 ? configured : (runtimeByStep[stepDef.id] || 240);
       }
+      const runtimeWorkerCoder = runtimeConfig?.worker_coder || {};
       if ((stepDef.id === "impl_fe" || stepDef.id === "impl_be") && !Array.isArray(payload.target_paths)) {
         payload.target_paths = ["sandbox/crm_site/"];
       }
       if ((stepDef.id === "impl_be" || stepDef.id === "impl_fe") && payload.execution_adapter_packet) {
         payload.target_paths = payload.execution_adapter_packet.target_paths;
+      }
+      if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
+        if (!String(payload.verification_command || "").trim()) {
+          const runtimeDefaultCommand = String(runtimeWorkerCoder.verification_command_default || "").trim();
+          payload.verification_command = runtimeDefaultCommand || inferVerificationCommand({
+            stepId: stepDef.id,
+            targetPaths: payload.target_paths,
+            workspaceRoot,
+          });
+        }
+        payload.max_attempts = clampInt(
+          payload.max_attempts ?? input.max_attempts ?? runtimeWorkerCoder.max_attempts_default,
+          1,
+          3,
+          2,
+        );
+        payload.same_error_repeat_limit = clampInt(
+          payload.same_error_repeat_limit ?? input.same_error_repeat_limit ?? runtimeWorkerCoder.same_error_repeat_limit_default,
+          1,
+          3,
+          2,
+        );
+        payload.wall_clock_timeout_s = clampInt(
+          payload.wall_clock_timeout_s ?? input.wall_clock_timeout_s ?? runtimeWorkerCoder.wall_clock_timeout_s_default,
+          Math.max(30, Number(payload.max_runtime_s || 30)),
+          3600,
+          Math.max(Number(payload.max_runtime_s || 30), 300),
+        );
       }
       if (["impl_be", "impl_fe", "qa_verify"].includes(String(stepDef.id || ""))) {
         const memoryProjectId = String(run.run_id || run.workflow_run_id || "default");

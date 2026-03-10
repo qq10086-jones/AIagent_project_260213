@@ -18,6 +18,7 @@
     "canary:llm_dispatcher": "node scripts/canary_llm_dispatcher.js",
     "canary:patch_bundle": "node scripts/canary_patch_bundle.js",
     "canary:context_budget": "node scripts/canary_context_budget.js",
+    "canary:m9_coding_guardrails": "node scripts/canary_m9_coding_guardrails.js",
     "canary:workflow_dag": "node scripts/canary_workflow_dag.js",
     "canary:m4_compat": "node scripts/canary_m4_compat.js",
     "canary:agent_contract_layer": "node scripts/canary_agent_contract_layer.js",

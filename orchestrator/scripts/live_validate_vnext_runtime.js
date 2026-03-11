@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { pathToFileURL } from "url";
 import {
   resolveOrchestratorArtifactPath,
 } from "./_paths.js";
@@ -177,11 +178,11 @@ async function validateApprovalApprove(baseUrl, approvalToken) {
   };
 }
 
-async function main() {
-  const baseUrl = String(arg("base-url", process.env.ORCH_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
-  const approvalToken = String(arg("approval-token", process.env.APPROVAL_TOKEN || "dev-approval-token"));
+export async function main(options = {}) {
+  const baseUrl = String(options.baseUrl || arg("base-url", process.env.ORCH_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
+  const approvalToken = String(options.approvalToken || arg("approval-token", process.env.APPROVAL_TOKEN || "dev-approval-token"));
   // Approval-approve path can take a few minutes when the live coding worker runs a real delegate task.
-  const timeoutMs = Math.max(60000, Number(arg("timeout-ms", "240000")));
+  const timeoutMs = Math.max(60000, Number(options.timeoutMs || arg("timeout-ms", "240000")));
 
   const report = {
     generated_at: new Date().toISOString(),
@@ -210,10 +211,18 @@ async function main() {
   console.log(`- report: ${outPath.replace(/\\/g, "/")}`);
   console.log(`- overall: ${report.overall}`);
   if (report.error) console.log(`- error: ${report.error}`);
-  if (report.overall !== "pass") process.exit(1);
+  if (report.overall !== "pass") {
+    throw new Error(report.error || "live vNext runtime validation failed");
+  }
+  return {
+    reportPath: outPath.replace(/\\/g, "/"),
+    report,
+  };
 }
 
-main().catch((err) => {
-  console.error(`[live-validate] failed: ${err.message || String(err)}`);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(`[live-validate] failed: ${err.message || String(err)}`);
+    process.exit(1);
+  });
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BrainGatewayRoutingDecisionIngestResponse",
+  "type": "object",
+  "properties": {
+    "ok": { "type": "boolean" },
+    "event_name": { "type": "string" },
+    "error": { "type": "string" }
+  },
+  "required": ["ok"],
+  "additionalProperties": false
+}

@@ -247,7 +247,18 @@ def main():
         # drawdown check: scale orders if portfolio drawdown exceeds thresholds
         dd_scale = 1.0
         dd_status = "OK"
-        if args.peak_nav is not None and args.peak_nav > 0:
+        
+        peak_nav = args.peak_nav
+        if peak_nav is None:
+            try:
+                row = conn.execute("SELECT MAX(nav) FROM account_snapshots").fetchone()
+                if row and row[0] is not None:
+                    peak_nav = float(row[0])
+                    print(f"Auto-fetched peak_nav from account_snapshots: {peak_nav:,.0f}")
+            except sqlite3.OperationalError:
+                pass # table might not exist
+
+        if peak_nav is not None and peak_nav > 0:
             # Estimate current NAV from DB positions + cash
             _, cur_pos = _latest_positions(conn, asof)
             cur_nav = float(args.cash)
@@ -255,15 +266,15 @@ def main():
                 _, px = _last_close(conn, sym, asof)
                 if px is not None:
                     cur_nav += float(qty) * float(px)
-            drawdown = (cur_nav - args.peak_nav) / args.peak_nav
+            drawdown = (cur_nav - peak_nav) / peak_nav
             if drawdown < -args.dd_full:
                 dd_scale = 0.0
                 dd_status = f"FULL_EXIT (DD={drawdown:.1%} < -{args.dd_full:.0%})"
-                print(f"⛔ 最大回撤触发全平仓: 当前NAV={cur_nav:,.0f} 峰值={args.peak_nav:,.0f} 回撤={drawdown:.1%}")
+                print(f"⛔ 最大回撤触发全平仓: 当前NAV={cur_nav:,.0f} 峰值={peak_nav:,.0f} 回撤={drawdown:.1%}")
             elif drawdown < -args.dd_half:
                 dd_scale = 0.5
                 dd_status = f"HALF_POSITION (DD={drawdown:.1%} < -{args.dd_half:.0%})"
-                print(f"⚠️  回撤触发半仓: 当前NAV={cur_nav:,.0f} 峰值={args.peak_nav:,.0f} 回撤={drawdown:.1%}")
+                print(f"⚠️  回撤触发半仓: 当前NAV={cur_nav:,.0f} 峰值={peak_nav:,.0f} 回撤={drawdown:.1%}")
 
         # build orders
         orders, info = build_orders(
@@ -324,7 +335,7 @@ def main():
                 "weights_sum_before_norm": info["weights_sum_before_norm"],
                 "drawdown_scale": dd_scale,
                 "drawdown_status": dd_status,
-                "peak_nav_input": args.peak_nav,
+                "peak_nav_input": peak_nav,
             },
         }
 

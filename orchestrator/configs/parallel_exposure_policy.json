@@ -11,7 +11,10 @@
     "webapp_crm"
   ],
   "fe_safe_eligible_input_classes": [
-    "fe_led"
+    "fe_led",
+    "be_led",
+    "fullstack",
+    "architecture"
   ],
   "deny_conditions": {
     "ambiguous_routing": {

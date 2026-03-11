@@ -60,7 +60,7 @@ def _log_slope(series: pd.Series, n: int = 60) -> pd.Series:
     return log_s.rolling(n).apply(_fit, raw=False)
 
 
-def compute_features(px: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+def compute_features(px: pd.DataFrame, vol: pd.DataFrame = None) -> Dict[str, pd.DataFrame]:
     """Compute all 15 features on a (date x ticker) price DataFrame."""
     ret = px.pct_change()
     feats: Dict[str, pd.DataFrame] = {}
@@ -84,7 +84,13 @@ def compute_features(px: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     feats["high52w"] = (px / px.rolling(252).max().clip(lower=1e-6)) - 1.0
     feats["vol_adj_mom20"] = feats["ret20"] / (feats["vol20"] + 1e-9)
     feats["mom_consist"] = ret.rolling(63).apply(lambda x: float((x > 0).mean()), raw=True)
-    feats["vol_z"] = pd.DataFrame(0.0, index=px.index, columns=px.columns)
+    
+    if vol is not None:
+        log_v = np.log(vol.clip(lower=1.0))
+        feats["vol_z"] = (log_v - log_v.rolling(60).mean()) / (log_v.rolling(60).std() + 1e-12)
+    else:
+        feats["vol_z"] = pd.DataFrame(0.0, index=px.index, columns=px.columns)
+    
     return feats
 
 
@@ -214,7 +220,7 @@ def main() -> None:
 
     print("Loading daily_prices from DB...")
     raw = pd.read_sql_query(
-        "SELECT date, symbol, close FROM daily_prices ORDER BY date, symbol",
+        "SELECT date, symbol, close, volume FROM daily_prices ORDER BY date, symbol",
         conn,
     )
     if raw.empty:
@@ -224,11 +230,12 @@ def main() -> None:
 
     raw["date"] = pd.to_datetime(raw["date"])
     px = raw.pivot(index="date", columns="symbol", values="close").sort_index()
+    vol = raw.pivot(index="date", columns="symbol", values="volume").sort_index()
     tickers = px.columns.tolist()
     print(f"Loaded {len(px)} dates x {len(tickers)} tickers")
 
     print("Computing features...")
-    feats = compute_features(px)
+    feats = compute_features(px, vol)
     fwd_ret = px.pct_change(args.H).shift(-args.H)
 
     min_history = 210

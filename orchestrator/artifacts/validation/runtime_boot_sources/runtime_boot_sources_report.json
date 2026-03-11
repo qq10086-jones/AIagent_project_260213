@@ -1,0 +1,126 @@
+{
+  "generated_at": "2026-03-11T03:28:33.807Z",
+  "overall": "pass",
+  "startup_profiles": {
+    "local_manual": {
+      "cwd_expected": "C:/Users/linweiye/AIagent_project_260213/orchestrator",
+      "workspace_root_resolved": "C:/Users/linweiye/AIagent_project_260213",
+      "governance_config_root": "C:/Users/linweiye/AIagent_project_260213/configs",
+      "orchestrator_config_root": "C:/Users/linweiye/AIagent_project_260213/orchestrator/configs"
+    },
+    "docker_compose": {
+      "workspace_root": "/workspace",
+      "app_config_root": "/app/configs"
+    }
+  },
+  "required_files": [
+    {
+      "id": "runtime_defaults",
+      "path": "C:/Users/linweiye/AIagent_project_260213/configs/runtime/runtime_defaults.json",
+      "exists": true
+    },
+    {
+      "id": "llm_providers",
+      "path": "C:/Users/linweiye/AIagent_project_260213/orchestrator/configs/llm_providers.json",
+      "exists": true
+    },
+    {
+      "id": "llm_role_policy",
+      "path": "C:/Users/linweiye/AIagent_project_260213/orchestrator/configs/llm_role_policy.json",
+      "exists": true
+    },
+    {
+      "id": "context_budget_policy",
+      "path": "C:/Users/linweiye/AIagent_project_260213/orchestrator/configs/context_budget_policy.json",
+      "exists": true
+    },
+    {
+      "id": "production_parallel_rollout_root",
+      "path": "C:/Users/linweiye/AIagent_project_260213/configs/production_parallel_rollout.json",
+      "exists": true
+    },
+    {
+      "id": "parallel_exposure_policy_root",
+      "path": "C:/Users/linweiye/AIagent_project_260213/configs/parallel_exposure_policy.json",
+      "exists": true
+    },
+    {
+      "id": "m7_exposure_cohorts_root",
+      "path": "C:/Users/linweiye/AIagent_project_260213/configs/m7_exposure_cohorts.json",
+      "exists": true
+    }
+  ],
+  "compose_mount_checks": [
+    {
+      "id": "workspace_mount",
+      "pattern": "../..:/workspace",
+      "ok": true
+    },
+    {
+      "id": "workspace_mount_exact",
+      "pattern": "- ..:/workspace",
+      "ok": true
+    },
+    {
+      "id": "runtime_defaults_mount",
+      "pattern": "../configs/runtime:/app/configs/runtime:ro",
+      "ok": true
+    },
+    {
+      "id": "llm_providers_mount",
+      "pattern": "../orchestrator/configs/llm_providers.json:/app/configs/llm_providers.json:ro",
+      "ok": true
+    },
+    {
+      "id": "llm_role_policy_mount",
+      "pattern": "../orchestrator/configs/llm_role_policy.json:/app/configs/llm_role_policy.json:ro",
+      "ok": true
+    },
+    {
+      "id": "context_budget_policy_mount",
+      "pattern": "../orchestrator/configs/context_budget_policy.json:/app/configs/context_budget_policy.json:ro",
+      "ok": true
+    },
+    {
+      "id": "rollout_mount_root",
+      "pattern": "../configs/production_parallel_rollout.json:/app/configs/production_parallel_rollout.json:ro",
+      "ok": true
+    },
+    {
+      "id": "parallel_policy_mount_root",
+      "pattern": "../configs/parallel_exposure_policy.json:/app/configs/parallel_exposure_policy.json:ro",
+      "ok": true
+    },
+    {
+      "id": "m7_cohort_mount_root",
+      "pattern": "../configs/m7_exposure_cohorts.json:/app/configs/m7_exposure_cohorts.json:ro",
+      "ok": true
+    }
+  ],
+  "governance_mirror_checks": [
+    {
+      "id": "production_parallel_rollout",
+      "root_path": "C:/Users/linweiye/AIagent_project_260213/configs/production_parallel_rollout.json",
+      "orchestrator_path": "C:/Users/linweiye/AIagent_project_260213/orchestrator/configs/production_parallel_rollout.json",
+      "root_exists": true,
+      "orchestrator_exists": true,
+      "in_sync": true
+    },
+    {
+      "id": "parallel_exposure_policy",
+      "root_path": "C:/Users/linweiye/AIagent_project_260213/configs/parallel_exposure_policy.json",
+      "orchestrator_path": "C:/Users/linweiye/AIagent_project_260213/orchestrator/configs/parallel_exposure_policy.json",
+      "root_exists": true,
+      "orchestrator_exists": true,
+      "in_sync": true
+    },
+    {
+      "id": "m7_exposure_cohorts",
+      "root_path": "C:/Users/linweiye/AIagent_project_260213/configs/m7_exposure_cohorts.json",
+      "orchestrator_path": "C:/Users/linweiye/AIagent_project_260213/orchestrator/configs/m7_exposure_cohorts.json",
+      "root_exists": true,
+      "orchestrator_exists": true,
+      "in_sync": true
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { pathToFileURL } from "url";
 
 import { resolveOrchestratorArtifactPath } from "./_paths.js";
 
@@ -125,9 +126,9 @@ function resolveManifestPath({ workspaceRoot, runId, packValidation }) {
   return candidates.find((item) => fs.existsSync(item)) || candidates[0];
 }
 
-async function main() {
-  const baseUrl = String(arg("base-url", process.env.ORCH_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
-  const timeoutMs = Math.max(120000, Number(arg("timeout-ms", "420000")));
+export async function main(options = {}) {
+  const baseUrl = String(options.baseUrl || arg("base-url", process.env.ORCH_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
+  const timeoutMs = Math.max(120000, Number(options.timeoutMs || arg("timeout-ms", "420000")));
   const workspaceRoot = path.resolve(process.cwd(), "..");
   const report = {
     generated_at: new Date().toISOString(),
@@ -187,10 +188,18 @@ async function main() {
   console.log(`- report: ${outPath.replace(/\\/g, "/")}`);
   console.log(`- overall: ${report.overall}`);
   if (report.error) console.log(`- error: ${report.error}`);
-  if (report.overall !== "pass") process.exit(1);
+  if (report.overall !== "pass") {
+    throw new Error(report.error || "live M9 workflow validation failed");
+  }
+  return {
+    reportPath: outPath.replace(/\\/g, "/"),
+    report,
+  };
 }
 
-main().catch((err) => {
-  console.error(`[live-m9-workflow] failed: ${err.message || String(err)}`);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(`[live-m9-workflow] failed: ${err.message || String(err)}`);
+    process.exit(1);
+  });
+}

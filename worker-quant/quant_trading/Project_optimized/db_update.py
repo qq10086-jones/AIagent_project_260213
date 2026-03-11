@@ -20,6 +20,7 @@ from typing import Dict, List, Tuple, Optional
 import yfinance as yf
 
 from market_db_v2 import MarketDB
+from trade_schema import connect, ensure_news_tables
 
 # Default universe - TSE Prime前300流动性股票（扩展至约100只）
 # 筛选标准：流动性好、覆盖多行业、含较多1手成本<15万JPY的品种（由screener进一步过滤）
@@ -192,6 +193,9 @@ def update_database(db_path: str = "japan_market.db", default_lookback_days: int
         pass
     print("DB updater: start")
     db = MarketDB(db_path)
+
+    with connect(db_path) as conn:
+        ensure_news_tables(conn)
 
     universe = load_universe(universe_path) if universe_path else TARGET_UNIVERSE
 

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "worker_coding_task_contract.schema.json",
+  "type": "object",
+  "required": [
+    "task_class"
+  ],
+  "properties": {
+    "task_class": {
+      "type": "string",
+      "minLength": 1
+    },
+    "beta_template_id": {
+      "type": "string"
+    },
+    "context_envelope": {
+      "type": "object",
+      "properties": {
+        "max_files": {},
+        "max_tokens": {},
+        "dependency_depth": {},
+        "context_source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

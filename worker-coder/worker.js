@@ -1,7 +1,10 @@
 import Redis from "ioredis";
 import pg from "pg";
 import crypto from "crypto";
-import { CodingService, validateSafeCommand } from "./coding_service.js";
+import { pathToFileURL } from "url";
+import { CodingService } from "./coding_service.js";
+import { createTaskLifecycle } from "./task_lifecycle.js";
+import { validateSafeCommand } from "./verification_runner.js";
 import { loadRuntimeConfig } from "./runtime_config.js";
 
 const {
@@ -55,7 +58,7 @@ async function writeFact(run_id, agent_name, payload) {
   }
 }
 
-async function processTask(msgId, task) {
+async function processTask(msgId, task, lifecycle) {
   const { task_id, tool_name, run_id, payload: rawPayload } = task;
   
   if (!tool_name.startsWith("coding.")) {
@@ -68,7 +71,7 @@ async function processTask(msgId, task) {
   } catch {}
 
   console.log(`[worker] Claimed task ${task_id} [${tool_name}]`);
-  await emitResult(task_id, "claimed");
+  await lifecycle.emitClaimed();
 
   let output = {};
   let error = null;
@@ -124,9 +127,13 @@ async function processTask(msgId, task) {
         codex_command: Array.isArray(payload.codex_command) ? payload.codex_command : null,
         opencode_command: Array.isArray(payload.opencode_command) ? payload.opencode_command : null,
         verification_command: payload.verification_command || "",
+        verification_plan: Array.isArray(payload.verification_plan) ? payload.verification_plan : null,
         execution_adapter_packet: payload.execution_adapter_packet || null,
         context_packet: payload.context_packet || null,
         repo_map: payload.repo_map || null,
+        task_class: payload.task_class || null,
+        beta_template_id: payload.beta_template_id || null,
+        context_envelope: payload.context_envelope || null,
       });
       output = result;
       isSuccess = !!result.ok;
@@ -136,20 +143,20 @@ async function processTask(msgId, task) {
     }
 
     // Write fact so Brain can consume it
-    await writeFact(run_id, "coder", { tool_name, output, success: isSuccess });
-    await emitResult(task_id, isSuccess ? "succeeded" : "failed", output, error);
+    await lifecycle.finalizeResult({
+      ok: isSuccess,
+      output,
+      error,
+    });
 
   } catch (err) {
     console.error(`[worker] Task failed:`, err);
-    await writeFact(run_id, "coder", { tool_name, error: err.message, success: false });
-    await emitResult(task_id, "failed", { error: err.message, plan: "failed_during_execution" }, err.message);
+    await lifecycle.finalizeExecutionFailure(err);
   }
-
-  await redis.xack(STREAM_TASK, GROUP, msgId);
   return true;
 }
 
-async function main() {
+export async function main() {
   console.log(`[worker] Starting Worker-Coder (${CONSUMER})...`);
   
   try {
@@ -172,15 +179,25 @@ async function main() {
           
           if (task.tool_name && task.tool_name.startsWith("coding.")) {
             console.log(`[worker] Processing task ${task.task_id} (${task.tool_name})...`);
+            const lifecycle = createTaskLifecycle({
+              taskId: task.task_id,
+              msgId: id,
+              toolName: task.tool_name,
+              runId: task.run_id,
+              emitResult,
+              writeFact,
+              ackMessage: async (messageId) => {
+                await redis.xack(STREAM_TASK, GROUP, messageId);
+              },
+            });
             try {
               const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("GLOBAL_TASK_TIMEOUT")), GLOBAL_TASK_TIMEOUT_MS));
-              await Promise.race([processTask(id, task), timeoutPromise]);
+              await Promise.race([processTask(id, task, lifecycle), timeoutPromise]);
               // After processTask finishes, it should have already called emitResult and xack inside.
               console.log(`[worker] Successfully processed and acknowledged task ${task.task_id}`);
             } catch (err) {
               console.error(`[worker] Critical error processing task ${task.task_id}:`, err.message);
-              await emitResult(task.task_id, "failed", { error: err.message }, err.message);
-              await redis.xack(STREAM_TASK, GROUP, id);
+              await lifecycle.finalizeTimeout(err);
             }
           } else {
             // NOT a coding task. In a shared queue model, we MUST acknowledge it so it doesn't stay pending for US.
@@ -197,4 +214,6 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(console.error);
+}

@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "task_classes": [
+    "fe_create",
+    "fe_modify",
+    "be_create",
+    "bug_fix",
+    "artifact_completion"
+  ]
+}

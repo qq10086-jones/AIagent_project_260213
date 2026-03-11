@@ -226,6 +226,7 @@ function createBackendImplArtifacts({ cwd, prompt, fixed = false }) {
   const finalContent = fixed
     ? "const status = 'fixed';\nmodule.exports = { status };\n"
     : "const status = ;\nmodule.exports = { status };\n";
+  writeText(path.join(artifactRoot, "impl", "be_changes", "server.js"), finalContent);
   writeJson(path.join(artifactRoot, "impl", "be_patch_bundle.json"), {
     bundle_id: "mock-be-bundle",
     step_id: "impl_be",
@@ -250,6 +251,10 @@ function createBackendImplArtifacts({ cwd, prompt, fixed = false }) {
     "- POST /api/customers",
     "- PUT /api/customers/:id",
     "",
+    "## Shared Types",
+    "",
+    "- Customer: id, name, email",
+    "",
     "## Scope Constraints",
     "",
     "- Only CRM sandbox backend file is modified.",
@@ -263,13 +268,13 @@ function createBackendImplArtifacts({ cwd, prompt, fixed = false }) {
     to_step: "impl_fe",
     be_changes_path: "impl/be_changes",
     api_contracts: [
-      { method: "GET", path: "/api/customers", response_shape: "Customer[]" },
-      { method: "GET", path: "/api/customers/:id", response_shape: "Customer" },
-      { method: "POST", path: "/api/customers", response_shape: "Customer" },
-      { method: "PUT", path: "/api/customers/:id", response_shape: "Customer" },
+      { name: "List Customers", method: "GET", path: "/api/customers", response_shape: "Customer[]" },
+      { name: "Get Customer", method: "GET", path: "/api/customers/:id", response_shape: "Customer" },
+      { name: "Create Customer", method: "POST", path: "/api/customers", response_shape: "Customer" },
+      { name: "Update Customer", method: "PUT", path: "/api/customers/:id", response_shape: "Customer" },
     ],
     shared_types: [
-      { name: "Customer", fields: ["id", "name", "email"] },
+      { name: "Customer", description: "Shared CRM customer record.", fields: ["id", "name", "email"] },
     ],
     scope_constraints: ["Only sandbox/crm_site/server.js is modified."],
   });
@@ -283,6 +288,7 @@ function createFrontendImplArtifacts({ cwd, prompt, fixed = false }) {
   const finalContent = fixed
     ? "const status = 'fixed';\nmodule.exports = { status };\n"
     : "const status = ;\nmodule.exports = { status };\n";
+  writeText(path.join(artifactRoot, "impl", "fe_changes", "app.js"), finalContent);
   writeJson(path.join(artifactRoot, "impl", "fe_patch_bundle.json"), {
     bundle_id: "mock-fe-bundle",
     step_id: "impl_fe",
@@ -314,6 +320,18 @@ function createFrontendImplArtifacts({ cwd, prompt, fixed = false }) {
     "",
     "1. Run node --check sandbox/crm_site/app.js",
   ].join("\n"));
+  writeJson(path.join(artifactRoot, "handoff", "impl_to_qa.json"), {
+    from_steps: ["impl_be", "impl_fe"],
+    to_step: "qa_verify",
+    be_changes_path: "impl/be_changes",
+    fe_changes_path: "impl/fe_changes",
+    run_instructions: "Start backend, start frontend, then verify the CRM list/detail/add-edit flows.",
+    known_limitations: [
+      "Authentication flow not implemented",
+      "Advanced filtering is out of scope",
+    ],
+    api_contracts_path: "handoff/be_to_fe.json",
+  });
   return true;
 }
 

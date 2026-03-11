@@ -1,6 +1,6 @@
 # Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-11 (M9 closeout validation follow-up)
+**Last updated:** 2026-03-11 (worker-coding live cohort residual issues recorded)
 **Author:** PM / Architecture Review
 
 ---
@@ -21,6 +21,22 @@
 - **Current coding focus:** M9 closeout tasks after core guardrails landed
 - **M9 runtime config preflight:** `PASS` on 2026-03-11
 - **M9 real live workflow validation:** `PASS` on 2026-03-11
+- **Next-stage release gate (config-only):** `PASS` on 2026-03-11
+- **Next-stage release gate (full live):** `PASS` on 2026-03-11
+- **Runtime boot source validation:** `PASS` on 2026-03-11
+- **Brain gateway typed contract handlers/tests:** landed on 2026-03-11
+- **Worker-coder structural decomposition:** completed on 2026-03-11 (`coding_service.js` reduced to ~705 lines)
+- **Worker lifecycle single-finalization guard:** landed on 2026-03-11 (`task_lifecycle.js` + targeted tests)
+- **Worker-coding task contract v1 landing:** in progress on 2026-03-11 (`task_class` / `context_envelope` / `failure_attribution` compatible fields landed)
+- **Worker-coding contract authority assets:** landed on 2026-03-11 (schema + beta template registry + validation command)
+- **Worker-coding cohort task matrix:** landed on 2026-03-11 (initial four-class beta validation set defined)
+- **Worker-coding cohort result format:** landed on 2026-03-11 (schema + validation command ready for first cohort run)
+- **Worker-coding cohort execution plan:** landed on 2026-03-11 (machine-readable four-task cohort plan validated)
+- **Worker-coding contract consistency hardening:** landed on 2026-03-11 (shared task-class authority + template/task-class mismatch guard)
+- **Worker-coding first multi-class cohort cycle:** completed on 2026-03-11 (`4/4` partial, no fail; current gap is verification tier, not workflow closure)
+- **Worker-coding result-quality hardening v1:** landed on 2026-03-11 (`verification_plan` execution + achieved-tier evidence persisted)
+- **Worker-coding repo-aware verification source:** landed on 2026-03-11 (`sandbox/crm_site` package scripts now back live cohort verification tiers)
+- **Worker-coding live cohort truthful-fail signal:** recorded on 2026-03-11 (`0 pass / 4 fail / 0 partial` after real verification enforcement)
 
 ---
 
@@ -47,6 +63,7 @@ Current governance state:
 - M6 evidence has been strengthened by compressed accelerated validation and is ready for next-stage review.
 - M7 Phase A design, scripts, and config package are complete.
 - M9 coding execution hardening is landed in code, and closeout work is focused on validation depth plus structural cleanup.
+- next-stage mainline execution has delivered a passing release gate, completed startup-path hardening, completed brain gateway contract hardening, and keeps worker-coder decomposition in progress.
 
 Governing documents:
 
@@ -63,7 +80,7 @@ Governing documents:
 
 Upgraded from `STAY_GATED` via M8 Go/No-Go approval on 2026-03-09.
 
-**Active production config:** `orchestrator/configs/production_parallel_rollout.json`
+**Active production config:** `configs/production_parallel_rollout.json`
 - `master_enabled: true`
 - `dynamic_routing_enabled: true` in prepared runtime config
 - `router_mode: dynamic_routing_advisory` in prepared runtime config
@@ -76,7 +93,7 @@ Current interpretation:
 
 Key artifacts:
 - Runtime gate: `orchestrator/src/domain/parallel_rollout_gate.js`
-- Eligibility policy: `orchestrator/configs/parallel_exposure_policy.json`
+- Eligibility policy: `configs/parallel_exposure_policy.json`
 - Circuit breaker: `orchestrator/src/domain/circuit_breaker_service.js`
 - Accelerated validation plan: `docs/03_feature_development/2026-03-09_30min_accelerated_validation_plan.md`
 - Accelerated validation report: `orchestrator/artifacts/m6_trial/accelerated_validation_report_30m.json`
@@ -175,9 +192,14 @@ worker-coder canary:m9_autofix_retry                          -> PASS inline moc
 pytest brain/tests/test_supervisor_routing.py                 -> 12 / 12 PASS after HTTP fact-gateway decoupling (2026-03-10)
 validate:live_vnext_runtime                                   -> PASS after orchestrator/brain container refresh (2026-03-10)
 validate:config_preflight                                     -> PASS (2026-03-11)
+validate:next_stage_release_gate -- --skip-live               -> PASS (2026-03-11)
+validate:next_stage_release_gate                              -> PASS (2026-03-11)
+validate:runtime_boot_sources                                 -> PASS (2026-03-11)
 curl /brain/facts/latest + synthetic DB fact                  -> PASS live HTTP gateway lookup (2026-03-10)
 POST brain /run                                               -> PASS on refreshed brain container (2026-03-10)
 validate:live_m9_workflow                                     -> PASS succeeded workflow + release-pack evidence check (2026-03-11)
+brain_gateway.integration.test.js                             -> PASS (2026-03-11)
+worker-coder test:adapter + prompt/retry/failure tests        -> PASS (2026-03-11)
 ```
 
 ---
@@ -218,7 +240,7 @@ Recently cleared:
 |---|------|------------|------|
 | T-B1 | Productize accelerated evidence workflow | T-A1 | Make Phase A evidence collection repeatable, not one-off |
 | T-B2 | Decide whether Phase B should remain blocked or enter review | T-A2 | Formalize enforced-mode entry based on advisory evidence |
-| T-B3 | Draft `brain/` API boundary decoupling design | None | Reduce direct DB coupling risk before broader expansion |
+| T-B3 | Draft `brain/` API boundary decoupling design | None | DONE for current endpoint surface; next step is broader endpoint expansion only if needed |
 | T-B4 | Extend M9 validation from local canary to worker/live integration | None | DONE in local mocked-worker scope; next step is full live runtime confidence |
 
 ### P2
@@ -245,7 +267,7 @@ Recently cleared:
 | R-NEW-01 | `brain/` still has direct DB coupling without API boundary | High | Mitigated |
 | R-NEW-02 | Workflow engine complexity regresses upward again | Medium | Mitigated |
 | R-NEW-03 | Production/staging config drift | Medium | Resolved |
-| R-NEW-04 | Local manual startup path bypasses intended config roots / env injection | High | Open |
+| R-NEW-04 | Local manual startup path bypasses intended config roots / env injection | High | Resolved |
 
 ---
 
@@ -255,9 +277,9 @@ Recently cleared:
 |----------|------|---------|
 | Root rollout config | `configs/production_parallel_rollout.json` | Prepared runtime gate state for local/root-based startup |
 | Root M7 cohort config | `configs/m7_exposure_cohorts.json` | Prepared Phase A cohort restriction for local/root-based startup |
-| Orchestrator rollout config | `orchestrator/configs/production_parallel_rollout.json` | Container-oriented rollout config copy |
-| Orchestrator M7 cohort config | `orchestrator/configs/m7_exposure_cohorts.json` | Container-oriented cohort config copy |
-| Exposure policy | `orchestrator/configs/parallel_exposure_policy.json` | Allowed M6 exposure cohorts |
+| Orchestrator rollout config | `orchestrator/configs/production_parallel_rollout.json` | Compatibility copy; should match root governance config |
+| Orchestrator M7 cohort config | `orchestrator/configs/m7_exposure_cohorts.json` | Compatibility copy; should match root governance config |
+| Exposure policy | `configs/parallel_exposure_policy.json` | Allowed M6 exposure cohorts |
 | M6 accelerated validation plan | `docs/03_feature_development/2026-03-09_30min_accelerated_validation_plan.md` | Compressed evidence plan |
 | M6 accelerated validation report | `orchestrator/artifacts/m6_trial/accelerated_validation_report_30m.json` | Measured compressed evidence |
 | M6 accelerated validation Go/No-Go | `docs/governance/m6_accelerated_validation_go_no_go_2026-03-09.md` | Formal next-stage recommendation |
@@ -286,9 +308,13 @@ Recently cleared:
 - `orchestrator/scripts/set_m7_phase_a_advisory.js` and `rollback_m7_phase_a_advisory.js` added for reversible config control.
 - `orchestrator/scripts/generate_accelerated_validation_report.js` updated to anchor report windows to latest database timestamps.
 - `orchestrator/src/domain/parallel_rollout_gate.js` and `orchestrator/src/domain/routing_audit_log.js` updated with config path fallback so `node src/index.js` local startup can resolve root configs instead of relying on `/workspace`.
+- `orchestrator/scripts/validate_next_stage_release_gate.js` added as a single next-stage release-gate entrypoint with machine-readable summary output.
+- `orchestrator/scripts/validate_runtime_boot_sources.js` added to verify startup-path config sources and compose mounts.
+- `orchestrator/src/vnext/brain_gateway.js` added to isolate brain gateway handlers from `index.js`.
 
 ### Infrastructure
 - `infra/docker-compose.yml` updated so containerized `orchestrator` mounts `contracts` correctly.
+- `infra/docker-compose.yml` updated so governance runtime files mount from root `configs/`.
 
 ### Coding / M9
 - `orchestrator/src/domain/repo_context_service.js` added for task-scoped context packet and repo map generation.
@@ -297,8 +323,58 @@ Recently cleared:
 - `orchestrator/src/domain/workflow_artifact_pack.js` updated to archive/index context artifacts.
 - `worker-coder/coding_service.js` updated with `target_paths` write guardrails, scoped snapshot diff recovery, and fast static checks.
 - `worker-coder/worker.js` updated to pass `target_paths` into patch/delegate operations.
+- `worker-coder/worker.js` import path fixed after decomposition so live container startup matches current source layout.
+- `worker-coder/scope_guard.js` extracted from `coding_service.js` and covered by targeted tests.
+- `worker-coder/artifact_scaffold.js` extracted from `coding_service.js` to isolate scaffold/template/repair behavior with targeted tests.
+- `worker-coder/scoped_delta.js` extracted from `coding_service.js` to isolate scoped snapshot, diff summary, and deterministic implementation-delta recovery.
+- `worker-coder/static_checks.js` extracted from `coding_service.js` to isolate fast static-check execution, severity shaping, and timeout clamping.
 - `configs/runtime/runtime_defaults.json`, `infra/docker-compose.yml`, and `orchestrator/src/index.js` aligned to `opencode + qwen3-coder-plus-2025-07-22`.
 - `docs/03_feature_development/2026-03-10_opencode_qwen_runtime_note.md` added as the current coding runtime note.
+- `worker-coder/prompt_contract.js`, `worker-coder/verification_runner.js`, `worker-coder/retry_policy.js`, and `worker-coder/failure_memory.js` extracted from `coding_service.js` with targeted tests.
+- `worker-coder/tests/artifact_scaffold.test.js` added to verify scaffold creation and repair logic.
+- `worker-coder/tests/scoped_delta.test.js` added to verify scoped snapshot, diff accounting, and fallback stub recovery.
+- `worker-coder/tests/static_checks.test.js` added to verify static-check execution and timeout guard behavior.
+- `worker-coder/task_lifecycle.js` added to enforce single-finalization semantics across success, failure, timeout, and ack paths.
+- `worker-coder/tests/task_lifecycle.test.js` added to verify timeout cannot double-write result/fact/ack after late completion.
+- `worker-coder/git_side_effects.js` added to replace shell-based auto-commit with structured git execution and artifacted outcomes.
+- `worker-coder/tests/git_side_effects.test.js` added to verify structured git arguments and auto-commit evidence output.
+- `worker-coder/task_contract.js` added to normalize `task_class` / `context_envelope` metadata and derive `failure_attribution`.
+- `worker-coder/tests/task_contract.test.js` added to verify task-contract normalization and failure-attribution mapping.
+- `worker-coder/coding_service.js`, `worker-coder/worker.js`, and `worker-coder/failure_memory.js` updated so `coding.delegate` can carry compatible task-contract metadata and persist it in diagnostics/failure memory.
+- `docs/03_feature_development/2026-03-11_worker_coding_task_contract_note.md` added as the first `WC-NEXT-01` contract landing note.
+- `orchestrator/contracts/worker_coding_task_contract.schema.json` and `orchestrator/contracts/worker_coding_beta_template_registry.schema.json` added as authority schemas for next-stage worker-coding governance.
+- `configs/registry/worker_coding_beta_templates.json` added with initial templates for `fe_create`, `fe_modify`, `be_create`, and `bug_fix`.
+- `orchestrator/scripts/validate_worker_coding_contract.js` and `npm.cmd --prefix orchestrator run validate:worker_coding_contract` added and passing.
+- `orchestrator/src/worker_coding_templates.js` added so worker-coding beta templates are loaded at orchestration time, not inferred inside the worker.
+- `orchestrator/src/domain/workflow_step_builder.js` updated to inject template defaults into `coding.delegate` payloads before execution.
+- `orchestrator/test/worker_coding_templates.test.js` added to verify template-driven `task_class` / `context_envelope` injection.
+- `docs/03_feature_development/2026-03-11_worker_coding_cohort_task_matrix.md` added to define the first multi-class worker-coding validation cohort (`fe_create`, `fe_modify`, `be_create`, `bug_fix`).
+- `orchestrator/contracts/worker_coding_cohort_result.schema.json` added as the authority schema for cohort validation result artifacts.
+- `docs/03_feature_development/2026-03-11_worker_coding_cohort_result_format.md` added to define the machine-readable cohort result format.
+- `orchestrator/scripts/validate_worker_coding_cohort_result_format.js` and `npm.cmd --prefix orchestrator run validate:worker_coding_cohort_result` added and passing.
+- `orchestrator/contracts/worker_coding_cohort_plan.schema.json` added as the authority schema for cohort execution plans.
+- `configs/registry/worker_coding_cohort_plan_v1.json` added as the first machine-readable worker-coding cohort plan.
+- `orchestrator/scripts/validate_worker_coding_cohort_plan.js` and `npm.cmd --prefix orchestrator run validate:worker_coding_cohort_plan` added and passing.
+- `shared/worker_coding_contract.mjs` added as the shared authority source for allowed worker-coding task classes.
+- `orchestrator/src/worker_coding_templates.js` hardened so `beta_template_id` and `task_class` mismatch now fails fast instead of silently polluting cohort data.
+- `orchestrator/scripts/validate_worker_coding_contract.js` and `orchestrator/scripts/validate_worker_coding_cohort_plan.js` updated to consume the shared task-class authority rather than duplicating local enums.
+- `orchestrator/scripts/run_worker_coding_cohort.js` and `npm.cmd --prefix orchestrator run validate:worker_coding_cohort_execute` added to execute the first controlled worker-coding cohort and emit machine-readable cohort result artifacts.
+- first cohort artifact recorded at `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T08-17-51-917Z/worker_coding_cohort_result.json`; observed result was `4 partial / 0 fail / 0 pass`, with all four runs closing workflow successfully but only achieving `syntax_check` against higher declared verification tiers.
+- `orchestrator/src/domain/workflow_step_builder.js` now translates template-declared verification tiers into structured `verification_plan` payloads, resolving package-script-backed tiers where available and preserving unresolved tiers explicitly.
+- `worker-coder/verification_runner.js`, `worker-coder/coding_service.js`, `worker-coder/worker.js`, and `worker-coder/prompt_contract.js` now support ordered verification-plan execution while remaining compatible with legacy single-command verification.
+- second cohort artifact recorded at `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T08-26-43-490Z/worker_coding_cohort_result.json`; result remained `4 partial / 0 fail / 0 pass`, confirming the current blocker is verification-depth availability rather than workflow instability.
+- `configs/registry/worker_coding_task_classes.json` is now the container-safe authority source for worker-coding task classes; orchestrator and worker loaders now resolve from config-visible paths instead of container-fragile relative imports.
+- `sandbox/crm_site/package.json` and `sandbox/crm_site/scripts/verify_crm_site.mjs` added as the first repo-aware verification source for cohort validation (`lint`, `typecheck`, `test`, `build` all locally pass).
+- latest cohort artifact recorded at `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T08-57-01-157Z/worker_coding_cohort_result.json`; result is now `4 fail / 0 partial / 0 pass`, which is a more truthful signal after live verification enforcement:
+  - `fe_create`, `fe_modify`, `bug_fix`: `verification_failure`
+  - `be_create`: `coding_logic_failure`
+- residual follow-up is now clear and bounded:
+  - FE cohort cases fail under enforced verification rather than silent partial success
+  - BE cohort case fails under coding logic rather than verification-only labeling
+  - the earlier `partial` signal should no longer be used as readiness evidence
+- `worker-coder/tests/startup_smoke.test.js` added to check worker entrypoint import wiring and key module syntax guards before container startup.
+- `worker-coder/adapters/opencode_adapter.js` live-validation mock outputs aligned with current implementation-step handoff and schema governance so full live gate now passes.
 
 ### Governance and Documentation
 - Accelerated validation plan, QA summary, Go/No-Go package, and post-M8 M7 controlled enablement plan added.
+- `docs/03_feature_development/2026-03-11_validation_gate_runbook.md`, `2026-03-11_runtime_startup_path_note.md`, and `2026-03-11_brain_gateway_contract_note.md` added for current mainline execution governance.

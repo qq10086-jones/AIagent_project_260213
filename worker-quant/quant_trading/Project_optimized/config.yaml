@@ -11,6 +11,8 @@ screener:
   max_cost_per_lot: 250000
 
 model:
+  signal_mode: "shadow_ic"
+  compare_signal_modes: ["ridge", "shadow_eq"]
   start: "2020-01-01"
   end: null
   H: 20

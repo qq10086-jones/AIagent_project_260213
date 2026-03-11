@@ -16,6 +16,7 @@ import { makeErrorResponse } from "./vnext/response_protocol.js";
 import { createExecuteVNextDispatch } from "./vnext/runtime_dispatch.js";
 import { createHandleApiChat, generateBrainDirectReply as generateChatDirectReply } from "./vnext/chat_entrypoint.js";
 import { createHandleApproveTask, createHandleRejectTask } from "./vnext/approval_entrypoint.js";
+import { createBrainGatewayHandlers } from "./vnext/brain_gateway.js";
 import { deliverWorkflowRuntimeNotification } from "./vnext/workflow_notification_delivery.js";
 import { assertDispatchErrorResponse } from "./vnext/contract_validator.js";
 import { callBrainWithRetry } from "./vnext/local_llm_client.js";
@@ -62,13 +63,15 @@ const {
   AUTO_REPORT_CHANNEL_ID, AUTO_REPORT_TIMEZONE = "Asia/Shanghai",
   APPROVAL_TOKEN = "dev-approval-token", TOOLS_CONFIG_PATH = "configs/tools.json",
   REGISTRY_PATH = "", RESUME_TOKEN_SECRET = "dev-resume-secret",
-  RESUME_TOKEN_TTL_SEC = "86400", WORKSPACE_ROOT = "/workspace",
+  RESUME_TOKEN_TTL_SEC = "86400", WORKSPACE_ROOT = "",
   STREAM_TASK_DLQ = "stream:task:dlq", TASK_RUNNING_TIMEOUT_SEC = "900",
   TASK_QUEUED_TIMEOUT_SEC = "21600", TASK_WATCHDOG_INTERVAL_SEC = "30",
   TASK_TIMEOUT_AUTO_DLQ = "1", RUNTIME_CONFIG_PATH = "configs/runtime/runtime_defaults.json",
   RELEASE_PACK_ARCHIVE_TO_MINIO = "1", RELEASE_PACK_BUCKET = "nexus-artifacts",
   WORKFLOW_STEP_ARTIFACT_AUDIT = "", WORKFLOW_STRICT_STEP_ARTIFACTS = "",
 } = process.env;
+
+const RESOLVED_WORKSPACE_ROOT = path.resolve(String(WORKSPACE_ROOT || path.resolve("..")));
 
 assertConfigPreflight({
   runtimeConfigPath: RUNTIME_CONFIG_PATH,
@@ -269,7 +272,7 @@ const workflowEngine = createWorkflowEngine({
   handoffContracts: HANDOFF_CONTRACTS, enqueueTask, recordEvent, makeIdempotencyKey,
   resumeTokenSecret: String(RESUME_TOKEN_SECRET || "dev-resume-secret"),
   resumeTokenTtlSec: Number(RESUME_TOKEN_TTL_SEC || 86400),
-  workspaceRoot: String(WORKSPACE_ROOT || "/workspace"),
+  workspaceRoot: RESOLVED_WORKSPACE_ROOT,
   auditStepArtifacts: RESOLVED_WORKFLOW_STEP_ARTIFACT_AUDIT,
   strictStepArtifacts: RESOLVED_WORKFLOW_STRICT_STEP_ARTIFACTS,
   runtimeConfig: {
@@ -307,6 +310,11 @@ const handleApiChat = createHandleApiChat({
   callBrainWithRetry,
   currentLocalModel: appState.currentLocalModel,
   currentQwenModel: CURRENT_QWEN_MODEL,
+});
+const { handleLatestFact, handleRoutingDecision } = createBrainGatewayHandlers({
+  pool,
+  recordEvent,
+  findLatestFactForRun: _findLatestFactForRun,
 });
 
 const handleApproveTask = createHandleApproveTask({
@@ -521,65 +529,15 @@ app.get("/runs/:run_id/timeline", async (req, res) => {
 app.get("/runs/:run_id/artifacts", async (req, res) => {
   try {
     const run_id = req.params.run_id;
-    const releaseDir = path.join(WORKSPACE_ROOT, "artifacts", "release", run_id);
-    const runtimeDir = path.join(WORKSPACE_ROOT, "artifacts", "runs", run_id);
+    const releaseDir = path.join(RESOLVED_WORKSPACE_ROOT, "artifacts", "release", run_id);
+    const runtimeDir = path.join(RESOLVED_WORKSPACE_ROOT, "artifacts", "runs", run_id);
     return res.json({ ok: true, run_id, roots: { release: releaseDir.replace(/\\/g, "/"), runtime: runtimeDir.replace(/\\/g, "/") }, release_files: listFilesRecursive(releaseDir), runtime_files: listFilesRecursive(runtimeDir) });
   } catch (err) { return res.status(500).json({ ok: false, error: err.message || "artifacts query failed" }); }
 });
 
-app.get("/brain/facts/latest", async (req, res) => {
-  try {
-    const run_id = String(req.query.run_id || "").trim();
-    const agent_name = String(req.query.agent_name || "").trim();
-    const tool_name = String(req.query.tool_name || "").trim();
-    if (!run_id || !agent_name) {
-      return res.status(400).json({ ok: false, error: "run_id and agent_name are required" });
-    }
-    const row = await _findLatestFactForRun(pool, { run_id, agent_name, tool_name });
-    if (!row) {
-      return res.status(404).json({ ok: false, error: "fact not found" });
-    }
-    let payload = row.payload_json;
-    try {
-      payload = typeof row.payload_json === "string" ? JSON.parse(row.payload_json) : row.payload_json;
-    } catch {
-      payload = { raw: String(row.payload_json || "") };
-    }
-    return res.json({
-      ok: true,
-      fact: {
-        fact_id: row.fact_id,
-        run_id: row.run_id,
-        agent_name: row.agent_name,
-        kind: row.kind,
-        created_at: row.created_at,
-        payload,
-      },
-    });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message || "brain fact query failed" });
-  }
-});
+app.get("/brain/facts/latest", handleLatestFact);
 
-app.post("/brain/routing-decisions", async (req, res) => {
-  try {
-    const run_id = String(req.body?.run_id || "").trim();
-    const workflow_run_id = String(req.body?.workflow_run_id || "").trim();
-    const event_name = String(req.body?.event_name || "brain.routing.decision").trim();
-    const payload = req.body?.payload && typeof req.body.payload === "object" ? req.body.payload : {};
-    if (!run_id && !workflow_run_id) {
-      return res.status(400).json({ ok: false, error: "run_id or workflow_run_id is required" });
-    }
-    await recordEvent(workflow_run_id || run_id, event_name, {
-      run_id: run_id || null,
-      workflow_run_id: workflow_run_id || null,
-      ...payload,
-    });
-    return res.json({ ok: true, event_name });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message || "brain routing decision ingest failed" });
-  }
-});
+app.post("/brain/routing-decisions", handleRoutingDecision);
 
 app.get("/approvals/pending", async (req, res) => {
   try {

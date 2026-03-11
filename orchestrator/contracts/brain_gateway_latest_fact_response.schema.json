@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BrainGatewayLatestFactResponse",
+  "type": "object",
+  "properties": {
+    "ok": { "type": "boolean" },
+    "fact": {
+      "type": "object",
+      "properties": {
+        "fact_id": { "type": "string" },
+        "run_id": { "type": "string" },
+        "agent_name": { "type": "string" },
+        "kind": { "type": ["string", "null"] },
+        "created_at": { "type": ["string", "null"] },
+        "payload": {}
+      },
+      "required": ["fact_id", "run_id", "agent_name", "payload"],
+      "additionalProperties": true
+    },
+    "error": { "type": "string" }
+  },
+  "required": ["ok"],
+  "additionalProperties": false
+}

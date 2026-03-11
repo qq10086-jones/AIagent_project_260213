@@ -1,0 +1,134 @@
+{
+  "version": "1.0.0",
+  "templates": [
+    {
+      "template_id": "wc.fe_create.v1",
+      "task_class": "fe_create",
+      "summary_expectations": [
+        "state what page was created",
+        "list files changed",
+        "state achieved verification tier"
+      ],
+      "expected_artifacts": [
+        "impl/fe_patch_bundle.json",
+        "impl/fe_notes.md"
+      ],
+      "target_path_hints": [
+        "src/pages/",
+        "src/components/"
+      ],
+      "context_envelope": {
+        "max_files": 5,
+        "max_tokens": 8000,
+        "dependency_depth": 0,
+        "context_source": "template"
+      },
+      "verification_tiers": [
+        "lint",
+        "build"
+      ],
+      "human_acceptance_criteria": [
+        "page renders without obvious layout breakage",
+        "copy and navigation match prompt scope"
+      ]
+    },
+    {
+      "template_id": "wc.fe_modify.v1",
+      "task_class": "fe_modify",
+      "summary_expectations": [
+        "state which existing UI surface changed",
+        "list impacted files",
+        "state whether change was additive or behavioral"
+      ],
+      "expected_artifacts": [
+        "impl/fe_patch_bundle.json",
+        "impl/fe_notes.md"
+      ],
+      "target_path_hints": [
+        "src/pages/",
+        "src/components/",
+        "src/features/"
+      ],
+      "context_envelope": {
+        "max_files": 15,
+        "max_tokens": 24000,
+        "dependency_depth": 2,
+        "context_source": "template"
+      },
+      "verification_tiers": [
+        "lint",
+        "type_check",
+        "build"
+      ],
+      "human_acceptance_criteria": [
+        "existing user path remains intact",
+        "changed behavior is explicit and reviewable"
+      ]
+    },
+    {
+      "template_id": "wc.be_create.v1",
+      "task_class": "be_create",
+      "summary_expectations": [
+        "state endpoint or handler added",
+        "list interface and contract impact",
+        "state achieved verification tier"
+      ],
+      "expected_artifacts": [
+        "impl/be_patch_bundle.json",
+        "impl/be_notes.md",
+        "handoff/be_to_fe.json"
+      ],
+      "target_path_hints": [
+        "src/routes/",
+        "src/controllers/",
+        "src/services/"
+      ],
+      "context_envelope": {
+        "max_files": 10,
+        "max_tokens": 16000,
+        "dependency_depth": 1,
+        "context_source": "template"
+      },
+      "verification_tiers": [
+        "lint",
+        "unit_test"
+      ],
+      "human_acceptance_criteria": [
+        "API contract is explicit",
+        "new behavior does not widen scope beyond prompt"
+      ]
+    },
+    {
+      "template_id": "wc.bug_fix.v1",
+      "task_class": "bug_fix",
+      "summary_expectations": [
+        "state symptom fixed",
+        "state likely root cause",
+        "state regression boundary checked"
+      ],
+      "expected_artifacts": [
+        "impl/bugfix_notes.md"
+      ],
+      "target_path_hints": [
+        "src/",
+        "app/",
+        "server/"
+      ],
+      "context_envelope": {
+        "max_files": 20,
+        "max_tokens": 32000,
+        "dependency_depth": 3,
+        "context_source": "manual"
+      },
+      "verification_tiers": [
+        "lint",
+        "unit_test",
+        "build"
+      ],
+      "human_acceptance_criteria": [
+        "fix is localized to the reported defect",
+        "known regression surface is stated clearly"
+      ]
+    }
+  ]
+}

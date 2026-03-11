@@ -1,0 +1,11 @@
+{
+  "name": "sandbox-crm-site",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "node scripts/verify_crm_site.mjs lint",
+    "typecheck": "node scripts/verify_crm_site.mjs typecheck",
+    "test": "node scripts/verify_crm_site.mjs test",
+    "build": "node scripts/verify_crm_site.mjs build"
+  }
+}

@@ -59,7 +59,9 @@ services:
       - ../orchestrator/configs/llm_providers.json:/app/configs/llm_providers.json:ro
       - ../orchestrator/configs/llm_role_policy.json:/app/configs/llm_role_policy.json:ro
       - ../orchestrator/configs/context_budget_policy.json:/app/configs/context_budget_policy.json:ro
-      - ../orchestrator/configs/production_parallel_rollout.json:/app/configs/production_parallel_rollout.json:ro
+      - ../configs/production_parallel_rollout.json:/app/configs/production_parallel_rollout.json:ro
+      - ../configs/parallel_exposure_policy.json:/app/configs/parallel_exposure_policy.json:ro
+      - ../configs/m7_exposure_cohorts.json:/app/configs/m7_exposure_cohorts.json:ro
       - ../orchestrator/contracts:/app/contracts:ro
       - ../orchestrator/src:/app/src
       - ..:/workspace

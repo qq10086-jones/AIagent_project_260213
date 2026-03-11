@@ -92,6 +92,13 @@ def main(cfg_path: str):
     env["SS6_BENCHMARK"] = str(model.get("benchmark_ticker", "1321.T"))
     env["SS6_START"] = str(model.get("start", "2020-01-01"))
     env["SS6_END"] = "" if model.get("end", None) is None else str(model.get("end"))
+    env["SS6_SIGNAL_MODE"] = str(model.get("signal_mode", "shadow_ic"))
+    
+    comp_modes = model.get("compare_signal_modes", ["ridge", "shadow_eq"])
+    if isinstance(comp_modes, list):
+        comp_modes = ",".join(comp_modes)
+    env["SS6_COMPARE_SIGNAL_MODES"] = str(comp_modes)
+
     env["SS6_H"] = str(int(model.get("H", 20)))
     env["SS6_TRAIN_WINDOW"] = str(int(model.get("train_window", 252)))
     env["SS6_REBALANCE_EVERY"] = str(int(model.get("rebalance_every", 20)))

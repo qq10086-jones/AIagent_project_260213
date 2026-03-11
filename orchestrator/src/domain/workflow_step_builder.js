@@ -23,6 +23,10 @@ import { buildCodingExecutorRequest, validateCodingExecutorRequest } from "../co
 import { parseJsonSafe } from "./workflow_runner.js";
 import { createContextBudgetService } from "./context_budget_service.js";
 import { createRepoContextService } from "./repo_context_service.js";
+import {
+  applyWorkerCodingTemplateDefaults,
+  loadWorkerCodingTemplateRegistryOrThrow,
+} from "../worker_coding_templates.js";
 
 export function pathForRunArtifacts(run_id) {
   return `artifacts/release/${run_id || "unknown-run"}`;
@@ -170,6 +174,91 @@ function inferVerificationCommand({ stepId, targetPaths = [], workspaceRoot }) {
   return "";
 }
 
+function findNearestPackageJson({ workspaceRoot, targetPaths = [] }) {
+  const workspaceAbs = path.resolve(workspaceRoot);
+  const candidates = new Set();
+  for (const targetPath of targetPaths) {
+    const rel = String(targetPath || "").replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!rel) continue;
+    let current = path.resolve(workspaceAbs, rel);
+    if (fs.existsSync(current) && fs.statSync(current).isFile()) {
+      current = path.dirname(current);
+    }
+    while (current.startsWith(workspaceAbs)) {
+      candidates.add(path.join(current, "package.json"));
+      if (current === workspaceAbs) break;
+      current = path.dirname(current);
+    }
+  }
+  candidates.add(path.join(workspaceAbs, "package.json"));
+  for (const candidate of candidates) {
+    try {
+      if (!fs.existsSync(candidate)) continue;
+      const parsed = JSON.parse(fs.readFileSync(candidate, "utf8"));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return {
+          path: candidate,
+          dir: path.dirname(candidate),
+          json: parsed,
+        };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function resolveTemplateVerificationPlan({ stepId, payload, workspaceRoot }) {
+  const tiers = Array.isArray(payload?.template_verification_tiers)
+    ? payload.template_verification_tiers.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean)
+    : [];
+  const targetPaths = Array.isArray(payload?.target_paths) ? payload.target_paths : [];
+  const packageInfo = findNearestPackageJson({ workspaceRoot, targetPaths });
+  const scripts = packageInfo?.json?.scripts && typeof packageInfo.json.scripts === "object"
+    ? packageInfo.json.scripts
+    : {};
+  const plan = [];
+  const syntaxCommand = inferVerificationCommand({ stepId, targetPaths, workspaceRoot });
+  if (syntaxCommand) {
+    plan.push({
+      tier: "syntax_check",
+      command: syntaxCommand,
+      required: true,
+      source: "inferred_target_paths",
+    });
+  }
+
+  const scriptMappings = {
+    lint: ["lint"],
+    type_check: ["typecheck", "type-check", "check-types"],
+    unit_test: ["test", "unit", "unit:test"],
+    build: ["build"],
+  };
+
+  for (const tier of tiers) {
+    const scriptNames = scriptMappings[tier] || [];
+    const matchedScript = scriptNames.find((name) => typeof scripts[name] === "string" && scripts[name].trim());
+    const relPackageDir = packageInfo
+      ? path.relative(workspaceRoot, packageInfo.dir).replace(/\\/g, "/")
+      : "";
+    const scriptCommand = matchedScript
+      ? relPackageDir && relPackageDir !== "."
+        ? `npm --prefix ${relPackageDir} run ${matchedScript}`
+        : `npm run ${matchedScript}`
+      : "";
+    plan.push({
+      tier,
+      command: scriptCommand,
+      required: false,
+      source: matchedScript
+        ? `package_json:${path.relative(workspaceRoot, packageInfo.path).replace(/\\/g, "/")}`
+        : "template_declared_unresolved",
+    });
+  }
+  return plan;
+}
+
 function formatMemoryValue(value) {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
@@ -218,6 +307,7 @@ export function buildArchitectMemoryContext({ projectContext = null, priorADRs =
 export function createStepBuilder({ registry, promptScriptRegistry, handoffContracts, workspaceRoot = ".", runtimeConfig = {} }) {
   const contextBudgetService = createContextBudgetService();
   const repoContextService = createRepoContextService({ workspaceRoot });
+  const workerCodingTemplateRegistry = loadWorkerCodingTemplateRegistryOrThrow();
   function buildStepPayload({ run, stepDef, stepIndex }) {
     const input = parseJsonSafe(run.input_json, {});
     const artifactRoot = pathForRunArtifacts(run.run_id);
@@ -253,6 +343,11 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       handoff_contract_out: downstreamHandoff || null,
       handoff_contract_in: upstreamHandoffs,
     };
+    applyWorkerCodingTemplateDefaults({
+      payload,
+      templateRegistry: workerCodingTemplateRegistry,
+      stepDef,
+    });
 
     const implMode = chooseImplementationMode({
       stepDef,
@@ -364,9 +459,19 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         payload.target_paths = payload.execution_adapter_packet.target_paths;
       }
       if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
+        if (!Array.isArray(payload.verification_plan) || payload.verification_plan.length === 0) {
+          payload.verification_plan = resolveTemplateVerificationPlan({
+            stepId: stepDef.id,
+            payload,
+            workspaceRoot,
+          });
+        }
         if (!String(payload.verification_command || "").trim()) {
           const runtimeDefaultCommand = String(runtimeWorkerCoder.verification_command_default || "").trim();
-          payload.verification_command = runtimeDefaultCommand || inferVerificationCommand({
+          const firstPlanCommand = Array.isArray(payload.verification_plan)
+            ? payload.verification_plan.find((item) => String(item?.command || "").trim())
+            : null;
+          payload.verification_command = runtimeDefaultCommand || String(firstPlanCommand?.command || "").trim() || inferVerificationCommand({
             stepId: stepDef.id,
             targetPaths: payload.target_paths,
             workspaceRoot,

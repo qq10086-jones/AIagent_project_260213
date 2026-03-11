@@ -85,9 +85,43 @@ async function testVerificationCommandFails() {
   assert.ok(result.artifacts.test_log);
 }
 
+async function testVerificationPlanPasses() {
+  const workspaceRoot = makeWorkspace();
+  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "export const value = 1;\n");
+
+  const result = await CodingService.delegateTask({
+    workspaceRoot,
+    task_prompt: "update frontend file",
+    step_id: "impl_fe",
+    target_paths: ["sandbox/crm_site/"],
+    provider: "opencode",
+    run_id: "run-plan-pass",
+    task_id: "task-plan-pass",
+    opencode_command: [
+      process.execPath,
+      "-e",
+      "require('fs').appendFileSync('sandbox/crm_site/app.js', '\\nexport const nextValue = 2;\\n');",
+    ],
+    verification_plan: [
+      { tier: "syntax_check", command: "node --check sandbox/crm_site/app.js" },
+      { tier: "custom_smoke", command: "node --version" },
+    ],
+  });
+
+  if (shouldSkipSpawn(result)) {
+    console.log("verification_plan pass test skipped due sandbox EPERM");
+    return;
+  }
+
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.deepEqual(result.diagnostics.verification.achieved_tiers, ["syntax_check", "custom_smoke"]);
+  assert.equal(result.diagnostics.verification.records.length, 2);
+}
+
 async function main() {
   await testVerificationCommandPasses();
   await testVerificationCommandFails();
+  await testVerificationPlanPasses();
   console.log("verification_command.test.js: all tests passed");
 }
 

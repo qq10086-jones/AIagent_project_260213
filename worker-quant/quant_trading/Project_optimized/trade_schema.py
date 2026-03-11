@@ -292,6 +292,75 @@ def ensure_learning_tables(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def ensure_news_tables(conn: sqlite3.Connection) -> None:
+    """Create News Overlay tables if missing. Idempotent."""
+    
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS news_feed (
+            news_id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            published_ts TEXT NOT NULL,
+            source TEXT NOT NULL,
+            title TEXT NOT NULL,
+            content_summary TEXT,
+            url TEXT,
+            ingested_ts TEXT NOT NULL,
+            event_cluster_id TEXT,
+            raw_hash TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_news_feed_symbol_ts ON news_feed(symbol, published_ts);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_news_feed_ingested ON news_feed(ingested_ts);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_news_feed_cluster ON news_feed(event_cluster_id);")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS news_sentiment (
+            news_id TEXT,
+            model_version TEXT,
+            sentiment_score REAL,
+            urgency REAL,
+            expected_impact_days REAL,
+            reason TEXT,
+            scored_ts TEXT,
+            PRIMARY KEY (news_id, model_version)
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sentiment_model_eval (
+            model_version TEXT PRIMARY KEY,
+            eval_date TEXT NOT NULL,
+            golden_set_size INTEGER,
+            macro_f1 REAL,
+            mean_abs_drift REAL,
+            passed BOOLEAN,
+            eval_detail_json TEXT
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS data_lifecycle_log (
+            log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            table_name TEXT NOT NULL,
+            date_range_start TEXT,
+            date_range_end TEXT,
+            row_count INTEGER,
+            executed_ts TEXT NOT NULL,
+            operator TEXT
+        )
+        """
+    )
+    conn.commit()
+
+
 def save_screening_history(conn: sqlite3.Connection, payload: Dict[str, Any]) -> int:
     """Persist the actual selected screener universe for a given asof date."""
     asof = str(payload.get("asof"))

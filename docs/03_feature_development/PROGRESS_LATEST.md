@@ -1,6 +1,6 @@
 # Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-10 (M9 coding guardrails baseline closed in code)
+**Last updated:** 2026-03-11 (M9 closeout validation follow-up)
 **Author:** PM / Architecture Review
 
 ---
@@ -18,7 +18,9 @@
 - **Real local LLM validation:** `PASS` against local `deepseek-r1:32b` on 2026-03-09
 - **M7 Phase A advisory-only code/config package:** completed on 2026-03-10
 - **Phase A live runtime validation after enablement:** `PASS` before observability-gap investigation
-- **Current coding focus:** M9 execution hardening for `worker-coder` is now in progress
+- **Current coding focus:** M9 closeout tasks after core guardrails landed
+- **M9 runtime config preflight:** `PASS` on 2026-03-11
+- **M9 real live workflow validation:** `PASS` on 2026-03-11
 
 ---
 
@@ -33,18 +35,18 @@
 | M6 | Parallel Rollout Readiness | **GO_LIMITED_EXPOSURE** | 2026-03-09 |
 | M7 | Limited Dynamic Routing v1 | **CLOSED - ACCEPTED WITH DEVIATION** | 2026-03-09 |
 | M8 | Staging Evidence and Live Routing Validation | **CLOSED** | 2026-03-09 |
-| M9 | Coding Precision & Sandbox Guardrails | **IN PROGRESS** | 2026-03-10 |
+| M9 | Coding Precision & Sandbox Guardrails | **GO WITH CONDITIONS** | 2026-03-11 |
 
 ---
 
 ## Active Design Authority
 
-**Active milestone:** M9 is in progress.
+**Active milestone:** M9 is in closeout.
 
 Current governance state:
 - M6 evidence has been strengthened by compressed accelerated validation and is ready for next-stage review.
 - M7 Phase A design, scripts, and config package are complete.
-- M9 coding execution hardening has started on the `worker-coder` path without changing the M6/M7 governance baseline.
+- M9 coding execution hardening is landed in code, and closeout work is focused on validation depth plus structural cleanup.
 
 Governing documents:
 
@@ -117,12 +119,13 @@ Governance:
 
 ---
 
-## M9 Status - IN PROGRESS
+## M9 Status - GO WITH CONDITIONS
 
 Current interpretation:
 - M9 is focused on `worker-coder` execution quality, not on routing/governance expansion.
 - The core coding hardening slice is now landed in code and validated locally with passing canaries/tests.
 - Scope now covers context grounding, write-scope enforcement, scoped file-delta capture, fast static checks, verification execution, coding failure memory, hardened execution contracts, bounded retry controls, durable memory write-back, and release-pack evidence visibility.
+- Runtime/compose preflight validation is now added and passing for orchestrator startup-critical config.
 
 Completed so far:
 - Task-scoped context packet generation for coding steps
@@ -149,6 +152,10 @@ Not yet done:
 - broader M9 release-quality validation against richer end-to-end business scenarios
 - typed brain gateway expansion beyond latest-fact lookup / event ingestion if future workflows need more surface area
 
+Current closeout blocker:
+- full workflow-level live validation is now passing with contract-valid deterministic provider fixtures for PM/architect/implementation/release steps
+- remaining closeout work is structural follow-up, not live workflow correctness
+
 ---
 
 ## Current Verification Status
@@ -167,8 +174,10 @@ canary_m9_coding_guardrails.js                                -> PASS local end-
 worker-coder canary:m9_autofix_retry                          -> PASS inline mocked first-fail / retry-success path (2026-03-10)
 pytest brain/tests/test_supervisor_routing.py                 -> 12 / 12 PASS after HTTP fact-gateway decoupling (2026-03-10)
 validate:live_vnext_runtime                                   -> PASS after orchestrator/brain container refresh (2026-03-10)
+validate:config_preflight                                     -> PASS (2026-03-11)
 curl /brain/facts/latest + synthetic DB fact                  -> PASS live HTTP gateway lookup (2026-03-10)
 POST brain /run                                               -> PASS on refreshed brain container (2026-03-10)
+validate:live_m9_workflow                                     -> PASS succeeded workflow + release-pack evidence check (2026-03-11)
 ```
 
 ---

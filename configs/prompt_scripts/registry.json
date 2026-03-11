@@ -101,6 +101,26 @@
       },
       "system_prompt": "Produce backend implementation files under impl/be_changes/, write impl/be_notes.md with implementation decisions and run instructions, and emit handoff/be_to_fe.json with api_contracts, shared_types, and scope_constraints."
     },
+    "backend.impl.v2": {
+      "script_id": "backend.impl.v2",
+      "agent_id": "backend_agent",
+      "role": "backend",
+      "llm_role": "backend",
+      "input_schema": {
+        "type": "object",
+        "required": ["goal", "project_type"]
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["patch_bundle_path", "be_notes_path", "handoff_path", "execution_mode_used"]
+      },
+      "tool_permissions": ["coding.delegate"],
+      "artifact_type": "backend_impl_patch_bundle",
+      "validation": {
+        "required_sections": ["patch_operations", "api_contracts", "scope_constraints", "run_instructions"]
+      },
+      "system_prompt": "Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Include only deterministic operations of type replace_range, insert_after_anchor, delete_range, or create_file. Write the bundle under impl/be_patch_bundle.json, write impl/be_notes.md with decisions and run instructions, and write handoff/be_to_fe.json matching the typed schema. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/be_changes/ with the same handoff contract."
+    },
     "frontend.impl.v1": {
       "script_id": "frontend.impl.v1",
       "agent_id": "frontend_agent",
@@ -120,6 +140,26 @@
         "required_sections": ["ui_scope", "api_consumption", "run_instructions"]
       },
       "system_prompt": "Produce frontend implementation files under impl/fe_changes/, write impl/fe_notes.md with UI decisions and run instructions, and consume handoff/be_to_fe.json as the backend contract source."
+    },
+    "frontend.impl.v2": {
+      "script_id": "frontend.impl.v2",
+      "agent_id": "frontend_agent",
+      "role": "frontend",
+      "llm_role": "frontend",
+      "input_schema": {
+        "type": "object",
+        "required": ["goal", "project_type"]
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["patch_bundle_path", "fe_notes_path", "execution_mode_used"]
+      },
+      "tool_permissions": ["coding.delegate"],
+      "artifact_type": "frontend_impl_patch_bundle",
+      "validation": {
+        "required_sections": ["patch_operations", "ui_scope", "api_consumption", "run_instructions"]
+      },
+      "system_prompt": "Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Consume handoff/be_to_fe.json as the only backend contract source. Write the bundle under impl/fe_patch_bundle.json and write impl/fe_notes.md with UI decisions and run instructions. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/fe_changes/."
     },
     "qa.verify.v1": {
       "script_id": "qa.verify.v1",

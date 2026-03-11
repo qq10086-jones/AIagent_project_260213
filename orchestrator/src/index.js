@@ -28,6 +28,7 @@ import { registerCronSchedules } from "./vnext/cron_scheduler.js";
 import { createTaskEnqueuer } from "./vnext/task_enqueuer.js";
 import { createRuntimeConnections } from "./infra/runtime_connections.js";
 import { createWaterfallTraceService } from "./domain/waterfall_trace_service.js";
+import { assertConfigPreflight } from "./config_preflight.js";
 import {
   upsertTask as _upsertTask, countPendingTasksForRun as _countPendingTasksForRun,
   countFailedTasksForRun as _countFailedTasksForRun, findRunIdByTaskId as _findRunIdByTaskId,
@@ -68,6 +69,11 @@ const {
   RELEASE_PACK_ARCHIVE_TO_MINIO = "1", RELEASE_PACK_BUCKET = "nexus-artifacts",
   WORKFLOW_STEP_ARTIFACT_AUDIT = "", WORKFLOW_STRICT_STEP_ARTIFACTS = "",
 } = process.env;
+
+assertConfigPreflight({
+  runtimeConfigPath: RUNTIME_CONFIG_PATH,
+  workspaceRoot: path.resolve("."),
+});
 
 // --- Runtime config ---
 function loadRuntimeConfig() {

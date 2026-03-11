@@ -1424,7 +1424,10 @@ async function ensureImplementationDelta({
     const targetPaths = Array.isArray(executionAdapterPacket?.target_paths) && executionAdapterPacket.target_paths.length > 0
         ? executionAdapterPacket.target_paths
         : ["sandbox/crm_site/"];
-    const targetRoot = String(targetPaths[0] || "sandbox/crm_site/").replace(/\\/g, "/").replace(/\/+$/, "");
+    const firstTargetPath = String(targetPaths[0] || "sandbox/crm_site/").replace(/\\/g, "/").replace(/\/+$/, "");
+    const targetRoot = /\.[A-Za-z0-9]+$/.test(firstTargetPath)
+        ? path.posix.dirname(firstTargetPath)
+        : firstTargetPath;
     const ext = safeStepId === "impl_fe" ? ".js" : ".js";
     const safeTaskId = String(taskId || "standalone").replace(/[^a-zA-Z0-9_-]/g, "_");
     const fileName = safeStepId === "impl_fe"

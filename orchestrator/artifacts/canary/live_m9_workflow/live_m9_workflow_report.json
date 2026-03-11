@@ -1,0 +1,1094 @@
+{
+  "generated_at": "2026-03-10T23:36:33.290Z",
+  "base_url": "http://localhost:3000",
+  "timeout_ms": 420000,
+  "overall": "pass",
+  "workflow_payload": {
+    "workflow_id": "coding_team_v0",
+    "project_type": "webapp_crm",
+    "input": {
+      "goal": "Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.",
+      "provider": "opencode",
+      "model": "qwen3-coder-next",
+      "fast_mode": true,
+      "max_runtime_s": 180,
+      "step_payloads": {
+        "pm_spec": {
+          "target_paths": [
+            "sandbox/live_validation/pm_spec.txt"
+          ],
+          "opencode_command": [
+            "mock-inline-autofix",
+            "sandbox/live_validation/pm_spec.txt",
+            "{{task_prompt}}"
+          ]
+        },
+        "arch_design": {
+          "target_paths": [
+            "sandbox/live_validation/arch_design.txt"
+          ],
+          "opencode_command": [
+            "mock-inline-autofix",
+            "sandbox/live_validation/arch_design.txt",
+            "{{task_prompt}}"
+          ]
+        },
+        "impl_be": {
+          "target_paths": [
+            "sandbox/crm_site/server.js"
+          ],
+          "opencode_command": [
+            "mock-inline-autofix",
+            "sandbox/crm_site/server.js",
+            "{{task_prompt}}"
+          ],
+          "max_attempts": 2,
+          "same_error_repeat_limit": 2,
+          "wall_clock_timeout_s": 300
+        },
+        "impl_fe": {
+          "target_paths": [
+            "sandbox/crm_site/app.js"
+          ],
+          "opencode_command": [
+            "mock-inline-autofix",
+            "sandbox/crm_site/app.js",
+            "{{task_prompt}}"
+          ],
+          "max_attempts": 2,
+          "same_error_repeat_limit": 2,
+          "wall_clock_timeout_s": 300
+        },
+        "qa_verify": {
+          "command": "node --version"
+        },
+        "release_pack": {
+          "target_paths": [
+            "sandbox/live_validation/release_pack.txt"
+          ],
+          "opencode_command": [
+            "mock-inline-autofix",
+            "sandbox/live_validation/release_pack.txt",
+            "{{task_prompt}}"
+          ]
+        }
+      }
+    }
+  },
+  "start": {
+    "ok": true,
+    "workflow_run_id": "54815520-6fd0-494f-bbfc-782d64be6e5d",
+    "run_id": "69d1a38c-87f5-47e9-ab98-ccf40157aad7",
+    "workflow_id": "coding_team_v0",
+    "project_type": "webapp_crm",
+    "first_step": {
+      "ok": true,
+      "task_id": "69e791b2-548d-49f9-9f9e-40a0c6828db3",
+      "waiting_approval": false,
+      "step_id": "pm_spec",
+      "step_index": 0
+    },
+    "first_steps": [
+      {
+        "ok": true,
+        "task_id": "69e791b2-548d-49f9-9f9e-40a0c6828db3",
+        "waiting_approval": false,
+        "step_id": "pm_spec",
+        "step_index": 0
+      }
+    ]
+  },
+  "terminal": {
+    "ok": true,
+    "run": {
+      "workflow_run_id": "54815520-6fd0-494f-bbfc-782d64be6e5d",
+      "run_id": "69d1a38c-87f5-47e9-ab98-ccf40157aad7",
+      "workflow_id": "coding_team_v0",
+      "project_type": "webapp_crm",
+      "status": "succeeded",
+      "current_step_index": 5,
+      "last_checkpoint_id": "9c961152-1575-414f-9983-26eab8e17bc0",
+      "resume_token": null,
+      "input_json": "{\"goal\":\"Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\",\"provider\":\"opencode\",\"model\":\"qwen3-coder-next\",\"fast_mode\":true,\"max_runtime_s\":180,\"step_payloads\":{\"pm_spec\":{\"target_paths\":[\"sandbox/live_validation/pm_spec.txt\"],\"opencode_command\":[\"mock-inline-autofix\",\"sandbox/live_validation/pm_spec.txt\",\"{{task_prompt}}\"]},\"arch_design\":{\"target_paths\":[\"sandbox/live_validation/arch_design.txt\"],\"opencode_command\":[\"mock-inline-autofix\",\"sandbox/live_validation/arch_design.txt\",\"{{task_prompt}}\"]},\"impl_be\":{\"target_paths\":[\"sandbox/crm_site/server.js\"],\"opencode_command\":[\"mock-inline-autofix\",\"sandbox/crm_site/server.js\",\"{{task_prompt}}\"],\"max_attempts\":2,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":300},\"impl_fe\":{\"target_paths\":[\"sandbox/crm_site/app.js\"],\"opencode_command\":[\"mock-inline-autofix\",\"sandbox/crm_site/app.js\",\"{{task_prompt}}\"],\"max_attempts\":2,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":300},\"qa_verify\":{\"command\":\"node --version\"},\"release_pack\":{\"target_paths\":[\"sandbox/live_validation/release_pack.txt\"],\"opencode_command\":[\"mock-inline-autofix\",\"sandbox/live_validation/release_pack.txt\",\"{{task_prompt}}\"]}}}",
+      "error_code": null,
+      "error_message": null,
+      "created_at": "2026-03-10T23:36:33.333Z",
+      "updated_at": "2026-03-10T23:40:50.234Z"
+    },
+    "steps": [
+      {
+        "id": "1057",
+        "workflow_run_id": "54815520-6fd0-494f-bbfc-782d64be6e5d",
+        "step_index": 0,
+        "step_id": "pm_spec",
+        "role_name": "pm",
+        "tool_name": "coding.delegate",
+        "gate_name": "low",
+        "status": "succeeded",
+        "task_id": "69e791b2-548d-49f9-9f9e-40a0c6828db3",
+        "risk_level": "medium",
+        "approval_required": false,
+        "approval_reasons_json": "[]",
+        "checkpoint_id": "b103f65a-96a0-4b2f-8c1c-a55e591c45e9",
+        "result_json": "{\"ok\":true,\"provider_used\":\"opencode\",\"model_used\":\"qwen3-coder-next\",\"summary\":\"opencode delegation finished.\",\"files_changed\":[],\"diff_stats\":{\"added\":0,\"deleted\":0,\"files\":0},\"test_result\":\"skipped\",\"git\":{\"base_ref\":\"SCOPED_SNAPSHOT\",\"branch\":\"scoped\",\"commit_sha\":null,\"dirty\":false},\"rollback_performed\":false,\"artifacts\":{\"diff_bundle\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_69e791b2-548d-49f9-9f9e-40a0c6828db3/delegate_diff_1773185799485.patch\",\"patch_file\":null,\"test_log\":null,\"prompt_contract\":\"artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_69e791b2-548d-49f9-9f9e-40a0c6828db3/prompt_contract_attempt1_1773185799406.json\",\"raw_stdout\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_69e791b2-548d-49f9-9f9e-40a0c6828db3/delegate_stdout_attempt1_1773185799480.log\",\"raw_stderr\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_69e791b2-548d-49f9-9f9e-40a0c6828db3/delegate_stderr_attempt1_1773185799480.log\"},\"diagnostics\":{\"error_code\":null,\"exit_code\":0,\"timeout\":false,\"adapter_type\":\"coding_executor\",\"task_type\":\"coding_execution\",\"fallback_from\":null,\"provider_requested\":\"opencode\",\"artifact_scaffold\":{\"checked\":true,\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"created\":[],\"existing\":[\"plan/spec.md\",\"plan/acceptance.json\",\"plan/milestones.md\",\"handoff/pm_to_architect.json\"],\"repaired\":[],\"failed\":[]},\"execution_adapter_packet\":null,\"tool_adapter_request\":{\"adapter_type\":\"coding_executor\",\"provider\":\"opencode\",\"task_type\":\"coding_execution\",\"payload\":{\"step_id\":\"pm_spec\",\"task_prompt\":\"[CodingTeam Step] PM Specification\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: pm_spec\\nRole: pm\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: pm.design_doc.v1\\nPrompt Script LLM Role: pm\\nPrompt Script Artifact Type: design_doc\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"scope\\\",\\\"user_stories\\\",\\\"acceptance_criteria\\\",\\\"non_goals\\\",\\\"artifact_list\\\"]}\\nPrompt Script Goal: Generate a structured PM design document with explicit scope, user stories, acceptance criteria, non-goals, and artifact list.\\n\\nExecution requirements:\\n- Define user stories, scope boundaries, and non-goals for a minimal CRM web app.\\n- Write measurable acceptance criteria in plan/acceptance.json.\\n- Create phased milestones in plan/milestones.md.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- plan/spec.md\\n- plan/acceptance.json\\n- plan/milestones.md\\nHandoff artifacts for next stage:\\n- plan/spec.md\\n- plan/acceptance.json\\n- plan/milestones.md\\n- handoff/pm_to_architect.json\\n- typed handoff manifest: handoff/pm_to_architect.json\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n\\n[Execution Contract v1]\\n- step_id: pm_spec\\n- target_paths: sandbox/live_validation/pm_spec.txt\\n- required_outputs: plan/spec.md, plan/acceptance.json, plan/milestones.md, handoff/pm_to_architect.json\\n- input_artifacts: none\\n- verification_command: none\\n- execution_mode: default\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n\",\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"expected_artifacts\":[\"plan/spec.md\",\"plan/acceptance.json\",\"plan/milestones.md\",\"handoff/pm_to_architect.json\"],\"target_paths\":[\"sandbox/live_validation/pm_spec.txt\"],\"verification_command\":\"\",\"wall_clock_timeout_s\":180,\"execution_adapter_packet\":null,\"context_packet\":null,\"repo_map\":null,\"model_hint\":\"qwen3-coder-next\"},\"context\":{\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"task_id\":\"69e791b2-548d-49f9-9f9e-40a0c6828db3\"}},\"prompt_contract\":{\"contract_version\":\"execution_contract_v1\",\"target_paths\":[\"sandbox/live_validation/pm_spec.txt\"],\"required_outputs\":[\"plan/spec.md\",\"plan/acceptance.json\",\"plan/milestones.md\",\"handoff/pm_to_architect.json\"],\"verification_command\":null,\"execution_mode\":\"default\",\"prompt_sha1\":\"2dca7fac7db8c5fa9648f1ab6e0a47be8abcdef5\",\"attempt\":1},\"static_check\":{\"checked\":false,\"ok\":true,\"commands\":[],\"logPath\":null},\"verification\":{\"checked\":false,\"ok\":true,\"command\":\"\",\"logPath\":null},\"retry_summary\":{\"attempts_used\":1,\"max_attempts\":1,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":180,\"repairs_attempted\":0,\"repaired_after_retry\":false},\"parse_error\":false,\"truncated\":false},\"error\":null,\"command_used\":\"mock-inline-autofix sandbox/live_validation/pm_spec.txt [CodingTeam Step] PM Specification\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: pm_spec\\nRole: pm\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: pm.design_doc.v1\\nPrompt Script LLM Role: pm\\nPrompt Script Artifact Type: design_doc\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"scope\\\",\\\"user_stories\\\",\\\"acceptance_criteria\\\",\\\"non_goals\\\",\\\"artifact_list\\\"]}\\nPrompt Script Goal: Generate a structured PM design document with explicit scope, user stories, acceptance criteria, non-goals, and artifact list.\\n\\nExecution requirements:\\n- Define user stories, scope boundaries, and non-goals for a minimal CRM web app.\\n- Write measurable acceptance criteria in plan/acceptance.json.\\n- Create phased milestones in plan/milestones.md.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- plan/spec.md\\n- plan/acceptance.json\\n- plan/milestones.md\\nHandoff artifacts for next stage:\\n- plan/spec.md\\n- plan/acceptance.json\\n- plan/milestones.md\\n- handoff/pm_to_architect.json\\n- typed handoff manifest: handoff/pm_to_architect.json\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n\\n[Execution Contract v1]\\n- step_id: pm_spec\\n- target_paths: sandbox/live_validation/pm_spec.txt\\n- required_outputs: plan/spec.md, plan/acceptance.json, plan/milestones.md, handoff/pm_to_architect.json\\n- input_artifacts: none\\n- verification_command: none\\n- execution_mode: default\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\",\"command_source\":\"payload.opencode_command\",\"started_at\":\"2026-03-10T23:36:39.406Z\",\"finished_at\":\"2026-03-10T23:36:39.487Z\",\"artifact_check\":{\"checked\":true,\"missing\":[],\"found\":[\"plan/spec.md\",\"plan/acceptance.json\",\"plan/milestones.md\",\"handoff/pm_to_architect.json\"],\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\"},\"role_output_validation\":{\"checked\":true,\"ok\":true,\"files_checked\":[\"plan/spec.md\",\"plan/acceptance.json\",\"plan/milestones.md\"],\"headings_checked\":[\"scope\",\"user_stories\",\"acceptance_criteria\",\"non_goals\",\"artifact_list\"],\"schema_checked\":\"coding_team_pm_acceptance.schema.json\"},\"handoff_validation\":{\"checked\":true,\"ok\":true,\"handoff\":{\"from_step\":\"pm_spec\",\"to_steps\":[\"arch_design\"],\"required_artifacts\":[\"plan/spec.md\",\"plan/acceptance.json\",\"plan/milestones.md\",\"handoff/pm_to_architect.json\"],\"required_sections\":[\"scope\",\"user_stories\",\"acceptance_criteria\",\"non_goals\",\"artifact_list\"],\"typed_handoff\":{\"file\":\"handoff/pm_to_architect.json\",\"required_fields\":[\"from_step\",\"to_steps\",\"scope_summary\",\"artifacts\",\"acceptance.criteria\"]}},\"typed_schema_checked\":\"coding_team_pm_handoff.schema.json\"},\"execution_mode_used\":\"full_file_fallback\",\"context_budget_report_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_pm_spec.json\",\"context_budget_report\":{\"step_id\":\"pm_spec\",\"artifact_count\":0,\"bytes_total\":0,\"largest_artifact_bytes\":0,\"prompt_chars\":1618,\"injected_context_bytes\":0,\"status\":\"ok\",\"threshold_source\":\"default_thresholds\",\"thresholds\":{\"warning_prompt_chars\":80000,\"overflow_risk_prompt_chars\":120000,\"warning_artifact_bytes\":500000,\"overflow_risk_artifact_bytes\":1000000,\"warning_injected_context_bytes\":150000,\"overflow_risk_injected_context_bytes\":300000},\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"workflow_run_id\":\"54815520-6fd0-494f-bbfc-782d64be6e5d\"},\"context_packet_path\":null,\"repo_map_path\":null,\"patch_application\":null}",
+        "error_code": null,
+        "started_at": "2026-03-10T23:36:39.390Z",
+        "ended_at": "2026-03-10T23:36:39.536Z",
+        "created_at": "2026-03-10T23:36:33.334Z",
+        "updated_at": "2026-03-10T23:36:39.536Z"
+      },
+      {
+        "id": "1058",
+        "workflow_run_id": "54815520-6fd0-494f-bbfc-782d64be6e5d",
+        "step_index": 1,
+        "step_id": "arch_design",
+        "role_name": "architect",
+        "tool_name": "coding.delegate",
+        "gate_name": "policy",
+        "status": "succeeded",
+        "task_id": "feafcdcc-1c9e-4b54-b52f-d50276321a52",
+        "risk_level": "medium",
+        "approval_required": false,
+        "approval_reasons_json": "[]",
+        "checkpoint_id": "6e5016df-237a-4c08-9ce2-89102c88d1cf",
+        "result_json": "{\"ok\":true,\"provider_used\":\"opencode\",\"model_used\":\"qwen3-coder-next\",\"summary\":\"opencode delegation finished.\",\"files_changed\":[],\"diff_stats\":{\"added\":0,\"deleted\":0,\"files\":0},\"test_result\":\"skipped\",\"git\":{\"base_ref\":\"SCOPED_SNAPSHOT\",\"branch\":\"scoped\",\"commit_sha\":null,\"dirty\":false},\"rollback_performed\":false,\"artifacts\":{\"diff_bundle\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_feafcdcc-1c9e-4b54-b52f-d50276321a52/delegate_diff_1773185799598.patch\",\"patch_file\":null,\"test_log\":null,\"prompt_contract\":\"artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_feafcdcc-1c9e-4b54-b52f-d50276321a52/prompt_contract_attempt1_1773185799561.json\",\"raw_stdout\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_feafcdcc-1c9e-4b54-b52f-d50276321a52/delegate_stdout_attempt1_1773185799593.log\",\"raw_stderr\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_feafcdcc-1c9e-4b54-b52f-d50276321a52/delegate_stderr_attempt1_1773185799593.log\"},\"diagnostics\":{\"error_code\":null,\"exit_code\":0,\"timeout\":false,\"adapter_type\":\"coding_executor\",\"task_type\":\"coding_execution\",\"fallback_from\":null,\"provider_requested\":\"opencode\",\"artifact_scaffold\":{\"checked\":true,\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"created\":[],\"existing\":[\"plan/arch.md\",\"plan/interfaces.md\",\"risk/risk_report.json\",\"plan/workplan.md\",\"handoff/architect_to_impl.json\"],\"repaired\":[],\"failed\":[]},\"execution_adapter_packet\":null,\"tool_adapter_request\":{\"adapter_type\":\"coding_executor\",\"provider\":\"opencode\",\"task_type\":\"coding_execution\",\"payload\":{\"step_id\":\"arch_design\",\"task_prompt\":\"[CodingTeam Step] Architecture Design\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: arch_design\\nRole: architect\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: architect.system_spec.v1\\nPrompt Script LLM Role: architect\\nPrompt Script Artifact Type: system_spec\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"module_breakdown\\\",\\\"interfaces\\\",\\\"dependency_choices\\\",\\\"risk_notes\\\"]}\\nPrompt Script Goal: Generate a system specification with module boundaries, interfaces, dependency choices, implementation sequence, and risk notes.\\n\\nExecution requirements:\\n- Provide architecture decisions with tradeoffs and module boundaries.\\n- Publish top risks and mitigations in risk/risk_report.json.\\n- Split implementation work for FE/BE/QA in plan/workplan.md.\\n- Define all API endpoints or internal interfaces in plan/interfaces.md.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- plan/arch.md\\n- plan/interfaces.md\\n- risk/risk_report.json\\n- plan/workplan.md\\nHandoff artifacts for next stage:\\n- plan/arch.md\\n- risk/risk_report.json\\n- plan/workplan.md\\n- handoff/architect_to_impl.json\\n- typed handoff manifest: handoff/architect_to_impl.json\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n\\n[Execution Contract v1]\\n- step_id: arch_design\\n- target_paths: sandbox/live_validation/arch_design.txt\\n- required_outputs: plan/arch.md, plan/interfaces.md, risk/risk_report.json, plan/workplan.md, handoff/architect_to_impl.json\\n- input_artifacts: none\\n- verification_command: none\\n- execution_mode: default\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n\",\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"expected_artifacts\":[\"plan/arch.md\",\"plan/interfaces.md\",\"risk/risk_report.json\",\"plan/workplan.md\",\"handoff/architect_to_impl.json\"],\"target_paths\":[\"sandbox/live_validation/arch_design.txt\"],\"verification_command\":\"\",\"wall_clock_timeout_s\":180,\"execution_adapter_packet\":null,\"context_packet\":null,\"repo_map\":null,\"model_hint\":\"qwen3-coder-next\"},\"context\":{\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"task_id\":\"feafcdcc-1c9e-4b54-b52f-d50276321a52\"}},\"prompt_contract\":{\"contract_version\":\"execution_contract_v1\",\"target_paths\":[\"sandbox/live_validation/arch_design.txt\"],\"required_outputs\":[\"plan/arch.md\",\"plan/interfaces.md\",\"risk/risk_report.json\",\"plan/workplan.md\",\"handoff/architect_to_impl.json\"],\"verification_command\":null,\"execution_mode\":\"default\",\"prompt_sha1\":\"cb505da4c98df01d9bb344dc8c0f13dda89c7f27\",\"attempt\":1},\"static_check\":{\"checked\":false,\"ok\":true,\"commands\":[],\"logPath\":null},\"verification\":{\"checked\":false,\"ok\":true,\"command\":\"\",\"logPath\":null},\"retry_summary\":{\"attempts_used\":1,\"max_attempts\":1,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":180,\"repairs_attempted\":0,\"repaired_after_retry\":false},\"parse_error\":false,\"truncated\":false},\"error\":null,\"command_used\":\"mock-inline-autofix sandbox/live_validation/arch_design.txt [CodingTeam Step] Architecture Design\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: arch_design\\nRole: architect\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: architect.system_spec.v1\\nPrompt Script LLM Role: architect\\nPrompt Script Artifact Type: system_spec\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"module_breakdown\\\",\\\"interfaces\\\",\\\"dependency_choices\\\",\\\"risk_notes\\\"]}\\nPrompt Script Goal: Generate a system specification with module boundaries, interfaces, dependency choices, implementation sequence, and risk notes.\\n\\nExecution requirements:\\n- Provide architecture decisions with tradeoffs and module boundaries.\\n- Publish top risks and mitigations in risk/risk_report.json.\\n- Split implementation work for FE/BE/QA in plan/workplan.md.\\n- Define all API endpoints or internal interfaces in plan/interfaces.md.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- plan/arch.md\\n- plan/interfaces.md\\n- risk/risk_report.json\\n- plan/workplan.md\\nHandoff artifacts for next stage:\\n- plan/arch.md\\n- risk/risk_report.json\\n- plan/workplan.md\\n- handoff/architect_to_impl.json\\n- typed handoff manifest: handoff/architect_to_impl.json\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n\\n[Execution Contract v1]\\n- step_id: arch_design\\n- target_paths: sandbox/live_validation/arch_design.txt\\n- required_outputs: plan/arch.md, plan/interfaces.md, risk/risk_report.json, plan/workplan.md, handoff/architect_to_impl.json\\n- input_artifacts: none\\n- verification_command: none\\n- execution_mode: default\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\",\"command_source\":\"payload.opencode_command\",\"started_at\":\"2026-03-10T23:36:39.561Z\",\"finished_at\":\"2026-03-10T23:36:39.600Z\",\"artifact_check\":{\"checked\":true,\"missing\":[],\"found\":[\"plan/arch.md\",\"plan/interfaces.md\",\"risk/risk_report.json\",\"plan/workplan.md\",\"handoff/architect_to_impl.json\"],\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\"},\"role_output_validation\":{\"checked\":true,\"ok\":true,\"files_checked\":[\"plan/arch.md\",\"plan/interfaces.md\",\"risk/risk_report.json\",\"plan/workplan.md\"],\"headings_checked\":[\"module_breakdown\",\"interfaces\",\"dependency_choices\",\"risk_notes\"],\"interfaces_checked\":[\"get /api/customers\",\"get /api/customers/:id\",\"post /api/customers\",\"put /api/customers/:id\"],\"schema_checked\":\"coding_team_arch_risk_report.schema.json\"},\"handoff_validation\":{\"checked\":true,\"ok\":true,\"handoff\":{\"from_step\":\"arch_design\",\"to_steps\":[\"impl_be\",\"impl_fe\",\"qa_verify\"],\"required_artifacts\":[\"plan/arch.md\",\"risk/risk_report.json\",\"plan/workplan.md\",\"handoff/architect_to_impl.json\"],\"required_sections\":[\"module_breakdown\",\"interfaces\",\"dependency_choices\",\"risk_notes\"],\"typed_handoff\":{\"file\":\"handoff/architect_to_impl.json\",\"required_fields\":[\"from_step\",\"to_steps\",\"modules\",\"interfaces\",\"decisions\",\"risks\"]}},\"typed_schema_checked\":\"coding_team_arch_handoff.schema.json\"},\"execution_mode_used\":\"full_file_fallback\",\"context_budget_report_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_arch_design.json\",\"context_budget_report\":{\"step_id\":\"arch_design\",\"artifact_count\":0,\"bytes_total\":0,\"largest_artifact_bytes\":0,\"prompt_chars\":1738,\"injected_context_bytes\":0,\"status\":\"ok\",\"threshold_source\":\"role_overrides.architect\",\"thresholds\":{\"warning_prompt_chars\":100000,\"overflow_risk_prompt_chars\":150000,\"warning_artifact_bytes\":500000,\"overflow_risk_artifact_bytes\":1000000,\"warning_injected_context_bytes\":150000,\"overflow_risk_injected_context_bytes\":300000},\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"workflow_run_id\":\"54815520-6fd0-494f-bbfc-782d64be6e5d\"},\"context_packet_path\":null,\"repo_map_path\":null,\"patch_application\":null}",
+        "error_code": null,
+        "started_at": "2026-03-10T23:36:39.552Z",
+        "ended_at": "2026-03-10T23:36:39.644Z",
+        "created_at": "2026-03-10T23:36:33.336Z",
+        "updated_at": "2026-03-10T23:36:39.644Z"
+      },
+      {
+        "id": "1059",
+        "workflow_run_id": "54815520-6fd0-494f-bbfc-782d64be6e5d",
+        "step_index": 2,
+        "step_id": "impl_be",
+        "role_name": "backend",
+        "tool_name": "coding.delegate",
+        "gate_name": "policy",
+        "status": "succeeded",
+        "task_id": "94e6ef6d-b668-4722-b274-811bb66364ae",
+        "risk_level": "medium",
+        "approval_required": false,
+        "approval_reasons_json": "[]",
+        "checkpoint_id": "771ee1f9-4ab0-4060-9490-6fd09bba980a",
+        "result_json": "{\"ok\":true,\"provider_used\":\"opencode\",\"model_used\":\"qwen3-coder-next\",\"summary\":\"opencode delegation finished.\",\"files_changed\":[],\"diff_stats\":{\"added\":0,\"deleted\":0,\"files\":0},\"test_result\":\"passed\",\"git\":{\"base_ref\":\"SCOPED_SNAPSHOT\",\"branch\":\"scoped\",\"commit_sha\":null,\"dirty\":false},\"rollback_performed\":false,\"artifacts\":{\"diff_bundle\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/delegate_diff_1773185799782.patch\",\"patch_file\":null,\"test_log\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/verification_1773185799785.json\",\"prompt_contract\":\"artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/prompt_contract_attempt2_1773185799741.json\",\"raw_stdout\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/delegate_stdout_attempt2_1773185799767.log\",\"raw_stderr\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/delegate_stderr_attempt2_1773185799767.log\"},\"diagnostics\":{\"error_code\":null,\"exit_code\":0,\"timeout\":false,\"adapter_type\":\"coding_executor\",\"task_type\":\"coding_execution\",\"fallback_from\":null,\"provider_requested\":\"opencode\",\"artifact_scaffold\":{\"checked\":true,\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"created\":[],\"existing\":[\"impl/be_patch_bundle.json\",\"impl/be_notes.md\",\"handoff/be_to_fe.json\"],\"repaired\":[],\"failed\":[]},\"execution_adapter_packet\":{\"adapter_id\":\"backend.execution.v1\",\"role\":\"backend\",\"step_id\":\"impl_be\",\"target_paths\":[\"sandbox/crm_site/server.js\"],\"required_outputs\":[\"impl/be_patch_bundle.json\",\"impl/be_notes.md\",\"handoff/be_to_fe.json\"],\"input_artifacts\":[\"plan/arch.md\",\"plan/interfaces.md\",\"risk/risk_report.json\",\"plan/workplan.md\",\"handoff/architect_to_impl.json\"],\"execution_mode\":\"structured_patch_and_handoff\",\"verification_hint\":\"return a structured backend patch bundle, backend notes, and a typed BE-to-FE handoff manifest\",\"verification_command\":\"\",\"max_attempts\":2,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":300,\"provider_hint\":\"opencode\",\"model_hint\":\"qwen3-coder-next\"},\"tool_adapter_request\":{\"adapter_type\":\"coding_executor\",\"provider\":\"opencode\",\"task_type\":\"coding_execution\",\"payload\":{\"step_id\":\"impl_be\",\"task_prompt\":\"[CodingTeam Step] Backend Implementation\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: impl_be\\nRole: backend\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: backend.impl.v2\\nPrompt Script LLM Role: backend\\nPrompt Script Artifact Type: backend_impl_patch_bundle\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"patch_operations\\\",\\\"api_contracts\\\",\\\"scope_constraints\\\",\\\"run_instructions\\\"]}\\nPrompt Script Goal: Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Include only deterministic operations of type replace_range, insert_after_anchor, delete_range, or create_file. Write the bundle under impl/be_patch_bundle.json, write impl/be_notes.md with decisions and run instructions, and write handoff/be_to_fe.json matching the typed schema. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/be_changes/ with the same handoff contract.\\nExecution Adapter: backend.execution.v1\\nExecution Target Paths: sandbox/crm_site/server.js\\nExecution Required Outputs: impl/be_patch_bundle.json, impl/be_notes.md, handoff/be_to_fe.json\\nExecution requirements:\\n- Implement backend/API/data layer outputs as complete files under impl/be_changes/.\\n- Write impl/be_notes.md with implementation decisions, assumptions, and run instructions.\\n- Emit handoff/be_to_fe.json with api_contracts, shared_types, and explicit scope_constraints.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- impl/be_changes/server.js\\n- impl/be_notes.md\\n- handoff/be_to_fe.json\\n\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Target File Context]\\nFile: sandbox/crm_site/server.js\\n```\\nconst status = 'fixed';\\nmodule.exports = { status };\\n\\n```\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n[Coding Context Packet]\\nStep: impl_be\\nRole: backend\\nTarget Paths: sandbox/crm_site/server.js\\nEntrypoints: sandbox/crm_site/server.js\\nRecent Changed Files: sandbox/crm_site/server.js\\nCandidate Files: sandbox/crm_site/server.js\\n\\n[Auto-Fix Retry]\\nAttempt: 2\\nRepair objective: fix the previously failed coding attempt without expanding scope.\\nPrevious failed phase: static_check\\nPrevious error code: E_STATIC_CHECK_FAILED\\nPrevious error: E_STATIC_CHECK_FAILED: node syntax check failed\\nPrevious command used: mock-inline-autofix sandbox/crm_site/server.js [CodingTeam Step] Backend Implementation\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: impl_be\\nRole: backend\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: backend.impl.v2\\nPrompt Script LLM Role: backend\\nPrompt Script Artifact Type: backend_impl_patch_bundle\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"patch_operations\\\",\\\"api_contracts\\\",\\\"scope_constraints\\\",\\\"run_instructions\\\"]}\\nPrompt Script Goal: Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Include only deterministic operations of type replace_range, insert_after_anchor, delete_range, or create_file. Write the bundle under impl/be_patch_bundle.json, write impl/be_notes.md with decisions and run instructions, and write handoff/be_to_fe.json matching the typed schema. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/be_changes/ with the same handoff contract.\\nExecution Adapter: backend.execution.v1\\nExecution Target Paths: sandbox/crm_site/server.js\\nExecution Required Outputs: impl/be_patch_bundle.json, impl/be_notes.md, handoff/be_to_fe.json\\nExecution requirements:\\n- Implement backend/API/data layer outputs as complete files under impl/be_changes/.\\n- Write impl/be_notes.md with implementation decisions, assumptions, and run instructions.\\n- Emit handoff/be_to_fe.json with api_contracts, shared_types, and explicit scope_constraints.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- impl/be_changes/server.js\\n- impl/be_notes.md\\n- handoff/be_to_fe.json\\n\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Target File Context]\\nFile: sandbox/crm_site/server.js\\n```\\nconst status = 'fixed';\\nmodule.exports = { status };\\n\\n```\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n[Coding Context Packet]\\nStep: impl_be\\nRole: backend\\nTarget Paths: sandbox/crm_site/server.js\\nEntrypoints: sandbox/crm_site/server.js\\nRecent Changed Files: sandbox/crm_site/server.js\\nCandidate Files: sandbox/crm_site/server.js\\n\\n[Execution Contract v1]\\n- step_id: impl_be\\n- target_paths: sandbox/crm_site/server.js\\n- required_outputs: impl/be_patch_bundle.json, impl/be_notes.md, handoff/be_to_fe.json\\n- input_artifacts: plan/arch.md, plan/interfaces.md, risk/risk_report.json, plan/workplan.md, handoff/architect_to_impl.json\\n- verification_command: node --check sandbox/crm_site/server.js\\n- execution_mode: structured_patch_and_handoff\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n- entrypoints: sandbox/crm_site/server.js\\n- candidate_files: sandbox/crm_site/server.js\\nInstructions: preserve target_paths, fix the reported failure, and return only the minimum necessary change set.\\n\\n[Execution Contract v1]\\n- step_id: impl_be\\n- target_paths: sandbox/crm_site/server.js\\n- required_outputs: impl/be_patch_bundle.json, impl/be_notes.md, handoff/be_to_fe.json\\n- input_artifacts: plan/arch.md, plan/interfaces.md, risk/risk_report.json, plan/workplan.md, handoff/architect_to_impl.json\\n- verification_command: node --check sandbox/crm_site/server.js\\n- execution_mode: structured_patch_and_handoff\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n- entrypoints: sandbox/crm_site/server.js\\n- candidate_files: sandbox/crm_site/server.js\\n\",\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"expected_artifacts\":[\"impl/be_patch_bundle.json\",\"impl/be_notes.md\",\"handoff/be_to_fe.json\"],\"target_paths\":[\"sandbox/crm_site/server.js\"],\"verification_command\":\"node --check sandbox/crm_site/server.js\",\"wall_clock_timeout_s\":300,\"execution_adapter_packet\":{\"adapter_id\":\"backend.execution.v1\",\"role\":\"backend\",\"step_id\":\"impl_be\",\"target_paths\":[\"sandbox/crm_site/server.js\"],\"required_outputs\":[\"impl/be_patch_bundle.json\",\"impl/be_notes.md\",\"handoff/be_to_fe.json\"],\"input_artifacts\":[\"plan/arch.md\",\"plan/interfaces.md\",\"risk/risk_report.json\",\"plan/workplan.md\",\"handoff/architect_to_impl.json\"],\"execution_mode\":\"structured_patch_and_handoff\",\"verification_hint\":\"return a structured backend patch bundle, backend notes, and a typed BE-to-FE handoff manifest\",\"verification_command\":\"\",\"max_attempts\":2,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":300,\"provider_hint\":\"opencode\",\"model_hint\":\"qwen3-coder-next\"},\"context_packet\":{\"step_id\":\"impl_be\",\"role\":\"backend\",\"target_paths\":[\"sandbox/crm_site/server.js\"],\"candidate_files\":[\"sandbox/crm_site/server.js\"],\"entrypoints\":[\"sandbox/crm_site/server.js\"],\"related_tests\":[],\"toolchain_facts\":[],\"recent_changed_files\":[\"sandbox/crm_site/server.js\"],\"memory_hints\":[]},\"repo_map\":{\"workspace_root\":\"/workspace\",\"target_paths\":[\"sandbox/crm_site/server.js\"],\"directory_summary\":[{\"path\":\"sandbox/crm_site/server.js\",\"entries\":[{\"path\":\"sandbox/crm_site/server.js\",\"kind\":\"file\"}]}],\"candidate_files\":[\"sandbox/crm_site/server.js\"],\"entrypoints\":[\"sandbox/crm_site/server.js\"],\"related_tests\":[],\"key_config_files\":[],\"toolchain_facts\":[],\"symbol_hints\":[{\"file\":\"sandbox/crm_site/server.js\",\"symbols\":[\"const status =\",\"module.exports =\"]}],\"recent_changed_files\":[\"sandbox/crm_site/server.js\"]},\"model_hint\":\"qwen3-coder-next\"},\"context\":{\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"task_id\":\"94e6ef6d-b668-4722-b274-811bb66364ae\"}},\"prompt_contract\":{\"contract_version\":\"execution_contract_v1\",\"target_paths\":[\"sandbox/crm_site/server.js\"],\"required_outputs\":[\"impl/be_patch_bundle.json\",\"impl/be_notes.md\",\"handoff/be_to_fe.json\"],\"verification_command\":\"node --check sandbox/crm_site/server.js\",\"execution_mode\":\"structured_patch_and_handoff\",\"prompt_sha1\":\"c8bfb54bd19cc1266f345c1f7bd2b22e888c1596\",\"attempt\":2},\"static_check\":{\"checked\":false,\"ok\":true,\"commands\":[],\"logPath\":null},\"verification\":{\"checked\":true,\"ok\":true,\"command\":\"node --check sandbox/crm_site/server.js\",\"exit_code\":0,\"stdout\":\"\",\"stderr\":\"\",\"error\":null,\"error_code\":null,\"logPath\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/verification_1773185799785.json\"},\"retry_summary\":{\"attempts_used\":2,\"max_attempts\":2,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":300,\"repairs_attempted\":1,\"repaired_after_retry\":true},\"parse_error\":false,\"truncated\":false},\"error\":null,\"command_used\":\"mock-inline-autofix sandbox/crm_site/server.js [CodingTeam Step] Backend Implementation\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: impl_be\\nRole: backend\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: backend.impl.v2\\nPrompt Script LLM Role: backend\\nPrompt Script Artifact Type: backend_impl_patch_bundle\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"patch_operations\\\",\\\"api_contracts\\\",\\\"scope_constraints\\\",\\\"run_instructions\\\"]}\\nPrompt Script Goal: Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Include only deterministic operations of type replace_range, insert_after_anchor, delete_range, or create_file. Write the bundle under impl/be_patch_bundle.json, write impl/be_notes.md with decisions and run instructions, and write handoff/be_to_fe.json matching the typed schema. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/be_changes/ with the same handoff contract.\\nExecution Adapter: backend.execution.v1\\nExecution Target Paths: sandbox/crm_site/server.js\\nExecution Required Outputs: impl/be_patch_bundle.json, impl/be_notes.md, handoff/be_to_fe.json\\nExecution requirements:\\n- Implement backend/API/data layer outputs as complete files under impl/be_changes/.\\n- Write impl/be_notes.md with implementation decisions, assumptions, and run instructions.\\n- Emit handoff/be_to_fe.json with api_contracts, shared_types, and explicit scope_constraints.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- impl/be_changes/server.js\\n- impl/be_notes.md\\n- handoff/be_to_fe.json\\n\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Target File Context]\\nFile: sandbox/crm_site/server.js\\n```\\nconst status = 'fixed';\\nmodule.exports = { status };\\n\\n```\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n[Coding Context Packet]\\nStep: impl_be\\nRole: backend\\nTarget Paths: sandbox/crm_site/server.js\\nEntrypoints: sandbox/crm_site/server.js\\nRecent Changed Files: sandbox/crm_site/server.js\\nCandidate Files: sandbox/crm_site/server.js\\n\\n[Auto-Fix Retry]\\nAttempt: 2\\nRepair objective: fix the previously failed coding attempt without expanding scope.\\nPrevious failed phase: static_check\\nPrevious error code: E_STATIC_CHECK_FAILED\\nPrevious error: E_STATIC_CHECK_FAILED: node syntax check failed\\nPrevious command used: mock-inline-autofix sandbox/crm_site/server.js [CodingTeam Step] Backend Implementation\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: impl_be\\nRole: backend\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: backend.impl.v2\\nPrompt Script LLM Role: backend\\nPrompt Script Artifact Type: backend_impl_patch_bundle\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"patch_operations\\\",\\\"api_contracts\\\",\\\"scope_constraints\\\",\\\"run_instructions\\\"]}\\nPrompt Script Goal: Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Include only deterministic operations of type replace_range, insert_after_anchor, delete_range, or create_file. Write the bundle under impl/be_patch_bundle.json, write impl/be_notes.md with decisions and run instructions, and write handoff/be_to_fe.json matching the typed schema. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/be_changes/ with the same handoff contract.\\nExecution Adapter: backend.execution.v1\\nExecution Target Paths: sandbox/crm_site/server.js\\nExecution Required Outputs: impl/be_patch_bundle.json, impl/be_notes.md, handoff/be_to_fe.json\\nExecution requirements:\\n- Implement backend/API/data layer outputs as complete files under impl/be_changes/.\\n- Write impl/be_notes.md with implementation decisions, assumptions, and run instructions.\\n- Emit handoff/be_to_fe.json with api_contracts, shared_types, and explicit scope_constraints.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- impl/be_changes/server.js\\n- impl/be_notes.md\\n- handoff/be_to_fe.json\\n\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Target File Context]\\nFile: sandbox/crm_site/server.js\\n```\\nconst status = 'fixed';\\nmodule.exports = { status };\\n\\n```\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n[Coding Context Packet]\\nStep: impl_be\\nRole: backend\\nTarget Paths: sandbox/crm_site/server.js\\nEntrypoints: sandbox/crm_site/server.js\\nRecent Changed Files: sandbox/crm_site/server.js\\nCandidate Files: sandbox/crm_site/server.js\\n\\n[Execution Contract v1]\\n- step_id: impl_be\\n- target_paths: sandbox/crm_site/server.js\\n- required_outputs: impl/be_patch_bundle.json, impl/be_notes.md, handoff/be_to_fe.json\\n- input_artifacts: plan/arch.md, plan/interfaces.md, risk/risk_report.json, plan/workplan.md, handoff/architect_to_impl.json\\n- verification_command: node --check sandbox/crm_site/server.js\\n- execution_mode: structured_patch_and_handoff\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n- entrypoints: sandbox/crm_site/server.js\\n- candidate_files: sandbox/crm_site/server.js\\nInstructions: preserve target_paths, fix the reported failure, and return only the minimum necessary change set.\\n\\n[Execution Contract v1]\\n- step_id: impl_be\\n- target_paths: sandbox/crm_site/server.js\\n- required_outputs: impl/be_patch_bundle.json, impl/be_notes.md, handoff/be_to_fe.json\\n- input_artifacts: plan/arch.md, plan/interfaces.md, risk/risk_report.json, plan/workplan.md, handoff/architect_to_impl.json\\n- verification_command: node --check sandbox/crm_site/server.js\\n- execution_mode: structured_patch_and_handoff\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n- entrypoints: sandbox/crm_site/server.js\\n- candidate_files: sandbox/crm_site/server.js\",\"command_source\":\"payload.opencode_command\",\"started_at\":\"2026-03-10T23:36:39.687Z\",\"finished_at\":\"2026-03-10T23:36:39.789Z\",\"artifact_check\":{\"checked\":true,\"missing\":[],\"found\":[\"impl/be_patch_bundle.json\",\"impl/be_notes.md\",\"handoff/be_to_fe.json\"],\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\"},\"impl_validation\":{\"checked\":true,\"ok\":true,\"execution_mode_used\":\"full_file_fallback\",\"be_changes_dir\":\"impl/be_changes\",\"be_changes_count\":0,\"patch_bundle_path\":\"impl/be_patch_bundle.json\",\"notes_path\":\"impl/be_notes.md\",\"handoff_path\":\"handoff/be_to_fe.json\",\"scoped_files\":[\"sandbox/crm_site/server.js\"]},\"execution_mode_used\":\"full_file_fallback\",\"context_budget_report_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_impl_be.json\",\"context_budget_report\":{\"step_id\":\"impl_be\",\"artifact_count\":0,\"bytes_total\":0,\"largest_artifact_bytes\":0,\"prompt_chars\":2576,\"injected_context_bytes\":80,\"status\":\"ok\",\"threshold_source\":\"role_overrides.backend\",\"thresholds\":{\"warning_prompt_chars\":80000,\"overflow_risk_prompt_chars\":120000,\"warning_artifact_bytes\":500000,\"overflow_risk_artifact_bytes\":1000000,\"warning_injected_context_bytes\":200000,\"overflow_risk_injected_context_bytes\":350000},\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"workflow_run_id\":\"54815520-6fd0-494f-bbfc-782d64be6e5d\"},\"context_packet_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/context_packet_impl_be.json\",\"repo_map_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/repo_map_impl_be.json\",\"patch_application\":{\"bundle_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/impl/be_patch_bundle.json\",\"mode\":\"full_file_fallback\",\"written_files\":[],\"operation_count\":1}}",
+        "error_code": null,
+        "started_at": "2026-03-10T23:36:39.680Z",
+        "ended_at": "2026-03-10T23:36:39.826Z",
+        "created_at": "2026-03-10T23:36:33.338Z",
+        "updated_at": "2026-03-10T23:36:39.826Z"
+      },
+      {
+        "id": "1060",
+        "workflow_run_id": "54815520-6fd0-494f-bbfc-782d64be6e5d",
+        "step_index": 3,
+        "step_id": "impl_fe",
+        "role_name": "frontend",
+        "tool_name": "coding.delegate",
+        "gate_name": "policy",
+        "status": "succeeded",
+        "task_id": "bd723c87-4820-4393-ba1e-7e78c6150346",
+        "risk_level": "medium",
+        "approval_required": false,
+        "approval_reasons_json": "[]",
+        "checkpoint_id": "8f01e101-861f-41f2-8a31-a9b0d8ff873f",
+        "result_json": "{\"ok\":true,\"provider_used\":\"opencode\",\"model_used\":\"qwen3-coder-next\",\"summary\":\"opencode delegation finished.\",\"files_changed\":[],\"diff_stats\":{\"added\":0,\"deleted\":0,\"files\":0},\"test_result\":\"passed\",\"git\":{\"base_ref\":\"SCOPED_SNAPSHOT\",\"branch\":\"scoped\",\"commit_sha\":null,\"dirty\":false},\"rollback_performed\":false,\"artifacts\":{\"diff_bundle\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/delegate_diff_1773185799925.patch\",\"patch_file\":null,\"test_log\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/verification_1773185799928.json\",\"prompt_contract\":\"artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/prompt_contract_attempt2_1773185799895.json\",\"raw_stdout\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/delegate_stdout_attempt2_1773185799914.log\",\"raw_stderr\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/delegate_stderr_attempt2_1773185799915.log\"},\"diagnostics\":{\"error_code\":null,\"exit_code\":0,\"timeout\":false,\"adapter_type\":\"coding_executor\",\"task_type\":\"coding_execution\",\"fallback_from\":null,\"provider_requested\":\"opencode\",\"artifact_scaffold\":{\"checked\":true,\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"created\":[],\"existing\":[\"impl/fe_patch_bundle.json\",\"impl/fe_notes.md\"],\"repaired\":[],\"failed\":[]},\"execution_adapter_packet\":{\"adapter_id\":\"frontend.execution.v1\",\"role\":\"frontend\",\"step_id\":\"impl_fe\",\"target_paths\":[\"sandbox/crm_site/app.js\"],\"required_outputs\":[\"impl/fe_patch_bundle.json\",\"impl/fe_notes.md\"],\"input_artifacts\":[\"plan/arch.md\",\"plan/interfaces.md\",\"plan/workplan.md\",\"handoff/architect_to_impl.json\",\"handoff/be_to_fe.json\"],\"execution_mode\":\"structured_patch_from_backend_handoff\",\"verification_hint\":\"return a structured frontend patch bundle and frontend notes that match the backend handoff contract\",\"verification_command\":\"\",\"max_attempts\":2,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":300,\"provider_hint\":\"opencode\",\"model_hint\":\"qwen3-coder-next\"},\"tool_adapter_request\":{\"adapter_type\":\"coding_executor\",\"provider\":\"opencode\",\"task_type\":\"coding_execution\",\"payload\":{\"step_id\":\"impl_fe\",\"task_prompt\":\"[CodingTeam Step] Frontend Implementation\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: impl_fe\\nRole: frontend\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: frontend.impl.v2\\nPrompt Script LLM Role: frontend\\nPrompt Script Artifact Type: frontend_impl_patch_bundle\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"patch_operations\\\",\\\"ui_scope\\\",\\\"api_consumption\\\",\\\"run_instructions\\\"]}\\nPrompt Script Goal: Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Consume handoff/be_to_fe.json as the only backend contract source. Write the bundle under impl/fe_patch_bundle.json and write impl/fe_notes.md with UI decisions and run instructions. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/fe_changes/.\\nExecution Adapter: frontend.execution.v1\\nExecution Target Paths: sandbox/crm_site/app.js\\nExecution Required Outputs: impl/fe_patch_bundle.json, impl/fe_notes.md\\nExecution requirements:\\n- Implement frontend outputs as complete files under impl/fe_changes/.\\n- Consume handoff/be_to_fe.json as the backend contract source for API usage.\\n- Write impl/fe_notes.md with UI decisions, assumptions, and run instructions.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- impl/fe_changes/app.js\\n- impl/fe_notes.md\\n\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Target File Context]\\nFile: sandbox/crm_site/app.js\\n```\\nconst status = 'fixed';\\nmodule.exports = { status };\\n\\n```\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n[Coding Context Packet]\\nStep: impl_fe\\nRole: frontend\\nTarget Paths: sandbox/crm_site/app.js\\nEntrypoints: sandbox/crm_site/app.js\\nRecent Changed Files: sandbox/crm_site/app.js\\nCandidate Files: sandbox/crm_site/app.js\\n\\n[Auto-Fix Retry]\\nAttempt: 2\\nRepair objective: fix the previously failed coding attempt without expanding scope.\\nPrevious failed phase: static_check\\nPrevious error code: E_STATIC_CHECK_FAILED\\nPrevious error: E_STATIC_CHECK_FAILED: node syntax check failed\\nPrevious command used: mock-inline-autofix sandbox/crm_site/app.js [CodingTeam Step] Frontend Implementation\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: impl_fe\\nRole: frontend\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: frontend.impl.v2\\nPrompt Script LLM Role: frontend\\nPrompt Script Artifact Type: frontend_impl_patch_bundle\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"patch_operations\\\",\\\"ui_scope\\\",\\\"api_consumption\\\",\\\"run_instructions\\\"]}\\nPrompt Script Goal: Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Consume handoff/be_to_fe.json as the only backend contract source. Write the bundle under impl/fe_patch_bundle.json and write impl/fe_notes.md with UI decisions and run instructions. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/fe_changes/.\\nExecution Adapter: frontend.execution.v1\\nExecution Target Paths: sandbox/crm_site/app.js\\nExecution Required Outputs: impl/fe_patch_bundle.json, impl/fe_notes.md\\nExecution requirements:\\n- Implement frontend outputs as complete files under impl/fe_changes/.\\n- Consume handoff/be_to_fe.json as the backend contract source for API usage.\\n- Write impl/fe_notes.md with UI decisions, assumptions, and run instructions.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- impl/fe_changes/app.js\\n- impl/fe_notes.md\\n\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Target File Context]\\nFile: sandbox/crm_site/app.js\\n```\\nconst status = 'fixed';\\nmodule.exports = { status };\\n\\n```\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n[Coding Context Packet]\\nStep: impl_fe\\nRole: frontend\\nTarget Paths: sandbox/crm_site/app.js\\nEntrypoints: sandbox/crm_site/app.js\\nRecent Changed Files: sandbox/crm_site/app.js\\nCandidate Files: sandbox/crm_site/app.js\\n\\n[Execution Contract v1]\\n- step_id: impl_fe\\n- target_paths: sandbox/crm_site/app.js\\n- required_outputs: impl/fe_patch_bundle.json, impl/fe_notes.md\\n- input_artifacts: plan/arch.md, plan/interfaces.md, plan/workplan.md, handoff/architect_to_impl.json, handoff/be_to_fe.json\\n- verification_command: node --check sandbox/crm_site/app.js\\n- execution_mode: structured_patch_from_backend_handoff\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n- entrypoints: sandbox/crm_site/app.js\\n- candidate_files: sandbox/crm_site/app.js\\nInstructions: preserve target_paths, fix the reported failure, and return only the minimum necessary change set.\\n\\n[Execution Contract v1]\\n- step_id: impl_fe\\n- target_paths: sandbox/crm_site/app.js\\n- required_outputs: impl/fe_patch_bundle.json, impl/fe_notes.md\\n- input_artifacts: plan/arch.md, plan/interfaces.md, plan/workplan.md, handoff/architect_to_impl.json, handoff/be_to_fe.json\\n- verification_command: node --check sandbox/crm_site/app.js\\n- execution_mode: structured_patch_from_backend_handoff\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n- entrypoints: sandbox/crm_site/app.js\\n- candidate_files: sandbox/crm_site/app.js\\n\",\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"expected_artifacts\":[\"impl/fe_patch_bundle.json\",\"impl/fe_notes.md\"],\"target_paths\":[\"sandbox/crm_site/app.js\"],\"verification_command\":\"node --check sandbox/crm_site/app.js\",\"wall_clock_timeout_s\":300,\"execution_adapter_packet\":{\"adapter_id\":\"frontend.execution.v1\",\"role\":\"frontend\",\"step_id\":\"impl_fe\",\"target_paths\":[\"sandbox/crm_site/app.js\"],\"required_outputs\":[\"impl/fe_patch_bundle.json\",\"impl/fe_notes.md\"],\"input_artifacts\":[\"plan/arch.md\",\"plan/interfaces.md\",\"plan/workplan.md\",\"handoff/architect_to_impl.json\",\"handoff/be_to_fe.json\"],\"execution_mode\":\"structured_patch_from_backend_handoff\",\"verification_hint\":\"return a structured frontend patch bundle and frontend notes that match the backend handoff contract\",\"verification_command\":\"\",\"max_attempts\":2,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":300,\"provider_hint\":\"opencode\",\"model_hint\":\"qwen3-coder-next\"},\"context_packet\":{\"step_id\":\"impl_fe\",\"role\":\"frontend\",\"target_paths\":[\"sandbox/crm_site/app.js\"],\"candidate_files\":[\"sandbox/crm_site/app.js\"],\"entrypoints\":[\"sandbox/crm_site/app.js\"],\"related_tests\":[],\"toolchain_facts\":[],\"recent_changed_files\":[\"sandbox/crm_site/app.js\"],\"memory_hints\":[]},\"repo_map\":{\"workspace_root\":\"/workspace\",\"target_paths\":[\"sandbox/crm_site/app.js\"],\"directory_summary\":[{\"path\":\"sandbox/crm_site/app.js\",\"entries\":[{\"path\":\"sandbox/crm_site/app.js\",\"kind\":\"file\"}]}],\"candidate_files\":[\"sandbox/crm_site/app.js\"],\"entrypoints\":[\"sandbox/crm_site/app.js\"],\"related_tests\":[],\"key_config_files\":[],\"toolchain_facts\":[],\"symbol_hints\":[{\"file\":\"sandbox/crm_site/app.js\",\"symbols\":[\"const status =\",\"module.exports =\"]}],\"recent_changed_files\":[\"sandbox/crm_site/app.js\"]},\"model_hint\":\"qwen3-coder-next\"},\"context\":{\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"task_id\":\"bd723c87-4820-4393-ba1e-7e78c6150346\"}},\"prompt_contract\":{\"contract_version\":\"execution_contract_v1\",\"target_paths\":[\"sandbox/crm_site/app.js\"],\"required_outputs\":[\"impl/fe_patch_bundle.json\",\"impl/fe_notes.md\"],\"verification_command\":\"node --check sandbox/crm_site/app.js\",\"execution_mode\":\"structured_patch_from_backend_handoff\",\"prompt_sha1\":\"710e825efbf4d915f22f908b480cf487f3e2d4df\",\"attempt\":2},\"static_check\":{\"checked\":false,\"ok\":true,\"commands\":[],\"logPath\":null},\"verification\":{\"checked\":true,\"ok\":true,\"command\":\"node --check sandbox/crm_site/app.js\",\"exit_code\":0,\"stdout\":\"\",\"stderr\":\"\",\"error\":null,\"error_code\":null,\"logPath\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/verification_1773185799928.json\"},\"retry_summary\":{\"attempts_used\":2,\"max_attempts\":2,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":300,\"repairs_attempted\":1,\"repaired_after_retry\":true},\"parse_error\":false,\"truncated\":false},\"error\":null,\"command_used\":\"mock-inline-autofix sandbox/crm_site/app.js [CodingTeam Step] Frontend Implementation\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: impl_fe\\nRole: frontend\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: frontend.impl.v2\\nPrompt Script LLM Role: frontend\\nPrompt Script Artifact Type: frontend_impl_patch_bundle\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"patch_operations\\\",\\\"ui_scope\\\",\\\"api_consumption\\\",\\\"run_instructions\\\"]}\\nPrompt Script Goal: Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Consume handoff/be_to_fe.json as the only backend contract source. Write the bundle under impl/fe_patch_bundle.json and write impl/fe_notes.md with UI decisions and run instructions. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/fe_changes/.\\nExecution Adapter: frontend.execution.v1\\nExecution Target Paths: sandbox/crm_site/app.js\\nExecution Required Outputs: impl/fe_patch_bundle.json, impl/fe_notes.md\\nExecution requirements:\\n- Implement frontend outputs as complete files under impl/fe_changes/.\\n- Consume handoff/be_to_fe.json as the backend contract source for API usage.\\n- Write impl/fe_notes.md with UI decisions, assumptions, and run instructions.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- impl/fe_changes/app.js\\n- impl/fe_notes.md\\n\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Target File Context]\\nFile: sandbox/crm_site/app.js\\n```\\nconst status = 'fixed';\\nmodule.exports = { status };\\n\\n```\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n[Coding Context Packet]\\nStep: impl_fe\\nRole: frontend\\nTarget Paths: sandbox/crm_site/app.js\\nEntrypoints: sandbox/crm_site/app.js\\nRecent Changed Files: sandbox/crm_site/app.js\\nCandidate Files: sandbox/crm_site/app.js\\n\\n[Auto-Fix Retry]\\nAttempt: 2\\nRepair objective: fix the previously failed coding attempt without expanding scope.\\nPrevious failed phase: static_check\\nPrevious error code: E_STATIC_CHECK_FAILED\\nPrevious error: E_STATIC_CHECK_FAILED: node syntax check failed\\nPrevious command used: mock-inline-autofix sandbox/crm_site/app.js [CodingTeam Step] Frontend Implementation\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: impl_fe\\nRole: frontend\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: frontend.impl.v2\\nPrompt Script LLM Role: frontend\\nPrompt Script Artifact Type: frontend_impl_patch_bundle\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"patch_operations\\\",\\\"ui_scope\\\",\\\"api_consumption\\\",\\\"run_instructions\\\"]}\\nPrompt Script Goal: Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Consume handoff/be_to_fe.json as the only backend contract source. Write the bundle under impl/fe_patch_bundle.json and write impl/fe_notes.md with UI decisions and run instructions. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/fe_changes/.\\nExecution Adapter: frontend.execution.v1\\nExecution Target Paths: sandbox/crm_site/app.js\\nExecution Required Outputs: impl/fe_patch_bundle.json, impl/fe_notes.md\\nExecution requirements:\\n- Implement frontend outputs as complete files under impl/fe_changes/.\\n- Consume handoff/be_to_fe.json as the backend contract source for API usage.\\n- Write impl/fe_notes.md with UI decisions, assumptions, and run instructions.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- impl/fe_changes/app.js\\n- impl/fe_notes.md\\n\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Target File Context]\\nFile: sandbox/crm_site/app.js\\n```\\nconst status = 'fixed';\\nmodule.exports = { status };\\n\\n```\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n[Coding Context Packet]\\nStep: impl_fe\\nRole: frontend\\nTarget Paths: sandbox/crm_site/app.js\\nEntrypoints: sandbox/crm_site/app.js\\nRecent Changed Files: sandbox/crm_site/app.js\\nCandidate Files: sandbox/crm_site/app.js\\n\\n[Execution Contract v1]\\n- step_id: impl_fe\\n- target_paths: sandbox/crm_site/app.js\\n- required_outputs: impl/fe_patch_bundle.json, impl/fe_notes.md\\n- input_artifacts: plan/arch.md, plan/interfaces.md, plan/workplan.md, handoff/architect_to_impl.json, handoff/be_to_fe.json\\n- verification_command: node --check sandbox/crm_site/app.js\\n- execution_mode: structured_patch_from_backend_handoff\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n- entrypoints: sandbox/crm_site/app.js\\n- candidate_files: sandbox/crm_site/app.js\\nInstructions: preserve target_paths, fix the reported failure, and return only the minimum necessary change set.\\n\\n[Execution Contract v1]\\n- step_id: impl_fe\\n- target_paths: sandbox/crm_site/app.js\\n- required_outputs: impl/fe_patch_bundle.json, impl/fe_notes.md\\n- input_artifacts: plan/arch.md, plan/interfaces.md, plan/workplan.md, handoff/architect_to_impl.json, handoff/be_to_fe.json\\n- verification_command: node --check sandbox/crm_site/app.js\\n- execution_mode: structured_patch_from_backend_handoff\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n- entrypoints: sandbox/crm_site/app.js\\n- candidate_files: sandbox/crm_site/app.js\",\"command_source\":\"payload.opencode_command\",\"started_at\":\"2026-03-10T23:36:39.859Z\",\"finished_at\":\"2026-03-10T23:36:39.930Z\",\"artifact_check\":{\"checked\":true,\"missing\":[],\"found\":[\"impl/fe_patch_bundle.json\",\"impl/fe_notes.md\"],\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\"},\"impl_validation\":{\"checked\":true,\"ok\":true,\"execution_mode_used\":\"full_file_fallback\",\"fe_changes_dir\":\"impl/fe_changes\",\"fe_changes_count\":0,\"patch_bundle_path\":\"impl/fe_patch_bundle.json\",\"notes_path\":\"impl/fe_notes.md\",\"consumed_handoff_path\":\"handoff/be_to_fe.json\",\"scoped_files\":[\"sandbox/crm_site/app.js\"]},\"execution_mode_used\":\"full_file_fallback\",\"context_budget_report_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_impl_fe.json\",\"context_budget_report\":{\"step_id\":\"impl_fe\",\"artifact_count\":0,\"bytes_total\":0,\"largest_artifact_bytes\":0,\"prompt_chars\":2336,\"injected_context_bytes\":77,\"status\":\"ok\",\"threshold_source\":\"role_overrides.frontend\",\"thresholds\":{\"warning_prompt_chars\":80000,\"overflow_risk_prompt_chars\":120000,\"warning_artifact_bytes\":500000,\"overflow_risk_artifact_bytes\":1000000,\"warning_injected_context_bytes\":200000,\"overflow_risk_injected_context_bytes\":350000},\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"workflow_run_id\":\"54815520-6fd0-494f-bbfc-782d64be6e5d\"},\"context_packet_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/context_packet_impl_fe.json\",\"repo_map_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/repo_map_impl_fe.json\",\"patch_application\":{\"bundle_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/impl/fe_patch_bundle.json\",\"mode\":\"full_file_fallback\",\"written_files\":[],\"operation_count\":1}}",
+        "error_code": null,
+        "started_at": "2026-03-10T23:36:39.854Z",
+        "ended_at": "2026-03-10T23:36:39.974Z",
+        "created_at": "2026-03-10T23:36:33.340Z",
+        "updated_at": "2026-03-10T23:36:39.974Z"
+      },
+      {
+        "id": "1061",
+        "workflow_run_id": "54815520-6fd0-494f-bbfc-782d64be6e5d",
+        "step_index": 4,
+        "step_id": "qa_verify",
+        "role_name": "qa",
+        "tool_name": "coding.execute",
+        "gate_name": "acceptance",
+        "status": "succeeded",
+        "task_id": "daf81b3e-63ec-4b87-bf42-5fc6a85d0e3e",
+        "risk_level": "medium",
+        "approval_required": false,
+        "approval_reasons_json": "[]",
+        "checkpoint_id": "70f0c1cc-52db-4cb7-b8a6-7e77070b7358",
+        "result_json": "{\"ok\":true,\"exit_code\":0,\"stdout\":\"v20.20.1\\n\",\"stderr\":\"\",\"diagnostics\":{\"artifact_scaffold\":{\"checked\":true,\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"created\":[\"verify/qa_report.json\"],\"existing\":[],\"repaired\":[],\"failed\":[]}},\"artifact_check\":{\"checked\":true,\"missing\":[],\"found\":[\"verify/qa_report.json\"],\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\"},\"qa_validation\":{\"checked\":true,\"ok\":true,\"scoped_files\":[\"sandbox/crm_site/server.js\",\"sandbox/crm_site/app.js\"],\"keyword_checks\":[]},\"execution_mode_used\":\"full_file_fallback\",\"context_budget_report_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_qa_verify.json\",\"context_budget_report\":{\"step_id\":\"qa_verify\",\"artifact_count\":0,\"bytes_total\":0,\"largest_artifact_bytes\":0,\"prompt_chars\":0,\"injected_context_bytes\":0,\"status\":\"ok\",\"threshold_source\":\"default_thresholds\",\"thresholds\":{\"warning_prompt_chars\":80000,\"overflow_risk_prompt_chars\":120000,\"warning_artifact_bytes\":500000,\"overflow_risk_artifact_bytes\":1000000,\"warning_injected_context_bytes\":150000,\"overflow_risk_injected_context_bytes\":300000},\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"workflow_run_id\":\"54815520-6fd0-494f-bbfc-782d64be6e5d\"},\"context_packet_path\":null,\"repo_map_path\":null,\"patch_application\":null}",
+        "error_code": null,
+        "started_at": "2026-03-10T23:36:39.992Z",
+        "ended_at": "2026-03-10T23:36:40.032Z",
+        "created_at": "2026-03-10T23:36:33.342Z",
+        "updated_at": "2026-03-10T23:36:40.032Z"
+      },
+      {
+        "id": "1062",
+        "workflow_run_id": "54815520-6fd0-494f-bbfc-782d64be6e5d",
+        "step_index": 5,
+        "step_id": "release_pack",
+        "role_name": "release",
+        "tool_name": "coding.delegate",
+        "gate_name": "finalize",
+        "status": "succeeded",
+        "task_id": "4122db61-e70d-4914-8ec5-1abee62b72d5",
+        "risk_level": "medium",
+        "approval_required": false,
+        "approval_reasons_json": "[]",
+        "checkpoint_id": "9c961152-1575-414f-9983-26eab8e17bc0",
+        "result_json": "{\"ok\":true,\"provider_used\":\"opencode\",\"model_used\":\"qwen3-coder-next\",\"summary\":\"opencode delegation finished.\",\"files_changed\":[],\"diff_stats\":{\"added\":0,\"deleted\":0,\"files\":0},\"test_result\":\"skipped\",\"git\":{\"base_ref\":\"SCOPED_SNAPSHOT\",\"branch\":\"scoped\",\"commit_sha\":null,\"dirty\":false},\"rollback_performed\":false,\"artifacts\":{\"diff_bundle\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_4122db61-e70d-4914-8ec5-1abee62b72d5/delegate_diff_1773185800089.patch\",\"patch_file\":null,\"test_log\":null,\"prompt_contract\":\"artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_4122db61-e70d-4914-8ec5-1abee62b72d5/prompt_contract_attempt1_1773185800059.json\",\"raw_stdout\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_4122db61-e70d-4914-8ec5-1abee62b72d5/delegate_stdout_attempt1_1773185800083.log\",\"raw_stderr\":\"/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_4122db61-e70d-4914-8ec5-1abee62b72d5/delegate_stderr_attempt1_1773185800083.log\"},\"diagnostics\":{\"error_code\":null,\"exit_code\":0,\"timeout\":false,\"adapter_type\":\"coding_executor\",\"task_type\":\"coding_execution\",\"fallback_from\":null,\"provider_requested\":\"opencode\",\"artifact_scaffold\":{\"checked\":true,\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"created\":[],\"existing\":[\"release/release_notes.md\",\"release/artifact_manifest.json\"],\"repaired\":[],\"failed\":[]},\"execution_adapter_packet\":null,\"tool_adapter_request\":{\"adapter_type\":\"coding_executor\",\"provider\":\"opencode\",\"task_type\":\"coding_execution\",\"payload\":{\"step_id\":\"release_pack\",\"task_prompt\":\"[CodingTeam Step] Release Pack\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: release_pack\\nRole: release\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: release.pack.v1\\nPrompt Script LLM Role: release\\nPrompt Script Artifact Type: release_pack\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"artifact_traceability\\\",\\\"go_no_go_summary\\\"]}\\nPrompt Script Goal: Produce exactly two outputs: release/release_notes.md and release/artifact_manifest.json. Keep artifact references explicit and traceable.\\n\\nExecution requirements:\\n- Assemble release/release_notes.md as the human-readable package summary.\\n- Assemble release/artifact_manifest.json as the machine-readable package manifest.\\n- Ensure artifact references are complete and traceable.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- release/release_notes.md\\n- release/artifact_manifest.json\\n\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n\\n[Execution Contract v1]\\n- step_id: release_pack\\n- target_paths: sandbox/live_validation/release_pack.txt\\n- required_outputs: release/release_notes.md, release/artifact_manifest.json\\n- input_artifacts: none\\n- verification_command: none\\n- execution_mode: default\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\\n\",\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"expected_artifacts\":[\"release/release_notes.md\",\"release/artifact_manifest.json\"],\"target_paths\":[\"sandbox/live_validation/release_pack.txt\"],\"verification_command\":\"\",\"wall_clock_timeout_s\":180,\"execution_adapter_packet\":null,\"context_packet\":null,\"repo_map\":null,\"model_hint\":\"qwen3-coder-next\"},\"context\":{\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"task_id\":\"4122db61-e70d-4914-8ec5-1abee62b72d5\"}},\"prompt_contract\":{\"contract_version\":\"execution_contract_v1\",\"target_paths\":[\"sandbox/live_validation/release_pack.txt\"],\"required_outputs\":[\"release/release_notes.md\",\"release/artifact_manifest.json\"],\"verification_command\":null,\"execution_mode\":\"default\",\"prompt_sha1\":\"1cecc3b73af77f0bea1ae0dd05d77909ba960410\",\"attempt\":1},\"static_check\":{\"checked\":false,\"ok\":true,\"commands\":[],\"logPath\":null},\"verification\":{\"checked\":false,\"ok\":true,\"command\":\"\",\"logPath\":null},\"retry_summary\":{\"attempts_used\":1,\"max_attempts\":1,\"same_error_repeat_limit\":2,\"wall_clock_timeout_s\":180,\"repairs_attempted\":0,\"repaired_after_retry\":false},\"parse_error\":false,\"truncated\":false},\"error\":null,\"command_used\":\"mock-inline-autofix sandbox/live_validation/release_pack.txt [CodingTeam Step] Release Pack\\nWorkflow: coding_team_v0\\nProject Type: webapp_crm\\nStep ID: release_pack\\nRole: release\\nGoal: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.\\nPrompt Script ID: release.pack.v1\\nPrompt Script LLM Role: release\\nPrompt Script Artifact Type: release_pack\\nPrompt Script Validation: {\\\"required_sections\\\":[\\\"artifact_traceability\\\",\\\"go_no_go_summary\\\"]}\\nPrompt Script Goal: Produce exactly two outputs: release/release_notes.md and release/artifact_manifest.json. Keep artifact references explicit and traceable.\\n\\nExecution requirements:\\n- Assemble release/release_notes.md as the human-readable package summary.\\n- Assemble release/artifact_manifest.json as the machine-readable package manifest.\\n- Ensure artifact references are complete and traceable.\\nRequired artifacts (relative to artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7):\\n- release/release_notes.md\\n- release/artifact_manifest.json\\n\\nAbsolute artifact output root: /workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\\nWrite files under the artifact output root exactly with the required relative paths.\\nConstraints:\\n- Prefer small, reviewable changes.\\n- Keep outputs deterministic and explicit.\\n- Include concise validation evidence.\\n[Fast Mode]\\n- Keep output concise and directly actionable.\\n- Prioritize required artifact paths first; avoid unnecessary long prose.\\n\\n[Execution Contract v1]\\n- step_id: release_pack\\n- target_paths: sandbox/live_validation/release_pack.txt\\n- required_outputs: release/release_notes.md, release/artifact_manifest.json\\n- input_artifacts: none\\n- verification_command: none\\n- execution_mode: default\\nRules:\\n1. Only modify files under target_paths.\\n2. Produce the minimum patch needed to satisfy the task.\\n3. Do not edit infrastructure, CI, git metadata, or unrelated roots.\\n4. Prefer deterministic file outputs over conversational prose.\\n5. If a required artifact is requested, generate it at the exact relative path.\",\"command_source\":\"payload.opencode_command\",\"started_at\":\"2026-03-10T23:36:40.059Z\",\"finished_at\":\"2026-03-10T23:36:40.090Z\",\"artifact_check\":{\"checked\":true,\"missing\":[],\"found\":[\"release/release_notes.md\",\"release/artifact_manifest.json\"],\"artifact_root\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7\"},\"role_output_validation\":{\"checked\":true,\"ok\":true,\"files_checked\":[\"release/release_notes.md\",\"release/artifact_manifest.json\"],\"schema_checked\":\"coding_team_release_artifact_manifest.schema.json\",\"artifact_count\":2},\"execution_mode_used\":\"full_file_fallback\",\"context_budget_report_path\":\"artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_release_pack.json\",\"context_budget_report\":{\"step_id\":\"release_pack\",\"artifact_count\":0,\"bytes_total\":0,\"largest_artifact_bytes\":0,\"prompt_chars\":1455,\"injected_context_bytes\":0,\"status\":\"ok\",\"threshold_source\":\"default_thresholds\",\"thresholds\":{\"warning_prompt_chars\":80000,\"overflow_risk_prompt_chars\":120000,\"warning_artifact_bytes\":500000,\"overflow_risk_artifact_bytes\":1000000,\"warning_injected_context_bytes\":150000,\"overflow_risk_injected_context_bytes\":300000},\"run_id\":\"69d1a38c-87f5-47e9-ab98-ccf40157aad7\",\"workflow_run_id\":\"54815520-6fd0-494f-bbfc-782d64be6e5d\"},\"context_packet_path\":null,\"repo_map_path\":null,\"patch_application\":null}",
+        "error_code": null,
+        "started_at": "2026-03-10T23:36:40.050Z",
+        "ended_at": "2026-03-10T23:36:40.114Z",
+        "created_at": "2026-03-10T23:36:33.344Z",
+        "updated_at": "2026-03-10T23:36:40.114Z"
+      }
+    ],
+    "checkpoints": [
+      {
+        "checkpoint_id": "b103f65a-96a0-4b2f-8c1c-a55e591c45e9",
+        "step_index": 0,
+        "step_id": "pm_spec",
+        "task_id": "69e791b2-548d-49f9-9f9e-40a0c6828db3",
+        "workspace_hash": "2931449dfa1634d7f94778d97f8246bb79cc7a9d762f2412ded1a53db89c7405"
+      },
+      {
+        "checkpoint_id": "6e5016df-237a-4c08-9ce2-89102c88d1cf",
+        "step_index": 1,
+        "step_id": "arch_design",
+        "task_id": "feafcdcc-1c9e-4b54-b52f-d50276321a52",
+        "workspace_hash": "38d265f243a91ad8876ad2513f354889baaf58dd64aff3add2fc4d4551ea4b6b"
+      },
+      {
+        "checkpoint_id": "771ee1f9-4ab0-4060-9490-6fd09bba980a",
+        "step_index": 2,
+        "step_id": "impl_be",
+        "task_id": "94e6ef6d-b668-4722-b274-811bb66364ae",
+        "workspace_hash": "107e0cd726e07c6b062be5b2211cdbd3a5cbb4b49b48d633ecfc5ccbd88a5086"
+      },
+      {
+        "checkpoint_id": "8f01e101-861f-41f2-8a31-a9b0d8ff873f",
+        "step_index": 3,
+        "step_id": "impl_fe",
+        "task_id": "bd723c87-4820-4393-ba1e-7e78c6150346",
+        "workspace_hash": "3b71d6b622955b6e52e3cb5da0b5b2ebb4ad0f28b5bd3b8d73f95d67f917a46c"
+      },
+      {
+        "checkpoint_id": "70f0c1cc-52db-4cb7-b8a6-7e77070b7358",
+        "step_index": 4,
+        "step_id": "qa_verify",
+        "task_id": "daf81b3e-63ec-4b87-bf42-5fc6a85d0e3e",
+        "workspace_hash": "f1ed517b61bcfe338815632dfa03d17e30ad9ce1a9891a6d74a6e71ef8e1f7c4"
+      },
+      {
+        "checkpoint_id": "9c961152-1575-414f-9983-26eab8e17bc0",
+        "step_index": 5,
+        "step_id": "release_pack",
+        "task_id": "4122db61-e70d-4914-8ec5-1abee62b72d5",
+        "workspace_hash": "f826861c5c19a2b6870c98e9574189f82492ff664be928fd3ca1f8fce5d73d3e"
+      }
+    ]
+  },
+  "artifacts": {
+    "ok": true,
+    "run_id": "69d1a38c-87f5-47e9-ab98-ccf40157aad7",
+    "roots": {
+      "release": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7",
+      "runtime": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7"
+    },
+    "release_files": [
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/context_packet_impl_be.json",
+        "bytes": 359,
+        "mtime": "2026-03-10T23:36:39.814Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/context_packet_impl_fe.json",
+        "bytes": 348,
+        "mtime": "2026-03-10T23:36:39.956Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/repo_map_impl_be.json",
+        "bytes": 719,
+        "mtime": "2026-03-10T23:36:39.817Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/repo_map_impl_fe.json",
+        "bytes": 698,
+        "mtime": "2026-03-10T23:36:39.963Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/handoff/architect_to_impl.json",
+        "bytes": 662,
+        "mtime": "2026-03-10T23:36:39.589Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/handoff/be_to_fe.json",
+        "bytes": 756,
+        "mtime": "2026-03-10T23:36:39.761Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/handoff/pm_to_architect.json",
+        "bytes": 425,
+        "mtime": "2026-03-10T23:36:39.477Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/impl/be_notes.md",
+        "bytes": 264,
+        "mtime": "2026-03-10T23:36:39.758Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/impl/be_patch_bundle.json",
+        "bytes": 416,
+        "mtime": "2026-03-10T23:36:39.755Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/impl/fe_notes.md",
+        "bytes": 238,
+        "mtime": "2026-03-10T23:36:39.918Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/impl/fe_patch_bundle.json",
+        "bytes": 411,
+        "mtime": "2026-03-10T23:36:39.914Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/meta/run_manifest.json",
+        "bytes": 13407,
+        "mtime": "2026-03-10T23:36:40.141Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_arch_design.json",
+        "bytes": 621,
+        "mtime": "2026-03-10T23:36:39.620Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_impl_be.json",
+        "bytes": 615,
+        "mtime": "2026-03-10T23:36:39.812Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_impl_fe.json",
+        "bytes": 616,
+        "mtime": "2026-03-10T23:36:39.954Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_pm_spec.json",
+        "bytes": 610,
+        "mtime": "2026-03-10T23:36:39.516Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_qa_verify.json",
+        "bytes": 609,
+        "mtime": "2026-03-10T23:36:40.028Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_release_pack.json",
+        "bytes": 615,
+        "mtime": "2026-03-10T23:36:40.110Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/plan/acceptance.json",
+        "bytes": 365,
+        "mtime": "2026-03-10T23:36:39.472Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/plan/arch.md",
+        "bytes": 470,
+        "mtime": "2026-03-10T23:36:39.575Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/plan/interfaces.md",
+        "bytes": 270,
+        "mtime": "2026-03-10T23:36:39.579Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/plan/milestones.md",
+        "bytes": 188,
+        "mtime": "2026-03-10T23:36:39.475Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/plan/spec.md",
+        "bytes": 574,
+        "mtime": "2026-03-10T23:36:39.422Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/plan/workplan.md",
+        "bytes": 220,
+        "mtime": "2026-03-10T23:36:39.586Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/qa/go_no_go_result.json",
+        "bytes": 1122,
+        "mtime": "2026-03-10T23:36:40.190Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/qa/strict_canary_report.json",
+        "bytes": 2658,
+        "mtime": "2026-03-10T23:36:40.131Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/qa/strict_canary_report.md",
+        "bytes": 805,
+        "mtime": "2026-03-10T23:36:40.133Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/release/artifact_manifest.json",
+        "bytes": 368,
+        "mtime": "2026-03-10T23:36:40.081Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/release/release_notes.md",
+        "bytes": 167,
+        "mtime": "2026-03-10T23:36:40.079Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/risk/risk_report.json",
+        "bytes": 527,
+        "mtime": "2026-03-10T23:36:39.582Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/summary/run_summary.md",
+        "bytes": 926,
+        "mtime": "2026-03-10T23:36:40.183Z"
+      },
+      {
+        "path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/verify/qa_report.json",
+        "bytes": 908,
+        "mtime": "2026-03-10T23:36:40.011Z"
+      }
+    ],
+    "runtime_files": [
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/memory/coding_failure_latest.json",
+        "bytes": 4798,
+        "mtime": "2026-03-10T23:36:39.903Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/memory/coding_failures.jsonl",
+        "bytes": 9589,
+        "mtime": "2026-03-10T23:36:39.901Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_4122db61-e70d-4914-8ec5-1abee62b72d5/delegate_diff_1773185800089.patch",
+        "bytes": 188,
+        "mtime": "2026-03-10T23:36:40.098Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_4122db61-e70d-4914-8ec5-1abee62b72d5/delegate_stderr_attempt1_1773185800083.log",
+        "bytes": 0,
+        "mtime": "2026-03-10T23:36:40.094Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_4122db61-e70d-4914-8ec5-1abee62b72d5/delegate_stdout_attempt1_1773185800083.log",
+        "bytes": 54,
+        "mtime": "2026-03-10T23:36:40.093Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_4122db61-e70d-4914-8ec5-1abee62b72d5/prompt_contract_attempt1_1773185800059.json",
+        "bytes": 2506,
+        "mtime": "2026-03-10T23:36:40.070Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_69e791b2-548d-49f9-9f9e-40a0c6828db3/delegate_diff_1773185799485.patch",
+        "bytes": 183,
+        "mtime": "2026-03-10T23:36:39.495Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_69e791b2-548d-49f9-9f9e-40a0c6828db3/delegate_stderr_attempt1_1773185799480.log",
+        "bytes": 0,
+        "mtime": "2026-03-10T23:36:39.491Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_69e791b2-548d-49f9-9f9e-40a0c6828db3/delegate_stdout_attempt1_1773185799480.log",
+        "bytes": 49,
+        "mtime": "2026-03-10T23:36:39.490Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_69e791b2-548d-49f9-9f9e-40a0c6828db3/prompt_contract_attempt1_1773185799406.json",
+        "bytes": 2734,
+        "mtime": "2026-03-10T23:36:39.416Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/delegate_diff_1773185799728.patch",
+        "bytes": 210,
+        "mtime": "2026-03-10T23:36:39.739Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/delegate_diff_1773185799776.patch",
+        "bytes": 174,
+        "mtime": "2026-03-10T23:36:39.785Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/delegate_diff_1773185799782.patch",
+        "bytes": 174,
+        "mtime": "2026-03-10T23:36:39.792Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/delegate_stderr_attempt1_1773185799720.log",
+        "bytes": 0,
+        "mtime": "2026-03-10T23:36:39.733Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/delegate_stderr_attempt2_1773185799767.log",
+        "bytes": 0,
+        "mtime": "2026-03-10T23:36:39.778Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/delegate_stdout_attempt1_1773185799720.log",
+        "bytes": 48,
+        "mtime": "2026-03-10T23:36:39.730Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/delegate_stdout_attempt2_1773185799767.log",
+        "bytes": 44,
+        "mtime": "2026-03-10T23:36:39.777Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/prompt_contract_attempt1_1773185799687.json",
+        "bytes": 3946,
+        "mtime": "2026-03-10T23:36:39.697Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/prompt_contract_attempt2_1773185799741.json",
+        "bytes": 7858,
+        "mtime": "2026-03-10T23:36:39.750Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/static_check_1773185799733.json",
+        "bytes": 310,
+        "mtime": "2026-03-10T23:36:39.742Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/verification_1773185799735.json",
+        "bytes": 332,
+        "mtime": "2026-03-10T23:36:39.745Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/verification_1773185799785.json",
+        "bytes": 226,
+        "mtime": "2026-03-10T23:36:39.797Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/delegate_diff_1773185799884.patch",
+        "bytes": 204,
+        "mtime": "2026-03-10T23:36:39.893Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/delegate_diff_1773185799919.patch",
+        "bytes": 171,
+        "mtime": "2026-03-10T23:36:39.928Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/delegate_diff_1773185799925.patch",
+        "bytes": 171,
+        "mtime": "2026-03-10T23:36:39.936Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/delegate_stderr_attempt1_1773185799878.log",
+        "bytes": 0,
+        "mtime": "2026-03-10T23:36:39.889Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/delegate_stderr_attempt2_1773185799915.log",
+        "bytes": 0,
+        "mtime": "2026-03-10T23:36:39.925Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/delegate_stdout_attempt1_1773185799878.log",
+        "bytes": 48,
+        "mtime": "2026-03-10T23:36:39.889Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/delegate_stdout_attempt2_1773185799914.log",
+        "bytes": 44,
+        "mtime": "2026-03-10T23:36:39.924Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/prompt_contract_attempt1_1773185799859.json",
+        "bytes": 3653,
+        "mtime": "2026-03-10T23:36:39.869Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/prompt_contract_attempt2_1773185799895.json",
+        "bytes": 7295,
+        "mtime": "2026-03-10T23:36:39.910Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/static_check_1773185799887.json",
+        "bytes": 307,
+        "mtime": "2026-03-10T23:36:39.896Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/verification_1773185799889.json",
+        "bytes": 326,
+        "mtime": "2026-03-10T23:36:39.899Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/verification_1773185799928.json",
+        "bytes": 223,
+        "mtime": "2026-03-10T23:36:39.939Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_feafcdcc-1c9e-4b54-b52f-d50276321a52/delegate_diff_1773185799598.patch",
+        "bytes": 187,
+        "mtime": "2026-03-10T23:36:39.608Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_feafcdcc-1c9e-4b54-b52f-d50276321a52/delegate_stderr_attempt1_1773185799593.log",
+        "bytes": 0,
+        "mtime": "2026-03-10T23:36:39.604Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_feafcdcc-1c9e-4b54-b52f-d50276321a52/delegate_stdout_attempt1_1773185799593.log",
+        "bytes": 56,
+        "mtime": "2026-03-10T23:36:39.603Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_feafcdcc-1c9e-4b54-b52f-d50276321a52/prompt_contract_attempt1_1773185799561.json",
+        "bytes": 2914,
+        "mtime": "2026-03-10T23:36:39.571Z"
+      },
+      {
+        "path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/timeline.md",
+        "bytes": 768,
+        "mtime": "2026-03-10T23:36:40.100Z"
+      }
+    ]
+  },
+  "pack_validation": {
+    "ok": true,
+    "validation": {
+      "ok": true,
+      "reasons": [],
+      "manifest": {
+        "workflow_run_id": "54815520-6fd0-494f-bbfc-782d64be6e5d",
+        "run_id": "69d1a38c-87f5-47e9-ab98-ccf40157aad7",
+        "workflow_id": "coding_team_v0",
+        "project_type": "webapp_crm",
+        "status": "succeeded",
+        "generated_at": "2026-03-10T23:36:40.119Z",
+        "required_artifacts": [
+          "spec",
+          "arch",
+          "diff",
+          "verification",
+          "run_manifest"
+        ],
+        "artifact_coverage": {
+          "spec": true,
+          "arch": true,
+          "diff": true,
+          "verification": true,
+          "run_summary": true,
+          "run_manifest": true
+        },
+        "step_artifacts": [
+          {
+            "step_index": 0,
+            "step_id": "pm_spec",
+            "task_id": "69e791b2-548d-49f9-9f9e-40a0c6828db3",
+            "artifacts": []
+          },
+          {
+            "step_index": 1,
+            "step_id": "arch_design",
+            "task_id": "feafcdcc-1c9e-4b54-b52f-d50276321a52",
+            "artifacts": []
+          },
+          {
+            "step_index": 2,
+            "step_id": "impl_be",
+            "task_id": "94e6ef6d-b668-4722-b274-811bb66364ae",
+            "artifacts": []
+          },
+          {
+            "step_index": 3,
+            "step_id": "impl_fe",
+            "task_id": "bd723c87-4820-4393-ba1e-7e78c6150346",
+            "artifacts": []
+          },
+          {
+            "step_index": 4,
+            "step_id": "qa_verify",
+            "task_id": "daf81b3e-63ec-4b87-bf42-5fc6a85d0e3e",
+            "artifacts": []
+          },
+          {
+            "step_index": 5,
+            "step_id": "release_pack",
+            "task_id": "4122db61-e70d-4914-8ec5-1abee62b72d5",
+            "artifacts": []
+          }
+        ],
+        "context_budget_reports": [
+          {
+            "step_index": 0,
+            "step_id": "pm_spec",
+            "role_name": "pm",
+            "status": "ok",
+            "report_path": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_pm_spec.json",
+            "threshold_source": "default_thresholds"
+          },
+          {
+            "step_index": 1,
+            "step_id": "arch_design",
+            "role_name": "architect",
+            "status": "ok",
+            "report_path": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_arch_design.json",
+            "threshold_source": "role_overrides.architect"
+          },
+          {
+            "step_index": 2,
+            "step_id": "impl_be",
+            "role_name": "backend",
+            "status": "ok",
+            "report_path": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_impl_be.json",
+            "threshold_source": "role_overrides.backend"
+          },
+          {
+            "step_index": 3,
+            "step_id": "impl_fe",
+            "role_name": "frontend",
+            "status": "ok",
+            "report_path": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_impl_fe.json",
+            "threshold_source": "role_overrides.frontend"
+          },
+          {
+            "step_index": 4,
+            "step_id": "qa_verify",
+            "role_name": "qa",
+            "status": "ok",
+            "report_path": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_qa_verify.json",
+            "threshold_source": "default_thresholds"
+          },
+          {
+            "step_index": 5,
+            "step_id": "release_pack",
+            "role_name": "release",
+            "status": "ok",
+            "report_path": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/metrics/context_budget_release_pack.json",
+            "threshold_source": "default_thresholds"
+          }
+        ],
+        "context_budget_summary": {
+          "total_steps": 6,
+          "ok": 6,
+          "warning": 0,
+          "overflow_risk": 0,
+          "missing": 0
+        },
+        "context_artifacts": [
+          {
+            "step_index": 0,
+            "step_id": "pm_spec",
+            "context_packet_path": null,
+            "repo_map_path": null
+          },
+          {
+            "step_index": 1,
+            "step_id": "arch_design",
+            "context_packet_path": null,
+            "repo_map_path": null
+          },
+          {
+            "step_index": 2,
+            "step_id": "impl_be",
+            "context_packet_path": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/context_packet_impl_be.json",
+            "repo_map_path": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/repo_map_impl_be.json"
+          },
+          {
+            "step_index": 3,
+            "step_id": "impl_fe",
+            "context_packet_path": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/context_packet_impl_fe.json",
+            "repo_map_path": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/context/repo_map_impl_fe.json"
+          },
+          {
+            "step_index": 4,
+            "step_id": "qa_verify",
+            "context_packet_path": null,
+            "repo_map_path": null
+          },
+          {
+            "step_index": 5,
+            "step_id": "release_pack",
+            "context_packet_path": null,
+            "repo_map_path": null
+          }
+        ],
+        "coding_execution_evidence": [
+          {
+            "step_index": 0,
+            "step_id": "pm_spec",
+            "test_result": "skipped",
+            "test_log_path": null,
+            "verification_checked": false,
+            "verification_ok": null,
+            "verification_command": null,
+            "retry_summary": {
+              "attempts_used": 1,
+              "max_attempts": 1,
+              "same_error_repeat_limit": 2,
+              "wall_clock_timeout_s": 180,
+              "repairs_attempted": 0,
+              "repaired_after_retry": false
+            },
+            "final_failure_summary": null,
+            "prompt_contract_path": "artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_69e791b2-548d-49f9-9f9e-40a0c6828db3/prompt_contract_attempt1_1773185799406.json",
+            "coding_failure_memory_latest_path": null,
+            "coding_failure_memory_jsonl_path": null
+          },
+          {
+            "step_index": 1,
+            "step_id": "arch_design",
+            "test_result": "skipped",
+            "test_log_path": null,
+            "verification_checked": false,
+            "verification_ok": null,
+            "verification_command": null,
+            "retry_summary": {
+              "attempts_used": 1,
+              "max_attempts": 1,
+              "same_error_repeat_limit": 2,
+              "wall_clock_timeout_s": 180,
+              "repairs_attempted": 0,
+              "repaired_after_retry": false
+            },
+            "final_failure_summary": null,
+            "prompt_contract_path": "artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_feafcdcc-1c9e-4b54-b52f-d50276321a52/prompt_contract_attempt1_1773185799561.json",
+            "coding_failure_memory_latest_path": null,
+            "coding_failure_memory_jsonl_path": null
+          },
+          {
+            "step_index": 2,
+            "step_id": "impl_be",
+            "test_result": "passed",
+            "test_log_path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/verification_1773185799785.json",
+            "verification_checked": true,
+            "verification_ok": true,
+            "verification_command": "node --check sandbox/crm_site/server.js",
+            "retry_summary": {
+              "attempts_used": 2,
+              "max_attempts": 2,
+              "same_error_repeat_limit": 2,
+              "wall_clock_timeout_s": 300,
+              "repairs_attempted": 1,
+              "repaired_after_retry": true
+            },
+            "final_failure_summary": null,
+            "prompt_contract_path": "artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_94e6ef6d-b668-4722-b274-811bb66364ae/prompt_contract_attempt2_1773185799741.json",
+            "coding_failure_memory_latest_path": null,
+            "coding_failure_memory_jsonl_path": null
+          },
+          {
+            "step_index": 3,
+            "step_id": "impl_fe",
+            "test_result": "passed",
+            "test_log_path": "/workspace/artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/verification_1773185799928.json",
+            "verification_checked": true,
+            "verification_ok": true,
+            "verification_command": "node --check sandbox/crm_site/app.js",
+            "retry_summary": {
+              "attempts_used": 2,
+              "max_attempts": 2,
+              "same_error_repeat_limit": 2,
+              "wall_clock_timeout_s": 300,
+              "repairs_attempted": 1,
+              "repaired_after_retry": true
+            },
+            "final_failure_summary": null,
+            "prompt_contract_path": "artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_bd723c87-4820-4393-ba1e-7e78c6150346/prompt_contract_attempt2_1773185799895.json",
+            "coding_failure_memory_latest_path": null,
+            "coding_failure_memory_jsonl_path": null
+          },
+          {
+            "step_index": 4,
+            "step_id": "qa_verify",
+            "test_result": null,
+            "test_log_path": null,
+            "verification_checked": false,
+            "verification_ok": null,
+            "verification_command": null,
+            "retry_summary": null,
+            "final_failure_summary": null,
+            "prompt_contract_path": null,
+            "coding_failure_memory_latest_path": null,
+            "coding_failure_memory_jsonl_path": null
+          },
+          {
+            "step_index": 5,
+            "step_id": "release_pack",
+            "test_result": "skipped",
+            "test_log_path": null,
+            "verification_checked": false,
+            "verification_ok": null,
+            "verification_command": null,
+            "retry_summary": {
+              "attempts_used": 1,
+              "max_attempts": 1,
+              "same_error_repeat_limit": 2,
+              "wall_clock_timeout_s": 180,
+              "repairs_attempted": 0,
+              "repaired_after_retry": false
+            },
+            "final_failure_summary": null,
+            "prompt_contract_path": "artifacts/runs/69d1a38c-87f5-47e9-ab98-ccf40157aad7/task_4122db61-e70d-4914-8ec5-1abee62b72d5/prompt_contract_attempt1_1773185800059.json",
+            "coding_failure_memory_latest_path": null,
+            "coding_failure_memory_jsonl_path": null
+          }
+        ],
+        "coding_execution_summary": {
+          "total_steps": 6,
+          "verification_checked": 2,
+          "verification_passed": 2,
+          "verification_failed": 0,
+          "test_logs_present": 2,
+          "retry_enabled_steps": 2,
+          "retry_attempted_steps": 2,
+          "final_failures_present": 0,
+          "failure_memory_entries": 0
+        },
+        "steps": [
+          {
+            "step_index": 0,
+            "step_id": "pm_spec",
+            "role_name": "pm",
+            "tool_name": "coding.delegate",
+            "gate_name": "low",
+            "task_id": "69e791b2-548d-49f9-9f9e-40a0c6828db3",
+            "status": "succeeded",
+            "checkpoint_id": "b103f65a-96a0-4b2f-8c1c-a55e591c45e9",
+            "error_code": null
+          },
+          {
+            "step_index": 1,
+            "step_id": "arch_design",
+            "role_name": "architect",
+            "tool_name": "coding.delegate",
+            "gate_name": "policy",
+            "task_id": "feafcdcc-1c9e-4b54-b52f-d50276321a52",
+            "status": "succeeded",
+            "checkpoint_id": "6e5016df-237a-4c08-9ce2-89102c88d1cf",
+            "error_code": null
+          },
+          {
+            "step_index": 2,
+            "step_id": "impl_be",
+            "role_name": "backend",
+            "tool_name": "coding.delegate",
+            "gate_name": "policy",
+            "task_id": "94e6ef6d-b668-4722-b274-811bb66364ae",
+            "status": "succeeded",
+            "checkpoint_id": "771ee1f9-4ab0-4060-9490-6fd09bba980a",
+            "error_code": null
+          },
+          {
+            "step_index": 3,
+            "step_id": "impl_fe",
+            "role_name": "frontend",
+            "tool_name": "coding.delegate",
+            "gate_name": "policy",
+            "task_id": "bd723c87-4820-4393-ba1e-7e78c6150346",
+            "status": "succeeded",
+            "checkpoint_id": "8f01e101-861f-41f2-8a31-a9b0d8ff873f",
+            "error_code": null
+          },
+          {
+            "step_index": 4,
+            "step_id": "qa_verify",
+            "role_name": "qa",
+            "tool_name": "coding.execute",
+            "gate_name": "acceptance",
+            "task_id": "daf81b3e-63ec-4b87-bf42-5fc6a85d0e3e",
+            "status": "succeeded",
+            "checkpoint_id": "70f0c1cc-52db-4cb7-b8a6-7e77070b7358",
+            "error_code": null
+          },
+          {
+            "step_index": 5,
+            "step_id": "release_pack",
+            "role_name": "release",
+            "tool_name": "coding.delegate",
+            "gate_name": "finalize",
+            "task_id": "4122db61-e70d-4914-8ec5-1abee62b72d5",
+            "status": "succeeded",
+            "checkpoint_id": "9c961152-1575-414f-9983-26eab8e17bc0",
+            "error_code": null
+          }
+        ],
+        "checkpoints": [
+          {
+            "checkpoint_id": "b103f65a-96a0-4b2f-8c1c-a55e591c45e9",
+            "step_index": 0,
+            "step_id": "pm_spec",
+            "task_id": "69e791b2-548d-49f9-9f9e-40a0c6828db3",
+            "workspace_hash": "2931449dfa1634d7f94778d97f8246bb79cc7a9d762f2412ded1a53db89c7405"
+          },
+          {
+            "checkpoint_id": "6e5016df-237a-4c08-9ce2-89102c88d1cf",
+            "step_index": 1,
+            "step_id": "arch_design",
+            "task_id": "feafcdcc-1c9e-4b54-b52f-d50276321a52",
+            "workspace_hash": "38d265f243a91ad8876ad2513f354889baaf58dd64aff3add2fc4d4551ea4b6b"
+          },
+          {
+            "checkpoint_id": "771ee1f9-4ab0-4060-9490-6fd09bba980a",
+            "step_index": 2,
+            "step_id": "impl_be",
+            "task_id": "94e6ef6d-b668-4722-b274-811bb66364ae",
+            "workspace_hash": "107e0cd726e07c6b062be5b2211cdbd3a5cbb4b49b48d633ecfc5ccbd88a5086"
+          },
+          {
+            "checkpoint_id": "8f01e101-861f-41f2-8a31-a9b0d8ff873f",
+            "step_index": 3,
+            "step_id": "impl_fe",
+            "task_id": "bd723c87-4820-4393-ba1e-7e78c6150346",
+            "workspace_hash": "3b71d6b622955b6e52e3cb5da0b5b2ebb4ad0f28b5bd3b8d73f95d67f917a46c"
+          },
+          {
+            "checkpoint_id": "70f0c1cc-52db-4cb7-b8a6-7e77070b7358",
+            "step_index": 4,
+            "step_id": "qa_verify",
+            "task_id": "daf81b3e-63ec-4b87-bf42-5fc6a85d0e3e",
+            "workspace_hash": "f1ed517b61bcfe338815632dfa03d17e30ad9ce1a9891a6d74a6e71ef8e1f7c4"
+          },
+          {
+            "checkpoint_id": "9c961152-1575-414f-9983-26eab8e17bc0",
+            "step_index": 5,
+            "step_id": "release_pack",
+            "task_id": "4122db61-e70d-4914-8ec5-1abee62b72d5",
+            "workspace_hash": "f826861c5c19a2b6870c98e9574189f82492ff664be928fd3ca1f8fce5d73d3e"
+          }
+        ],
+        "strict_canary": {
+          "verdict": "pass",
+          "report_json": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/qa/strict_canary_report.json",
+          "report_md": "artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/qa/strict_canary_report.md",
+          "failed_steps": 0,
+          "missing_artifacts_total": 0
+        },
+        "reasons": []
+      },
+      "quality_summary": {
+        "contract_found": false,
+        "required": 0,
+        "present": 0,
+        "missing": 0,
+        "invalid": 0
+      },
+      "summary_path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/summary/run_summary.md",
+      "manifest_path": "/workspace/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/meta/run_manifest.json"
+    }
+  },
+  "run_manifest_path": "E:/AIagent_project_260213/artifacts/release/69d1a38c-87f5-47e9-ab98-ccf40157aad7/meta/run_manifest.json",
+  "coding_execution_summary": {
+    "total_steps": 6,
+    "verification_checked": 2,
+    "verification_passed": 2,
+    "verification_failed": 0,
+    "test_logs_present": 2,
+    "retry_enabled_steps": 2,
+    "retry_attempted_steps": 2,
+    "final_failures_present": 0,
+    "failure_memory_entries": 0
+  }
+}

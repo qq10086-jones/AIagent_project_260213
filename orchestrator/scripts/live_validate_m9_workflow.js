@@ -1,0 +1,196 @@
+import fs from "fs";
+import path from "path";
+
+import { resolveOrchestratorArtifactPath } from "./_paths.js";
+
+function arg(name, fallback = "") {
+  const idx = process.argv.indexOf(`--${name}`);
+  if (idx >= 0 && process.argv[idx + 1]) return String(process.argv[idx + 1]);
+  return fallback;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+async function getJson(url, init = {}) {
+  const res = await fetch(url, init);
+  const text = await res.text();
+  let json;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = { raw: text };
+  }
+  return { ok: res.ok, status: res.status, json };
+}
+
+async function checkHealth(baseUrl) {
+  const res = await fetch(`${baseUrl}/health`);
+  const text = await res.text();
+  assert(res.ok && String(text).trim() === "ok", `health failed: ${res.status} ${text}`);
+}
+
+async function pollWorkflow(baseUrl, workflowRunId, timeoutMs = 240000, intervalMs = 4000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const state = await getJson(`${baseUrl}/workflow-runs/${encodeURIComponent(workflowRunId)}`);
+    if (state.ok) {
+      const status = String(state.json?.run?.status || "");
+      if (["succeeded", "failed", "partial_failure"].includes(status)) {
+        return state.json;
+      }
+    }
+    await sleep(intervalMs);
+  }
+  throw new Error(`timeout waiting workflow ${workflowRunId}`);
+}
+
+function buildWorkflowPayload() {
+  return {
+    workflow_id: "coding_team_v0",
+    project_type: "webapp_crm",
+    input: {
+      goal: "Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.",
+      provider: "opencode",
+      model: "qwen3-coder-next",
+      fast_mode: true,
+      max_runtime_s: 180,
+      step_payloads: {
+        pm_spec: {
+          target_paths: ["sandbox/live_validation/pm_spec.txt"],
+          opencode_command: ["mock-inline-autofix", "sandbox/live_validation/pm_spec.txt", "{{task_prompt}}"],
+        },
+        arch_design: {
+          target_paths: ["sandbox/live_validation/arch_design.txt"],
+          opencode_command: ["mock-inline-autofix", "sandbox/live_validation/arch_design.txt", "{{task_prompt}}"],
+        },
+        impl_be: {
+          target_paths: ["sandbox/crm_site/server.js"],
+          opencode_command: ["mock-inline-autofix", "sandbox/crm_site/server.js", "{{task_prompt}}"],
+          max_attempts: 2,
+          same_error_repeat_limit: 2,
+          wall_clock_timeout_s: 300,
+        },
+        impl_fe: {
+          target_paths: ["sandbox/crm_site/app.js"],
+          opencode_command: ["mock-inline-autofix", "sandbox/crm_site/app.js", "{{task_prompt}}"],
+          max_attempts: 2,
+          same_error_repeat_limit: 2,
+          wall_clock_timeout_s: 300,
+        },
+        qa_verify: {
+          command: "node --version",
+        },
+        release_pack: {
+          target_paths: ["sandbox/live_validation/release_pack.txt"],
+          opencode_command: ["mock-inline-autofix", "sandbox/live_validation/release_pack.txt", "{{task_prompt}}"],
+        },
+      },
+    },
+  };
+}
+
+function validateManifest(manifest) {
+  assert(Array.isArray(manifest?.coding_execution_evidence), "coding_execution_evidence missing");
+  const be = manifest.coding_execution_evidence.find((item) => item.step_id === "impl_be");
+  const fe = manifest.coding_execution_evidence.find((item) => item.step_id === "impl_fe");
+  assert(be, "impl_be evidence missing");
+  assert(fe, "impl_fe evidence missing");
+  assert(be.verification_checked === true, "impl_be verification not recorded");
+  assert(fe.verification_checked === true, "impl_fe verification not recorded");
+  assert(Number(be?.retry_summary?.attempts_used || 0) >= 2, "impl_be retry evidence missing");
+  assert(Number(fe?.retry_summary?.attempts_used || 0) >= 2, "impl_fe retry evidence missing");
+  assert(be.test_log_path, "impl_be test_log_path missing");
+  assert(fe.test_log_path, "impl_fe test_log_path missing");
+  assert(be.prompt_contract_path, "impl_be prompt_contract_path missing");
+  assert(fe.prompt_contract_path, "impl_fe prompt_contract_path missing");
+}
+
+function resolveManifestPath({ workspaceRoot, runId, packValidation }) {
+  const manifestPathHint = String(packValidation?.validation?.manifest_path || "").trim();
+  if (manifestPathHint) {
+    const normalized = manifestPathHint.replace(/^\/workspace/i, "").replace(/^\/+/, "");
+    const hintedPath = path.resolve(workspaceRoot, normalized);
+    if (fs.existsSync(hintedPath)) return hintedPath;
+  }
+  const candidates = [
+    path.join(workspaceRoot, "artifacts", "release", runId, "meta", "run_manifest.json"),
+    path.join(workspaceRoot, "artifacts", "release", runId, "release", "run_manifest.json"),
+  ];
+  return candidates.find((item) => fs.existsSync(item)) || candidates[0];
+}
+
+async function main() {
+  const baseUrl = String(arg("base-url", process.env.ORCH_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
+  const timeoutMs = Math.max(120000, Number(arg("timeout-ms", "420000")));
+  const workspaceRoot = path.resolve(process.cwd(), "..");
+  const report = {
+    generated_at: new Date().toISOString(),
+    base_url: baseUrl,
+    timeout_ms: timeoutMs,
+    overall: "pass",
+    workflow_payload: buildWorkflowPayload(),
+  };
+
+  try {
+    await checkHealth(baseUrl);
+    const startRes = await getJson(`${baseUrl}/workflow-runs/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(report.workflow_payload),
+    });
+    assert(startRes.ok, `workflow start failed: ${startRes.status}`);
+    report.start = startRes.json;
+
+    const workflowRunId = String(startRes.json?.workflow_run_id || "");
+    const runId = String(startRes.json?.run_id || "");
+    assert(workflowRunId, "workflow_run_id missing");
+    assert(runId, "run_id missing");
+
+    report.terminal = await pollWorkflow(baseUrl, workflowRunId, timeoutMs, 4000);
+    assert(String(report.terminal?.run?.status || "") === "succeeded", `workflow ended with status=${String(report.terminal?.run?.status || "")}`);
+
+    const artifactsRes = await getJson(`${baseUrl}/runs/${encodeURIComponent(runId)}/artifacts`);
+    assert(artifactsRes.ok, `artifacts query failed: ${artifactsRes.status}`);
+    report.artifacts = artifactsRes.json;
+
+    const packValidationRes = await getJson(`${baseUrl}/workflow-runs/${encodeURIComponent(workflowRunId)}/validate-pack`);
+    assert(packValidationRes.ok, `validate-pack failed: ${packValidationRes.status}`);
+    report.pack_validation = packValidationRes.json;
+
+    const manifestPath = resolveManifestPath({
+      workspaceRoot,
+      runId,
+      packValidation: packValidationRes.json,
+    });
+    assert(fs.existsSync(manifestPath), `run manifest missing: ${manifestPath}`);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    report.run_manifest_path = manifestPath.replace(/\\/g, "/");
+    report.coding_execution_summary = manifest.coding_execution_summary || null;
+    validateManifest(manifest);
+  } catch (err) {
+    report.overall = "fail";
+    report.error = err.message || String(err);
+  }
+
+  const outDir = resolveOrchestratorArtifactPath("canary", "live_m9_workflow");
+  fs.mkdirSync(outDir, { recursive: true });
+  const outPath = path.join(outDir, "live_m9_workflow_report.json");
+  fs.writeFileSync(outPath, JSON.stringify(report, null, 2), "utf8");
+
+  console.log("# Live M9 Workflow Validation");
+  console.log(`- report: ${outPath.replace(/\\/g, "/")}`);
+  console.log(`- overall: ${report.overall}`);
+  if (report.error) console.log(`- error: ${report.error}`);
+  if (report.overall !== "pass") process.exit(1);
+}
+
+main().catch((err) => {
+  console.error(`[live-m9-workflow] failed: ${err.message || String(err)}`);
+  process.exit(1);
+});

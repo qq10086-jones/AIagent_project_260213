@@ -8,6 +8,7 @@
     "format": "prettier --write \"**/*.{js,json}\"",
     "start": "node src/index.js",
     "test": "node --test test/**/*.test.js",
+    "validate:config_preflight": "node scripts/validate_config_preflight.js",
     "validate:registry": "node scripts/validate_registry.js",
     "validate:go-nogo": "node scripts/validate_go_nogo.js",
     "canary:coding_team": "node scripts/canary_coding_team.js",
@@ -30,6 +31,7 @@
     "canary:workflow_runtime_notifier": "node scripts/canary_workflow_runtime_notifier.js",
     "canary:arch_design": "node scripts/canary_arch_design.js",
     "validate:live_vnext_runtime": "node scripts/live_validate_vnext_runtime.js",
+    "validate:live_m9_workflow": "node scripts/live_validate_m9_workflow.js",
     "validate:live_workflow_runtime": "node scripts/live_validate_workflow_runtime.js",
     "validate:live_m2_e2e": "node scripts/live_validate_m2_e2e_bundle.js"
   },

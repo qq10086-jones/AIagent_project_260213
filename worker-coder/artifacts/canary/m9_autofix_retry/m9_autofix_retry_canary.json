@@ -1,7 +1,7 @@
 {
   "ok": true,
-  "generated_at": "2026-03-10T13:58:48.813Z",
-  "workspace_root": "C:/Users/jones/AppData/Local/Temp/worker-coder-autofix-DVNo7v",
+  "generated_at": "2026-03-10T23:29:15.933Z",
+  "workspace_root": "C:/Users/jones/AppData/Local/Temp/worker-coder-autofix-Y5YqYi",
   "retry_summary": {
     "attempts_used": 2,
     "max_attempts": 2,
@@ -19,7 +19,7 @@
     "stderr": "",
     "error": null,
     "error_code": null,
-    "logPath": "C:\\Users\\jones\\AppData\\Local\\Temp\\worker-coder-autofix-DVNo7v\\artifacts\\runs\\run-autofix\\task_task-autofix\\verification_1773151128813.json"
+    "logPath": "C:\\Users\\jones\\AppData\\Local\\Temp\\worker-coder-autofix-Y5YqYi\\artifacts\\runs\\run-autofix\\task_task-autofix\\verification_1773185355932.json"
   },
   "prompt_contract": {
     "contract_version": "execution_contract_v1",
@@ -32,7 +32,7 @@
     "prompt_sha1": "2b4c35648dfb55d33d7345f02f12c411a4f80945",
     "attempt": 2
   },
-  "test_log": "C:\\Users\\jones\\AppData\\Local\\Temp\\worker-coder-autofix-DVNo7v\\artifacts\\runs\\run-autofix\\task_task-autofix\\verification_1773151128813.json",
+  "test_log": "C:\\Users\\jones\\AppData\\Local\\Temp\\worker-coder-autofix-Y5YqYi\\artifacts\\runs\\run-autofix\\task_task-autofix\\verification_1773185355932.json",
   "files_changed": [
     "sandbox/crm_site/app.js"
   ]

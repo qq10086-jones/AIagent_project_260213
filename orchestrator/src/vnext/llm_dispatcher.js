@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { callLocalOllamaChat, callQwenChat } from "./local_llm_client.js";
+import { assertConfigPreflight } from "../config_preflight.js";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROVIDERS_PATH = path.resolve(MODULE_DIR, "..", "..", "configs", "llm_providers.json");
@@ -39,17 +40,26 @@ function makeTypedError({ code, role, provider, model, fallbackAttempted, cause 
 }
 
 export function createLlmDispatcher({
-  providers = readJson(PROVIDERS_PATH),
-  rolePolicy = readJson(ROLE_POLICY_PATH),
+  providers = null,
+  rolePolicy = null,
   qwenClient = callQwenChat,
   ollamaClient = callLocalOllamaChat,
   fetchImpl = globalThis.fetch,
   logger = console,
   sleep = delay,
 } = {}) {
+  if (providers == null || rolePolicy == null) {
+    assertConfigPreflight({
+      runtimeConfigPath: process.env.RUNTIME_CONFIG_PATH || "",
+      workspaceRoot: path.resolve(MODULE_DIR, "..", ".."),
+    });
+  }
+  const resolvedProviders = providers ?? readJson(PROVIDERS_PATH);
+  const resolvedRolePolicy = rolePolicy ?? readJson(ROLE_POLICY_PATH);
+
   function resolveRole(role, overrides = {}) {
     const roleName = String(role || "").trim();
-    const policy = rolePolicy?.roles?.[roleName];
+    const policy = resolvedRolePolicy?.roles?.[roleName];
     if (!policy) {
       throw makeTypedError({
         code: "LLM_ROLE_UNKNOWN",
@@ -63,7 +73,7 @@ export function createLlmDispatcher({
     const provider = String(overrides.provider || policy.provider || "").trim();
     const model = String(overrides.model || policy.model || "").trim();
     const secondaryModel = String(overrides.secondary_model || policy.secondary_model || "").trim();
-    const providerSpec = providers?.[provider];
+    const providerSpec = resolvedProviders?.[provider];
     if (!providerSpec) {
       throw makeTypedError({
         code: "LLM_PROVIDER_UNKNOWN",
@@ -91,7 +101,7 @@ export function createLlmDispatcher({
   }
 
   async function runWithRetry({ roleName, provider, providerSpec, model, messages }) {
-    const retryPolicy = rolePolicy?.retry_policy || {};
+    const retryPolicy = resolvedRolePolicy?.retry_policy || {};
     const retries = Math.max(0, Number(retryPolicy.retries || 0));
     const baseDelayMs = Math.max(1, Number(retryPolicy.base_delay_ms || 2000));
     let lastError = null;
@@ -125,7 +135,7 @@ export function createLlmDispatcher({
     } catch (err) {
       const shouldFallback = Boolean(secondaryModel)
         && (isProviderFallbackError(err) || isTransportError(err))
-        && String(rolePolicy?.fallback_policy || "") === "model_fallback";
+        && String(resolvedRolePolicy?.fallback_policy || "") === "model_fallback";
       if (!shouldFallback) {
         throw makeTypedError({
           code: "LLM_DISPATCH_FAILED",
@@ -170,7 +180,7 @@ export function createLlmDispatcher({
 
   async function validateProviders() {
     const results = [];
-    for (const [provider, providerSpec] of Object.entries(providers || {})) {
+    for (const [provider, providerSpec] of Object.entries(resolvedProviders || {})) {
       try {
         if (providerSpec?.type === "cloud_api") {
           const authEnv = String(providerSpec.auth_env || "").trim();
@@ -190,7 +200,7 @@ export function createLlmDispatcher({
           const payload = await response.json();
           const available = new Set((payload?.models || []).map((item) => String(item?.name || "").trim()).filter(Boolean));
           const required = [];
-          for (const spec of Object.values(rolePolicy?.roles || {})) {
+          for (const spec of Object.values(resolvedRolePolicy?.roles || {})) {
             if (String(spec?.provider || "") !== provider) continue;
             required.push(String(spec?.model || "").trim());
             if (spec?.secondary_model) required.push(String(spec.secondary_model).trim());

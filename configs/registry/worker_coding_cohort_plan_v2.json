@@ -1,0 +1,95 @@
+{
+  "version": "2.0.0",
+  "cohort_id": "worker_coding_beta_v2",
+  "tasks": [
+    {
+      "cohort_task_id": "C-FE-03",
+      "task_class": "fe_modify",
+      "beta_template_id": "wc.fe_modify.v1",
+      "scenario": "modify an existing dashboard page across multiple files and extract one shared UI component",
+      "validation_focus": "multi-file frontend modification with bounded shared-component refactor",
+      "verification_tier_target": "lint + type_check + build",
+      "target_path_hints": [
+        "src/pages/",
+        "src/components/",
+        "src/features/"
+      ],
+      "required_artifacts": [
+        "impl/fe_patch_bundle.json",
+        "impl/fe_notes.md"
+      ],
+      "likely_failure_attribution": [
+        "context_failure",
+        "coding_logic_failure",
+        "verification_failure"
+      ]
+    },
+    {
+      "cohort_task_id": "C-FE-04",
+      "task_class": "fe_create",
+      "beta_template_id": "wc.fe_create.v1",
+      "scenario": "create a scoped feature page with one supporting component and route-level wiring in the existing app",
+      "validation_focus": "bounded frontend creation with light integration surface",
+      "verification_tier_target": "lint + build",
+      "target_path_hints": [
+        "src/pages/",
+        "src/components/",
+        "src/routes/"
+      ],
+      "required_artifacts": [
+        "impl/fe_patch_bundle.json",
+        "impl/fe_notes.md"
+      ],
+      "likely_failure_attribution": [
+        "coding_logic_failure",
+        "verification_failure"
+      ]
+    },
+    {
+      "cohort_task_id": "C-BE-02",
+      "task_class": "be_create",
+      "beta_template_id": "wc.be_create.v1",
+      "scenario": "add one API route with service logic and update or create the nearest unit test boundary",
+      "validation_focus": "backend creation with explicit regression surface and contract handoff",
+      "verification_tier_target": "lint + unit_test",
+      "target_path_hints": [
+        "src/routes/",
+        "src/controllers/",
+        "src/services/",
+        "src/tests/"
+      ],
+      "required_artifacts": [
+        "impl/be_patch_bundle.json",
+        "impl/be_notes.md",
+        "handoff/be_to_fe.json"
+      ],
+      "likely_failure_attribution": [
+        "coding_logic_failure",
+        "context_failure",
+        "verification_failure"
+      ]
+    },
+    {
+      "cohort_task_id": "C-BUG-02",
+      "task_class": "bug_fix",
+      "beta_template_id": "wc.bug_fix.v1",
+      "scenario": "repair a frontend-backend contract mismatch with explicit regression boundaries on both data shape and visible UI behavior",
+      "validation_focus": "cross-layer bug localization without widening into unconstrained autonomy",
+      "verification_tier_target": "lint + unit_test + build",
+      "target_path_hints": [
+        "src/",
+        "app/",
+        "server/"
+      ],
+      "required_artifacts": [
+        "impl/bugfix_notes.md",
+        "handoff/be_to_fe.json"
+      ],
+      "likely_failure_attribution": [
+        "context_failure",
+        "coding_logic_failure",
+        "verification_failure"
+      ]
+    }
+  ]
+}

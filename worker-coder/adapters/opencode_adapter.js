@@ -26,16 +26,25 @@ function extractRequiredOutputs(prompt) {
     .filter(Boolean);
 }
 
-function buildArtifactRoot(cwd, prompt) {
-  const rel = extractPromptValue(prompt, "Absolute artifact output root")
-    .replace(/^\/workspace/i, "")
-    .replace(/^\/+/, "")
-    .replace(/\//g, path.sep);
-  return rel ? path.resolve(cwd, rel) : null;
+function buildArtifactRoot(cwd, prompt, artifactWorkspaceRoot = null) {
+  const raw = extractPromptValue(prompt, "Absolute artifact output root");
+  if (!raw) return null;
+  if (/^[A-Za-z]:[\\/]/.test(raw) || raw.startsWith("/")) {
+    if (/^\/workspace/i.test(raw)) {
+      const baseRoot = artifactWorkspaceRoot || cwd;
+      const rel = raw
+        .replace(/^\/workspace/i, "")
+        .replace(/^\/+/, "")
+        .replace(/\//g, path.sep);
+      return rel ? path.resolve(baseRoot, rel) : path.resolve(baseRoot);
+    }
+    return path.resolve(raw);
+  }
+  return path.resolve(cwd, raw.replace(/\//g, path.sep));
 }
 
-function createPmArtifacts({ cwd, prompt }) {
-  const artifactRoot = buildArtifactRoot(cwd, prompt);
+function createPmArtifacts({ cwd, prompt, artifactWorkspaceRoot }) {
+  const artifactRoot = buildArtifactRoot(cwd, prompt, artifactWorkspaceRoot);
   if (!artifactRoot) return false;
   const now = new Date().toISOString();
   writeText(path.join(artifactRoot, "plan", "spec.md"), [
@@ -103,8 +112,8 @@ function createPmArtifacts({ cwd, prompt }) {
   return true;
 }
 
-function createArchArtifacts({ cwd, prompt }) {
-  const artifactRoot = buildArtifactRoot(cwd, prompt);
+function createArchArtifacts({ cwd, prompt, artifactWorkspaceRoot }) {
+  const artifactRoot = buildArtifactRoot(cwd, prompt, artifactWorkspaceRoot);
   if (!artifactRoot) return false;
   const now = new Date().toISOString();
   writeText(path.join(artifactRoot, "plan", "arch.md"), [
@@ -185,8 +194,8 @@ function createArchArtifacts({ cwd, prompt }) {
   return true;
 }
 
-function createReleaseArtifacts({ cwd, prompt }) {
-  const artifactRoot = buildArtifactRoot(cwd, prompt);
+function createReleaseArtifacts({ cwd, prompt, artifactWorkspaceRoot }) {
+  const artifactRoot = buildArtifactRoot(cwd, prompt, artifactWorkspaceRoot);
   if (!artifactRoot) return false;
   const now = new Date().toISOString();
   const runId = String(artifactRoot).split(path.sep).pop() || "unknown-run";
@@ -219,8 +228,8 @@ function createReleaseArtifacts({ cwd, prompt }) {
   return true;
 }
 
-function createBackendImplArtifacts({ cwd, prompt, fixed = false }) {
-  const artifactRoot = buildArtifactRoot(cwd, prompt);
+function createBackendImplArtifacts({ cwd, prompt, fixed = false, artifactWorkspaceRoot }) {
+  const artifactRoot = buildArtifactRoot(cwd, prompt, artifactWorkspaceRoot);
   if (!artifactRoot) return false;
   const targetFile = "sandbox/crm_site/server.js";
   const finalContent = fixed
@@ -281,8 +290,8 @@ function createBackendImplArtifacts({ cwd, prompt, fixed = false }) {
   return true;
 }
 
-function createFrontendImplArtifacts({ cwd, prompt, fixed = false }) {
-  const artifactRoot = buildArtifactRoot(cwd, prompt);
+function createFrontendImplArtifacts({ cwd, prompt, fixed = false, artifactWorkspaceRoot }) {
+  const artifactRoot = buildArtifactRoot(cwd, prompt, artifactWorkspaceRoot);
   if (!artifactRoot) return false;
   const targetFile = "sandbox/crm_site/app.js";
   const finalContent = fixed
@@ -434,13 +443,13 @@ export function buildOpenCodeInvocation({
   };
 }
 
-async function runInlineMockProcess({ cwd, args = [] }) {
+async function runInlineMockProcess({ cwd, args = [], artifactWorkspaceRoot = null }) {
   const targetRel = String(args[0] || "sandbox/crm_site/app.js").replace(/\\/g, "/");
   const prompt = String(args[1] || "");
   const targetAbs = path.resolve(cwd, targetRel);
   fs.mkdirSync(path.dirname(targetAbs), { recursive: true });
   if (prompt.includes("Step ID: pm_spec")) {
-    createPmArtifacts({ cwd, prompt });
+    createPmArtifacts({ cwd, prompt, artifactWorkspaceRoot });
     writeText(targetAbs, "pm spec placeholder\n");
     return {
       ok: true,
@@ -451,7 +460,7 @@ async function runInlineMockProcess({ cwd, args = [] }) {
     };
   }
   if (prompt.includes("Step ID: arch_design")) {
-    createArchArtifacts({ cwd, prompt });
+    createArchArtifacts({ cwd, prompt, artifactWorkspaceRoot });
     writeText(targetAbs, "arch design placeholder\n");
     return {
       ok: true,
@@ -462,7 +471,7 @@ async function runInlineMockProcess({ cwd, args = [] }) {
     };
   }
   if (prompt.includes("Step ID: release_pack")) {
-    createReleaseArtifacts({ cwd, prompt });
+    createReleaseArtifacts({ cwd, prompt, artifactWorkspaceRoot });
     writeText(targetAbs, "release pack placeholder\n");
     return {
       ok: true,
@@ -473,10 +482,10 @@ async function runInlineMockProcess({ cwd, args = [] }) {
     };
   }
   if (prompt.includes("Step ID: impl_be")) {
-    createBackendImplArtifacts({ cwd, prompt, fixed: prompt.includes("[Auto-Fix Retry]") });
+    createBackendImplArtifacts({ cwd, prompt, fixed: prompt.includes("[Auto-Fix Retry]"), artifactWorkspaceRoot });
   }
   if (prompt.includes("Step ID: impl_fe")) {
-    createFrontendImplArtifacts({ cwd, prompt, fixed: prompt.includes("[Auto-Fix Retry]") });
+    createFrontendImplArtifacts({ cwd, prompt, fixed: prompt.includes("[Auto-Fix Retry]"), artifactWorkspaceRoot });
   }
   if (prompt.includes("[Auto-Fix Retry]")) {
     fs.writeFileSync(targetAbs, "const status = 'fixed';\nmodule.exports = { status };\n", "utf8");
@@ -514,6 +523,7 @@ function mapErrorCode({ proc, command }) {
 
 export async function runOpenCodeTask({
   workspaceRoot,
+  artifactWorkspaceRoot = null,
   taskPrompt,
   model,
   maxRuntimeS = 600,
@@ -535,7 +545,7 @@ export async function runOpenCodeTask({
     });
 
     const effectiveProc = invocation.command === "mock-inline-autofix"
-      ? await runInlineMockProcess({ cwd: workspaceRoot, args: invocation.args })
+      ? await runInlineMockProcess({ cwd: workspaceRoot, args: invocation.args, artifactWorkspaceRoot })
       : await runProcess({
         command: invocation.command,
         args: invocation.args,

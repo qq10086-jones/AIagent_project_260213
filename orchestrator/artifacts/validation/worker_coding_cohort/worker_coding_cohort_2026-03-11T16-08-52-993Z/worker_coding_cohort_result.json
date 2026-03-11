@@ -1,0 +1,79 @@
+{
+  "cohort_run_id": "worker_coding_cohort_2026-03-11T16-08-52-993Z",
+  "generated_at": "2026-03-11T23:09:24.444Z",
+  "summary": {
+    "total_runs": 4,
+    "pass_count": 3,
+    "fail_count": 1,
+    "partial_count": 0
+  },
+  "results": [
+    {
+      "cohort_id": "C-FE-01",
+      "task_class": "fe_create",
+      "beta_template_id": "wc.fe_create.v1",
+      "verification_tier_target": "lint + build",
+      "verification_tier_achieved": "syntax_check + lint + build",
+      "result": "pass",
+      "failure_attribution": "none",
+      "workflow_run_id": "8753c198-6f4e-4715-9afc-f9161ad86c42",
+      "run_id": "34f32641-7eb2-4879-8f2f-22b70fed7bf2",
+      "task_id": "564e94e8-151a-4721-8c4d-11cf0dbc1ae5",
+      "focused_step_id": "impl_fe",
+      "failed_step_id": "",
+      "workflow_status": "succeeded",
+      "step_status": "succeeded",
+      "files_changed_count": 0,
+      "artifact_completeness": true,
+      "operator_note": "scenario=create a small landing page in an existing app; focused_step=impl_fe; failed_step=none; workflow_status=succeeded"
+    },
+    {
+      "cohort_id": "C-FE-02",
+      "task_class": "fe_modify",
+      "beta_template_id": "wc.fe_modify.v1",
+      "verification_tier_target": "lint + type_check + build",
+      "verification_tier_achieved": "syntax_check + lint + type_check + build",
+      "result": "pass",
+      "failure_attribution": "none",
+      "workflow_run_id": "472b308f-ec2c-421e-b4af-ab2b0dc61bf6",
+      "run_id": "b08ae7fe-e03a-42a4-a397-009bcf66b6c5",
+      "task_id": "927ecf82-1ea7-42bc-ac3a-27c3c8540a37",
+      "focused_step_id": "impl_fe",
+      "failed_step_id": "",
+      "workflow_status": "succeeded",
+      "step_status": "succeeded",
+      "files_changed_count": 0,
+      "artifact_completeness": true,
+      "operator_note": "scenario=modify an existing page and add one component; focused_step=impl_fe; failed_step=none; workflow_status=succeeded"
+    },
+    {
+      "cohort_id": "C-BE-01",
+      "task_class": "be_create",
+      "beta_template_id": "wc.be_create.v1",
+      "verification_tier_target": "lint + unit_test",
+      "verification_tier_achieved": "syntax_check + lint + unit_test",
+      "result": "pass",
+      "failure_attribution": "none",
+      "workflow_run_id": "7c723b89-2ff6-4825-8ebb-dbc57b2630d1",
+      "run_id": "a54d26d5-b1d4-4d83-b30d-57d3b6b46e38",
+      "task_id": "0236933b-5e96-4d58-b2f6-47f3dcd77969",
+      "focused_step_id": "impl_be",
+      "failed_step_id": "",
+      "workflow_status": "succeeded",
+      "step_status": "succeeded",
+      "files_changed_count": 0,
+      "artifact_completeness": true,
+      "operator_note": "scenario=add one API route or handler; focused_step=impl_be; failed_step=none; workflow_status=succeeded"
+    },
+    {
+      "cohort_id": "C-BUG-01",
+      "task_class": "bug_fix",
+      "beta_template_id": "wc.bug_fix.v1",
+      "verification_tier_target": "lint + unit_test + build",
+      "verification_tier_achieved": "none",
+      "result": "fail",
+      "failure_attribution": "infrastructure_failure",
+      "operator_note": "scenario=repair one scoped defect with stated regression boundary; focused_step=impl_fe; error=timeout waiting workflow f7b8a5ef-d623-450e-8bc8-13ca301ee968"
+    }
+  ]
+}

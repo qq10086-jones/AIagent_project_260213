@@ -94,6 +94,7 @@ export function buildCodexInvocation({
 
 export async function runCodexTask({
   workspaceRoot,
+  artifactWorkspaceRoot = null,
   taskPrompt,
   model,
   maxRuntimeS = 600,

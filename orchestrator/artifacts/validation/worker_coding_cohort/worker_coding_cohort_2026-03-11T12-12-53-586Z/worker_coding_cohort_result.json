@@ -1,0 +1,48 @@
+{
+  "cohort_run_id": "worker_coding_cohort_2026-03-11T12-12-53-586Z",
+  "generated_at": "2026-03-11T12:13:16.451Z",
+  "summary": {
+    "total_runs": 2,
+    "pass_count": 0,
+    "fail_count": 2,
+    "partial_count": 0
+  },
+  "results": [
+    {
+      "cohort_id": "C-FE-01",
+      "task_class": "fe_create",
+      "beta_template_id": "wc.fe_create.v1",
+      "verification_tier_target": "lint + build",
+      "verification_tier_achieved": "none",
+      "result": "fail",
+      "failure_attribution": "verification_failure",
+      "workflow_run_id": "d757b54a-1319-4c4d-9cc3-4fa278f6232e",
+      "run_id": "2968b63f-530b-436b-9ec1-d063b5dd124c",
+      "task_id": "",
+      "focused_step_id": "impl_fe",
+      "workflow_status": "failed",
+      "step_status": "pending",
+      "files_changed_count": 0,
+      "artifact_completeness": null,
+      "operator_note": "scenario=create a small landing page in an existing app; focused_step=impl_fe; workflow_status=failed"
+    },
+    {
+      "cohort_id": "C-BE-01",
+      "task_class": "be_create",
+      "beta_template_id": "wc.be_create.v1",
+      "verification_tier_target": "lint + unit_test",
+      "verification_tier_achieved": "none",
+      "result": "fail",
+      "failure_attribution": "coding_logic_failure",
+      "workflow_run_id": "50b61c29-06b8-4c26-9430-1d9ceb3ba859",
+      "run_id": "30a65032-8295-4a5b-8e94-8adc77ba71c1",
+      "task_id": "c77ea58d-8d4f-461c-aba1-cd4a7f8aa174",
+      "focused_step_id": "impl_be",
+      "workflow_status": "failed",
+      "step_status": "failed",
+      "files_changed_count": 94,
+      "artifact_completeness": null,
+      "operator_note": "scenario=add one API route or handler; focused_step=impl_be; workflow_status=failed"
+    }
+  ]
+}

@@ -336,3 +336,212 @@ Current next-step posture:
 Final recommendation:
 
 `EXECUTE AS MAINLINE TASK GROUP`
+
+---
+
+## 6. Post-Closeout Execution Checklist
+
+Status:
+
+`UPDATED` on 2026-03-11 after full cohort recovery
+
+Interpretation:
+
+- `WS-NEXT-01` through `WS-NEXT-04` are complete for this round
+- the temporary debug slice against truthful cohort failures is complete
+- the next execution slice is evidence closeout plus next-cohort design, not repeated FE/BE failure archaeology
+
+Scope discipline:
+
+- no new feature expansion
+- no new subsystem program
+- no provider expansion
+- no governance-state promotion without explicit artifact-backed review
+
+### P0
+
+#### GOV-01: Close Out Mainline Evidence State
+
+**Status**
+
+`READY`
+
+**Goal**
+
+Align progress notes, governance notes, and tasklists with the recovered authoritative result:
+
+- full four-case worker-coding cohort = `4 pass / 0 fail / 0 partial`
+
+**Expected Output**
+
+- authoritative current-state references point to the latest passing cohort artifact
+- stale debug guidance is removed from active tasklists
+- next-step decisions are reviewable without replaying old incident context
+
+#### REG-01: Lock Regression Guards For Recovered Failure Modes
+
+**Status**
+
+`READY`
+
+**Goal**
+
+Prevent the recovered structural failures from reappearing silently.
+
+**Checks**
+
+- single-file target paths must not trigger out-of-scope fallback stub writes
+- worker-coding cohort result logic must treat verification supersets as pass
+- coding-executor request building must continue to preserve `verification_plan` and task-contract metadata
+
+#### ARCH-ISO-01: Land Execution Isolation Design
+
+**Status**
+
+`DONE`
+
+**Goal**
+
+Define the approved architecture for worker-coding failure-safe execution and promotion.
+
+**Current artifact**
+
+- design note: `docs/03_feature_development/2026-03-11_worker_coding_execution_isolation_design.md`
+
+**Decision**
+
+- isolation model = isolated workspace execution plus validated patch promotion
+- default path is not `git worktree + auto-commit`
+- no implementation writes reach main workspace before verification and promotion preflight succeed
+
+### P1
+
+#### ARCH-ISO-02: Implement Isolation Scaffold Behind Flag
+
+**Status**
+
+`DONE (phase 1-2 landed; scaffold + shadow execution)`
+
+**Goal**
+
+Create isolated task workspace materialization and artifact manifests without yet changing the public workflow contract.
+
+**Current implementation**
+
+- `worker-coder/isolation_workspace.js`
+- `worker-coder/coding_service.js`
+- `worker-coder/tests/isolation_workspace.test.js`
+- feature flag: `CODER_ISOLATION_MODE=scaffold|shadow`
+
+#### ARCH-ISO-03: Add Promotion Preflight And Rollback Evidence
+
+**Status**
+
+`DONE (preflight + explicit promote mode landed)`
+
+**Goal**
+
+Promote only verified scoped patches into main workspace and make rollback posture explicit in artifacts.
+
+**Current state**
+
+- shadow-mode isolated execution is landed for delegate/static-check/verification
+- main workspace remains untouched before promotion
+- promotion preflight and explicit `promote` mode are landed
+- remaining gap is richer rollback evidence and clean live evidence without runner-side terminal-state inference
+
+#### ARCH-ISO-04: Validate Live Cohort Under Shadow Mode
+
+**Status**
+
+`DONE (full shadow cohort passed)`
+
+**Goal**
+
+Confirm that worker-coding isolation preserves the recovered cohort baseline before any broader `promote` activation.
+
+**Acceptance target**
+
+- live cohort runs with `CODER_ISOLATION_MODE=shadow`
+- recovered passing baseline does not regress unexpectedly
+- artifacts clearly show isolation mode and zero main-workspace promotion
+
+**Current evidence**
+
+- live debug cohort workflows produced step-level diagnostics with:
+  - `isolation_mode=shadow`
+  - `promotion.applied=false`
+  - normal release artifact roots preserved
+- debug FE+BE cohort artifact:
+  - `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T14-02-24-449Z/worker_coding_cohort_result.json`
+  - result: `2 pass / 0 fail / 0 partial`
+- full four-case shadow cohort artifact:
+  - `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T14-14-49-306Z/worker_coding_cohort_result.json`
+  - result: `4 pass / 0 fail / 0 partial`
+- workflow-engine closeout hardening landed in `orchestrator/src/workflow_engine.js`
+- targeted regression coverage landed in `orchestrator/test/workflow_finalization.test.js`
+
+**Remaining gap**
+
+- rerun live full four-case shadow cohort and confirm the new result-consumer pending-recovery path prevents late-consumption `TASK_QUEUED_STALE` failures
+- confirm runner-side terminal-state inference is no longer exercised in the fresh live rerun
+- enrich rollback evidence so promotion failure and restore posture are operator-visible
+- only evaluate broader `promote` rollout after those evidence items are closed
+
+#### WC-NEXT-A: Define Worker-Coding v2 Cohort
+
+**Status**
+
+`DRAFTED`
+
+**Goal**
+
+Move beyond the recovered baseline four-case cohort into a harder but still governed validation set.
+
+**Required shape**
+
+- at least one multi-file FE modify case
+- at least one BE case with tighter regression surface
+- at least one FE/BE contract-linked case
+- at least one higher-friction bug-fix case
+
+**Acceptance target**
+
+- difficulty increases without abandoning deterministic reviewability
+- task-class balance remains governed
+- no scenario widens into unconstrained autonomy
+
+**Current artifacts**
+
+- design note: `docs/03_feature_development/2026-03-11_worker_coding_cohort_task_matrix_v2.md`
+- machine-readable plan: `configs/registry/worker_coding_cohort_plan_v2.json`
+- remaining action is review plus execution readiness, not blank-page design
+
+#### WC-NEXT-B: Decide M9 Governance Exit Recommendation
+
+**Status**
+
+`READY`
+
+**Goal**
+
+Use the recovered evidence state to recommend one of:
+
+- keep `GO WITH CONDITIONS`
+- promote to closeout-ready with explicit beta limitations
+- defer promotion pending v2 cohort evidence
+
+**Inputs**
+
+- release gate artifacts
+- runtime boot-source validation
+- full four-case passing cohort
+- residual caution around deterministic-provider-backed evidence scope
+
+### Exit Rule For This Slice
+
+Do not widen scope beyond the current North Star coding pipeline until:
+
+- recovered failure modes are regression-protected
+- v2 cohort definition is reviewed
+- M9 governance-state recommendation is written against current evidence

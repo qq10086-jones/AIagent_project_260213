@@ -27,11 +27,12 @@ function buildAdapterResult({ adapterRequest, providerUsed, providerRequested, r
   };
 }
 
-async function runProvider({ providerName, adapterRequest, model, maxRuntimeS, codexCommand, opencodeCommand, workspaceRoot }) {
+async function runProvider({ providerName, adapterRequest, model, maxRuntimeS, codexCommand, opencodeCommand, workspaceRoot, artifactWorkspaceRoot = null }) {
   const taskPrompt = String(adapterRequest?.payload?.task_prompt || "").trim();
   if (providerName === "opencode") {
     return runOpenCodeTask({
       workspaceRoot,
+      artifactWorkspaceRoot,
       taskPrompt,
       model,
       maxRuntimeS,
@@ -40,6 +41,7 @@ async function runProvider({ providerName, adapterRequest, model, maxRuntimeS, c
   }
   return runCodexTask({
     workspaceRoot,
+    artifactWorkspaceRoot,
     taskPrompt,
     model,
     maxRuntimeS,
@@ -49,6 +51,7 @@ async function runProvider({ providerName, adapterRequest, model, maxRuntimeS, c
 
 export async function executeCodingAdapter({
   workspaceRoot,
+  artifactWorkspaceRoot = null,
   adapterRequest,
   provider = "auto",
   model = null,
@@ -85,6 +88,7 @@ export async function executeCodingAdapter({
     codexCommand,
     opencodeCommand,
     workspaceRoot,
+    artifactWorkspaceRoot,
   });
   let providerUsed = preferredProvider;
   let fallbackFrom = null;
@@ -102,6 +106,7 @@ export async function executeCodingAdapter({
       codexCommand,
       opencodeCommand,
       workspaceRoot,
+      artifactWorkspaceRoot,
     });
     providerUsed = "codex";
   }

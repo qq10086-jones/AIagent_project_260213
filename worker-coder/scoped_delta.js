@@ -113,6 +113,7 @@ export async function ensureImplementationDelta({
   stepId,
   taskId,
   executionAdapterPacket,
+  targetPaths,
   taskPrompt,
   taskDir,
   baselineSnapshot,
@@ -126,16 +127,19 @@ export async function ensureImplementationDelta({
     return current;
   }
 
-  const targetPaths = Array.isArray(executionAdapterPacket?.target_paths) && executionAdapterPacket.target_paths.length > 0
+  const effectiveTargetPaths = Array.isArray(executionAdapterPacket?.target_paths) && executionAdapterPacket.target_paths.length > 0
     ? executionAdapterPacket.target_paths
-    : ["sandbox/crm_site/"];
-  const firstTargetPath = String(targetPaths[0] || "sandbox/crm_site/").replace(/\\/g, "/").replace(/\/+$/, "");
-  const targetRoot = /\.[A-Za-z0-9]+$/.test(firstTargetPath)
-    ? path.posix.dirname(firstTargetPath)
-    : firstTargetPath;
-  const summaryTargetPaths = /\.[A-Za-z0-9]+$/.test(firstTargetPath)
-    ? [targetRoot]
-    : targetPaths;
+    : Array.isArray(targetPaths) && targetPaths.length > 0
+      ? targetPaths
+      : ["sandbox/crm_site/"];
+  const firstTargetPath = String(effectiveTargetPaths[0] || "sandbox/crm_site/").replace(/\\/g, "/").replace(/\/+$/, "");
+  const isFileTarget = /\.[A-Za-z0-9]+$/.test(firstTargetPath);
+  if (isFileTarget) {
+    return current;
+  }
+
+  const targetRoot = firstTargetPath;
+  const summaryTargetPaths = effectiveTargetPaths;
   const safeTaskId = String(taskId || "standalone").replace(/[^a-zA-Z0-9_-]/g, "_");
   const fileName = safeStepId === "impl_fe"
     ? `workflow_impl_fe_stub_${safeTaskId}.js`

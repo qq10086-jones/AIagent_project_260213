@@ -43,7 +43,7 @@ Interpretation:
 
 **Status**
 
-`IN PROGRESS`
+`DONE (v1 baseline)` on 2026-03-11
 
 **Task Name**
 
@@ -117,7 +117,7 @@ Define the controlled coding task classes and make them explicit in the worker-c
 
 **Status**
 
-`IN PROGRESS`
+`IN PROGRESS` on 2026-03-12 (`phase 1-3 landed; finalization fail-close landed; phase 4 pending`)
 
 **Task Name**
 
@@ -166,13 +166,38 @@ Implement execution isolation as a dedicated architecture workstream so coding t
 
 `none`
 
+**Current Progress**
+
+- execution isolation design note landed under `docs/03_feature_development/2026-03-11_worker_coding_execution_isolation_design.md`
+- recommended architecture is now explicit:
+  - isolated workspace execution
+  - scoped patch promotion into main workspace only after verification succeeds
+- primary design decision:
+  - do not use `git worktree + auto-commit` as the default promotion path
+  - current repo policy allows dirty user worktrees, so isolation must be Git-light and operator-safe
+- immediate implementation order is now defined:
+  - phase 1 isolation scaffold -> landed
+  - phase 2 delegate-in-isolation -> landed for `shadow` mode
+  - phase 3 promotion gate -> landed for preflight + explicit `promote` mode
+  - orchestrator finalization fail-close -> landed
+  - phase 4 rollback evidence
+- current landed code:
+  - `worker-coder/isolation_workspace.js`
+  - `worker-coder/tests/isolation_workspace.test.js`
+  - `worker-coder/coding_service.js` now emits isolation scaffold artifacts and diagnostics when the feature flag is enabled
+  - `worker-coder/coding_executor_runtime.js` and `worker-coder/adapters/opencode_adapter.js` now support isolated execution root with main-workspace artifact output root preserved
+  - `worker-coder/tests/isolation_delegate_shadow.test.js` proves a failed isolated task does not mutate the main workspace
+  - `worker-coder/promotion_workspace.js` and `worker-coder/tests/promotion_workspace.test.js` now cover promotion preflight, no-apply `shadow`, and scoped `promote`
+  - `orchestrator/src/workflow_engine.js` now marks workflow finalization failures as terminal `failed` instead of leaving runs stuck in `running`
+  - `orchestrator/test/workflow_finalization.test.js` now locks both success closeout and finalization-failure closeout semantics
+
 ---
 
 #### WC-NEXT-03: Beta Template Registry
 
 **Status**
 
-`IN PROGRESS`
+`DONE (v1 baseline)` on 2026-03-11
 
 **Task Name**
 
@@ -251,8 +276,13 @@ Create a governed registry of approved internal beta coding templates so first-u
   - `fe_create`, `fe_modify`, and `bug_fix` currently fail under `verification_failure`
   - `be_create` currently fails under `coding_logic_failure`
 - current quality conclusion:
-  - earlier `partial` results were optimistic because verification depth was not truly enforced in live runtime
-  - after true enforcement, current beta cohort is not yet ready for pass claims
+- earlier `partial` results were optimistic because verification depth was not truly enforced in live runtime
+- after true enforcement, current beta cohort is not yet ready for pass claims
+- recovery update on 2026-03-11:
+  - live container runtime source drift corrected
+  - coding-executor contract-field drop corrected
+  - single-file fallback stub pollution corrected
+  - current four-case cohort now passes under truthful verification enforcement
 
 ---
 
@@ -262,7 +292,7 @@ Create a governed registry of approved internal beta coding templates so first-u
 
 **Status**
 
-`TODO`
+`DONE (v1 baseline)` on 2026-03-11
 
 **Task Name**
 
@@ -349,7 +379,7 @@ Replace single-scenario confidence with a controlled validation cohort covering 
 - current gap is not workflow failure; it is verification-tier gap:
   - achieved tier observed: `syntax_check`
   - target tiers remain `lint + build`, `lint + type_check + build`, `lint + unit_test`
-- latest enforced live cohort signal is now stricter and should be treated as authoritative:
+- latest enforced live cohort signal is now stricter and should be treated as historical incident evidence:
   - artifact: `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T08-57-01-157Z/worker_coding_cohort_result.json`
   - total runs: `4`
   - pass: `0`
@@ -357,10 +387,15 @@ Replace single-scenario confidence with a controlled validation cohort covering 
   - partial: `0`
   - `fe_create`, `fe_modify`, `bug_fix` => `verification_failure`
   - `be_create` => `coding_logic_failure`
-- residual issues for follow-up:
-  - inspect why FE cohort cases fail before any achieved verification tier is recorded
-  - inspect why `be_create` still fails as coding logic rather than verification-only
-  - keep using the latest fail artifact, not earlier partial artifacts, as readiness evidence
+- recovery evidence:
+  - debug FE+BE cohort: `2 pass / 0 fail / 0 partial`
+  - debug BE-only cohort: `1 pass / 0 fail / 0 partial`
+  - full four-case cohort artifact: `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T12-56-17-290Z/worker_coding_cohort_result.json`
+  - current authoritative result: `4 pass / 0 fail / 0 partial`
+- next follow-up is not another v1 failure-debug loop; it is defining a harder v2 cohort while keeping recovered failure modes regression-protected
+- v2 cohort draft artifacts now landed:
+  - design note: `docs/03_feature_development/2026-03-11_worker_coding_cohort_task_matrix_v2.md`
+  - machine-readable plan: `configs/registry/worker_coding_cohort_plan_v2.json`
 
 ---
 
@@ -431,8 +466,8 @@ Improve the readability and actionability of coding outcomes for internal beta u
   - real verification enforcement no longer reports optimistic `partial` readiness
   - latest cohort result is `4 fail / 0 partial / 0 pass`
 - residual issues recorded for next session:
-  - FE path currently surfaces as `verification_failure`
-  - BE path currently surfaces as `coding_logic_failure`
+  - convert current cohort/report language into explicit baseline-vs-v2 readiness language
+  - ensure operator-facing summaries continue to distinguish historical fail artifacts from current passing state
 
 ---
 
@@ -442,7 +477,7 @@ Improve the readability and actionability of coding outcomes for internal beta u
 
 **Status**
 
-`TODO`
+`READY`
 
 **Task Name**
 
@@ -499,7 +534,7 @@ Track whether worker-coding is becoming more usable for internal beta, not just 
 
 **Status**
 
-`TODO`
+`READY AFTER WC-NEXT-06`
 
 **Task Name**
 
@@ -556,23 +591,19 @@ Analyze cohort validation data to determine whether context-related failures jus
 
 ## 4. Recommended Order
 
-1. `WC-NEXT-01` Task-Class Contract Definition
-2. `WC-NEXT-02` Execution State Isolation and Rollback Hardening
-3. `WC-NEXT-03` Beta Template Registry
-4. `WC-NEXT-04` Multi-Class Cohort Validation
-5. `WC-NEXT-05` User-Facing Result Quality Hardening
-6. `WC-NEXT-06` Controlled Beta Operations Metrics
-7. `WC-NEXT-07` Context Failure Analysis and RAG Decision Gate
+1. `WC-NEXT-02` Execution State Isolation and Rollback Hardening
+2. `WC-NEXT-05` User-Facing Result Quality Hardening
+3. execute review on the landed governed v2 cohort note and plan
+4. `WC-NEXT-06` Controlled Beta Operations Metrics
+5. `WC-NEXT-07` Context Failure Analysis and RAG Decision Gate
 
 Reasoning:
 
-- define the product boundary first
-- separate execution architecture hardening from contract-definition scope
-- reduce first-use ambiguity next, with explicit verification tiers
-- validate across classes after contract and minimum execution safety are clear
-- improve user-facing quality using evidence rather than guesswork
-- add lightweight operational metrics after the workflow shape is stable
-- make the RAG investment decision using real data, not architectural intuition
+- v1 contract, template, and cohort baseline are already in place
+- the next highest-risk gap is execution-state isolation beyond current scope guards
+- result quality should now be improved against a passing baseline instead of against failing noise
+- the v2 cohort draft now exists, so the next action is review and execution readiness rather than blank-page planning
+- metrics and any future RAG decision should be based on the next harder cohort, not the already-closed v1 slice
 
 ---
 
@@ -587,3 +618,8 @@ This sub-program should be considered ready for closeout review when:
 - if execution isolation is included in this phase, it is enforced for approved task executions
 - failure attribution is clean enough to support infrastructure investment decisions
 - context failure rates are measured and a RAG decision recommendation exists
+
+Current note:
+
+- the initial v1 four-case cohort requirement is satisfied
+- closeout is not yet recommended until the next-harder cohort and execution-isolation posture are reviewed

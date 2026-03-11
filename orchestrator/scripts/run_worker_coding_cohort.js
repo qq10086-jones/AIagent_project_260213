@@ -59,6 +59,21 @@ async function pollWorkflow(baseUrl, workflowRunId, timeoutMs = 420000, interval
       if (["succeeded", "failed", "partial_failure"].includes(status)) {
         return state.json;
       }
+      const steps = Array.isArray(state.json?.steps) ? state.json.steps : [];
+      const allStepsSucceeded = steps.length > 0 && steps.every((step) => String(step?.status || "") === "succeeded");
+      if (status === "running" && allStepsSucceeded) {
+        return {
+          ...state.json,
+          run: {
+            ...(state.json?.run || {}),
+            status: "succeeded",
+          },
+          diagnostics: {
+            inferred_terminal_state: true,
+            inference_reason: "all_steps_succeeded_while_run_still_running",
+          },
+        };
+      }
     }
     await sleep(intervalMs);
   }
@@ -80,7 +95,16 @@ function inferFocusedStepId(taskClass) {
   return ["be_create"].includes(String(taskClass || "")) ? "impl_be" : "impl_fe";
 }
 
-function inferVerificationTierAchieved(stepOutput = {}) {
+function inferCounterpartStepId(focusedStepId) {
+  return String(focusedStepId || "") === "impl_be" ? "impl_fe" : "impl_be";
+}
+
+function buildIsolatedStubTarget(cohortTaskId, stepId) {
+  const safeStepId = String(stepId || "").trim() || "impl_stub";
+  return `sandbox/worker_coding_cohort/${cohortTaskId}/${safeStepId}_isolated_stub.js`;
+}
+
+export function inferVerificationTierAchieved(stepOutput = {}) {
   const diagnostics = stepOutput?.diagnostics && typeof stepOutput.diagnostics === "object"
     ? stepOutput.diagnostics
     : {};
@@ -101,26 +125,29 @@ function inferVerificationTierAchieved(stepOutput = {}) {
   return "verified";
 }
 
-function verificationTargetSatisfied(target, achieved) {
+export function verificationTargetSatisfied(target, achieved) {
   const normalizedTarget = String(target || "").trim().toLowerCase();
   const normalizedAchieved = String(achieved || "").trim().toLowerCase();
   if (!normalizedTarget) return normalizedAchieved !== "none";
   if (normalizedTarget === normalizedAchieved) return true;
   const targetParts = normalizedTarget.split("+").map((item) => item.trim()).filter(Boolean);
-  return targetParts.length === 1 && targetParts[0] === normalizedAchieved;
+  const achievedParts = normalizedAchieved.split("+").map((item) => item.trim()).filter(Boolean);
+  if (targetParts.length === 0) return normalizedAchieved !== "none";
+  return targetParts.every((item) => achievedParts.includes(item));
 }
 
-function deriveFailureAttribution(stepOutput = {}, fallbackErrorCode = "") {
+export function deriveFailureAttribution(stepOutput = {}, fallbackErrorCode = "") {
   const diagnostics = stepOutput?.diagnostics && typeof stepOutput.diagnostics === "object"
     ? stepOutput.diagnostics
     : {};
+  const code = String(fallbackErrorCode || diagnostics.error_code || "").trim().toUpperCase();
+  if (code.includes("UNAUTHORIZED_WRITE") || code.includes("OUT_OF_SCOPE")) return "scope_guard_failure";
   const direct = String(diagnostics.failure_attribution || "").trim();
   if (direct) return direct;
   const finalFailure = diagnostics?.final_failure_summary && typeof diagnostics.final_failure_summary === "object"
     ? diagnostics.final_failure_summary
     : null;
   if (finalFailure?.failure_attribution) return String(finalFailure.failure_attribution);
-  const code = String(fallbackErrorCode || diagnostics.error_code || "").trim().toUpperCase();
   if (!code) return "none";
   if (code.includes("CONTEXT")) return "context_failure";
   if (code.includes("VERIFY")) return "verification_failure";
@@ -144,7 +171,9 @@ function buildScenarioGoal(task) {
 function buildWorkflowPayload({ task, template }) {
   const cohortTaskId = sanitizeId(task.cohort_task_id);
   const focusedStepId = inferFocusedStepId(task.task_class);
+  const counterpartStepId = inferCounterpartStepId(focusedStepId);
   const focusedTarget = focusedStepId === "impl_be" ? "sandbox/crm_site/server.js" : "sandbox/crm_site/app.js";
+  const isolatedCounterpartTarget = buildIsolatedStubTarget(cohortTaskId, counterpartStepId);
   const focusedPayload = {
     target_paths: [focusedTarget],
     opencode_command: ["mock-inline-autofix", focusedTarget, "{{task_prompt}}"],
@@ -154,6 +183,7 @@ function buildWorkflowPayload({ task, template }) {
     task_class: task.task_class,
     beta_template_id: task.beta_template_id,
     context_envelope: template?.context_envelope || null,
+    template_verification_tiers: Array.isArray(template?.verification_tiers) ? template.verification_tiers : [],
   };
 
   const stepPayloads = {
@@ -166,15 +196,15 @@ function buildWorkflowPayload({ task, template }) {
       opencode_command: ["mock-inline-autofix", `sandbox/worker_coding_cohort/${cohortTaskId}/arch_design.txt`, "{{task_prompt}}"],
     },
     impl_be: {
-      target_paths: ["sandbox/crm_site/server.js"],
-      opencode_command: ["mock-inline-autofix", "sandbox/crm_site/server.js", "{{task_prompt}}"],
+      target_paths: [focusedStepId === "impl_be" ? "sandbox/crm_site/server.js" : isolatedCounterpartTarget],
+      opencode_command: ["mock-inline-autofix", focusedStepId === "impl_be" ? "sandbox/crm_site/server.js" : isolatedCounterpartTarget, "{{task_prompt}}"],
       max_attempts: 2,
       same_error_repeat_limit: 2,
       wall_clock_timeout_s: 300,
     },
     impl_fe: {
-      target_paths: ["sandbox/crm_site/app.js"],
-      opencode_command: ["mock-inline-autofix", "sandbox/crm_site/app.js", "{{task_prompt}}"],
+      target_paths: [focusedStepId === "impl_fe" ? "sandbox/crm_site/app.js" : isolatedCounterpartTarget],
+      opencode_command: ["mock-inline-autofix", focusedStepId === "impl_fe" ? "sandbox/crm_site/app.js" : isolatedCounterpartTarget, "{{task_prompt}}"],
       max_attempts: 2,
       same_error_repeat_limit: 2,
       wall_clock_timeout_s: 300,
@@ -215,16 +245,30 @@ function toStepOutput(step = {}) {
   return raw;
 }
 
-function summarizeResult({ task, terminal, focusedStep }) {
+function findFailedStep(terminal = {}) {
+  if (!Array.isArray(terminal?.steps)) return null;
+  return terminal.steps.find((step) => String(step?.status || "") === "failed") || null;
+}
+
+export function summarizeResult({ task, terminal, focusedStep }) {
   const workflowStatus = String(terminal?.run?.status || "");
+  const failedStep = findFailedStep(terminal);
+  const failedStepId = String(failedStep?.step_id || "");
   const focusedOutput = toStepOutput(focusedStep);
+  const failedOutput = failedStep ? toStepOutput(failedStep) : {};
   const verificationAchieved = inferVerificationTierAchieved(focusedOutput);
   const target = String(task?.verification_tier_target || "");
   const stepStatus = String(focusedStep?.status || "");
-  const fallbackErrorCode = String(focusedStep?.error_code || terminal?.run?.error_code || "");
+  const fallbackErrorCode = String(focusedStep?.error_code || failedStep?.error_code || terminal?.run?.error_code || "");
+  const blockedByUpstream = workflowStatus !== "succeeded"
+    && stepStatus !== "failed"
+    && failedStepId
+    && failedStepId !== String(focusedStep?.step_id || "");
   const failureAttribution = workflowStatus === "succeeded" && stepStatus === "succeeded"
     ? "none"
-    : deriveFailureAttribution(focusedOutput, fallbackErrorCode);
+    : blockedByUpstream
+      ? "upstream_blocker"
+      : deriveFailureAttribution(stepStatus === "failed" ? focusedOutput : failedOutput, fallbackErrorCode);
 
   let result = "fail";
   if (workflowStatus === "succeeded" && stepStatus === "succeeded") {
@@ -250,6 +294,7 @@ function summarizeResult({ task, terminal, focusedStep }) {
     run_id: String(terminal?.run?.run_id || ""),
     task_id: String(focusedStep?.task_id || ""),
     focused_step_id: String(focusedStep?.step_id || ""),
+    failed_step_id: failedStepId,
     workflow_status: workflowStatus,
     step_status: stepStatus,
     files_changed_count: changedFiles.length,
@@ -257,6 +302,7 @@ function summarizeResult({ task, terminal, focusedStep }) {
     operator_note: [
       `scenario=${String(task.scenario || "")}`,
       `focused_step=${String(focusedStep?.step_id || "")}`,
+      `failed_step=${failedStepId || "none"}`,
       `workflow_status=${workflowStatus || "unknown"}`,
     ].join("; "),
   };

@@ -138,7 +138,10 @@ export async function countPendingTasksForRun(pool, run_id) {
  * @param {string} task_id
  */
 export async function markTaskRunning(pool, task_id) {
-  await pool.query("UPDATE tasks SET status=$1, updated_at=NOW() WHERE task_id=$2", ["running", task_id]);
+  await pool.query(
+    "UPDATE tasks SET status=$1, updated_at=NOW() WHERE task_id=$2 AND COALESCE(status,'') IN ('queued','waiting_approval')",
+    ["running", task_id]
+  );
 }
 
 /**

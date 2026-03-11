@@ -3,8 +3,17 @@ import path from "path";
 import { validateJsonSchemaLite } from "../src/schema_lite_validator.js";
 import { loadWorkerCodingTaskClassesOrThrow } from "../src/worker_coding_task_classes.js";
 
+function arg(name, fallback = "") {
+  const idx = process.argv.indexOf(`--${name}`);
+  if (idx >= 0 && process.argv[idx + 1]) return String(process.argv[idx + 1]);
+  return fallback;
+}
+
 const cohortPlanSchemaPath = path.resolve(process.cwd(), "contracts", "worker_coding_cohort_plan.schema.json");
-const cohortPlanPath = path.resolve(process.cwd(), "..", "configs", "registry", "worker_coding_cohort_plan_v1.json");
+const cohortPlanPath = path.resolve(
+  process.cwd(),
+  arg("plan", path.join("..", "configs", "registry", "worker_coding_cohort_plan_v1.json")),
+);
 const betaTemplateRegistryPath = path.resolve(process.cwd(), "..", "configs", "registry", "worker_coding_beta_templates.json");
 
 function readJson(filePath) {

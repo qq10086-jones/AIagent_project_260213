@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "cohort_id": "worker_coding_debug_fe_be_v1",
+  "tasks": [
+    {
+      "cohort_task_id": "C-FE-01",
+      "task_class": "fe_create",
+      "beta_template_id": "wc.fe_create.v1",
+      "scenario": "create a small landing page in an existing app",
+      "validation_focus": "greenfield page creation",
+      "verification_tier_target": "lint + build",
+      "target_path_hints": [
+        "src/pages/",
+        "src/components/"
+      ],
+      "required_artifacts": [
+        "impl/fe_patch_bundle.json",
+        "impl/fe_notes.md"
+      ],
+      "likely_failure_attribution": [
+        "coding_logic_failure",
+        "verification_failure"
+      ]
+    },
+    {
+      "cohort_task_id": "C-BE-01",
+      "task_class": "be_create",
+      "beta_template_id": "wc.be_create.v1",
+      "scenario": "add one API route or handler",
+      "validation_focus": "backend contract creation",
+      "verification_tier_target": "lint + unit_test",
+      "target_path_hints": [
+        "src/routes/",
+        "src/controllers/",
+        "src/services/"
+      ],
+      "required_artifacts": [
+        "impl/be_patch_bundle.json",
+        "impl/be_notes.md",
+        "handoff/be_to_fe.json"
+      ],
+      "likely_failure_attribution": [
+        "coding_logic_failure",
+        "context_failure",
+        "verification_failure"
+      ]
+    }
+  ]
+}

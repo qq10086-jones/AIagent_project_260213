@@ -1,0 +1,31 @@
+{
+  "cohort_run_id": "worker_coding_cohort_2026-03-11T12-29-24-506Z",
+  "generated_at": "2026-03-11T12:33:45.054Z",
+  "summary": {
+    "total_runs": 1,
+    "pass_count": 0,
+    "fail_count": 0,
+    "partial_count": 1
+  },
+  "results": [
+    {
+      "cohort_id": "C-BE-01",
+      "task_class": "be_create",
+      "beta_template_id": "wc.be_create.v1",
+      "verification_tier_target": "lint + unit_test",
+      "verification_tier_achieved": "syntax_check + lint + unit_test",
+      "result": "partial",
+      "failure_attribution": "none",
+      "workflow_run_id": "322f554c-c69e-417c-9e66-37ce0a6b272b",
+      "run_id": "0f8b5d6c-2702-4ece-9f27-a9df4e5a62b2",
+      "task_id": "ada54b34-4c9d-4a78-b183-53bf51d9e957",
+      "focused_step_id": "impl_be",
+      "failed_step_id": "",
+      "workflow_status": "succeeded",
+      "step_status": "succeeded",
+      "files_changed_count": 0,
+      "artifact_completeness": true,
+      "operator_note": "scenario=add one API route or handler; focused_step=impl_be; failed_step=none; workflow_status=succeeded"
+    }
+  ]
+}

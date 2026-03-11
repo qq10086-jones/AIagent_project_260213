@@ -55,6 +55,7 @@ export function createWorkflowEngine({
   onStepTransition = null,
   runtimeConfig = {},
   waterfallTraceService = null,
+  artifactPackService = null,
 }) {
   const { archiveReleasePackToMinio, indexReleasePackToDb, minioBucket } =
     createWorkflowReleasePackService({ pool, recordEvent, workspaceRoot, minio });
@@ -97,7 +98,21 @@ export function createWorkflowEngine({
   }
 
   async function succeedWorkflowRun(run) {
-    const pack = await artifactPack.generateArtifactPack(run);
+    let pack = null;
+    try {
+      pack = await artifactPack.generateArtifactPack(run);
+    } catch (err) {
+      const errorCode = "WORKFLOW_FINALIZATION_FAILED";
+      const errorMessage = err?.message || "workflow finalization failed";
+      await updateWorkflowRunFailed(pool, run.workflow_run_id, errorCode, errorMessage);
+      if (run.run_id) await updateRunStatus(pool, run.run_id, "failed").catch(() => {});
+      await recordEvent(run.workflow_run_id, "workflow.finalization.failed", {
+        workflow_run_id: run.workflow_run_id,
+        error_code: errorCode,
+        error: String(errorMessage),
+      });
+      return { ok: false, error_code: errorCode, error: errorMessage };
+    }
     if (!pack.ok) {
       const classified = classifyArtifactReasons(pack.reasons || []);
       const failurePayload = buildFailurePayload({
@@ -115,7 +130,7 @@ export function createWorkflowEngine({
         reasons: pack.reasons || [],
         failure_payload: failurePayload,
       });
-      return;
+      return { ok: false, error_code: "ARTIFACT_INCOMPLETE", error: pack.error || "artifact pack incomplete" };
     }
     await updateWorkflowRunSucceeded(pool, run.workflow_run_id);
     if (run.run_id) {
@@ -149,6 +164,7 @@ export function createWorkflowEngine({
         error: err?.message || String(err),
       });
     }
+    return { ok: true };
   }
 
   async function dispatchStepByIndex(workflow_run_id, stepIndex, context = null) {
@@ -487,7 +503,7 @@ export function createWorkflowEngine({
   }
 
   // Service objects that reference local functions (constructed after function declarations)
-  const artifactPack = createArtifactPackService({
+  const artifactPack = artifactPackService || createArtifactPackService({
     pool, workspaceRoot, registry,
     archiveReleasePackToMinio, indexReleasePackToDb, minioBucket,
     recordEvent, getSteps,

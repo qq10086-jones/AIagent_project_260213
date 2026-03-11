@@ -170,8 +170,20 @@ Proceed with worker-coding capability uplift as the next governed mainline progr
 
 Execution should focus on:
 
-1. task-class coverage
-2. first-use success rate
-3. verification reliability
-4. artifact quality
-5. controlled beta evidence
+1. preserving the recovered `4/4 pass` baseline with regression guards
+2. hardening execution isolation and rollback semantics using isolated workspace execution plus validated patch promotion
+3. defining a harder governed v2 cohort rather than re-debugging the completed v1 slice
+4. improving operator-facing result quality and evidence language
+5. collecting metrics only after the harder cohort definition is active
+
+Current execution-isolation posture:
+
+- `shadow` mode is the preferred validation mode while isolation evidence is still being collected
+- `promote` mode exists but should remain controlled until live cohort evidence confirms baseline stability
+- wider activation should follow evidence, not implementation availability
+- latest live evidence confirms `shadow` diagnostics and `promotion.applied=false` at step level
+- latest shadow-mode debug cohort artifact confirms `2 pass / 0 fail / 0 partial` for FE+BE validation slice
+- latest full shadow-mode cohort artifact confirms `4 pass / 0 fail / 0 partial`
+- orchestrator finalization now fails closed if artifact-pack generation crashes, which removes the prior silent `run.status=running` drift as an accepted state
+- orchestrator result-consumer now reclaims stale pending result-stream messages, addressing the late-consumption path that previously allowed a task to succeed after watchdog had already failed the workflow
+- remaining blocker before broader isolation rollout is rollback-evidence completeness plus one fresh full-slice live rerun to replace the interrupted post-restart evidence attempt

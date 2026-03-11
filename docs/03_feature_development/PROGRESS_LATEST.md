@@ -1,6 +1,6 @@
 # Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-11 (worker-coding live cohort residual issues recorded)
+**Last updated:** 2026-03-12 (result-consumer pending recovery landed; live full-cohort revalidation still pending)
 **Author:** PM / Architecture Review
 
 ---
@@ -37,6 +37,17 @@
 - **Worker-coding result-quality hardening v1:** landed on 2026-03-11 (`verification_plan` execution + achieved-tier evidence persisted)
 - **Worker-coding repo-aware verification source:** landed on 2026-03-11 (`sandbox/crm_site` package scripts now back live cohort verification tiers)
 - **Worker-coding live cohort truthful-fail signal:** recorded on 2026-03-11 (`0 pass / 4 fail / 0 partial` after real verification enforcement)
+- **Worker-coding cohort structural recovery:** completed on 2026-03-11 (runtime source drift, contract-field drop, and single-file scope fallback repaired)
+- **Worker-coding full four-case cohort rerun:** `PASS` on 2026-03-11 (`4 pass / 0 fail / 0 partial`)
+- **Worker-coding execution isolation phase 1 scaffold:** landed on 2026-03-11 (isolated workspace manifests behind feature flag; main execution path unchanged)
+- **Worker-coding execution isolation phase 2 shadow execution:** landed on 2026-03-11 (`delegate + static checks + verification` can run in isolated workspace without touching main workspace)
+- **Worker-coding execution isolation phase 3 promotion gate:** landed on 2026-03-11 (promotion preflight and explicit `promote` mode added; main workspace writes remain opt-in)
+- **Worker-coding live shadow-mode validation:** confirmed on 2026-03-12 (step-level isolation evidence remains good; orchestrator finalization now fails closed instead of leaving runs stuck in `running`)
+- **Worker-coding live shadow-mode debug cohort:** `PASS` on 2026-03-11 (`2 pass / 0 fail / 0 partial` after runner terminal-state inference hardening)
+- **Worker-coding live shadow-mode full cohort:** `PASS` on 2026-03-11 (`4 pass / 0 fail / 0 partial`)
+- **Orchestrator result-consumer pending recovery:** landed on 2026-03-12 (`XAUTOCLAIM`-based stale result recovery + fail-loud loop logging)
+- **Post-restart live shadow-mode debug cohort:** `PASS` on 2026-03-11T23:20Z (`2 pass / 0 fail / 0 partial`, pending backlog cleared)
+- **Post-restart live full four-case cohort:** started on 2026-03-11T23:20Z but was interrupted before completion; authoritative full-slice revalidation remains pending
 
 ---
 
@@ -62,8 +73,8 @@
 Current governance state:
 - M6 evidence has been strengthened by compressed accelerated validation and is ready for next-stage review.
 - M7 Phase A design, scripts, and config package are complete.
-- M9 coding execution hardening is landed in code, and closeout work is focused on validation depth plus structural cleanup.
-- next-stage mainline execution has delivered a passing release gate, completed startup-path hardening, completed brain gateway contract hardening, and keeps worker-coder decomposition in progress.
+- M9 coding execution hardening is landed in code, and closeout work has now advanced from residual debug into evidence closeout.
+- next-stage mainline execution has delivered a passing release gate, completed startup-path hardening, completed brain gateway contract hardening, completed worker-coder decomposition, and restored truthful worker-coding cohort readiness evidence.
 
 Governing documents:
 
@@ -140,8 +151,8 @@ Governance:
 
 Current interpretation:
 - M9 is focused on `worker-coder` execution quality, not on routing/governance expansion.
-- The core coding hardening slice is now landed in code and validated locally with passing canaries/tests.
-- Scope now covers context grounding, write-scope enforcement, scoped file-delta capture, fast static checks, verification execution, coding failure memory, hardened execution contracts, bounded retry controls, durable memory write-back, and release-pack evidence visibility.
+- The core coding hardening slice is now landed in code and validated locally plus through passing live cohort evidence.
+- Scope now covers context grounding, write-scope enforcement, scoped file-delta capture, fast static checks, verification execution, coding failure memory, hardened execution contracts, bounded retry controls, durable memory write-back, release-pack evidence visibility, and truthful cohort result attribution.
 - Runtime/compose preflight validation is now added and passing for orchestrator startup-critical config.
 
 Completed so far:
@@ -171,7 +182,8 @@ Not yet done:
 
 Current closeout blocker:
 - full workflow-level live validation is now passing with contract-valid deterministic provider fixtures for PM/architect/implementation/release steps
-- remaining closeout work is structural follow-up, not live workflow correctness
+- full four-case worker-coding cohort is now passing with truthful verification-tier evidence
+- remaining work is documentation closeout and future regression protection, not an active M9 execution blocker
 
 ---
 
@@ -200,6 +212,15 @@ POST brain /run                                               -> PASS on refresh
 validate:live_m9_workflow                                     -> PASS succeeded workflow + release-pack evidence check (2026-03-11)
 brain_gateway.integration.test.js                             -> PASS (2026-03-11)
 worker-coder test:adapter + prompt/retry/failure tests        -> PASS (2026-03-11)
+worker-coder/tests/scoped_delta.test.js                       -> PASS after single-file fallback hardening (2026-03-11)
+worker-coder/tests/isolation_workspace.test.js                -> PASS after isolation scaffold landing (2026-03-11)
+worker-coder/tests/isolation_delegate_shadow.test.js          -> PASS (shadow-mode failure leaves main workspace unchanged) (2026-03-11)
+worker-coder/tests/promotion_workspace.test.js                -> PASS (`shadow` no-apply + `promote` apply + out-of-scope block) (2026-03-11)
+validate:worker_coding_cohort_execute (debug FE+BE)           -> PASS 2 / 2 (2026-03-11)
+validate:worker_coding_cohort_execute (debug FE+BE, shadow mode) -> PASS 2 / 2 (2026-03-11)
+validate:worker_coding_cohort_execute (BE only)               -> PASS 1 / 1 (2026-03-11)
+validate:worker_coding_cohort_execute (full four-case cohort) -> PASS 4 / 4 (2026-03-11)
+validate:worker_coding_cohort_execute (full four-case cohort, shadow mode) -> PASS 4 / 4 (2026-03-11)
 ```
 
 ---
@@ -368,10 +389,24 @@ Recently cleared:
 - latest cohort artifact recorded at `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T08-57-01-157Z/worker_coding_cohort_result.json`; result is now `4 fail / 0 partial / 0 pass`, which is a more truthful signal after live verification enforcement:
   - `fe_create`, `fe_modify`, `bug_fix`: `verification_failure`
   - `be_create`: `coding_logic_failure`
-- residual follow-up is now clear and bounded:
-  - FE cohort cases fail under enforced verification rather than silent partial success
-  - BE cohort case fails under coding logic rather than verification-only labeling
-  - the earlier `partial` signal should no longer be used as readiness evidence
+- `infra/docker-compose.yml` updated so `worker-coder` now mounts live repo source into `/app`, removing stale-image runtime drift during live validation.
+- `orchestrator/src/coding_executor.js` updated so `verification_plan`, `task_class`, `beta_template_id`, and `context_envelope` are preserved in coding-executor requests.
+- `orchestrator/scripts/run_worker_coding_cohort.js` updated to isolate non-focused implementation steps for debug cohorts, classify scope-guard failures correctly, and treat achieved verification supersets as pass.
+- `worker-coder/scoped_delta.js` and `worker-coder/coding_service.js` updated so single-file targets no longer fabricate out-of-scope fallback stub files when no implementation delta is produced.
+- `worker-coder/isolation_workspace.js` landed to create isolated workspace manifests and scoped shadow copies behind `CODER_ISOLATION_MODE=scaffold|shadow`; current runtime remains main-workspace execution until promotion logic is implemented.
+- `worker-coder/coding_service.js`, `worker-coder/coding_executor_runtime.js`, and `worker-coder/adapters/opencode_adapter.js` now support shadow-mode isolated execution so delegate/static-check/verification failures do not mutate the main workspace before promotion support exists.
+- `worker-coder/promotion_workspace.js` now adds promotion preflight plus explicit `promote` mode, validating changed files against `target_paths` before any main-workspace write is applied.
+- live shadow-mode debug cohort evidence shows `isolation_mode=shadow` and `promotion.applied=false` in worker step diagnostics while artifact roots remain stable.
+- `orchestrator/src/workflow_engine.js` now fails workflow finalization closed when artifact-pack generation throws, preventing the prior `all steps succeeded but run stayed running` state from persisting silently.
+- `orchestrator/test/workflow_finalization.test.js` added to lock both terminal success closeout and finalization-failure closeout semantics.
+- `orchestrator/scripts/run_worker_coding_cohort.js` still contains temporary terminal-state inference for reporting continuity, but that path is no longer the desired steady-state evidence source after workflow-engine hardening.
+- `orchestrator/src/vnext/result_consumer.js` now reclaims stale pending result-stream messages before reading new ones and logs per-message failures instead of silently sleeping the whole loop.
+- `orchestrator/src/data/task_repository.js` now only marks tasks `running` when they are still `queued` or `waiting_approval`, preventing recovered stale `claimed` messages from regressing terminal task state.
+- `orchestrator/test/result_consumer_recovery.test.js` added to lock stale-result recovery and fresh-result processing behavior.
+- shadow-mode debug cohort artifact recorded at `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T14-02-24-449Z/worker_coding_cohort_result.json`; result is `2 pass / 0 fail / 0 partial`.
+- shadow-mode full cohort artifact recorded at `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T14-14-49-306Z/worker_coding_cohort_result.json`; result is `4 pass / 0 fail / 0 partial`, showing the recovered baseline is preserved under isolated `shadow` execution.
+- final recovery artifact recorded at `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T12-56-17-290Z/worker_coding_cohort_result.json`; result is now `4 pass / 0 fail / 0 partial`, restoring worker-coding cohort readiness evidence under truthful verification enforcement.
+- post-restart debug shadow artifact recorded at `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T23-20-45-381Z/worker_coding_cohort_result.json`; result is `2 pass / 0 fail / 0 partial`, confirming pending backlog recovery after orchestrator restart.
 - `worker-coder/tests/startup_smoke.test.js` added to check worker entrypoint import wiring and key module syntax guards before container startup.
 - `worker-coder/adapters/opencode_adapter.js` live-validation mock outputs aligned with current implementation-step handoff and schema governance so full live gate now passes.
 

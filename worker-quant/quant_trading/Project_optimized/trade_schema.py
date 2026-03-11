@@ -330,19 +330,51 @@ def ensure_news_tables(conn: sqlite3.Connection) -> None:
         """
     )
 
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS sentiment_model_eval (
-            model_version TEXT PRIMARY KEY,
-            eval_date TEXT NOT NULL,
-            golden_set_size INTEGER,
-            macro_f1 REAL,
-            mean_abs_drift REAL,
-            passed BOOLEAN,
-            eval_detail_json TEXT
+    # sentiment_model_eval: composite PK (model_version, eval_date) to preserve history.
+    # Migration: if old single-PK table exists, rename and recreate.
+    old_schema = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='sentiment_model_eval'"
+    ).fetchone()
+    if old_schema and "model_version TEXT PRIMARY KEY" in (old_schema[0] or ""):
+        conn.execute("ALTER TABLE sentiment_model_eval RENAME TO sentiment_model_eval_old")
+        conn.execute(
+            """
+            CREATE TABLE sentiment_model_eval (
+                model_version    TEXT NOT NULL,
+                eval_date        TEXT NOT NULL,
+                golden_set_size  INTEGER,
+                macro_f1         REAL,
+                mean_abs_drift   REAL,
+                passed           BOOLEAN,
+                eval_detail_json TEXT,
+                PRIMARY KEY (model_version, eval_date)
+            )
+            """
         )
-        """
-    )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO sentiment_model_eval
+            SELECT model_version, eval_date, golden_set_size, macro_f1,
+                   mean_abs_drift, passed, eval_detail_json
+            FROM sentiment_model_eval_old
+            """
+        )
+        conn.execute("DROP TABLE sentiment_model_eval_old")
+    else:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sentiment_model_eval (
+                model_version    TEXT NOT NULL,
+                eval_date        TEXT NOT NULL,
+                golden_set_size  INTEGER,
+                macro_f1         REAL,
+                mean_abs_drift   REAL,
+                passed           BOOLEAN,
+                eval_detail_json TEXT,
+                PRIMARY KEY (model_version, eval_date)
+            )
+            """
+        )
 
     conn.execute(
         """

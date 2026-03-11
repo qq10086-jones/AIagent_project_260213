@@ -23,7 +23,15 @@
       "Bash(rm:*)",
       "Bash(sqlite3:*)",
       "Bash(pip show:*)",
-      "Bash(set:*)"
+      "Bash(set:*)",
+      "Bash(BASE=\"E:/AIagent_project_260213/worker-quant/quant_trading/Project_optimized\")",
+      "Bash(mkdir -p \"$BASE/news/design\")",
+      "Bash(mv \"$BASE/design/NEWS_SYSTEM_DESIGN_v1.md\" \"$BASE/news/design/NEWS_SYSTEM_DESIGN_v1.md\")",
+      "Bash(mv \"$BASE/design/NEWS_GOVERNANCE_v1.md\" \"$BASE/news/design/NEWS_GOVERNANCE_v1.md\")",
+      "Bash(mv \"$BASE/design/NEWS_SYSTEM_TASKS_v1.md\" \"$BASE/news/design/NEWS_SYSTEM_TASKS_v1.md\")",
+      "Bash(rmdir \"$BASE/design\")",
+      "Read(//e/AIagent_project_260213/$BASE/**)",
+      "Read(//e/AIagent_project_260213/$BASE/news/**)"
     ]
   }
 }

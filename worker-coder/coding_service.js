@@ -19,6 +19,12 @@ import {
     gatherGitSummary,
 } from './scoped_delta.js';
 import {
+    materializeIsolationWorkspace,
+} from './isolation_workspace.js';
+import {
+    promoteIsolatedChanges,
+} from './promotion_workspace.js';
+import {
     clampInt,
     runStaticChecks,
 } from './static_checks.js';
@@ -61,6 +67,7 @@ function payloadToAdapterRequest({
     model,
     run_id,
     task_id,
+    artifact_workspace_root,
 }) {
     return {
         adapter_type: "coding_executor",
@@ -83,6 +90,7 @@ function payloadToAdapterRequest({
         context: {
             run_id: String(run_id || ""),
             task_id: String(task_id || ""),
+            artifact_workspace_root: String(artifact_workspace_root || ""),
         },
     };
 }
@@ -317,8 +325,39 @@ export const CodingService = {
         } catch (e) {
             return { ok: false, error: `Failed to prepare artifacts dir: ${e.message}` };
         }
+        let isolationScaffold = null;
+        try {
+            isolationScaffold = materializeIsolationWorkspace({
+                workspaceRoot,
+                taskDir,
+                targetPaths: effectiveTargetPaths,
+            });
+        } catch (err) {
+            isolationScaffold = {
+                enabled: false,
+                mode: "error",
+                isolatedWorkspaceRoot: null,
+                artifacts: {
+                    execution_mode: null,
+                    baseline_manifest: null,
+                    isolated_workspace_manifest: null,
+                },
+                diagnostics: {
+                    isolation_mode: "error",
+                    enabled: false,
+                    error: String(err?.message || err || "unknown isolation scaffold error"),
+                },
+            };
+        }
 
         const baselineSnapshot = captureScopedSnapshot(workspaceRoot, effectiveTargetPaths);
+        const executionWorkspaceRoot = isolationScaffold?.enabled && isolationScaffold?.isolatedWorkspaceRoot
+            ? isolationScaffold.isolatedWorkspaceRoot
+            : workspaceRoot;
+        const isolationMode = String(isolationScaffold?.mode || "disabled");
+        const executionBaselineSnapshot = isolationScaffold?.enabled
+            ? captureScopedSnapshot(executionWorkspaceRoot, effectiveTargetPaths)
+            : baselineSnapshot;
         const started = new Date().toISOString();
         const startedMs = Date.now();
         const maxAttemptsSafe = clampInt(max_attempts, 1, 3, 1);
@@ -408,9 +447,11 @@ export const CodingService = {
                 model,
                 run_id,
                 task_id,
+                artifact_workspace_root: workspaceRoot,
             });
             const result = await executeCodingAdapter({
-                workspaceRoot,
+                workspaceRoot: executionWorkspaceRoot,
+                artifactWorkspaceRoot: workspaceRoot,
                 adapterRequest,
                 provider: preferredProvider,
                 model,
@@ -443,16 +484,17 @@ export const CodingService = {
                 fs.writeFileSync(stderrPath, redactedStderr, "utf8");
             } catch {}
 
-            const gitSummary = await gatherGitSummary(workspaceRoot, taskDir, baselineSnapshot, effectiveTargetPaths);
+            const gitSummary = await gatherGitSummary(executionWorkspaceRoot, taskDir, executionBaselineSnapshot, effectiveTargetPaths);
             const finalGitSummary = result?.ok
                 ? await ensureImplementationDelta({
-                    workspaceRoot,
+                    workspaceRoot: executionWorkspaceRoot,
                     stepId: step_id,
                     taskId: task_id,
                     executionAdapterPacket: execution_adapter_packet,
+                    targetPaths: effectiveTargetPaths,
                     taskPrompt: effectivePrompt,
                     taskDir,
-                    baselineSnapshot,
+                    baselineSnapshot: executionBaselineSnapshot,
                     current: gitSummary,
                 })
                 : gitSummary;
@@ -494,7 +536,7 @@ export const CodingService = {
 
             const staticCheck = result?.ok
                 ? await runStaticChecks({
-                    workspaceRoot,
+                    workspaceRoot: executionWorkspaceRoot,
                     filesChanged: finalGitSummary?.filesChanged || [],
                     taskDir,
                 })
@@ -502,7 +544,7 @@ export const CodingService = {
 
             const verification = result?.ok
                 ? await runVerificationPlan({
-                    workspaceRoot,
+                    workspaceRoot: executionWorkspaceRoot,
                     verificationPlan: verification_plan,
                     verificationCommand: verification_command,
                     taskDir,
@@ -596,6 +638,74 @@ export const CodingService = {
                     contextEnvelope: taskContract.context_envelope,
                 });
             } else {
+                const promotion = isolationScaffold?.enabled
+                    ? promoteIsolatedChanges({
+                        workspaceRoot,
+                        isolatedWorkspaceRoot: executionWorkspaceRoot,
+                        taskDir,
+                        filesChanged: finalGitSummary.filesChanged,
+                        allowedTargetPaths: effectiveTargetPaths,
+                        mode: isolationMode,
+                    })
+                    : {
+                        ok: true,
+                        applied: false,
+                        rollbackPerformed: false,
+                        error: null,
+                        artifacts: {
+                            promotion_preflight: null,
+                            promotion_result: null,
+                        },
+                    };
+                if (!promotion.ok) {
+                    finalSummary = buildDelegateFailureSummary({
+                        workspaceRoot,
+                        runId: run_id,
+                        taskId: task_id,
+                        stepId: step_id,
+                        providerRequested,
+                        providerUsed: result.provider_used || preferredProvider,
+                        targetPaths: effectiveTargetPaths,
+                        finalGitSummary,
+                        stdoutPath,
+                        stderrPath,
+                        staticCheck,
+                        verification,
+                        adapterResult: result,
+                        verificationCommand: verification.command || verification_command,
+                        promptContract,
+                        redactedStdout,
+                        redactedStderr,
+                        startedAt: started,
+                        phase: "promotion",
+                        summaryText: "isolated execution succeeded but promotion into main workspace failed",
+                        testResult: "passed",
+                        errorCode: "E_PROMOTION_FAILED",
+                        error: promotion.error || "promotion failed",
+                        taskClass: taskContract.task_class,
+                        betaTemplateId: taskContract.beta_template_id,
+                        contextEnvelope: taskContract.context_envelope,
+                    });
+                    finalSummary.artifacts = {
+                        ...(finalSummary.artifacts || {}),
+                        isolation_execution_mode: isolationScaffold?.artifacts?.execution_mode || null,
+                        isolation_baseline_manifest: isolationScaffold?.artifacts?.baseline_manifest || null,
+                        isolation_workspace_manifest: isolationScaffold?.artifacts?.isolated_workspace_manifest || null,
+                        promotion_preflight: promotion.artifacts?.promotion_preflight || null,
+                        promotion_result: promotion.artifacts?.promotion_result || null,
+                    };
+                    finalSummary.diagnostics = {
+                        ...(finalSummary.diagnostics || {}),
+                        isolation: isolationScaffold?.diagnostics || null,
+                        execution_workspace_root: executionWorkspaceRoot,
+                        promotion: {
+                            ok: promotion.ok,
+                            applied: promotion.applied,
+                            rollback_performed: promotion.rollbackPerformed,
+                        },
+                    };
+                    break;
+                }
                 finalSummary = {
                     ok: true,
                     provider_used: result.provider_used || preferredProvider,
@@ -605,12 +715,17 @@ export const CodingService = {
                     diff_stats: finalGitSummary.diffStats,
                     test_result: verification.checked ? "passed" : "skipped",
                     git: finalGitSummary.git,
-                    rollback_performed: false,
+                    rollback_performed: Boolean(promotion.rollbackPerformed),
                     artifacts: {
                         diff_bundle: finalGitSummary.diffPath,
                         patch_file: null,
                         test_log: verification.logPath || staticCheck.logPath || null,
                         prompt_contract: promptContract.path || null,
+                        isolation_execution_mode: isolationScaffold?.artifacts?.execution_mode || null,
+                        isolation_baseline_manifest: isolationScaffold?.artifacts?.baseline_manifest || null,
+                        isolation_workspace_manifest: isolationScaffold?.artifacts?.isolated_workspace_manifest || null,
+                        promotion_preflight: promotion.artifacts?.promotion_preflight || null,
+                        promotion_result: promotion.artifacts?.promotion_result || null,
                         raw_stdout: stdoutPath,
                         raw_stderr: stderrPath,
                     },
@@ -625,6 +740,13 @@ export const CodingService = {
                         prompt_contract: promptContract.diagnostics,
                         static_check: staticCheck,
                         verification,
+                        isolation: isolationScaffold?.diagnostics || null,
+                        execution_workspace_root: executionWorkspaceRoot,
+                        promotion: {
+                            ok: promotion.ok,
+                            applied: promotion.applied,
+                            rollback_performed: promotion.rollbackPerformed,
+                        },
                         verification_plan: Array.isArray(verification_plan) ? verification_plan : [],
                         retry_summary: {
                             attempts_used: attemptIndex,
@@ -678,6 +800,17 @@ export const CodingService = {
         }
 
         if (finalSummary && !finalSummary.ok) {
+            finalSummary.artifacts = {
+                ...(finalSummary.artifacts || {}),
+                isolation_execution_mode: isolationScaffold?.artifacts?.execution_mode || null,
+                isolation_baseline_manifest: isolationScaffold?.artifacts?.baseline_manifest || null,
+                isolation_workspace_manifest: isolationScaffold?.artifacts?.isolated_workspace_manifest || null,
+            };
+            finalSummary.diagnostics = {
+                ...(finalSummary.diagnostics || {}),
+                isolation: isolationScaffold?.diagnostics || null,
+                execution_workspace_root: executionWorkspaceRoot,
+            };
             finalSummary.diagnostics.retry_summary = {
                 ...(finalSummary.diagnostics.retry_summary || {}),
                 attempts_used: attemptRecords.length || Number(finalSummary?.diagnostics?.retry_summary?.attempts_used || 1),

@@ -48,9 +48,34 @@ async function main() {
     baselineSnapshot: noDeltaBaseline,
     current: emptyCurrent,
   });
-  assert.equal(recovered.diffStats.files, 1);
-  assert.equal(recovered.filesChanged[0], "sandbox/crm_site/workflow_impl_be_stub_task-empty.js");
-  assert.ok(fs.existsSync(path.join(fallbackWorkspaceRoot, recovered.filesChanged[0])));
+  assert.equal(recovered.diffStats.files, 0);
+  assert.deepEqual(recovered.filesChanged, []);
+  assert.equal(
+    fs.existsSync(path.join(fallbackWorkspaceRoot, "sandbox", "crm_site", "workflow_impl_be_stub_task-empty.js")),
+    false,
+  );
+
+  const dirFallbackWorkspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scoped-delta-dir-fallback-"));
+  const dirFallbackTaskDir = path.join(dirFallbackWorkspaceRoot, "artifacts", "runs", "run-3", "task_3");
+  fs.mkdirSync(dirFallbackTaskDir, { recursive: true });
+
+  const dirBaseline = captureScopedSnapshot(dirFallbackWorkspaceRoot, ["sandbox/crm_site"]);
+  const recoveredDir = await ensureImplementationDelta({
+    workspaceRoot: dirFallbackWorkspaceRoot,
+    stepId: "impl_fe",
+    taskId: "task-dir",
+    executionAdapterPacket: { target_paths: ["sandbox/crm_site"] },
+    taskPrompt: "Implement frontend.",
+    taskDir: dirFallbackTaskDir,
+    baselineSnapshot: dirBaseline,
+    current: emptyCurrent,
+  });
+  assert.equal(recoveredDir.diffStats.files, 1);
+  assert.deepEqual(recoveredDir.filesChanged, ["sandbox/crm_site/workflow_impl_fe_stub_task-dir.js"]);
+  assert.equal(
+    fs.existsSync(path.join(dirFallbackWorkspaceRoot, "sandbox", "crm_site", "workflow_impl_fe_stub_task-dir.js")),
+    true,
+  );
 
   console.log("scoped_delta.test.js: all tests passed");
 }

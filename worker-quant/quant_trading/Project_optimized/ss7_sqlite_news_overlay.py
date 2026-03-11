@@ -379,6 +379,7 @@ class NewsConfig:
     """
     enabled: bool = False
     csv_path: Optional[str] = None
+    db_path: Optional[str] = None   # preferred: read directly from SQLite feature_daily
 
     # factor construction
     half_life_days: float = 3.0        # exponential decay half-life
@@ -428,6 +429,112 @@ def load_news_items(csv_path: str) -> pd.DataFrame:
     out["sent"] = out["sent"].clip(-1.0, 1.0)
     out = out.sort_values("date")
     return out
+
+
+def load_news_items_from_db(db_path: str, cutoff_ts: Optional[str] = None) -> pd.DataFrame:
+    """Load news sentiment signal from SQLite, returning date/ticker/sent/weight/conf.
+
+    Primary source: news_feed JOIN news_sentiment (populated by news_analyzer.py).
+    Fallback source: feature_daily WHERE feature_name='news_risk_raw' (legacy).
+
+    Governance compliance (NEWS_GOVERNANCE_v1.md):
+      Rule 1.2/1.3 — PIT: when cutoff_ts is given, filters
+                     published_ts < cutoff_ts AND ingested_ts < cutoff_ts.
+      Rule 2.1     — Any DB error returns empty DataFrame; never raises.
+      Rule 5.2     — Per event_cluster_id only the earliest-ingested article's
+                     score is used, preventing duplicate-report signal inflation.
+
+    Parameters
+    ----------
+    db_path   : path to japan_market.db
+    cutoff_ts : ISO-8601 order_time for PIT filtering (None = live mode, no filter)
+    """
+    import sqlite3 as _sqlite3
+
+    _EMPTY = pd.DataFrame(columns=["date", "ticker", "sent", "weight", "conf"])
+
+    try:
+        conn = _sqlite3.connect(db_path)
+
+        # ------------------------------------------------------------------
+        # Primary path: news_feed + news_sentiment
+        # Uses latest non-TIMEOUT score per news_id (subquery on scored_ts).
+        # Governance Rule 5.2: within a cluster keep only the earliest ingested row.
+        # ------------------------------------------------------------------
+        pit_clause = (
+            "AND nf.published_ts < :cutoff AND nf.ingested_ts < :cutoff"
+            if cutoff_ts else ""
+        )
+        sql = f"""
+            SELECT
+                nf.published_ts          AS date,
+                nf.symbol                AS ticker,
+                ns.sentiment_score       AS sent,
+                COALESCE(ns.urgency, 1.0) AS weight,
+                1.0                      AS conf
+            FROM news_feed nf
+            INNER JOIN (
+                SELECT news_id, sentiment_score, urgency
+                FROM news_sentiment
+                WHERE scored_ts != 'TIMEOUT'
+                GROUP BY news_id
+                HAVING scored_ts = MAX(scored_ts)
+            ) ns ON nf.news_id = ns.news_id
+            WHERE (
+                nf.event_cluster_id IS NULL
+                OR nf.ingested_ts = (
+                    SELECT MIN(nf2.ingested_ts)
+                    FROM news_feed nf2
+                    WHERE nf2.event_cluster_id = nf.event_cluster_id
+                )
+            )
+            {pit_clause}
+            ORDER BY nf.published_ts
+        """
+        params = {"cutoff": cutoff_ts} if cutoff_ts else {}
+        rows = conn.execute(sql, params).fetchall()
+
+        # ------------------------------------------------------------------
+        # Fallback: feature_daily (legacy risk scores from worker.py)
+        # Used during transition while news_sentiment is still empty.
+        # ------------------------------------------------------------------
+        if not rows:
+            print("   [news_db] news_sentiment empty — falling back to feature_daily")
+            pit_sql = " AND asof <= :cutoff" if cutoff_ts else ""
+            legacy_rows = conn.execute(
+                f"SELECT asof, symbol, value FROM feature_daily"
+                f" WHERE feature_name='news_risk_raw'{pit_sql}",
+                {"cutoff": cutoff_ts} if cutoff_ts else {},
+            ).fetchall()
+            conn.close()
+
+            if not legacy_rows:
+                return _EMPTY
+            out = pd.DataFrame(legacy_rows, columns=["date", "ticker", "sent"])
+            out["date"] = pd.to_datetime(out["date"], errors="coerce")
+            out["sent"] = pd.to_numeric(out["sent"], errors="coerce").fillna(0.0).apply(
+                lambda v: float(-v)  # invert risk → sentiment
+            ).clip(-1.0, 1.0)
+            out["weight"] = 1.0
+            out["conf"] = 1.0
+            out = out.dropna(subset=["date", "ticker"])
+            out["ticker"] = out["ticker"].astype(str)
+            return out.sort_values("date")
+
+        conn.close()
+
+    except Exception as exc:
+        print(f"   [news_db] query failed: {exc}")
+        return _EMPTY
+
+    out = pd.DataFrame(rows, columns=["date", "ticker", "sent", "weight", "conf"])
+    out["date"] = pd.to_datetime(out["date"], errors="coerce")
+    out["sent"] = pd.to_numeric(out["sent"], errors="coerce").fillna(0.0).clip(-1.0, 1.0)
+    out["weight"] = pd.to_numeric(out["weight"], errors="coerce").fillna(1.0).clip(lower=0.0)
+    out["conf"] = 1.0
+    out = out.dropna(subset=["date", "ticker"])
+    out["ticker"] = out["ticker"].astype(str)
+    return out.sort_values("date")
 
 def build_news_factors(
     dates: pd.Index,
@@ -817,11 +924,26 @@ def backtest(bt: BTConfig, ex: ExecConfig):
 
     # ---- optional news overlay precompute ----
     F_news = A_news = U_news = None
-    if bt.news.enabled and bt.news.csv_path:
+    if bt.news.enabled:
         try:
-            items = load_news_items(bt.news.csv_path)
-            F_news, A_news, U_news = build_news_factors(dates=dates, tickers=trade_tickers, items=items, cfg=bt.news)
-            print(f"   News overlay: enabled, items={len(items):,}, half_life={bt.news.half_life_days}d")
+            if bt.news.db_path:
+                # PIT cutoff: backtest end date prevents using future-ingested news.
+                # In live mode bt.end is None → no cutoff (all ingested data is past).
+                items = load_news_items_from_db(bt.news.db_path, cutoff_ts=bt.end)
+                src_label = f"db:{bt.news.db_path}"
+            elif bt.news.csv_path:
+                items = load_news_items(bt.news.csv_path)
+                src_label = f"csv:{bt.news.csv_path}"
+            else:
+                items = None
+                src_label = "none"
+
+            if items is not None and len(items) > 0:
+                F_news, A_news, U_news = build_news_factors(dates=dates, tickers=trade_tickers, items=items, cfg=bt.news)
+                print(f"   News overlay: enabled ({src_label}), items={len(items):,}, half_life={bt.news.half_life_days}d")
+            else:
+                print(f"   News overlay: no items loaded ({src_label}); disabled.")
+                bt.news.enabled = False
         except Exception as e:
             print(f"   News overlay: failed to load ({e}); disabled.")
             bt.news.enabled = False
@@ -1252,9 +1374,13 @@ if __name__ == "__main__":
     )
 
     # ---- optional: News overlay (external gating/risk layer) ----
-    # Enable by setting SS6_NEWS_CSV to a csv path and SS6_NEWS_ON=1
+    # Preferred: SS6_NEWS_DB=<path/to/japan_market.db> (reads feature_daily directly)
+    # Fallback:  SS6_NEWS_CSV=<path/to/news.csv> + SS6_NEWS_ON=1
     bt.news.enabled = (os.getenv("SS6_NEWS_ON", "0") == "1")
+    bt.news.db_path = os.getenv("SS6_NEWS_DB", None) or None
     bt.news.csv_path = os.getenv("SS6_NEWS_CSV", None)
+    if bt.news.db_path:
+        bt.news.enabled = True  # DB path alone is sufficient to enable overlay
     bt.news.half_life_days = float(os.getenv("SS6_NEWS_HALF_LIFE_DAYS", str(bt.news.half_life_days)))
     bt.news.lookback_days = int(os.getenv("SS6_NEWS_LOOKBACK_DAYS", str(bt.news.lookback_days)))
     bt.news.A_max = float(os.getenv("SS6_NEWS_A_MAX", str(bt.news.A_max)))

@@ -1,0 +1,17 @@
+# News Worker - Python dependencies
+# Install: pip install -r news/requirements.txt
+#
+# Core (required for news_ingester.py)
+requests>=2.31.0
+
+# LLM scoring (required for news_analyzer.py and eval_golden_set.py)
+# Set ANTHROPIC_API_KEY env var before use
+anthropic>=0.40.0
+
+# NLP / clustering (required for news_analyzer.py event clustering)
+# If unavailable, analyzer falls back gracefully (clustering step skipped)
+scikit-learn>=1.3.0
+numpy>=1.24.0
+
+# Standard library only - no extra deps needed for:
+#   data_archiver.py, qa_pit_regression.py, validate_sources.py

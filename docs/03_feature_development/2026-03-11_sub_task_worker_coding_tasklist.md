@@ -4,6 +4,9 @@
 - Status: DRAFT FOR REVIEW
 - Scope: next-stage worker-coding capability uplift after M9 closeout and next-stage hardening completion
 
+> Note: this file is now a simplified companion note. The authoritative worker-coding execution plan is:
+> `docs/01_design/coding/260311/OpenClaw_Nexus_Worker_Coding_Task_List_v2.md`
+
 ---
 
 ## 1. Decision

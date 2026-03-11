@@ -1462,34 +1462,12 @@ def run_optimized_pipeline(payload: dict):
             try: f.unlink()
             except: pass
             
-    # --- Generate SS7 News Overlay CSV ---
-    csv_path = base_dir / "news_overlay.csv"
+    # --- News Overlay: pass DB path directly, no CSV intermediate ---
     db_path = base_dir / "japan_market.db"
-    has_news = False
-    try:
-        if db_path.exists():
-            import csv
-            conn = sqlite3.connect(str(db_path))
-            cur = conn.cursor()
-            cur.execute("SELECT asof, symbol, value FROM feature_daily WHERE feature_name='news_risk_raw'")
-            rows = cur.fetchall()
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-                w = csv.writer(f)
-                w.writerow(["date", "ticker", "sent", "weight", "conf"])
-                for r in rows:
-                    # Invert risk: High risk -> Negative sentiment
-                    w.writerow([r[0], r[1], -float(r[2]), 1.0, 1.0])
-                    has_news = True
-            conn.close()
-    except Exception as e:
-        print(f"Failed to generate news CSV: {e}")
-    
     my_env = os.environ.copy()
     my_env["PYTHONPATH"] = str(base_dir) + ":" + my_env.get("PYTHONPATH", "")
-    
-    if has_news:
-        my_env["SS6_NEWS_ON"] = "1"
-        my_env["SS6_NEWS_CSV"] = "news_overlay.csv"
+    if db_path.exists():
+        my_env["SS6_NEWS_DB"] = str(db_path)
         
     res = subprocess.run(["python", "run_pipeline.py", "--config", "config.yaml"], cwd=str(base_dir), capture_output=True, text=True, timeout=600, env=my_env)
     

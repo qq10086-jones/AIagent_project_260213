@@ -29,6 +29,7 @@ Reasons:
 Remaining concern:
 
 - runtime lifecycle consistency must remain a first-class regression axis as the system scales
+- single-file worker-coding scope semantics must remain locked down so no fallback path can reintroduce out-of-scope writes
 
 ## Findings
 
@@ -71,6 +72,24 @@ Validation after the fix:
 New targeted coverage:
 
 - `worker-coder/tests/git_side_effects.test.js`
+
+### P1 Fixed During Review
+
+`worker-coder/scoped_delta.js` previously emitted deterministic fallback stub files even when the allowed target scope was a single file such as `sandbox/crm_site/app.js` or `sandbox/crm_site/server.js`. Under truthful live cohort validation, that behavior produced `E_UNAUTHORIZED_WRITE` noise and distorted readiness evidence.
+
+This has now been fixed by:
+
+- mounting live `worker-coder` source into container `/app`
+- preserving `verification_plan` and task-contract fields through orchestrator request building
+- disabling stub fallback for single-file implementation targets
+- correcting cohort result logic so verification supersets satisfy target tiers
+
+Validation after the fix:
+
+- `node worker-coder/tests/scoped_delta.test.js` -> `PASS`
+- debug BE-only cohort -> `PASS`
+- debug FE+BE cohort -> `PASS`
+- full four-case worker-coding cohort -> `PASS 4 / 4`
 
 ## Architecture Assessment
 

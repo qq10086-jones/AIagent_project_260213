@@ -1,0 +1,14 @@
+{
+  "workspace_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/finalization_failure",
+  "target_paths": [],
+  "directory_summary": [],
+  "candidate_files": [],
+  "entrypoints": [],
+  "related_tests": [],
+  "key_config_files": [],
+  "toolchain_facts": [],
+  "symbol_hints": [],
+  "recent_changed_files": [
+    "sandbox/crm_site/"
+  ]
+}

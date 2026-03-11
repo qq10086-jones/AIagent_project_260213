@@ -1,0 +1,101 @@
+news_id,title,symbol,published_ts,source,sentiment_label,urgency_label,notes
+gs001,"NTT決算発表、純利益前年比32%増 — 通期予想を上方修正",9432.T,2026-01-15T09:00:00Z,google_news_rss,bullish,0.8,earnings beat + raised guidance
+gs002,"ソフトバンクグループ、孫氏が大規模リストラ計画を発表 — 社員3000人削減",9984.T,2026-01-10T06:30:00Z,google_news_rss,bearish,0.9,mass layoff announcement
+gs003,"トヨタ自動車、EV新モデル発表 — 2027年に北米市場へ投入予定",7203.T,2026-01-20T08:00:00Z,tdnet,bullish,0.5,product roadmap, moderate urgency
+gs004,"三菱UFJ、不良債権比率が業界最低水準に改善",8306.T,2026-01-18T10:00:00Z,google_news_rss,bullish,0.4,gradual positive signal
+gs005,"東京電力、原子力規制委員会の検査で指摘事項 — 株価一時3%下落",9501.T,2026-01-22T11:00:00Z,tdnet,bearish,0.8,regulatory issue
+gs006,"ソニーグループ、ゲーム部門売上が予想を下回る",6758.T,2026-01-25T07:30:00Z,google_news_rss,bearish,0.6,earnings miss
+gs007,"任天堂、新型ゲーム機の予約受付開始 — 初日で100万台突破",7974.T,2026-01-28T09:15:00Z,google_news_rss,bullish,0.7,strong product launch
+gs008,"信越化学工業、半導体市況の影響で受注が横ばい",4063.T,2026-01-12T08:45:00Z,tdnet,neutral,0.3,flat guidance
+gs009,"KDDI、5G基地局の整備目標を達成 — 予定通りの進捗",9433.T,2026-01-14T10:30:00Z,google_news_rss,neutral,0.2,in-line with expectations
+gs010,"ファナック、中国向け工作機械の受注が前期比20%減",6954.T,2026-01-16T08:00:00Z,tdnet,bearish,0.7,China demand weakness
+gs011,"富士フイルム、医療機器部門の売上が過去最高を更新",4901.T,2026-01-19T09:30:00Z,google_news_rss,bullish,0.6,record segment revenue
+gs012,"大和証券グループ、自己株式取得を発表 — 上限500億円",8601.T,2026-01-21T10:00:00Z,tdnet,bullish,0.5,buyback positive signal
+gs013,"オリエンタルランド、TDR入場者数が過去最高水準",4661.T,2026-01-23T08:30:00Z,google_news_rss,bullish,0.4,operational strength
+gs014,"川崎重工業、潜水艦機密漏洩問題で社内調査を実施中",7012.T,2026-01-26T11:00:00Z,tdnet,bearish,0.9,governance scandal
+gs015,"日本製鉄、鉄鉱石コスト上昇を価格転嫁へ — 交渉中",5401.T,2026-01-27T08:00:00Z,google_news_rss,neutral,0.4,cost pass-through in progress
+gs016,"塩野義製薬、コロナ治療薬の海外承認申請を提出",4507.T,2026-01-29T09:00:00Z,tdnet,bullish,0.7,regulatory filing catalyst
+gs017,"東京海上ホールディングス、自然災害保険金支払いが増加",8766.T,2026-01-30T10:15:00Z,google_news_rss,bearish,0.5,cost headwind from disasters
+gs018,"村田製作所、スマートフォン向け部品需要が回復傾向",6981.T,2026-01-31T08:45:00Z,google_news_rss,bullish,0.5,demand recovery
+gs019,"中外製薬、主力抗がん剤の後発品参入で売上影響懸念",4519.T,2026-02-01T09:00:00Z,google_news_rss,bearish,0.6,generic competition risk
+gs020,"リクルートホールディングス、Indeed事業が堅調 — 通期見通し据置",6098.T,2026-02-02T10:00:00Z,tdnet,neutral,0.3,in-line guidance maintained
+gs021,"パナソニック、電池事業の設備投資を前期比50%増加",6752.T,2026-02-03T08:30:00Z,google_news_rss,bullish,0.5,capex expansion for EV batteries
+gs022,"三菱商事、資源価格下落で営業利益が前年比15%減の見通し",8058.T,2026-02-04T09:15:00Z,tdnet,bearish,0.6,commodity headwind
+gs023,"キーエンス、FA投資の回復で受注が想定を上回る",6861.T,2026-02-05T08:00:00Z,google_news_rss,bullish,0.7,upside surprise on orders
+gs024,"NTTデータグループ、海外M&Aで1000億円の特別損失",9613.T,2026-02-06T11:00:00Z,tdnet,bearish,0.8,impairment charge
+gs025,"Honda Motor, Q3 earnings beat estimates; raises full-year EPS guidance",7267.T,2026-02-07T08:30:00Z,google_news_rss,bullish,0.7,earnings beat + raised FY guide
+gs026,"Mazda Motor, recall of 120,000 vehicles due to brake defect",7261.T,2026-02-08T09:00:00Z,google_news_rss,bearish,0.7,safety recall
+gs027,"Nidec forecasts FY2026 revenue in line with analyst consensus",6594.T,2026-02-09T10:00:00Z,google_news_rss,neutral,0.2,in-line forecast
+gs028,"Shionogi antiviral granted fast-track designation by FDA",4507.T,2026-02-10T08:45:00Z,google_news_rss,bullish,0.8,FDA fast-track catalyst
+gs029,"Komatsu warns of softer demand in Chinese construction market",6301.T,2026-02-11T09:30:00Z,tdnet,bearish,0.6,China demand warning
+gs030,"Recruit Holdings announces $1B share buyback program",6098.T,2026-02-12T10:00:00Z,google_news_rss,bullish,0.6,buyback announcement
+gs031,"東京エレクトロン、AI向け半導体製造装置の受注が過去最高",8035.T,2026-02-13T08:00:00Z,tdnet,bullish,0.9,AI demand surge - high urgency
+gs032,"住友商事、海外不動産投資で評価損500億円を計上",8053.T,2026-02-14T10:30:00Z,tdnet,bearish,0.8,impairment charge
+gs033,"第一三共、抗体薬物複合体の米国売上が予想を大幅超過",4568.T,2026-02-15T09:00:00Z,google_news_rss,bullish,0.8,major drug revenue beat
+gs034,"ANAホールディングス、燃料費高騰で通期利益予想を下方修正",9202.T,2026-02-16T10:00:00Z,tdnet,bearish,0.7,fuel cost downgrade
+gs035,"ダイキン工業、空調システムの欧州販売が前年比15%増",6367.T,2026-02-17T08:30:00Z,google_news_rss,bullish,0.5,steady growth - moderate
+gs036,"三井物産、LNG事業の収益が予想通りに推移",8031.T,2026-02-18T09:00:00Z,tdnet,neutral,0.2,in-line result
+gs037,"ソニーグループ、映画部門が第三者による買収報道を否定",6758.T,2026-02-19T11:00:00Z,google_news_rss,neutral,0.4,denial of rumor - uncertain
+gs038,"楽天グループ、モバイル事業の赤字縮小傾向が鮮明に",4755.T,2026-02-20T09:30:00Z,google_news_rss,bullish,0.6,loss narrowing positive signal
+gs039,"日産自動車、国内工場の生産ライン一時停止を発表",7201.T,2026-02-21T10:00:00Z,tdnet,bearish,0.7,production halt
+gs040,"ファーストリテイリング、中国ユニクロ店舗の売上が回復",9983.T,2026-02-22T08:00:00Z,google_news_rss,bullish,0.6,China recovery
+gs041,"住友電工、電線需要の低迷が続く見通し",5802.T,2026-02-23T09:00:00Z,tdnet,bearish,0.4,demand weakness - low urgency
+gs042,"AGC、ガラス部門の採算が悪化 — 構造改革を検討中",5201.T,2026-02-24T10:30:00Z,google_news_rss,bearish,0.5,margin pressure + restructuring
+gs043,"任天堂、新作ソフトの発売を1四半期延期と発表",7974.T,2026-02-25T09:00:00Z,tdnet,bearish,0.6,game launch delay
+gs044,"デンソー、EV向けパワーエレクトロニクスの新工場を建設",6902.T,2026-02-26T08:30:00Z,google_news_rss,bullish,0.5,capex for EV growth
+gs045,"みずほフィナンシャルグループ、システム障害が8時間継続",8411.T,2026-02-27T06:00:00Z,tdnet,bearish,0.9,system outage - high urgency
+gs046,"花王、原材料費の上昇分を価格に転嫁できず収益圧迫",4452.T,2026-02-28T09:15:00Z,google_news_rss,bearish,0.5,cost pass-through failure
+gs047,"日東電工、光学フィルム需要がスマートフォン回復で増加",6988.T,2026-03-01T08:00:00Z,tdnet,bullish,0.5,smartphone recovery benefit
+gs048,"セコム、警備事業の安定成長が継続 — 増配を発表",9735.T,2026-03-02T09:00:00Z,google_news_rss,bullish,0.4,dividend increase
+gs049,"キリンホールディングス、医薬事業の売却を検討か — 報道",2503.T,2026-03-03T10:00:00Z,google_news_rss,neutral,0.5,unconfirmed divestiture rumor
+gs050,"三菱地所、東京都心オフィス空室率が低下 — テナント需要堅調",8802.T,2026-03-04T08:30:00Z,tdnet,bullish,0.3,steady office demand
+gs051,"Fujitsu cuts 3,000 jobs globally as part of restructuring plan",6702.T,2026-03-05T09:00:00Z,google_news_rss,bearish,0.8,large-scale layoff
+gs052,"Canon reports Q4 revenue in line with consensus; no guidance change",7751.T,2026-03-06T08:30:00Z,google_news_rss,neutral,0.2,in-line result no surprise
+gs053,"SoftBank Vision Fund posts $4B quarterly loss on tech portfolio",9984.T,2026-03-07T10:00:00Z,google_news_rss,bearish,0.9,large investment loss
+gs054,"Olympus completes divestiture of imaging division; focuses on medtech",7733.T,2026-03-08T09:00:00Z,google_news_rss,bullish,0.5,strategic focus positive
+gs055,"Eisai Alzheimer drug receives additional EU market approval",4523.T,2026-03-09T08:00:00Z,google_news_rss,bullish,0.8,regulatory expansion
+gs056,"JFE Holdings warns on steel margins due to rising iron ore prices",5411.T,2026-03-10T09:30:00Z,tdnet,bearish,0.6,margin compression warning
+gs057,"Hoya Corp optical glass demand recovers on semiconductor capex",7741.T,2026-03-11T08:00:00Z,google_news_rss,bullish,0.6,demand recovery
+gs058,"Tokyo Gas announces record LNG procurement cost",9531.T,2026-03-12T10:00:00Z,tdnet,bearish,0.5,cost headwind
+gs059,"Nippon Steel receives antitrust approval for US acquisition",5401.T,2026-03-13T09:00:00Z,google_news_rss,bullish,0.9,major acquisition cleared
+gs060,"Daiwa Securities reports flat earnings; market conditions cited",8601.T,2026-03-14T08:30:00Z,google_news_rss,neutral,0.2,flat result
+gs061,"武田薬品工業、主力製品の特許切れで売上への影響を警告",4502.T,2026-03-15T09:00:00Z,tdnet,bearish,0.7,patent cliff risk
+gs062,"KDDI、衛星通信サービスを新規参入で開始",9433.T,2026-03-16T08:30:00Z,google_news_rss,bullish,0.5,new service launch
+gs063,"日立製作所、インド市場での受注が倍増",6501.T,2026-03-17T09:00:00Z,tdnet,bullish,0.6,emerging market growth
+gs064,"東京ガス、都市ガス料金の値上げを申請",9531.T,2026-03-18T10:00:00Z,tdnet,neutral,0.4,price hike pending approval
+gs065,"キヤノン、医療機器部門の利益率が改善",7751.T,2026-03-19T08:00:00Z,google_news_rss,bullish,0.4,segment margin improvement
+gs066,"セブン&アイ・ホールディングス、コンビニ海外事業が好調",3382.T,2026-03-20T09:30:00Z,tdnet,bullish,0.5,overseas convenience store growth
+gs067,"ブリヂストン、タイヤ値上げを4月から実施",5108.T,2026-03-21T08:30:00Z,google_news_rss,neutral,0.3,price hike in-line with expectations
+gs068,"TDK、車載用電子部品の需要が想定を下回る",6762.T,2026-03-22T09:00:00Z,tdnet,bearish,0.5,auto demand miss
+gs069,"三菱UFJ、米国債投資で含み損が拡大",8306.T,2026-03-23T10:00:00Z,google_news_rss,bearish,0.7,unrealized bond loss
+gs070,"住友化学、農薬部門のブラジル向け売上が回復",4005.T,2026-03-24T08:00:00Z,tdnet,bullish,0.4,Brazil market recovery
+gs071,"ヤマトホールディングス、EC需要の取り込みで荷物量増加",9064.T,2026-03-25T09:00:00Z,google_news_rss,bullish,0.4,volume growth
+gs072,"資生堂、中国事業の構造改革を加速 — 不採算店舗を閉鎖",4911.T,2026-03-26T10:30:00Z,tdnet,neutral,0.5,restructuring with uncertain outcome
+gs073,"富士通、量子コンピュータの商用サービスを開始",6702.T,2026-03-27T09:00:00Z,google_news_rss,bullish,0.6,emerging tech commercial launch
+gs074,"日本郵船、海運市況の軟化で通期利益予想を下方修正",9101.T,2026-03-28T09:00:00Z,tdnet,bearish,0.7,shipping rate downgrade
+gs075,"三井住友フィナンシャルグループ、ROE目標を上方修正",8316.T,2026-03-29T08:30:00Z,google_news_rss,bullish,0.5,improved profitability target
+gs076,"エーザイ、アルツハイマー薬の副作用報告が増加",4523.T,2026-03-30T11:00:00Z,tdnet,bearish,0.8,safety signal emerging
+gs077,"オリックス、不動産売却益で特別利益を計上",8591.T,2026-04-01T09:00:00Z,google_news_rss,bullish,0.4,one-time gain
+gs078,"東海旅客鉄道、リニア工事の一部再開が認可",9022.T,2026-04-02T10:00:00Z,tdnet,bullish,0.7,project restart positive
+gs079,"王子ホールディングス、パルプ価格上昇で利益圧迫",3861.T,2026-04-03T08:30:00Z,google_news_rss,bearish,0.4,raw material cost pressure
+gs080,"ニコン、半導体露光装置の新モデルで競争力強化",7731.T,2026-04-04T09:00:00Z,tdnet,bullish,0.6,product competitiveness improvement
+gs081,"東レ、炭素繊維の航空宇宙向け需要が堅調",3402.T,2026-04-05T08:00:00Z,google_news_rss,bullish,0.4,steady aerospace demand
+gs082,"小松製作所、建設機械の中国向け出荷が回復",6301.T,2026-04-06T09:00:00Z,tdnet,bullish,0.5,China construction recovery
+gs083,"野村ホールディングス、海外債券業務で損失が発生",8604.T,2026-04-07T10:00:00Z,google_news_rss,bearish,0.8,trading loss
+gs084,"ENEOS、製油所の設備トラブルで生産に一部支障",5020.T,2026-04-08T09:30:00Z,tdnet,bearish,0.6,refinery operational issue
+gs085,"ソニーグループ、PS5の累計販売台数が5000万台を突破",6758.T,2026-04-09T08:00:00Z,google_news_rss,bullish,0.5,milestone console sales
+gs086,"NEC、防衛省向けシステム受注で売上押し上げ",6701.T,2026-04-10T09:00:00Z,tdnet,bullish,0.5,government contract win
+gs087,"コニカミノルタ、業績不振でCEOが辞任を表明",4902.T,2026-04-11T11:00:00Z,google_news_rss,bearish,0.9,CEO resignation signal
+gs088,"明治ホールディングス、乳製品値上げで数量が減少",2269.T,2026-04-12T09:00:00Z,tdnet,bearish,0.4,volume decline from price hike
+gs089,"リクシル、住宅設備の受注が回復傾向にある",5938.T,2026-04-13T08:30:00Z,google_news_rss,bullish,0.4,housing demand recovery
+gs090,"三菱ケミカルグループ、石油化学事業の減損を実施",4188.T,2026-04-14T10:00:00Z,tdnet,bearish,0.7,petrochemical impairment
+gs091,"Panasonic EV battery subsidiary lists on Tokyo Stock Exchange",6752.T,2026-04-15T09:00:00Z,google_news_rss,bullish,0.7,subsidiary IPO positive
+gs092,"Hitachi Construction Machinery beats Q4 estimates on Asia demand",6305.T,2026-04-16T08:30:00Z,google_news_rss,bullish,0.6,Asia demand beat
+gs093,"Japan Airlines suspends flights to three destinations citing weak demand",9201.T,2026-04-17T10:00:00Z,tdnet,bearish,0.5,route suspension weak demand
+gs094,"Yamaha Motor reports record motorcycle sales in Southeast Asia",7272.T,2026-04-18T09:00:00Z,google_news_rss,bullish,0.6,record regional sales
+gs095,"Sumitomo Mitsui Trust faces FSA investigation over client fund handling",8309.T,2026-04-19T11:00:00Z,tdnet,bearish,0.9,regulatory investigation high risk
+gs096,"Shin-Etsu Chemical maintains full-year guidance despite FX headwind",4063.T,2026-04-20T09:00:00Z,google_news_rss,neutral,0.3,guidance maintained despite headwind
+gs097,"Kawasaki Heavy Industries wins large offshore wind turbine order",7012.T,2026-04-21T08:30:00Z,tdnet,bullish,0.7,large contract win
+gs098,"Mitsubishi Electric recalls 100,000 air conditioning units over fire risk",6503.T,2026-04-22T10:00:00Z,tdnet,bearish,0.8,product safety recall
+gs099,"Zensho Holdings expands restaurant chain to 10,000 locations",7550.T,2026-04-23T09:00:00Z,google_news_rss,bullish,0.4,expansion milestone
+gs100,"Toray Industries quarterly profit meets estimates; no change to outlook",3402.T,2026-04-24T08:30:00Z,google_news_rss,neutral,0.2,in-line no surprise

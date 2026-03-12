@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import * as diff from "diff";
 import { captureScopedSnapshot } from "./scoped_delta.js";
 
 import { normalizeRelPath, validateChangedFilesWithinScope } from "./scope_guard.js";
@@ -153,6 +154,19 @@ export function promoteIsolatedChanges({
     };
   }
 
+  // Generate audit diff
+  let fullPatch = "";
+  for (const relPath of changedFiles) {
+    const srcAbs = path.resolve(isolatedWorkspaceRoot, relPath);
+    const dstAbs = path.resolve(workspaceRoot, relPath);
+    const oldCode = fs.existsSync(dstAbs) ? fs.readFileSync(dstAbs, "utf8") : "";
+    const newCode = fs.existsSync(srcAbs) ? fs.readFileSync(srcAbs, "utf8") : "";
+    fullPatch += diff.createTwoFilesPatch(`a/${relPath}`, `b/${relPath}`, oldCode, newCode) + "\n";
+  }
+  const diffBundlePath = path.join(promotionDir, "promotion_request.diff");
+  ensureDir(promotionDir);
+  fs.writeFileSync(diffBundlePath, fullPatch, "utf8");
+
   const backupRoot = path.join(promotionDir, "promotion_backup");
   const applied = [];
   try {
@@ -185,6 +199,7 @@ export function promoteIsolatedChanges({
       error: null,
       artifacts: {
         promotion_preflight: preflightPath,
+        promotion_request_diff: diffBundlePath,
         promotion_result: resultPath,
       },
     };
@@ -192,6 +207,14 @@ export function promoteIsolatedChanges({
     for (const relPath of applied.reverse()) {
       restoreBackup(workspaceRoot, backupRoot, relPath);
     }
+    const rollbackJournalPath = writeJson(
+      path.join(promotionDir, "rollback_journal.json"),
+      {
+        failed_during: applied.length > 0 ? "partial_apply" : "initial_apply",
+        rolled_back_files: applied,
+        error: String(err?.message || err || "promotion failed"),
+      }
+    );
     const resultPath = writeJson(
       path.join(promotionDir, "promotion_result.json"),
       {
@@ -211,6 +234,8 @@ export function promoteIsolatedChanges({
       error: `PROMOTION_PARTIAL_ABORT: ${String(err?.message || err || "promotion failed")}`,
       artifacts: {
         promotion_preflight: preflightPath,
+        promotion_request_diff: diffBundlePath,
+        rollback_journal: rollbackJournalPath,
         promotion_result: resultPath,
       },
     };

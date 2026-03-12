@@ -43,6 +43,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
+    "diff": "^8.0.3",
     "discord.js": "^14.14.1",
     "express": "^4.19.2",
     "ioredis": "^5.4.1",

@@ -1,0 +1,197 @@
+{
+  "generated_at": "2026-03-12T08:18:05.698Z",
+  "tag": "[M10LoadTest][2026-03-12T08-02-32-732Z]",
+  "config": {
+    "hostname": "localhost",
+    "port": 3000,
+    "endpoint": "/vnext/dispatch",
+    "provider": "opencode",
+    "model": "opencode/gpt-5-nano",
+    "warmup_count": 6,
+    "baseline_count": 0,
+    "interval_ms": 1000,
+    "timeout_ms": 30000,
+    "poll_ms": 10000,
+    "settle_timeout_sec": 900
+  },
+  "execution_window": {
+    "started_at": "2026-03-12T08:02:32.735Z",
+    "finished_at": "2026-03-12T08:18:05.665Z",
+    "elapsed_ms": 932930
+  },
+  "dispatch": {
+    "attempted": 6,
+    "accepted": 6,
+    "failed": 0,
+    "results": [
+      {
+        "index": 1,
+        "class": "short",
+        "ok": true,
+        "status_code": 200,
+        "run_id": "29f16930-c9ff-4fb9-896f-b718bff6ebb0",
+        "mode": "",
+        "workflow_run_id": "",
+        "raw_error": ""
+      },
+      {
+        "index": 2,
+        "class": "short",
+        "ok": true,
+        "status_code": 200,
+        "run_id": "134e8df0-5bb7-49b2-b612-1a9631e48c20",
+        "mode": "",
+        "workflow_run_id": "",
+        "raw_error": ""
+      },
+      {
+        "index": 3,
+        "class": "short",
+        "ok": true,
+        "status_code": 200,
+        "run_id": "ec548731-7d4b-421a-bffe-f72b6e39593c",
+        "mode": "",
+        "workflow_run_id": "",
+        "raw_error": ""
+      },
+      {
+        "index": 4,
+        "class": "short",
+        "ok": true,
+        "status_code": 200,
+        "run_id": "dd506640-6ad8-44b6-81df-94f1aa5f61d3",
+        "mode": "",
+        "workflow_run_id": "",
+        "raw_error": ""
+      },
+      {
+        "index": 5,
+        "class": "short",
+        "ok": true,
+        "status_code": 200,
+        "run_id": "a961c034-5c08-4110-a28a-9e58c01a0e03",
+        "mode": "",
+        "workflow_run_id": "",
+        "raw_error": ""
+      },
+      {
+        "index": 6,
+        "class": "short",
+        "ok": true,
+        "status_code": 200,
+        "run_id": "dc617f7d-ef05-49aa-984b-fb5bb4a62e25",
+        "mode": "",
+        "workflow_run_id": "",
+        "raw_error": ""
+      }
+    ]
+  },
+  "runs": {
+    "total_run_ids": 6,
+    "run_status_counts": {
+      "failed": 2,
+      "running": 4
+    },
+    "workflow_status_counts": {
+      "failed": 2,
+      "running": 4
+    },
+    "duplicate_workflow_runs": [],
+    "unsettled_run_ids": [
+      "134e8df0-5bb7-49b2-b612-1a9631e48c20",
+      "a961c034-5c08-4110-a28a-9e58c01a0e03",
+      "dc617f7d-ef05-49aa-984b-fb5bb4a62e25",
+      "dd506640-6ad8-44b6-81df-94f1aa5f61d3"
+    ]
+  },
+  "routing": {
+    "rows": 6,
+    "gated_parallel_allowed": 0
+  },
+  "latency": {
+    "by_stage": {
+      "intake": {
+        "sample_size": 6,
+        "p50_ms": 3244,
+        "p95_ms": 3835
+      },
+      "routing": {
+        "sample_size": 6,
+        "p50_ms": 1,
+        "p95_ms": 3
+      },
+      "execution_dispatch": {
+        "sample_size": 6,
+        "p50_ms": 854,
+        "p95_ms": 1435
+      },
+      "policy_evaluation": {
+        "sample_size": 6,
+        "p50_ms": 8,
+        "p95_ms": 12
+      }
+    },
+    "routing_overhead_p95_ms": 3850
+  },
+  "release_pack": {
+    "checks": [
+      {
+        "run_id": "29f16930-c9ff-4fb9-896f-b718bff6ebb0",
+        "release_root": "artifacts/release/29f16930-c9ff-4fb9-896f-b718bff6ebb0",
+        "go_no_go_exists": false,
+        "go_no_go_verdict": "",
+        "strict_canary_verdict": "",
+        "manifest_exists": false
+      },
+      {
+        "run_id": "134e8df0-5bb7-49b2-b612-1a9631e48c20",
+        "release_root": "artifacts/release/134e8df0-5bb7-49b2-b612-1a9631e48c20",
+        "go_no_go_exists": false,
+        "go_no_go_verdict": "",
+        "strict_canary_verdict": "",
+        "manifest_exists": false
+      },
+      {
+        "run_id": "ec548731-7d4b-421a-bffe-f72b6e39593c",
+        "release_root": "artifacts/release/ec548731-7d4b-421a-bffe-f72b6e39593c",
+        "go_no_go_exists": false,
+        "go_no_go_verdict": "",
+        "strict_canary_verdict": "",
+        "manifest_exists": false
+      },
+      {
+        "run_id": "dd506640-6ad8-44b6-81df-94f1aa5f61d3",
+        "release_root": "artifacts/release/dd506640-6ad8-44b6-81df-94f1aa5f61d3",
+        "go_no_go_exists": false,
+        "go_no_go_verdict": "",
+        "strict_canary_verdict": "",
+        "manifest_exists": false
+      },
+      {
+        "run_id": "a961c034-5c08-4110-a28a-9e58c01a0e03",
+        "release_root": "artifacts/release/a961c034-5c08-4110-a28a-9e58c01a0e03",
+        "go_no_go_exists": false,
+        "go_no_go_verdict": "",
+        "strict_canary_verdict": "",
+        "manifest_exists": false
+      },
+      {
+        "run_id": "dc617f7d-ef05-49aa-984b-fb5bb4a62e25",
+        "release_root": "artifacts/release/dc617f7d-ef05-49aa-984b-fb5bb4a62e25",
+        "go_no_go_exists": false,
+        "go_no_go_verdict": "",
+        "strict_canary_verdict": "",
+        "manifest_exists": false
+      }
+    ],
+    "go_count": 0
+  },
+  "workflow_steps": {
+    "total": 36,
+    "failed": 2
+  },
+  "verdict": "FAIL",
+  "failure_reasons": [
+    "missing go_no_go_result.json on at least one run"
+  ]
+}

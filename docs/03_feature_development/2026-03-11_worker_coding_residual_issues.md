@@ -12,6 +12,8 @@
   - `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T12-56-17-290Z/worker_coding_cohort_result.json`
 - latest debug post-restart reference:
   - `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T23-20-45-381Z/worker_coding_cohort_result.json`
+- latest full shadow cohort post-restart reference:
+  - `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-12T01-36-43-264Z/worker_coding_cohort_result.json`
 
 ## Historical baseline
 
@@ -27,9 +29,12 @@
   - pass: `2`
   - fail: `0`
   - partial: `0`
-- post-restart full four-case rerun:
-  - started but interrupted before completion
-  - no new authoritative full-slice result should be claimed yet
+- post-restart full four-case rerun (2026-03-12T01-36-43):
+  - total: `4`
+  - pass: `4`
+  - fail: `0`
+  - partial: `0`
+  - status: `SUCCESS`
 
 ## Resolved issues
 
@@ -49,9 +54,7 @@
 
 ## Remaining issue
 
-1. a live full four-case shadow rerun after the result-consumer recovery fix was started but interrupted before completion, so today the full-slice post-fix evidence is still incomplete.
-2. one pre-fix live run showed `C-BUG-01` failing not because worker execution failed, but because the task result was consumed too late and the workflow had already been failed by `TASK_QUEUED_STALE`.
-3. current operational follow-up is therefore not coding-logic debugging; it is end-to-end revalidation of the full cohort after the consumer recovery fix.
+1. (Resolved) the live full four-case shadow rerun successfully executed `4/4 pass`, proving the consumer recovery fix resolves the `TASK_QUEUED_STALE` race condition.
 
 ## Remaining caution
 
@@ -61,6 +64,5 @@
 
 ## Suggested next order
 
-1. rerun the full four-case shadow cohort now that result-consumer pending recovery is landed.
-2. if the rerun returns `4/4 pass`, update governance closeout notes to use the post-restart artifact as the latest live operational reference.
-3. keep regression coverage for single-file target fallback, cohort verification superset handling, workflow finalization fail-close, and result-consumer pending recovery.
+1. proceed with M9 governance closeout using the post-restart 4/4 artifact as the authoritative operational reference.
+2. keep regression coverage for single-file target fallback, cohort verification superset handling, workflow finalization fail-close, and result-consumer pending recovery.

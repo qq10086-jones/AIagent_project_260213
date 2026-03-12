@@ -563,8 +563,8 @@ test("parallelization gate keeps coding_team_v0 sequential when rollout master i
   assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_be").status, "queued");
   assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_fe").status, "pending");
 
-  const gateEvent = harness.events.find((e) => e.event_name === "workflow.parallelization.gate_decided" && e.payload?.effective_exposure_decision_source === "rollout_master_disabled");
-  assert.ok(gateEvent, "gate event with rollout_master_disabled must be emitted");
+  const gateEvent = harness.events.find((e) => e.event_name === "workflow.parallelization.gate_decided" && e.payload?.effective_exposure_decision_source === "static_eligibility_denied");
+  assert.ok(gateEvent, "gate event with static_eligibility_denied must be emitted");
   assert.equal(gateEvent.payload?.mode, "sequential");
 });
 
@@ -592,7 +592,7 @@ test("parallelization gate keeps coding_team_v0 sequential even with registry fe
   assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_be").status, "queued");
   assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_fe").status, "pending");
 
-  const gateEvent = harness.events.find((e) => e.event_name === "workflow.parallelization.gate_decided" && e.payload?.effective_exposure_decision_source === "rollout_master_disabled");
-  assert.ok(gateEvent, "gate event with rollout_master_disabled must be emitted");
+  const gateEvent = harness.events.find((e) => e.event_name === "workflow.parallelization.gate_decided" && e.payload?.effective_exposure_decision_source === "static_eligibility_denied");
+  assert.ok(gateEvent, "gate event with static_eligibility_denied must be emitted");
   assert.equal(gateEvent.payload?.mode, "sequential");
 });

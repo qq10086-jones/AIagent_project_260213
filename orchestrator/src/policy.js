@@ -9,6 +9,8 @@ import path from "path";
 const CAPABILITY_REGISTRY_CANDIDATES = [
   path.join(process.cwd(), "configs", "registry", "capability_registry.json"),
   path.join(process.cwd(), "configs", "capability_registry.json"),
+  path.join(process.cwd(), "..", "configs", "registry", "capability_registry.json"),
+  path.join(process.cwd(), "..", "configs", "capability_registry.json"),
 ];
 
 function resolveRegistryPath() {

@@ -115,11 +115,18 @@ const appState = { forceLocalLlm: false, currentLocalModel: DEFAULT_LOCAL_MODEL 
 
 // --- Registry/tool config ---
 function loadToolsConfig() {
-  try {
-    const raw = fs.readFileSync(path.resolve(TOOLS_CONFIG_PATH), "utf-8");
-    const parsed = JSON.parse(raw);
-    return typeof parsed === "object" && parsed ? parsed : {};
-  } catch (err) { console.warn("[orchestrator] tools.json load failed:", err.message); return {}; }
+  const candidates = [String(TOOLS_CONFIG_PATH || "").trim(), path.resolve("configs/tools.json"), path.resolve("../configs/tools.json")].filter(Boolean);
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        const parsed = JSON.parse(fs.readFileSync(p, "utf-8"));
+        if (parsed && typeof parsed === "object") return parsed;
+      }
+    } catch (err) {
+      console.warn(`[orchestrator] tools.json load failed from ${p}:`, err.message);
+    }
+  }
+  return {};
 }
 const TOOLS_CONFIG = loadToolsConfig();
 export function getToolSpec(toolName) { return TOOLS_CONFIG?.[toolName] || {}; }

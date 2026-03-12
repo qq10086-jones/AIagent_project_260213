@@ -6,8 +6,13 @@ import { callLocalOllamaChat, callQwenChat } from "./local_llm_client.js";
 import { assertConfigPreflight } from "../config_preflight.js";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const PROVIDERS_PATH = path.resolve(MODULE_DIR, "..", "..", "configs", "llm_providers.json");
-const ROLE_POLICY_PATH = path.resolve(MODULE_DIR, "..", "..", "configs", "llm_role_policy.json");
+const LOCAL_PROVIDERS_PATH = path.resolve(MODULE_DIR, "..", "..", "configs", "llm_providers.json");
+const ROOT_PROVIDERS_PATH = path.resolve(MODULE_DIR, "..", "..", "..", "configs", "llm_providers.json");
+const LOCAL_ROLE_POLICY_PATH = path.resolve(MODULE_DIR, "..", "..", "configs", "llm_role_policy.json");
+const ROOT_ROLE_POLICY_PATH = path.resolve(MODULE_DIR, "..", "..", "..", "configs", "llm_role_policy.json");
+
+const PROVIDERS_PATH = fs.existsSync(LOCAL_PROVIDERS_PATH) ? LOCAL_PROVIDERS_PATH : ROOT_PROVIDERS_PATH;
+const ROLE_POLICY_PATH = fs.existsSync(LOCAL_ROLE_POLICY_PATH) ? LOCAL_ROLE_POLICY_PATH : ROOT_ROLE_POLICY_PATH;
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));

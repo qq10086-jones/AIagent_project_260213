@@ -21,7 +21,7 @@ function shouldSkipSpawn(result) {
 
 async function testVerificationCommandPasses() {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "export const value = 1;\n");
+  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "const value = 1;\n");
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
@@ -34,7 +34,7 @@ async function testVerificationCommandPasses() {
     opencode_command: [
       process.execPath,
       "-e",
-      "require('fs').appendFileSync('sandbox/crm_site/app.js', '\\nexport const nextValue = 2;\\n');",
+      "require('fs').appendFileSync('sandbox/crm_site/app.js', '\\nconst nextValue = 2;\\n');",
     ],
     verification_command: "node --check sandbox/crm_site/app.js",
   });
@@ -54,7 +54,7 @@ async function testVerificationCommandPasses() {
 
 async function testVerificationCommandFails() {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "export const value = 1;\n");
+  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "const value = 1;\n");
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
@@ -67,7 +67,7 @@ async function testVerificationCommandFails() {
     opencode_command: [
       process.execPath,
       "-e",
-      "require('fs').appendFileSync('sandbox/crm_site/app.js', '\\nexport const nextValue = 2;\\n');",
+      "require('fs').appendFileSync('sandbox/crm_site/app.js', '\\nconst nextValue = 2;\\n');",
     ],
     verification_command: "node missing_entry.js",
   });
@@ -87,7 +87,7 @@ async function testVerificationCommandFails() {
 
 async function testVerificationPlanPasses() {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "export const value = 1;\n");
+  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "const value = 1;\n");
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
@@ -100,7 +100,7 @@ async function testVerificationPlanPasses() {
     opencode_command: [
       process.execPath,
       "-e",
-      "require('fs').appendFileSync('sandbox/crm_site/app.js', '\\nexport const nextValue = 2;\\n');",
+      "require('fs').appendFileSync('sandbox/crm_site/app.js', '\\nconst nextValue = 2;\\n');",
     ],
     verification_plan: [
       { tier: "syntax_check", command: "node --check sandbox/crm_site/app.js" },

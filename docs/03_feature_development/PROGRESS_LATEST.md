@@ -1,6 +1,6 @@
 # Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-12 (result-consumer pending recovery landed; live full-cohort revalidation still pending)
+**Last updated:** 2026-03-12 (M9 Closed; live full-cohort revalidation PASSED, M10 initiated)
 **Author:** PM / Architecture Review
 
 ---
@@ -62,18 +62,18 @@
 | M6 | Parallel Rollout Readiness | **GO_LIMITED_EXPOSURE** | 2026-03-09 |
 | M7 | Limited Dynamic Routing v1 | **CLOSED - ACCEPTED WITH DEVIATION** | 2026-03-09 |
 | M8 | Staging Evidence and Live Routing Validation | **CLOSED** | 2026-03-09 |
-| M9 | Coding Precision & Sandbox Guardrails | **GO WITH CONDITIONS** | 2026-03-11 |
+| M9 | Coding Precision & Sandbox Guardrails | **CLOSED** | 2026-03-12 |
 
 ---
 
 ## Active Design Authority
 
-**Active milestone:** M9 is in closeout.
+**Active milestone:** M10 is in preflight / active development.
 
 Current governance state:
 - M6 evidence has been strengthened by compressed accelerated validation and is ready for next-stage review.
 - M7 Phase A design, scripts, and config package are complete.
-- M9 coding execution hardening is landed in code, and closeout work has now advanced from residual debug into evidence closeout.
+- M9 coding execution hardening is CLOSED. The `4/4` full-slice shadow cohort successfully passed, proving `C-BUG-01` is resolved and the result-consumer recovery handles execution safely.
 - next-stage mainline execution has delivered a passing release gate, completed startup-path hardening, completed brain gateway contract hardening, completed worker-coder decomposition, and restored truthful worker-coding cohort readiness evidence.
 
 Governing documents:
@@ -84,6 +84,7 @@ Governing documents:
 | Architect Contract | `docs/01_design/system/260307/Architect_Engineer_Role_Contract.md` |
 | M8 Engineering Task List v1 | `docs/01_design/system/260309/260309_M8/OpenClaw_Nexus_Engineering_Task_List_M8_v1.md` |
 | M9 Engineering Task List v1 | `docs/01_design/system/260310/OpenClaw_Nexus_Engineering_Task_List_M9_v1.md` |
+| M10 Draft Task List | `docs/03_feature_development/2026-03-12_m10_draft_tasklist.md` |
 
 ---
 
@@ -147,13 +148,14 @@ Governance:
 
 ---
 
-## M9 Status - GO WITH CONDITIONS
+## M9 Status - CLOSED
 
 Current interpretation:
 - M9 is focused on `worker-coder` execution quality, not on routing/governance expansion.
 - The core coding hardening slice is now landed in code and validated locally plus through passing live cohort evidence.
 - Scope now covers context grounding, write-scope enforcement, scoped file-delta capture, fast static checks, verification execution, coding failure memory, hardened execution contracts, bounded retry controls, durable memory write-back, release-pack evidence visibility, and truthful cohort result attribution.
 - Runtime/compose preflight validation is now added and passing for orchestrator startup-critical config.
+- `C-BUG-01` is resolved and fully proven by the 4/4 cohort run post-result-consumer recovery.
 
 Completed so far:
 - Task-scoped context packet generation for coding steps
@@ -175,15 +177,11 @@ Completed so far:
 - Worker-level auto-fix retry canary passes in sandbox via inline mocked provider (`worker-coder canary:m9_autofix_retry`)
 - `brain` fact polling is decoupled from direct PostgreSQL access through orchestrator HTTP gateway endpoints
 - Live stack validation completed for the new M9/brain boundary path after container refresh and config mount fix
-
-Not yet done:
-- broader M9 release-quality validation against richer end-to-end business scenarios
-- typed brain gateway expansion beyond latest-fact lookup / event ingestion if future workflows need more surface area
+- full workflow-level live validation is now passing with contract-valid deterministic provider fixtures for PM/architect/implementation/release steps
+- full four-case worker-coding cohort is now passing with truthful verification-tier evidence (`4/4 pass`)
 
 Current closeout blocker:
-- full workflow-level live validation is now passing with contract-valid deterministic provider fixtures for PM/architect/implementation/release steps
-- full four-case worker-coding cohort is now passing with truthful verification-tier evidence
-- remaining work is documentation closeout and future regression protection, not an active M9 execution blocker
+- None. M9 is officially closed.
 
 ---
 

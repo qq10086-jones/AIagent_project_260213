@@ -7,12 +7,22 @@ export function buildRequiredConfigFiles({
   existsSync = fs.existsSync,
 } = {}) {
   const root = path.resolve(workspaceRoot || process.cwd());
+
+  function resolveConfig(relativePath) {
+    const candidates = [
+      path.resolve(root, relativePath),
+      path.resolve(root, "..", relativePath),
+    ];
+    return candidates.find(item => existsSync(item)) || candidates[0];
+  }
+
   const runtimeCandidates = [
     String(runtimeConfigPath || "").trim(),
     path.resolve(root, "configs/runtime/runtime_defaults.json"),
     path.resolve(root, "../configs/runtime/runtime_defaults.json"),
   ].filter(Boolean);
   const runtimeResolved = runtimeCandidates.find((item) => existsSync(item)) || runtimeCandidates[0];
+  
   return [
     {
       id: "runtime_defaults",
@@ -21,17 +31,17 @@ export function buildRequiredConfigFiles({
     },
     {
       id: "llm_providers",
-      path: path.resolve(root, "configs/llm_providers.json"),
+      path: resolveConfig("configs/llm_providers.json"),
       reason: "llm dispatcher provider registry is required at startup",
     },
     {
       id: "llm_role_policy",
-      path: path.resolve(root, "configs/llm_role_policy.json"),
+      path: resolveConfig("configs/llm_role_policy.json"),
       reason: "llm dispatcher role policy is required at startup",
     },
     {
       id: "context_budget_policy",
-      path: path.resolve(root, "configs/context_budget_policy.json"),
+      path: resolveConfig("configs/context_budget_policy.json"),
       reason: "context budget policy is required to finalize workflow step artifacts",
     },
   ];

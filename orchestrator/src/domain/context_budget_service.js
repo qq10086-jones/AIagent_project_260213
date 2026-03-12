@@ -3,7 +3,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_POLICY_PATH = path.resolve(MODULE_DIR, "..", "..", "configs", "context_budget_policy.json");
+const LOCAL_POLICY_PATH = path.resolve(MODULE_DIR, "..", "..", "configs", "context_budget_policy.json");
+const ROOT_POLICY_PATH = path.resolve(MODULE_DIR, "..", "..", "..", "configs", "context_budget_policy.json");
+const DEFAULT_POLICY_PATH = fs.existsSync(LOCAL_POLICY_PATH) ? LOCAL_POLICY_PATH : ROOT_POLICY_PATH;
 
 function readJsonFile(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));

@@ -56,9 +56,9 @@ services:
       - ../configs/prompt_scripts:/app/configs/prompt_scripts:ro
       - ../configs/registry:/app/configs/registry:ro
       - ../configs/runtime:/app/configs/runtime:ro
-      - ../orchestrator/configs/llm_providers.json:/app/configs/llm_providers.json:ro
-      - ../orchestrator/configs/llm_role_policy.json:/app/configs/llm_role_policy.json:ro
-      - ../orchestrator/configs/context_budget_policy.json:/app/configs/context_budget_policy.json:ro
+      - ../configs/llm_providers.json:/app/configs/llm_providers.json:ro
+      - ../configs/llm_role_policy.json:/app/configs/llm_role_policy.json:ro
+      - ../configs/context_budget_policy.json:/app/configs/context_budget_policy.json:ro
       - ../configs/production_parallel_rollout.json:/app/configs/production_parallel_rollout.json:ro
       - ../configs/parallel_exposure_policy.json:/app/configs/parallel_exposure_policy.json:ro
       - ../configs/m7_exposure_cohorts.json:/app/configs/m7_exposure_cohorts.json:ro
@@ -89,7 +89,7 @@ services:
       - OPENCODE_BIN=${OPENCODE_BIN:-opencode}
       - CODER_PROVIDER_DEFAULT=${CODER_PROVIDER_DEFAULT:-opencode}
       - CODER_MODEL_DEFAULT=${CODER_MODEL_DEFAULT:-qwen3-coder-plus-2025-07-22}
-      - CODER_ISOLATION_MODE=${CODER_ISOLATION_MODE:-shadow}
+      - CODER_ISOLATION_MODE=${CODER_ISOLATION_MODE:-promote}
       - RUNTIME_CONFIG_PATH=/workspace/configs/runtime/runtime_defaults.json
       - PGHOST=db
       - PGPORT=5432

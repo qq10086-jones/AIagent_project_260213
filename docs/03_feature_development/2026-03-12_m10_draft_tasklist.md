@@ -22,15 +22,15 @@ M10 is about safely transitioning the system from highly-guarded observation (M9
 ## Phase 1: Execution Promotion Engine (Atomic & Safe)
 *Transitioning from `shadow` mode to `promote` mode requires strict consistency guarantees, not just file copying.*
 
-- [ ] **T-11 (Review & Extend):** Review the existing M9 `promotion_workspace.js` scaffold (preflight, shadow mode, out-of-scope blocking). Define the delta for M10: strict patch generation, diff semantics, and rollback atomicity.
+- [x] **T-11 (Review & Extend):** Review the existing M9 `promotion_workspace.js` scaffold (preflight, shadow mode, out-of-scope blocking). Define the delta for M10: strict patch generation, diff semantics, and rollback atomicity.
 - [x] **T-12 (ADR: Promotion Consistency):** Draft an Architecture Decision Record (ADR) detailing:
   - Baseline Authority: (Snapshot manifest vs. Git tree hash).
   - Conflict Unit: (File-level vs. Hunk-level).
   - Promotion Atomicity: (Temp apply + rename vs. Journaled copy).
   - Failure Semantics: (`PROMOTION_CONFLICT` vs. partial aborts).
 - [x] **T-13 (Detector Impl):** Implement the `Conflict Detector` based on the T-12 ADR to catch workspace drift during step execution.
-- [ ] **T-14 (Executor Impl):** Implement the `Atomic Promote Executor`. Ensure partial applies are impossible (all-or-nothing). Include rigorous rollback-proof tests.
-- [ ] **T-15 (Validation):** Run the standard `4-case cohort` using `promote` mode. Verify zero data loss and exact target path adherence.
+- [x] **T-14 (Executor Impl):** Implement the `Atomic Promote Executor`. Ensure partial applies are impossible (all-or-nothing). Include rigorous rollback-proof tests.
+- [x] **T-15 (Validation):** Run the standard `4-case cohort` using `promote` mode. Verify zero data loss and exact target path adherence.
 
 ---
 

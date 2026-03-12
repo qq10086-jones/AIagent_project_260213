@@ -28,7 +28,7 @@ M10 is about safely transitioning the system from highly-guarded observation (M9
   - Conflict Unit: (File-level vs. Hunk-level).
   - Promotion Atomicity: (Temp apply + rename vs. Journaled copy).
   - Failure Semantics: (`PROMOTION_CONFLICT` vs. partial aborts).
-- [ ] **T-13 (Detector Impl):** Implement the `Conflict Detector` based on the T-12 ADR to catch workspace drift during step execution.
+- [x] **T-13 (Detector Impl):** Implement the `Conflict Detector` based on the T-12 ADR to catch workspace drift during step execution.
 - [ ] **T-14 (Executor Impl):** Implement the `Atomic Promote Executor`. Ensure partial applies are impossible (all-or-nothing). Include rigorous rollback-proof tests.
 - [ ] **T-15 (Validation):** Run the standard `4-case cohort` using `promote` mode. Verify zero data loss and exact target path adherence.
 

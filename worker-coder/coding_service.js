@@ -646,6 +646,7 @@ export const CodingService = {
                         filesChanged: finalGitSummary.filesChanged,
                         allowedTargetPaths: effectiveTargetPaths,
                         mode: isolationMode,
+                        baselineSnapshot,
                     })
                     : {
                         ok: true,

@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { captureScopedSnapshot } from "./scoped_delta.js";
 
 import { normalizeRelPath, validateChangedFilesWithinScope } from "./scope_guard.js";
 
@@ -38,6 +39,26 @@ function restoreBackup(workspaceRoot, backupRoot, relPath) {
   }
 }
 
+function detectBaselineDrift(workspaceRoot, targetPaths, baselineSnapshot) {
+  const currentSnapshot = captureScopedSnapshot(workspaceRoot, targetPaths);
+  const driftedFiles = [];
+
+  for (const [rel, currentMeta] of currentSnapshot.entries()) {
+    const baseMeta = baselineSnapshot.get(rel);
+    if (!baseMeta || baseMeta.hash !== currentMeta.hash) {
+      driftedFiles.push(rel);
+    }
+  }
+  
+  for (const rel of baselineSnapshot.keys()) {
+    if (!currentSnapshot.has(rel)) {
+      driftedFiles.push(rel);
+    }
+  }
+  
+  return Array.from(new Set(driftedFiles)).sort();
+}
+
 export function promoteIsolatedChanges({
   workspaceRoot,
   isolatedWorkspaceRoot,
@@ -45,12 +66,17 @@ export function promoteIsolatedChanges({
   filesChanged = [],
   allowedTargetPaths = [],
   mode = "disabled",
+  baselineSnapshot = new Map(),
 }) {
   const normalizedMode = String(mode || "").trim().toLowerCase();
   const promotionDir = path.join(taskDir, "isolation");
   const changedFiles = Array.isArray(filesChanged)
     ? filesChanged.map((item) => normalizeRelPath(item)).filter(Boolean)
     : [];
+    
+  const driftedFiles = detectBaselineDrift(workspaceRoot, allowedTargetPaths, baselineSnapshot);
+  const isDrifted = driftedFiles.length > 0;
+  
   const preflight = {
     generated_at: new Date().toISOString(),
     mode: normalizedMode,
@@ -58,21 +84,30 @@ export function promoteIsolatedChanges({
     allowed_target_paths: Array.isArray(allowedTargetPaths) ? allowedTargetPaths : [],
     isolated_workspace_root: isolatedWorkspaceRoot,
     promotion_attempted: normalizedMode === "promote",
+    baseline_drift_detected: isDrifted,
+    drifted_files: driftedFiles,
   };
 
   const scopeCheck = validateChangedFilesWithinScope({
     filesChanged: changedFiles,
     allowedTargetPaths,
   });
+  
+  const preflightOk = scopeCheck.ok && !isDrifted;
+  let preflightError = null;
+  if (!scopeCheck.ok) preflightError = scopeCheck.error;
+  else if (isDrifted) preflightError = `PROMOTION_CONFLICT: Workspace drifted since task start. Drifted files: ${driftedFiles.join(", ")}`;
+
   const preflightPath = writeJson(
     path.join(promotionDir, "promotion_preflight.json"),
     {
       ...preflight,
-      ok: scopeCheck.ok,
-      error: scopeCheck.ok ? null : scopeCheck.error,
+      ok: preflightOk,
+      error: preflightError,
     },
   );
-  if (!scopeCheck.ok) {
+  
+  if (!preflightOk) {
     const resultPath = writeJson(
       path.join(promotionDir, "promotion_result.json"),
       {
@@ -80,14 +115,14 @@ export function promoteIsolatedChanges({
         ok: false,
         applied: false,
         rollback_performed: false,
-        error: scopeCheck.error,
+        error: preflightError,
       },
     );
     return {
       ok: false,
       applied: false,
       rollbackPerformed: false,
-      error: scopeCheck.error,
+      error: preflightError,
       artifacts: {
         promotion_preflight: preflightPath,
         promotion_result: resultPath,
@@ -165,7 +200,7 @@ export function promoteIsolatedChanges({
         applied: false,
         applied_files: applied,
         rollback_performed: applied.length > 0,
-        error: String(err?.message || err || "promotion failed"),
+        error: `PROMOTION_PARTIAL_ABORT: ${String(err?.message || err || "promotion failed")}`,
         status: "promotion_failed",
       },
     );
@@ -173,7 +208,7 @@ export function promoteIsolatedChanges({
       ok: false,
       applied: false,
       rollbackPerformed: applied.length > 0,
-      error: String(err?.message || err || "promotion failed"),
+      error: `PROMOTION_PARTIAL_ABORT: ${String(err?.message || err || "promotion failed")}`,
       artifacts: {
         promotion_preflight: preflightPath,
         promotion_result: resultPath,

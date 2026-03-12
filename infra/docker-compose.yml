@@ -40,12 +40,13 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-dashscope}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       DASH_SCOPE_API_KEY: ${DASH_SCOPE_API_KEY}
+      ALIBABA_CODING_PLAN_API_KEY: ${DASH_SCOPE_API_KEY}
       AUTO_REPORT_CHANNEL_ID: ${AUTO_REPORT_CHANNEL_ID}
       AUTO_REPORT_TIMEZONE: ${AUTO_REPORT_TIMEZONE:-Asia/Shanghai}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       APPROVAL_TOKEN: ${APPROVAL_TOKEN:-dev-approval-token}
       CODER_PROVIDER_DEFAULT: ${CODER_PROVIDER_DEFAULT:-opencode}
-      CODER_MODEL_DEFAULT: ${CODER_MODEL_DEFAULT:-qwen3-coder-plus-2025-07-22}
+      CODER_MODEL_DEFAULT: ${CODER_MODEL_DEFAULT:-alibaba-coding-plan/qwen3-coder-plus}
       RUNTIME_CONFIG_PATH: /app/configs/runtime/runtime_defaults.json
     ports:
       - "3000:3000"
@@ -82,13 +83,14 @@ services:
       - QWEN_API_KEY=${QWEN_API_KEY}
       - QWEN_BASE_URL=${QWEN_BASE_URL}
       - DASH_SCOPE_API_KEY=${DASH_SCOPE_API_KEY}
+      - ALIBABA_CODING_PLAN_API_KEY=${DASH_SCOPE_API_KEY}
       - DASH_SCOPE_BASE_URL=${DASH_SCOPE_BASE_URL}
       - QWEN_MODEL=${QWEN_MODEL:-qwen-plus}
       - CODEX_BIN=${CODEX_BIN:-codex}
       - CODEX_SANDBOX=${CODEX_SANDBOX:-workspace-write}
       - OPENCODE_BIN=${OPENCODE_BIN:-opencode}
       - CODER_PROVIDER_DEFAULT=${CODER_PROVIDER_DEFAULT:-opencode}
-      - CODER_MODEL_DEFAULT=${CODER_MODEL_DEFAULT:-qwen3-coder-plus-2025-07-22}
+      - CODER_MODEL_DEFAULT=${CODER_MODEL_DEFAULT:-alibaba-coding-plan/qwen3-coder-plus}
       - CODER_ISOLATION_MODE=${CODER_ISOLATION_MODE:-promote}
       - RUNTIME_CONFIG_PATH=/workspace/configs/runtime/runtime_defaults.json
       - PGHOST=db

@@ -100,7 +100,7 @@ const RUNTIME_STREAMS = RUNTIME_CONFIG.streams || {};
 const QWEN_BASE = process.env.QWEN_BASE_URL || RUNTIME_ORCH.qwen_base_url || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 const QWEN_MODEL = process.env.QWEN_MODEL || RUNTIME_ORCH.qwen_model || "qwen-plus";
 const CODER_PROVIDER_DEFAULT = String(process.env.CODER_PROVIDER_DEFAULT || RUNTIME_ORCH.coder_provider_default || "opencode").toLowerCase();
-const CODER_MODEL_DEFAULT = String(process.env.CODER_MODEL_DEFAULT || RUNTIME_ORCH.coder_model_default || "qwen3-coder-plus-2025-07-22");
+const CODER_MODEL_DEFAULT = String(process.env.CODER_MODEL_DEFAULT || RUNTIME_ORCH.coder_model_default || "alibaba-coding-plan/qwen3-coder-plus");
 const DEFAULT_LOCAL_MODEL = process.env.QUANT_LLM_MODEL || RUNTIME_ORCH.quant_llm_model || "deepseek-r1:32b";
 const RESOLVED_WORKFLOW_STEP_ARTIFACT_AUDIT = String(WORKFLOW_STEP_ARTIFACT_AUDIT || (RUNTIME_ORCH.workflow_step_artifact_audit ? "1" : "0")) !== "0";
 const RESOLVED_WORKFLOW_STRICT_STEP_ARTIFACTS = String(WORKFLOW_STRICT_STEP_ARTIFACTS || (RUNTIME_ORCH.workflow_strict_step_artifacts ? "1" : "0")) !== "0";

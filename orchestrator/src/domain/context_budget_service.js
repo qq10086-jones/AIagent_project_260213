@@ -5,7 +5,16 @@ import { fileURLToPath } from "url";
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const LOCAL_POLICY_PATH = path.resolve(MODULE_DIR, "..", "..", "configs", "context_budget_policy.json");
 const ROOT_POLICY_PATH = path.resolve(MODULE_DIR, "..", "..", "..", "configs", "context_budget_policy.json");
-const DEFAULT_POLICY_PATH = fs.existsSync(LOCAL_POLICY_PATH) ? LOCAL_POLICY_PATH : ROOT_POLICY_PATH;
+
+function isReadableJsonFile(filePath) {
+  try {
+    return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+const DEFAULT_POLICY_PATH = isReadableJsonFile(LOCAL_POLICY_PATH) ? LOCAL_POLICY_PATH : ROOT_POLICY_PATH;
 
 function readJsonFile(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -43,7 +52,7 @@ function classifyBudget({ metrics, thresholds }) {
 
 export function createContextBudgetService({ policyPath = DEFAULT_POLICY_PATH } = {}) {
   function loadPolicy() {
-    if (!fs.existsSync(policyPath)) {
+    if (!isReadableJsonFile(policyPath)) {
       const err = new Error(`context budget policy not found: ${policyPath}`);
       err.code = "CONTEXT_BUDGET_POLICY_MISSING";
       throw err;

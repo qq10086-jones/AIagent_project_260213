@@ -11,6 +11,19 @@ function writeJson(absPath, value) {
   writeText(absPath, JSON.stringify(value, null, 2));
 }
 
+function normalizeOpenCodeModelRef(model) {
+  const safe = String(model || "").trim();
+  if (!safe) return "";
+  if (safe.includes("/")) return safe;
+  if (/^qwen3-coder-plus(?:-\d{4}-\d{2}-\d{2})?$/i.test(safe)) {
+    return "alibaba-coding-plan/qwen3-coder-plus";
+  }
+  if (/^qwen/i.test(safe)) return `alibaba-coding-plan/${safe}`;
+  if (/^(gpt|o\d|text-embedding)/i.test(safe)) return `openai/${safe}`;
+  if (/^claude/i.test(safe)) return `anthropic/${safe}`;
+  return safe;
+}
+
 function extractPromptValue(prompt, label) {
   const escaped = String(label).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = String(prompt || "").match(new RegExp(`${escaped}:\\s*(.+)`, "i"));
@@ -406,6 +419,7 @@ export function buildOpenCodeInvocation({
   model,
   opencodeCommand,
 }) {
+  const normalizedModel = normalizeOpenCodeModelRef(model);
   if (Array.isArray(opencodeCommand) && opencodeCommand.length > 0) {
     const promptText = String(taskPrompt || "").trim();
     const commandName = String(opencodeCommand[0]);
@@ -414,7 +428,7 @@ export function buildOpenCodeInvocation({
         command: commandName,
         args: opencodeCommand.slice(1).map((x) => String(x)
           .replace(/\{\{task_prompt\}\}/g, promptText)
-          .replace(/\{\{model\}\}/g, String(model || ""))),
+          .replace(/\{\{model\}\}/g, normalizedModel)),
         stdinText: "",
         commandSource: "payload.opencode_command",
       };
@@ -423,7 +437,7 @@ export function buildOpenCodeInvocation({
       command: commandName,
       args: opencodeCommand.slice(1).map((x) => String(x)
         .replace(/\{\{task_prompt\}\}/g, promptText)
-        .replace(/\{\{model\}\}/g, String(model || ""))),
+        .replace(/\{\{model\}\}/g, normalizedModel)),
       stdinText: "",
       commandSource: "payload.opencode_command",
     };
@@ -431,8 +445,8 @@ export function buildOpenCodeInvocation({
 
   const command = process.env.OPENCODE_BIN || "opencode";
   const args = ["run", String(taskPrompt || "").trim()];
-  if (model) {
-    args.push("--model", String(model));
+  if (normalizedModel) {
+    args.push("--model", normalizedModel);
   }
 
   return {
@@ -566,7 +580,7 @@ export async function runOpenCodeTask({
     return {
       ok: effectiveProc.ok,
       provider_used: "opencode",
-      model_used: model || null,
+      model_used: normalizeOpenCodeModelRef(model) || null,
       command_used: [invocation.command, ...invocation.args].join(" "),
       command_source: invocation.commandSource,
       stdout: effectiveProc.stdout,
@@ -582,7 +596,7 @@ export async function runOpenCodeTask({
     return {
       ok: false,
       provider_used: "opencode",
-      model_used: model || null,
+      model_used: normalizeOpenCodeModelRef(model) || null,
       stdout: "",
       stderr: "",
       diagnostics: {

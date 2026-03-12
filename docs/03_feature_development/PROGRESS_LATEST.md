@@ -1,6 +1,6 @@
 # Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-12 (M9 Closed; live full-cohort revalidation PASSED, M10 initiated)
+**Last updated:** 2026-03-12 (M10 Phase 2 enforced canaries A/B/C completed; M10 load-test spec recorded; OpenCode/Qwen runtime triage completed)
 **Author:** PM / Architecture Review
 
 ---
@@ -17,7 +17,7 @@
 - **Live runtime validation:** `PASS` on 2026-03-10
 - **Real local LLM validation:** `PASS` against local `deepseek-r1:32b` on 2026-03-09
 - **M7 Phase A advisory-only code/config package:** completed on 2026-03-10
-- **Phase A live runtime validation after enablement:** `PASS` before observability-gap investigation
+- **Phase A live runtime validation after enablement:** `PASS` on 2026-03-10
 - **Current coding focus:** M9 closeout tasks after core guardrails landed
 - **M9 runtime config preflight:** `PASS` on 2026-03-11
 - **M9 real live workflow validation:** `PASS` on 2026-03-11
@@ -68,12 +68,21 @@
 
 ## Active Design Authority
 
-**Active milestone:** M10 is in preflight / active development.
+**Active milestone:** M10 is in active development (Phase 2).
 
 Current governance state:
 - M6 evidence has been strengthened by compressed accelerated validation and is ready for next-stage review.
 - M7 Phase A design, scripts, and config package are complete.
-- M9 coding execution hardening is CLOSED. The `4/4` full-slice shadow cohort successfully passed, proving `C-BUG-01` is resolved and the result-consumer recovery handles execution safely.
+- M9 coding execution hardening is CLOSED.
+- M10 Phase 1 (Execution Promotion Engine) is CLOSED. Atomic patch application, baseline drift detection, and rollback journaling are landed and validated.
+- M10 Phase 2 (Dynamic Routing Enforcement) is IN PROGRESS. `router_mode` is now set to `dynamic_routing_enforced` in production config.
+- Phase B limited enforced entry is explicitly approved for the narrow `coding_team_v0 / webapp_crm / fe_led` cohort.
+- Canary A validation for enforced mode PASSED (3/3).
+- Canary B validation for enforced mode PASSED (FE + BE queued in parallel with disjoint `target_paths`, routing audit log persisted, and `policy_evaluation` waterfall stage recorded).
+- Canary C validation for enforced mode PASSED (full `fe_safe` DAG completed with `qa_verify`, `release_pack`, `GO` go/no-go, and release-pack artifacts).
+- Observability correlation canary PASSED (`routing_decision_log`, `policy_evaluation`, and derived `branch_completion_*` stages now query cleanly by the same parent `run_id`).
+- M10 quantified load-test specification recorded with fixed task mix, latency assumptions, `XAUTOCLAIM` parameters, and pass/fail thresholds.
+- OpenCode/Qwen runtime triage is now explicit: the direct DashScope compatible-mode endpoint is valid, but current `opencode` built-in provider wiring does not accept the same credential path for coding execution.
 - next-stage mainline execution has delivered a passing release gate, completed startup-path hardening, completed brain gateway contract hardening, completed worker-coder decomposition, and restored truthful worker-coding cohort readiness evidence.
 
 Governing documents:
@@ -85,6 +94,8 @@ Governing documents:
 | M8 Engineering Task List v1 | `docs/01_design/system/260309/260309_M8/OpenClaw_Nexus_Engineering_Task_List_M8_v1.md` |
 | M9 Engineering Task List v1 | `docs/01_design/system/260310/OpenClaw_Nexus_Engineering_Task_List_M9_v1.md` |
 | M10 Draft Task List | `docs/03_feature_development/2026-03-12_m10_draft_tasklist.md` |
+| M10 Load Test Spec | `docs/03_feature_development/2026-03-12_m10_load_test_spec.md` |
+| M10 Phase B Sign-off | `docs/governance/2026-03-12_m10_phase_b_limited_enforced_signoff.md` |
 
 ---
 
@@ -94,14 +105,15 @@ Upgraded from `STAY_GATED` via M8 Go/No-Go approval on 2026-03-09.
 
 **Active production config:** `configs/production_parallel_rollout.json`
 - `master_enabled: true`
-- `dynamic_routing_enabled: true` in prepared runtime config
-- `router_mode: dynamic_routing_advisory` in prepared runtime config
+- `dynamic_routing_enabled: true`
+- `router_mode: dynamic_routing_enforced`
 
 Current interpretation:
-- M6 production gate is active.
-- Phase A advisory-only runtime package is prepared and validated offline / canary-level.
-- 2026-03-09 accelerated validation produced enough compressed evidence to enter Phase A without waiting for a 1-2 week natural observation window.
-- Live advisory-only observability is not yet fully confirmed because the currently running local orchestrator process still needs a controlled restart onto the updated code.
+- M6 production gate remains active as the safety baseline.
+- Dynamic routing has now advanced from Phase A advisory-only to Phase B limited enforced execution for the narrow approved cohort.
+- 2026-03-09 accelerated validation remains the advisory evidence base that justified controlled enablement.
+- Current focus is no longer canary admission proof; it is executing quantified load validation and then targeted failure injection without widening cohort scope.
+- `T-32` is presently split into two tracks: workflow-quality investigation under a known-good model runtime, and separate remediation of `Qwen on opencode` runtime/provider integration.
 
 Key artifacts:
 - Runtime gate: `orchestrator/src/domain/parallel_rollout_gate.js`
@@ -120,8 +132,10 @@ Original M7 implementation work remains complete and accepted with deviation. Li
 Current governance state:
 - Original M7 implementation remains closed and accepted.
 - Post-M8 controlled enablement plan has been integrated into design and runtime.
-- Phase A activation package exists, but live observation is paused until the local orchestrator process is restarted on the new code path.
-- Next governance step is not Phase B review yet; it is completing that restart and confirming `dynamic_routing_advisory_only` records appear in `routing_decision_log`.
+- Phase A advisory evidence collection is complete enough for the current limited cohort.
+- Phase B limited enforced execution is now explicitly approved and active for the narrow cohort through M10 governance.
+- Next governance step is not broader rollout; it is executing `T-32` against the recorded M10 load-test spec, then `T-33` failure injection, while keeping cohort scope fixed.
+- Today's runtime finding does not reopen M7/M10 governance. It only narrows the operational conclusion that `Qwen direct API works` while `Qwen via current opencode provider chain remains unresolved`.
 
 | Workstream | Status | Key Files |
 |------------|--------|-----------|
@@ -172,7 +186,7 @@ Completed so far:
 - Terminal `final_failure_summary` emitted for bounded retry failures
 - Orchestrator-side payload productization for `verification_command` and retry controls
 - Release-pack evidence contract extended with verification, retry, final-failure, prompt-contract, and failure-memory visibility
-- Default coding runtime aligned to `provider=opencode`, `model=qwen3-coder-plus-2025-07-22`
+- Default coding runtime compatibility updated toward `provider=opencode`, `model=alibaba-coding-plan/qwen3-coder-plus`, while preserving legacy `qwen3-coder-plus-2025-07-22` normalization in the adapter
 - Local canary coverage for M9 coding guardrails (`canary:m9_coding_guardrails`)
 - Worker-level auto-fix retry canary passes in sandbox via inline mocked provider (`worker-coder canary:m9_autofix_retry`)
 - `brain` fact polling is decoupled from direct PostgreSQL access through orchestrator HTTP gateway endpoints
@@ -219,6 +233,12 @@ validate:worker_coding_cohort_execute (debug FE+BE, shadow mode) -> PASS 2 / 2 (
 validate:worker_coding_cohort_execute (BE only)               -> PASS 1 / 1 (2026-03-11)
 validate:worker_coding_cohort_execute (full four-case cohort) -> PASS 4 / 4 (2026-03-11)
 validate:worker_coding_cohort_execute (full four-case cohort, shadow mode) -> PASS 4 / 4 (2026-03-11)
+validate:worker_coding_cohort_execute (full four-case cohort, promote mode) -> PASS 4 / 4 (2026-03-12)
+worker-coder/tests/promotion_workspace.test.js (atomic patch apply and conflict detector) -> PASS 1 / 1 (2026-03-12)
+worker-coder unified diff generation for `promotion_request.diff` -> PASS (2026-03-12)
+canary:m10_phase_b_enforced                                  -> PASS 3 / 3 (2026-03-12)
+canary:m10_phase_b_parallel_isolation                        -> PASS (enforced FE+BE parallel queue + disjoint target_paths) (2026-03-12)
+canary:m10_observability_correlation                        -> PASS (run_id-correlated routing + waterfall + branch timelines) (2026-03-12)
 ```
 
 ---
@@ -250,7 +270,7 @@ Recently cleared:
 |---|------|-------|--------|
 | T-A1 | Safely restart local orchestrator onto updated M7 advisory runtime | You | DONE |
 | T-A2 | Re-run Phase A live validation and confirm `dynamic_routing_advisory_only` appears in logs | You | DONE |
-| T-A3 | Resume advisory-only evidence collection after runtime confirmation | You | IN PROGRESS |
+| T-A3 | Resume advisory-only evidence collection after runtime confirmation | You | DONE |
 | T-A4 | Keep cohort narrow and rollback path ready | You | IN EFFECT |
 
 ### P1
@@ -258,7 +278,7 @@ Recently cleared:
 | # | Task | Dependency | Goal |
 |---|------|------------|------|
 | T-B1 | Productize accelerated evidence workflow | T-A1 | Make Phase A evidence collection repeatable, not one-off |
-| T-B2 | Decide whether Phase B should remain blocked or enter review | T-A2 | Formalize enforced-mode entry based on advisory evidence |
+| T-B2 | Decide whether Phase B should remain blocked or enter review | T-A2 | DONE - limited enforced entry approved on 2026-03-12 |
 | T-B3 | Draft `brain/` API boundary decoupling design | None | DONE for current endpoint surface; next step is broader endpoint expansion only if needed |
 | T-B4 | Extend M9 validation from local canary to worker/live integration | None | DONE in local mocked-worker scope; next step is full live runtime confidence |
 
@@ -334,6 +354,7 @@ Recently cleared:
 ### Infrastructure
 - `infra/docker-compose.yml` updated so containerized `orchestrator` mounts `contracts` correctly.
 - `infra/docker-compose.yml` updated so governance runtime files mount from root `configs/`.
+- `infra/docker-compose.yml` updated to inject `ALIBABA_CODING_PLAN_API_KEY` into the coding runtime for provider triage.
 
 ### Coding / M9
 - `orchestrator/src/domain/repo_context_service.js` added for task-scoped context packet and repo map generation.
@@ -407,6 +428,14 @@ Recently cleared:
 - post-restart debug shadow artifact recorded at `orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_2026-03-11T23-20-45-381Z/worker_coding_cohort_result.json`; result is `2 pass / 0 fail / 0 partial`, confirming pending backlog recovery after orchestrator restart.
 - `worker-coder/tests/startup_smoke.test.js` added to check worker entrypoint import wiring and key module syntax guards before container startup.
 - `worker-coder/adapters/opencode_adapter.js` live-validation mock outputs aligned with current implementation-step handoff and schema governance so full live gate now passes.
+- `worker-coder/adapters/opencode_adapter.js` now normalizes legacy `qwen3-coder-plus-2025-07-22` references to `alibaba-coding-plan/qwen3-coder-plus` for opencode compatibility probing.
+- `worker-coder/tests/opencode_adapter.test.js` updated to lock the new Qwen normalization path.
+- `worker-coder/scripts/qwen_compatible_probe.mjs` added to directly validate `QWEN_BASE_URL + QWEN_API_KEY` against the OpenAI-compatible DashScope endpoint from the live worker container.
+- live runtime triage completed on 2026-03-12 with these authoritative outcomes:
+  - direct `QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1` call with `model=qwen3-coder-plus-2025-07-22` -> `PASS (HTTP 200)`
+  - `opencode models alibaba-coding-plan` after `ALIBABA_CODING_PLAN_API_KEY` injection -> provider visible with `qwen3-coder-plus`
+  - `opencode run ... --model alibaba-coding-plan/qwen3-coder-plus` -> `FAIL (invalid access token or token expired)`
+  - conclusion: the current DashScope credential is valid for direct compatible-mode calls but does not authenticate successfully through `opencode`'s built-in `alibaba-coding-plan` provider path
 
 ### Governance and Documentation
 - Accelerated validation plan, QA summary, Go/No-Go package, and post-M8 M7 controlled enablement plan added.

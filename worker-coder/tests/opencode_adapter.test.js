@@ -8,11 +8,11 @@ function shouldSkipSpawn(result) {
 async function testBuildInvocation() {
   const inv = buildOpenCodeInvocation({
     taskPrompt: "fix bug",
-    model: "minimax-m2.5",
-    opencodeCommand: ["opencode", "run", "fix bug"],
+    model: "qwen3-coder-plus-2025-07-22",
+    opencodeCommand: ["opencode", "run", "fix bug", "--model", "{{model}}"],
   });
   assert.strictEqual(inv.command, "opencode");
-  assert.deepStrictEqual(inv.args, ["run", "fix bug"]);
+  assert.deepStrictEqual(inv.args, ["run", "fix bug", "--model", "alibaba-coding-plan/qwen3-coder-plus"]);
   assert.strictEqual(inv.commandSource, "payload.opencode_command");
 }
 

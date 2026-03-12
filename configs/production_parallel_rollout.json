@@ -4,7 +4,7 @@
   "master_enabled": true,
   "force_sequential": false,
   "dynamic_routing_enabled": true,
-  "router_mode": "dynamic_routing_advisory",
+  "router_mode": "dynamic_routing_enforced",
   "circuit_breaker": {
     "activated": false,
     "rolling_window_size": 100,

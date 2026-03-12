@@ -152,6 +152,30 @@ Task prompt snippet:
 ${prompt}
 `;
   }
+  if (rel === "plan/interfaces.md") {
+    return `# Interfaces
+
+## GET /api/customers
+- returns a customer summary list for the CRM dashboard
+- response fields: id, name, email, status
+
+## GET /api/customers/:id
+- returns a single customer detail record
+- response fields: id, name, email, phone, status, notes
+
+## POST /api/customers
+- creates a customer record from validated form input
+- request fields: name, email, phone, status
+
+## PUT /api/customers/:id
+- updates an existing customer record from validated form input
+- request fields: name, email, phone, status
+
+Generated at: ${now}
+Task prompt snippet:
+${prompt}
+`;
+  }
   if (rel === "plan/workplan.md") {
     return `# Workplan
 
@@ -287,7 +311,24 @@ export function submitCustomerForm(payload) {
       return JSON.stringify({ generated_at: now, step_id: stepId || "", from_step: "pm_spec", to_steps: ["arch_design"], scope_summary: "Minimal CRM scope, user stories, acceptance criteria, non-goals, and milestones are ready for architecture design.", artifacts: ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"], acceptance: { criteria: ["customer list flow defined", "customer detail flow defined", "add and edit customer flow defined"] } }, null, 2);
     }
     if (rel === "handoff/architect_to_impl.json") {
-      return JSON.stringify({ generated_at: now, step_id: stepId || "", from_step: "arch_design", to_steps: ["impl_fe", "impl_be", "qa_verify"], modules: ["frontend app", "backend api", "shared customer model"], interfaces: ["GET /customers", "GET /customers/:id", "POST /customers", "PUT /customers/:id"], decisions: ["Separate frontend and backend responsibilities clearly", "Use explicit API contracts for customer flows"], risks: ["frontend/backend schema drift", "missing validation coverage"] }, null, 2);
+      return JSON.stringify({
+        generated_at: now,
+        step_id: stepId || "",
+        from_step: "arch_design",
+        to_steps: ["impl_fe", "impl_be", "qa_verify"],
+        modules: ["frontend app", "backend api", "shared customer model"],
+        interfaces: ["GET /api/customers", "GET /api/customers/:id", "POST /api/customers", "PUT /api/customers/:id"],
+        decisions: [
+          { adr_id: "ADR-001", title: "Separate frontend and backend responsibilities clearly", status: "accepted" },
+          { adr_id: "ADR-002", title: "Use explicit API contracts for customer flows", status: "accepted" },
+        ],
+        risks: ["frontend/backend schema drift", "missing validation coverage"],
+        parallelization: {
+          fe_safe_parallel: true,
+          requires_be_handoff: true,
+          rationale: "Frontend can proceed in parallel once API contracts and shared types are fixed by architecture.",
+        },
+      }, null, 2);
     }
     if (rel === "handoff/impl_to_qa.json") {
       return JSON.stringify({ from_steps: ["impl_be", "impl_fe"], to_step: "qa_verify", be_changes_path: "impl/be_changes", fe_changes_path: "impl/fe_changes", run_instructions: "Start backend, start frontend, then verify the CRM list/detail/add-edit flows.", known_limitations: ["Authentication flow not implemented", "Advanced filtering is out of scope"], api_contracts_path: "handoff/be_to_fe.json" }, null, 2);
@@ -367,7 +408,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
       fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
       return { repaired: true, reason: "pm_placeholder_upgraded" };
     }
-    if ((rel === "plan/arch.md" || rel === "plan/workplan.md") && ext === ".md" && /Scaffold note: baseline content generated for workflow continuity\./i.test(raw)) {
+    if ((rel === "plan/arch.md" || rel === "plan/interfaces.md" || rel === "plan/workplan.md") && ext === ".md" && /Scaffold note: baseline content generated for workflow continuity\./i.test(raw)) {
       fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
       return { repaired: true, reason: "arch_placeholder_upgraded" };
     }

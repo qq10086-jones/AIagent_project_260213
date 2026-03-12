@@ -57,3 +57,12 @@ test("buildReport uses role overrides and classifies warning/overflow_risk", () 
   assert.equal(overflow.status, "overflow_risk");
   assert.equal(overflow.threshold_source, "role_overrides.frontend");
 });
+
+test("loadPolicy rejects directory paths that shadow the policy filename", () => {
+  const workspaceRoot = makeWorkspace();
+  const fakePolicyDir = path.join(workspaceRoot, "context_budget_policy.json");
+  fs.mkdirSync(fakePolicyDir, { recursive: true });
+
+  const service = createContextBudgetService({ policyPath: fakePolicyDir });
+  assert.throws(() => service.loadPolicy(), (err) => err?.code === "CONTEXT_BUDGET_POLICY_MISSING");
+});

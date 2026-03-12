@@ -27,6 +27,12 @@ The goal is not to immediately open dynamic routing globally. The goal is to:
 
 ## 2. Current State
 
+Status note:
+
+- This document remains the original 2026-03-10 controlled enablement plan.
+- Operational state later advanced beyond this snapshot.
+- The authoritative transition into limited enforced mode is recorded in `docs/governance/2026-03-12_m10_phase_b_limited_enforced_signoff.md`.
+
 Current production state:
 
 - `master_enabled=true`
@@ -370,6 +376,20 @@ Operational interpretation:
 - Phase A is active
 - rollback remains available through runtime config
 - next action is sample collection and observation reporting, not broader rollout
+
+### 13.1 2026-03-12 Status Update
+
+The separate Architect/PM sign-off required above has now been recorded.
+
+See:
+
+- `docs/governance/2026-03-12_m10_phase_b_limited_enforced_signoff.md`
+
+Updated interpretation as of 2026-03-12:
+
+- the narrow cohort has entered **Phase B limited enforced** mode
+- rollback expectations and cohort restrictions remain unchanged
+- no cohort widening is authorized by this update
 
 ---
 

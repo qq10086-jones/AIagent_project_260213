@@ -41,3 +41,26 @@ When the stack is running correctly, coding execution logs should show:
 - `provider_used=opencode`
 - `model_used=qwen3-coder-plus-2025-07-22`
 - `command_used` containing `opencode run ... --model qwen3-coder-plus-2025-07-22`
+
+## 2026-03-12 Runtime Triage Addendum
+
+This note is no longer sufficient as the sole runtime authority.
+
+Observed facts from live container validation on 2026-03-12:
+
+- Direct DashScope compatible-mode call using:
+  - `QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1`
+  - `QWEN_API_KEY`
+  - `model=qwen3-coder-plus-2025-07-22`
+  returned `HTTP 200` and valid completion output.
+- `opencode` does not recognize a standalone `qwen` provider in the live runtime.
+- Injecting `ALIBABA_CODING_PLAN_API_KEY` enables the built-in `alibaba-coding-plan` provider and exposes:
+  - `alibaba-coding-plan/qwen3-coder-plus`
+- However, actual `opencode run --model alibaba-coding-plan/qwen3-coder-plus` fails with:
+  - `invalid access token or token expired`
+
+Current operational conclusion:
+
+- Qwen itself is not the blocker.
+- The blocker is the mismatch between a valid DashScope compatible-mode credential path and the authentication path expected by `opencode`'s built-in Alibaba Coding Plan provider.
+- Until that provider mismatch is resolved, `Qwen on opencode` must be treated as a separate runtime integration issue rather than a solved default coding runtime.

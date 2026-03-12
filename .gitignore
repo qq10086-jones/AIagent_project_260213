@@ -20,6 +20,9 @@ artifacts/runs/
 artifacts/logs/
 artifacts/release/
 artifacts/canary/
+orchestrator/artifacts/canary/
+orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_*/
+sandbox/worker_coding_cohort/c-*/
 backup_20260301*/
 coder_test/
 __write_test*.txt

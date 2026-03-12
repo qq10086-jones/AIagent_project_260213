@@ -38,23 +38,24 @@ M10 is about safely transitioning the system from highly-guarded observation (M9
 *Advisory accuracy does not guarantee enforced safety. We must rollout routing in graduated stages.*
 
 - [ ] **T-21 (Observation Review):** Review M8/M9 advisory logs. Acknowledge the statistical limitations of the 89-sample set and prepare for enforced behavioral shifts.
-- [ ] **T-22 (Configuration):** Update `configs/production_parallel_rollout.json` to switch `router_mode` to `dynamic_routing_enforced`.
-- [ ] **T-23a (Enforced Canary A):** Execute low-risk, pure UI tasks with no cross-module dependencies in enforced parallel mode.
-- [ ] **T-23b (Enforced Canary B):** Execute `FE + BE` parallel tasks where `target_paths` are strictly isolated and disjoint.
-- [ ] **T-23c (Enforced Canary C):** Execute full `fe_safe` DAGs requiring complex merge, verification, and release-pack tracing.
-- [ ] **T-24 (Observability):** Verify `waterfall_trace_service` accurately correlates parallel task execution timelines to the single parent `run_id`.
+- [x] **T-22 (Configuration):** Update `configs/production_parallel_rollout.json` to switch `router_mode` to `dynamic_routing_enforced`.
+- [x] **T-23a (Enforced Canary A):** Execute low-risk, pure UI tasks with no cross-module dependencies in enforced parallel mode.
+- [x] **T-23b (Enforced Canary B):** Execute `FE + BE` parallel tasks where `target_paths` are strictly isolated and disjoint.
+- [x] **T-23c (Enforced Canary C):** Execute full `fe_safe` DAGs requiring complex merge, verification, and release-pack tracing.
+- [x] **T-24 (Observability):** Verify `waterfall_trace_service` accurately correlates parallel task execution timelines to the single parent `run_id`.
 
 ---
 
 ## Phase 3: Chaos Engineering & Quantified Load Testing
 *Moving beyond vague "10+ tasks" to strict, metric-driven resilience verification.*
 
-- [ ] **T-31 (Load Test Spec):** Draft a rigorous Load Test Specification defining:
+- [x] **T-31 (Load Test Spec):** Draft a rigorous Load Test Specification defining:
   - Task mix (Short/Medium/Long duration).
   - P50/P95 LLM latency assumptions.
   - Redis consumer group count, `XAUTOCLAIM` intervals, and `maxlen`.
   - Pass/Fail metrics (e.g., zero lost terminal results, zero duplicate finalizations).
 - [ ] **T-32 (Load Test Execution):** Execute the load test against the T-31 spec and publish the performance baseline artifact.
+  - 2026-03-12 note: direct DashScope compatible-mode validation for `qwen3-coder-plus-2025-07-22` is `PASS`, but current `opencode` built-in `alibaba-coding-plan/qwen3-coder-plus` path still fails with `invalid access token or token expired`. Immediate execution path remains fallback to a known-good model runtime while Qwen-on-opencode is treated as a separate integration bug.
 - [ ] **T-33 (Failure Injection):** Perform Chaos Testing:
   - Inject main-workspace drift just before a `promote` triggers to verify `PROMOTION_CONFLICT` fires.
   - Force a worker container crash/timeout during an enforced parallel execution to verify safe DAG branch collapse.

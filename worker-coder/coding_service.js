@@ -95,6 +95,13 @@ function payloadToAdapterRequest({
     };
 }
 
+function requiresScopedTargetPaths(stepId, targetPaths) {
+    const safeStepId = String(stepId || "").trim().toLowerCase();
+    const safeTargetPaths = Array.isArray(targetPaths) ? targetPaths.filter(Boolean) : [];
+    if (safeTargetPaths.length > 0) return true;
+    return safeStepId === "impl_be" || safeStepId === "impl_fe";
+}
+
 /**
  * Service to handle all coding-related business logic.
  */
@@ -280,41 +287,44 @@ export const CodingService = {
         const effectiveTargetPaths = Array.isArray(execution_adapter_packet?.target_paths) && execution_adapter_packet.target_paths.length > 0
             ? execution_adapter_packet.target_paths
             : target_paths;
-        const scopeRootsCheck = validateAllowedTargetPaths({
-            workspaceRoot,
-            allowedTargetPaths: effectiveTargetPaths,
-        });
-        if (!scopeRootsCheck.ok) {
-            const failureMemory = persistCodingFailureMemory({
+        const targetPathsRequired = requiresScopedTargetPaths(step_id, effectiveTargetPaths);
+        if (targetPathsRequired) {
+            const scopeRootsCheck = validateAllowedTargetPaths({
                 workspaceRoot,
-                runId: run_id,
-                taskId: task_id,
-                stepId: step_id,
-                providerRequested: providerRequested,
-                providerUsed: null,
-                targetPaths: effectiveTargetPaths,
-                failedPhase: "scope_guard",
-                terminalOutcome: "failed",
-                errorCode: "E_UNAUTHORIZED_WRITE",
-                error: scopeRootsCheck.error,
-                attemptedFixes: [],
-                filesChanged: [],
-                artifactPaths: {},
-                taskClass: taskContract.task_class,
-                betaTemplateId: taskContract.beta_template_id,
-                contextEnvelope: taskContract.context_envelope,
+                allowedTargetPaths: effectiveTargetPaths,
             });
-            return {
-                ok: false,
-                error: scopeRootsCheck.error,
-                diagnostics: {
-                    error_code: "E_UNAUTHORIZED_WRITE",
-                    provider_requested: providerRequested,
-                    target_paths: effectiveTargetPaths,
-                    task_contract: taskContract,
-                    coding_failure_memory: failureMemory,
-                },
-            };
+            if (!scopeRootsCheck.ok) {
+                const failureMemory = persistCodingFailureMemory({
+                    workspaceRoot,
+                    runId: run_id,
+                    taskId: task_id,
+                    stepId: step_id,
+                    providerRequested: providerRequested,
+                    providerUsed: null,
+                    targetPaths: effectiveTargetPaths,
+                    failedPhase: "scope_guard",
+                    terminalOutcome: "failed",
+                    errorCode: "E_UNAUTHORIZED_WRITE",
+                    error: scopeRootsCheck.error,
+                    attemptedFixes: [],
+                    filesChanged: [],
+                    artifactPaths: {},
+                    taskClass: taskContract.task_class,
+                    betaTemplateId: taskContract.beta_template_id,
+                    contextEnvelope: taskContract.context_envelope,
+                });
+                return {
+                    ok: false,
+                    error: scopeRootsCheck.error,
+                    diagnostics: {
+                        error_code: "E_UNAUTHORIZED_WRITE",
+                        provider_requested: providerRequested,
+                        target_paths: effectiveTargetPaths,
+                        task_contract: taskContract,
+                        coding_failure_memory: failureMemory,
+                    },
+                };
+            }
         }
 
         const runDir = path.join(workspaceRoot, 'artifacts', 'runs', run_id || 'default');

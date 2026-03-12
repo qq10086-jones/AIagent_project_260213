@@ -26,18 +26,30 @@ function main() {
   const scaffold = ensureExpectedArtifacts({
     workspaceRoot,
     artifactRoot,
-    expectedArtifacts: ["impl/be_notes.md", "handoff/be_to_fe.json", "release/release_notes.md"],
+    expectedArtifacts: ["impl/be_notes.md", "handoff/be_to_fe.json", "release/release_notes.md", "plan/interfaces.md"],
     stepId: "impl_be",
     taskPrompt: "Implement backend changes.",
   });
   assert.equal(scaffold.checked, true);
   assert.deepEqual(scaffold.failed, []);
   assert.ok(scaffold.created.includes("impl/be_notes.md"));
+  assert.ok(scaffold.created.includes("plan/interfaces.md"));
   assert.ok(fs.existsSync(path.join(rootAbs, "handoff", "be_to_fe.json")));
+  const interfacesText = fs.readFileSync(path.join(rootAbs, "plan", "interfaces.md"), "utf8");
+  assert.match(interfacesText, /## GET \/api\/customers/);
 
   const handoff = JSON.parse(fs.readFileSync(path.join(rootAbs, "handoff", "be_to_fe.json"), "utf8"));
   assert.equal(handoff.from_step, "impl_be");
   assert.equal(handoff.api_contracts[0].name, "List Customers");
+
+  const archHandoff = JSON.parse(buildArtifactTemplate({
+    relPath: "handoff/architect_to_impl.json",
+    rootAbs,
+    stepId: "arch_design",
+    taskPrompt: "Design architecture.",
+  }));
+  assert.equal(archHandoff.decisions[0].adr_id, "ADR-001");
+  assert.equal(archHandoff.parallelization.fe_safe_parallel, true);
 
   const qaReport = buildArtifactTemplate({
     relPath: "verify/qa_report.json",
@@ -51,14 +63,18 @@ function main() {
 
   fs.mkdirSync(path.join(rootAbs, "qa"), { recursive: true });
   fs.writeFileSync(path.join(rootAbs, "qa", "smoke_report.md"), "auto-generated to satisfy workflow artifact contract\n");
+  fs.writeFileSync(path.join(rootAbs, "plan", "interfaces.md"), "# plan/interfaces.md\n\nScaffold note: baseline content generated for workflow continuity.\n");
   const repaired = ensureExpectedArtifacts({
     workspaceRoot,
     artifactRoot,
-    expectedArtifacts: ["qa/smoke_report.md"],
-    stepId: "qa_verify",
-    taskPrompt: "Run QA.",
+    expectedArtifacts: ["qa/smoke_report.md", "plan/interfaces.md"],
+    stepId: "arch_design",
+    taskPrompt: "Design architecture.",
   });
   assert.ok(repaired.repaired.includes("qa/smoke_report.md"));
+  assert.ok(repaired.repaired.includes("plan/interfaces.md"));
+  const repairedInterfacesText = fs.readFileSync(path.join(rootAbs, "plan", "interfaces.md"), "utf8");
+  assert.match(repairedInterfacesText, /## POST \/api\/customers/);
 
   console.log("artifact_scaffold.test.js: all tests passed");
 }

@@ -93,6 +93,21 @@ async function testRunOpenCodeTaskProviderUnavailable() {
   assert.strictEqual(result.diagnostics.error_code, "E_PROVIDER_UNAVAILABLE");
 }
 
+async function testRunOpenCodeTaskAuthFailed() {
+  const result = await runOpenCodeTask({
+    workspaceRoot: process.cwd(),
+    taskPrompt: "auth failed",
+    opencodeCommand: [process.execPath, "-e", "console.error('invalid access token or token expired'); process.exit(1)"],
+    maxRuntimeS: 10,
+  });
+  if (shouldSkipSpawn(result)) {
+    console.log("opencode auth-failed test skipped due sandbox EPERM");
+    return;
+  }
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.diagnostics.error_code, "E_AUTH_FAILED");
+  assert.strictEqual(result.diagnostics.provider_error_class, "AUTH_FAILURE");
+}
 async function main() {
   await testBuildInvocation();
   await testRunOpenCodeTaskWithMockCommand();
@@ -100,6 +115,7 @@ async function main() {
   await testRunOpenCodeTaskTimeout();
   await testRunOpenCodeTaskApplyFailed();
   await testRunOpenCodeTaskProviderUnavailable();
+  await testRunOpenCodeTaskAuthFailed();
   console.log("opencode_adapter.test.js: all tests passed");
 }
 
@@ -108,3 +124,5 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+

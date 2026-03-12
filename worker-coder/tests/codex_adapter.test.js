@@ -66,7 +66,8 @@ async function testRunCodexTaskMissingAuth() {
     codexCommand: [process.execPath, "-e", "console.log('x')"],
   });
   assert.strictEqual(result.ok, false);
-  assert.strictEqual(result.diagnostics.error_code, "E_PROVIDER_UNAVAILABLE");
+  assert.strictEqual(result.diagnostics.error_code, "E_AUTH_FAILED");
+  assert.strictEqual(result.diagnostics.provider_error_class, "AUTH_FAILURE");
   assert.ok(String(result.error || "").includes("Codex auth missing"));
   if (prevKey !== undefined) process.env.OPENAI_API_KEY = prevKey;
 }

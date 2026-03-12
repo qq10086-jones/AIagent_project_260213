@@ -23,11 +23,26 @@ const GROUP = process.env.GROUP_TASK || "cg:workers:coding";
 const CONSUMER = `coder-${crypto.randomUUID().slice(0, 8)}`;
 const RUNTIME = loadRuntimeConfig();
 const RUNTIME_CODER = RUNTIME.config?.worker_coder || {};
+
+function parseBool(value, fallback = false) {
+  if (typeof value === "boolean") return value;
+  const safe = String(value || "").trim().toLowerCase();
+  if (!safe) return fallback;
+  if (["1", "true", "yes", "on"].includes(safe)) return true;
+  if (["0", "false", "no", "off"].includes(safe)) return false;
+  return fallback;
+}
+
 const DEFAULT_PROVIDER = String(process.env.CODER_PROVIDER_DEFAULT || RUNTIME_CODER.provider_default || "auto").toLowerCase();
 const DEFAULT_MODEL = String(process.env.CODER_MODEL_DEFAULT || RUNTIME_CODER.model_default || "");
+const DEFAULT_EXECUTION_LANE = String(process.env.CODER_EXECUTION_LANE_DEFAULT || RUNTIME_CODER.execution_lane_default || "").trim();
+const DEFAULT_ALLOW_PROVIDER_FALLBACK = parseBool(
+  process.env.CODER_ALLOW_PROVIDER_FALLBACK,
+  parseBool(RUNTIME_CODER.allow_provider_fallback_default, false),
+);
 const GLOBAL_TASK_TIMEOUT_MS = Math.max(30000, Number(process.env.CODER_GLOBAL_TASK_TIMEOUT_MS || RUNTIME_CODER.global_task_timeout_ms || 900000));
 console.log(
-  `[runtime-config] path=${RUNTIME.path || "none"} provider_default=${DEFAULT_PROVIDER} model_default=${DEFAULT_MODEL || "none"} global_timeout_ms=${GLOBAL_TASK_TIMEOUT_MS}`
+  `[runtime-config] path=${RUNTIME.path || "none"} provider_default=${DEFAULT_PROVIDER} model_default=${DEFAULT_MODEL || "none"} execution_lane_default=${DEFAULT_EXECUTION_LANE || "none"} allow_provider_fallback=${DEFAULT_ALLOW_PROVIDER_FALLBACK} global_timeout_ms=${GLOBAL_TASK_TIMEOUT_MS}`
 );
 
 const redis = new Redis(REDIS_URL);
@@ -60,9 +75,9 @@ async function writeFact(run_id, agent_name, payload) {
 
 async function processTask(msgId, task, lifecycle) {
   const { task_id, tool_name, run_id, payload: rawPayload } = task;
-  
+
   if (!tool_name.startsWith("coding.")) {
-    return false; // not my job
+    return false;
   }
 
   let payload = {};
@@ -109,6 +124,7 @@ async function processTask(msgId, task, lifecycle) {
       isSuccess = result.ok;
       if (!isSuccess) error = result.error;
     } else if (tool_name === "coding.delegate") {
+      const hasFallbackFlag = Object.prototype.hasOwnProperty.call(payload, "allow_provider_fallback");
       const result = await CodingService.delegateTask({
         workspaceRoot: WORKSPACE_ROOT,
         task_prompt: payload.task_prompt || payload.prompt,
@@ -118,6 +134,11 @@ async function processTask(msgId, task, lifecycle) {
         target_paths: Array.isArray(payload.target_paths) ? payload.target_paths : [],
         provider: payload.provider || DEFAULT_PROVIDER,
         model: payload.model || DEFAULT_MODEL || null,
+        execution_lane: payload.execution_lane || DEFAULT_EXECUTION_LANE || null,
+        allow_provider_fallback: hasFallbackFlag
+          ? parseBool(payload.allow_provider_fallback, DEFAULT_ALLOW_PROVIDER_FALLBACK)
+          : DEFAULT_ALLOW_PROVIDER_FALLBACK,
+        runtime_coder_config: RUNTIME_CODER,
         run_id,
         task_id,
         max_runtime_s: payload.max_runtime_s || 600,
@@ -142,7 +163,6 @@ async function processTask(msgId, task, lifecycle) {
       throw new Error(`Unknown tool: ${tool_name}`);
     }
 
-    // Write fact so Brain can consume it
     await lifecycle.finalizeResult({
       ok: isSuccess,
       output,
@@ -158,7 +178,7 @@ async function processTask(msgId, task, lifecycle) {
 
 export async function main() {
   console.log(`[worker] Starting Worker-Coder (${CONSUMER})...`);
-  
+
   try {
     await redis.xgroup("CREATE", STREAM_TASK, GROUP, "0", "MKSTREAM");
   } catch (e) {
@@ -176,7 +196,7 @@ export async function main() {
           for (let i = 0; i < fieldValues.length; i += 2) {
             task[fieldValues[i]] = fieldValues[i + 1];
           }
-          
+
           if (task.tool_name && task.tool_name.startsWith("coding.")) {
             console.log(`[worker] Processing task ${task.task_id} (${task.tool_name})...`);
             const lifecycle = createTaskLifecycle({
@@ -193,15 +213,12 @@ export async function main() {
             try {
               const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("GLOBAL_TASK_TIMEOUT")), GLOBAL_TASK_TIMEOUT_MS));
               await Promise.race([processTask(id, task, lifecycle), timeoutPromise]);
-              // After processTask finishes, it should have already called emitResult and xack inside.
               console.log(`[worker] Successfully processed and acknowledged task ${task.task_id}`);
             } catch (err) {
               console.error(`[worker] Critical error processing task ${task.task_id}:`, err.message);
               await lifecycle.finalizeTimeout(err);
             }
           } else {
-            // NOT a coding task. In a shared queue model, we MUST acknowledge it so it doesn't stay pending for US.
-            // Ideally, Orchestrator should only send relevant tasks to this stream.
             console.warn(`[worker] Received non-coding task ${task.task_id} (${task.tool_name}), acknowledging and skipping.`);
             await redis.xack(STREAM_TASK, GROUP, id);
           }

@@ -92,6 +92,16 @@ export function buildCodexInvocation({
   };
 }
 
+function buildDiagnostics({ errorCode, exitCode, timeout, providerErrorClass }) {
+  return {
+    error_code: errorCode,
+    exit_code: exitCode,
+    timeout,
+    provider_class: "codex-cli",
+    provider_error_class: providerErrorClass,
+  };
+}
+
 export async function runCodexTask({
   workspaceRoot,
   artifactWorkspaceRoot = null,
@@ -104,7 +114,12 @@ export async function runCodexTask({
     return {
       ok: false,
       error: "task_prompt is required for coding.delegate",
-      diagnostics: { error_code: "E_INVALID_INPUT" },
+      diagnostics: buildDiagnostics({
+        errorCode: "E_INVALID_INPUT",
+        exitCode: null,
+        timeout: false,
+        providerErrorClass: "REQUEST_SHAPE_ERROR",
+      }),
     };
   }
 
@@ -117,7 +132,12 @@ export async function runCodexTask({
       model_used: model || null,
       stdout: "",
       stderr: "",
-      diagnostics: { error_code: "E_PROVIDER_UNAVAILABLE", exit_code: null, timeout: false },
+      diagnostics: buildDiagnostics({
+        errorCode: "E_AUTH_FAILED",
+        exitCode: null,
+        timeout: false,
+        providerErrorClass: "AUTH_FAILURE",
+      }),
       error: "Codex auth missing: set OPENAI_API_KEY or mount /root/.codex/auth.json into worker-coder",
     };
   }
@@ -139,9 +159,28 @@ export async function runCodexTask({
   const stderrText = String(proc.stderr || "");
   const commandNotFound =
     stderrText.includes("ENOENT") && invocation.command.toLowerCase() === "codex";
+  const authFailure = /(invalid api key|authentication failed|unauthorized|401)/i.test(stderrText);
+  const modelNotFound = /(model not found|unknown model|unsupported model)/i.test(stderrText);
+  const requestShapeError = /(invalid request|bad request|400 bad request)/i.test(stderrText);
+
   const errorCode = proc.timedOut
     ? "E_TIMEOUT"
-    : (commandNotFound ? "E_PROVIDER_UNAVAILABLE" : (proc.ok ? null : "E_PROVIDER_UNAVAILABLE"));
+    : authFailure
+      ? "E_AUTH_FAILED"
+      : modelNotFound
+        ? "E_MODEL_NOT_FOUND"
+        : requestShapeError
+          ? "E_REQUEST_SHAPE"
+          : (commandNotFound ? "E_PROVIDER_UNAVAILABLE" : (proc.ok ? null : "E_EXEC_FAILED"));
+  const providerErrorClass = proc.timedOut
+    ? "EXECUTION_TIMEOUT"
+    : authFailure
+      ? "AUTH_FAILURE"
+      : modelNotFound
+        ? "MODEL_NOT_FOUND"
+        : requestShapeError
+          ? "REQUEST_SHAPE_ERROR"
+          : (commandNotFound ? "PROVIDER_UNAVAILABLE" : (proc.ok ? null : "PROVIDER_EXECUTION_ERROR"));
   const errorMsg = commandNotFound
     ? "Codex CLI not found in worker-coder container (spawn codex ENOENT)"
     : (proc.ok ? null : (proc.timedOut ? "Codex command timed out" : "Codex command failed"));
@@ -154,11 +193,12 @@ export async function runCodexTask({
     command_source: invocation.commandSource,
     stdout: proc.stdout,
     stderr: proc.stderr,
-    diagnostics: {
-      error_code: errorCode,
-      exit_code: proc.exitCode,
+    diagnostics: buildDiagnostics({
+      errorCode,
+      exitCode: proc.exitCode,
       timeout: proc.timedOut,
-    },
+      providerErrorClass,
+    }),
     error: errorMsg,
   };
 }

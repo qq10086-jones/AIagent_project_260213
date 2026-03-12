@@ -522,17 +522,40 @@ async function runInlineMockProcess({ cwd, args = [], artifactWorkspaceRoot = nu
 }
 
 function mapErrorCode({ proc, command }) {
-  if (proc.timedOut) return "E_TIMEOUT";
   const stderrText = String(proc.stderr || "");
   const lower = stderrText.toLowerCase();
+  const commandName = String(command || "").trim().toLowerCase();
   const commandNotFound =
     stderrText.includes("ENOENT") ||
     lower.includes("not recognized as an internal or external command") ||
     lower.includes("command not found");
-  if (commandNotFound) return "E_PROVIDER_UNAVAILABLE";
-  if (!proc.ok && /(apply|patch).*(fail|error)/i.test(stderrText)) return "E_APPLY_FAILED";
-  if (!proc.ok) return "E_EXEC_FAILED";
-  return null;
+
+  if (proc.timedOut) {
+    return { errorCode: "E_TIMEOUT", providerErrorClass: "EXECUTION_TIMEOUT" };
+  }
+  if (commandNotFound) {
+    return { errorCode: "E_PROVIDER_UNAVAILABLE", providerErrorClass: "PROVIDER_UNAVAILABLE" };
+  }
+  if (/(invalid access token|token expired|unauthorized|authentication failed|auth failed|401)/i.test(stderrText)) {
+    return { errorCode: "E_AUTH_FAILED", providerErrorClass: "AUTH_FAILURE" };
+  }
+  if (/(unknown model|model not found|no such model|unsupported model)/i.test(stderrText)) {
+    return { errorCode: "E_MODEL_NOT_FOUND", providerErrorClass: "MODEL_NOT_FOUND" };
+  }
+  if (/(missing api key|api key.*missing|base url.*missing|configuration error|config error|env.*not set)/i.test(stderrText)) {
+    return { errorCode: "E_PROVIDER_CONFIG", providerErrorClass: "PROVIDER_CONFIG_ERROR" };
+  }
+  if (/(invalid request|bad request|request shape|malformed request|400 bad request)/i.test(stderrText)) {
+    return { errorCode: "E_REQUEST_SHAPE", providerErrorClass: "REQUEST_SHAPE_ERROR" };
+  }
+  if (!proc.ok && /(apply|patch).*(fail|error)/i.test(stderrText)) {
+    return { errorCode: "E_APPLY_FAILED", providerErrorClass: null };
+  }
+  if (!proc.ok) {
+    const providerErrorClass = commandName === "opencode" ? "PROVIDER_EXECUTION_ERROR" : null;
+    return { errorCode: "E_EXEC_FAILED", providerErrorClass };
+  }
+  return { errorCode: null, providerErrorClass: null };
 }
 
 export async function runOpenCodeTask({
@@ -548,7 +571,7 @@ export async function runOpenCodeTask({
       return {
         ok: false,
         error: "task_prompt is required for coding.delegate",
-        diagnostics: { error_code: "E_INVALID_INPUT" },
+        diagnostics: { error_code: "E_INVALID_INPUT", provider_class: "opencode-provider", provider_error_class: "REQUEST_SHAPE_ERROR" },
       };
     }
 
@@ -568,7 +591,7 @@ export async function runOpenCodeTask({
         stdinText: invocation.stdinText,
       });
 
-    const errorCode = mapErrorCode({ proc: effectiveProc, command: invocation.command });
+    const { errorCode, providerErrorClass } = mapErrorCode({ proc: effectiveProc, command: invocation.command });
     const errorMsg = effectiveProc.ok
       ? null
       : (effectiveProc.timedOut
@@ -589,6 +612,8 @@ export async function runOpenCodeTask({
         error_code: errorCode,
         exit_code: effectiveProc.exitCode,
         timeout: effectiveProc.timedOut,
+        provider_class: "opencode-provider",
+        provider_error_class: providerErrorClass,
       },
       error: errorMsg,
     };
@@ -603,8 +628,13 @@ export async function runOpenCodeTask({
         error_code: "E_INTERNAL",
         exit_code: null,
         timeout: false,
+        provider_class: "opencode-provider",
+        provider_error_class: "PROVIDER_EXECUTION_ERROR",
       },
       error: `OpenCode internal error: ${err.message}`,
     };
   }
 }
+
+
+

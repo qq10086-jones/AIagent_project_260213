@@ -281,6 +281,9 @@ export function summarizeResult({ task, terminal, focusedStep }) {
   const artifactCheck = focusedOutput?.artifact_check && typeof focusedOutput.artifact_check === "object"
     ? focusedOutput.artifact_check
     : null;
+  const diagnostics = focusedOutput?.diagnostics && typeof focusedOutput.diagnostics === "object"
+    ? focusedOutput.diagnostics
+    : {};
 
   return {
     cohort_id: String(task.cohort_task_id || ""),
@@ -297,6 +300,12 @@ export function summarizeResult({ task, terminal, focusedStep }) {
     failed_step_id: failedStepId,
     workflow_status: workflowStatus,
     step_status: stepStatus,
+    execution_lane: String(diagnostics.execution_lane || ""),
+    model_provider: String(diagnostics.model_provider || focusedOutput?.model_provider || focusedOutput?.provider_used || ""),
+    model_name: String(diagnostics.model_name || focusedOutput?.model_name || focusedOutput?.model_used || ""),
+    provider_error_class: String(diagnostics.provider_error_class || ""),
+    fallback_taken: Boolean(diagnostics.fallback_taken),
+    fallback_target: String(diagnostics.fallback_target || ""),
     files_changed_count: changedFiles.length,
     artifact_completeness: artifactCheck?.checked ? artifactCheck.missing?.length === 0 : null,
     operator_note: [
@@ -322,7 +331,7 @@ function makeReportMd(report) {
     "## Results",
   ];
   for (const item of report.results) {
-    lines.push(`- ${item.cohort_id} task_class=${item.task_class} result=${item.result} verification=${item.verification_tier_achieved}/${item.verification_tier_target} failure_attribution=${item.failure_attribution}`);
+    lines.push(`- ${item.cohort_id} task_class=${item.task_class} result=${item.result} verification=${item.verification_tier_achieved}/${item.verification_tier_target} lane=${item.execution_lane || "none"} provider=${item.model_provider || "none"} model=${item.model_name || "none"} failure_attribution=${item.failure_attribution}`);
   }
   return lines.join("\n");
 }
@@ -334,7 +343,10 @@ export async function main(options = {}) {
   const planPath = path.resolve(options.planPath || arg("plan", resolveRepoPath("configs", "registry", "worker_coding_cohort_plan_v1.json")));
   const registryPath = path.resolve(options.registryPath || arg("registry", resolveRepoPath("configs", "registry", "worker_coding_beta_templates.json")));
   const schemaPath = path.resolve(options.schemaPath || arg("schema", path.resolve(process.cwd(), "contracts", "worker_coding_cohort_result.schema.json")));
-
+  const provider = String(options.provider || arg("provider", process.env.COHORT_PROVIDER || "opencode"));
+  const model = String(options.model || arg("model", process.env.COHORT_MODEL || "qwen3-coder-next"));
+  const executionLane = String(options.executionLane || arg("execution-lane", process.env.COHORT_EXECUTION_LANE || "")).trim();
+  const realImplOnly = String(options.realImplOnly || arg("real-impl-only", process.env.COHORT_REAL_IMPL_ONLY || "false")).toLowerCase() === "true";
   const plan = readJson(planPath);
   const registry = readJson(registryPath);
   const schema = readJson(schemaPath);
@@ -347,7 +359,7 @@ export async function main(options = {}) {
   for (const task of plan.tasks || []) {
     const template = templatesById.get(String(task.beta_template_id || ""));
     const focusedStepId = inferFocusedStepId(task.task_class);
-    const payload = buildWorkflowPayload({ task, template });
+    const payload = buildWorkflowPayload({ task, template, provider, model, executionLane, realImplOnly });
     const item = {
       cohort_id: String(task.cohort_task_id || ""),
       task_class: String(task.task_class || ""),
@@ -391,6 +403,12 @@ export async function main(options = {}) {
   const report = {
     cohort_run_id: cohortRunId,
     generated_at: new Date().toISOString(),
+    config: {
+      provider,
+      model,
+      execution_lane: executionLane,
+      real_impl_only: realImplOnly,
+    },
     summary: {
       total_runs: results.length,
       pass_count: results.filter((item) => item.result === "pass").length,
@@ -436,3 +454,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exit(1);
   });
 }
+
+
+

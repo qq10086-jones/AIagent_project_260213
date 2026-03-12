@@ -1,6 +1,6 @@
 # Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-12 (M10 Phase 2 enforced canaries A/B/C completed; M10 load-test spec recorded; OpenCode/Qwen runtime triage completed)
+**Last updated:** 2026-03-13 (stable local OpenCode/Ollama execution lane validated; authoritative worker-coding full-slice revalidation restored to pass; Qwen/OpenCode remains isolated triage)
 **Author:** PM / Architecture Review
 
 ---
@@ -47,7 +47,9 @@
 - **Worker-coding live shadow-mode full cohort:** `PASS` on 2026-03-11 (`4 pass / 0 fail / 0 partial`)
 - **Orchestrator result-consumer pending recovery:** landed on 2026-03-12 (`XAUTOCLAIM`-based stale result recovery + fail-loud loop logging)
 - **Post-restart live shadow-mode debug cohort:** `PASS` on 2026-03-11T23:20Z (`2 pass / 0 fail / 0 partial`, pending backlog cleared)
-- **Post-restart live full four-case cohort:** started on 2026-03-11T23:20Z but was interrupted before completion; authoritative full-slice revalidation remains pending
+- **Stable local OpenCode/Ollama execution lane:** `PASS` on 2026-03-12 (`opencode + ollama/glm-4.7-flash:latest` live probe and cohort evidence now usable as the known-good coding lane)
+- **Authoritative stable-lane debug cohort:** `PASS` on 2026-03-12 (`2 pass / 0 fail / 0 partial`)
+- **Authoritative stable-lane full four-case cohort:** `PASS` on 2026-03-12 (`4 pass / 0 fail / 0 partial`)
 
 ---
 
@@ -82,7 +84,8 @@ Current governance state:
 - Canary C validation for enforced mode PASSED (full `fe_safe` DAG completed with `qa_verify`, `release_pack`, `GO` go/no-go, and release-pack artifacts).
 - Observability correlation canary PASSED (`routing_decision_log`, `policy_evaluation`, and derived `branch_completion_*` stages now query cleanly by the same parent `run_id`).
 - M10 quantified load-test specification recorded with fixed task mix, latency assumptions, `XAUTOCLAIM` parameters, and pass/fail thresholds.
-- OpenCode/Qwen runtime triage is now explicit: the direct DashScope compatible-mode endpoint is valid, but current `opencode` built-in provider wiring does not accept the same credential path for coding execution.
+- Stable mainline coding execution is now restored on `opencode + local ollama/glm-4.7-flash:latest`.
+- OpenCode/Qwen runtime triage remains explicit and isolated: the direct DashScope compatible-mode endpoint is valid, but current `opencode` built-in `alibaba-coding-plan` provider path still does not accept the same credential path for coding execution.
 - next-stage mainline execution has delivered a passing release gate, completed startup-path hardening, completed brain gateway contract hardening, completed worker-coder decomposition, and restored truthful worker-coding cohort readiness evidence.
 
 Governing documents:
@@ -113,7 +116,7 @@ Current interpretation:
 - Dynamic routing has now advanced from Phase A advisory-only to Phase B limited enforced execution for the narrow approved cohort.
 - 2026-03-09 accelerated validation remains the advisory evidence base that justified controlled enablement.
 - Current focus is no longer canary admission proof; it is executing quantified load validation and then targeted failure injection without widening cohort scope.
-- `T-32` is presently split into two tracks: workflow-quality investigation under a known-good model runtime, and separate remediation of `Qwen on opencode` runtime/provider integration.
+- `T-32` is presently split into two tracks: mainline workflow-quality/load validation under the known-good `stable_local_lane`, and separate remediation of `Qwen on opencode` runtime/provider integration.
 
 Key artifacts:
 - Runtime gate: `orchestrator/src/domain/parallel_rollout_gate.js`
@@ -135,7 +138,7 @@ Current governance state:
 - Phase A advisory evidence collection is complete enough for the current limited cohort.
 - Phase B limited enforced execution is now explicitly approved and active for the narrow cohort through M10 governance.
 - Next governance step is not broader rollout; it is executing `T-32` against the recorded M10 load-test spec, then `T-33` failure injection, while keeping cohort scope fixed.
-- Today's runtime finding does not reopen M7/M10 governance. It only narrows the operational conclusion that `Qwen direct API works` while `Qwen via current opencode provider chain remains unresolved`.
+- Today's runtime finding does not reopen M7/M10 governance. The mainline conclusion is that `stable_local_lane` is now a working execution baseline, while `Qwen via current opencode provider chain` remains unresolved as a parallel triage item.
 
 | Workstream | Status | Key Files |
 |------------|--------|-----------|
@@ -192,7 +195,7 @@ Completed so far:
 - `brain` fact polling is decoupled from direct PostgreSQL access through orchestrator HTTP gateway endpoints
 - Live stack validation completed for the new M9/brain boundary path after container refresh and config mount fix
 - full workflow-level live validation is now passing with contract-valid deterministic provider fixtures for PM/architect/implementation/release steps
-- full four-case worker-coding cohort is now passing with truthful verification-tier evidence (`4/4 pass`)
+- full four-case worker-coding cohort is now passing with truthful verification-tier evidence (`4/4 pass`), and the 2026-03-12 authoritative rerun is now locked to `execution_lane=stable_local_lane`, `model_provider=opencode`, `model_name=ollama/glm-4.7-flash:latest`
 
 Current closeout blocker:
 - None. M9 is officially closed.
@@ -440,3 +443,4 @@ Recently cleared:
 ### Governance and Documentation
 - Accelerated validation plan, QA summary, Go/No-Go package, and post-M8 M7 controlled enablement plan added.
 - `docs/03_feature_development/2026-03-11_validation_gate_runbook.md`, `2026-03-11_runtime_startup_path_note.md`, and `2026-03-11_brain_gateway_contract_note.md` added for current mainline execution governance.
+

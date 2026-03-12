@@ -65,6 +65,9 @@ function payloadToAdapterRequest({
     context_packet,
     repo_map,
     model,
+    execution_lane,
+    allow_provider_fallback,
+    runtime_coder_config,
     run_id,
     task_id,
     artifact_workspace_root,
@@ -86,6 +89,9 @@ function payloadToAdapterRequest({
             context_packet: context_packet || null,
             repo_map: repo_map || null,
             model_hint: String(model || ""),
+            execution_lane: String(execution_lane || ""),
+            allow_provider_fallback: Boolean(allow_provider_fallback),
+            runtime_coder_config: runtime_coder_config || null,
         },
         context: {
             run_id: String(run_id || ""),
@@ -227,6 +233,9 @@ export const CodingService = {
             target_paths = [],
             provider = "auto",
             model = null,
+            execution_lane = null,
+            allow_provider_fallback = false,
+            runtime_coder_config = null,
             run_id,
             task_id,
             max_runtime_s = 600,
@@ -455,6 +464,9 @@ export const CodingService = {
                 context_packet,
                 repo_map,
                 model,
+                execution_lane,
+                allow_provider_fallback,
+                runtime_coder_config,
                 run_id,
                 task_id,
                 artifact_workspace_root: workspaceRoot,
@@ -471,6 +483,8 @@ export const CodingService = {
                 )),
                 codexCommand: codex_command,
                 opencodeCommand: opencode_command,
+                allowProviderFallback: allow_provider_fallback,
+                runtimeCoderConfig: runtime_coder_config || {},
             });
             finalFallbackFrom = finalFallbackFrom || result?.diagnostics?.fallback_from || null;
 
@@ -721,6 +735,9 @@ export const CodingService = {
                     ok: true,
                     provider_used: result.provider_used || preferredProvider,
                     model_used: result.model_used || null,
+                    execution_lane: result.execution_lane || execution_lane || null,
+                    model_provider: result?.diagnostics?.model_provider || result.provider_used || preferredProvider,
+                    model_name: result?.diagnostics?.model_name || result.model_used || null,
                     summary: `${result.provider_used || preferredProvider} delegation finished.`,
                     files_changed: finalGitSummary.filesChanged,
                     diff_stats: finalGitSummary.diffStats,
@@ -882,6 +899,12 @@ export const CodingService = {
         }
     }
 };
+
+
+
+
+
+
 
 
 

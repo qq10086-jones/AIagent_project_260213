@@ -85,6 +85,8 @@ services:
       - DASH_SCOPE_API_KEY=${DASH_SCOPE_API_KEY}
       - ALIBABA_CODING_PLAN_API_KEY=${DASH_SCOPE_API_KEY}
       - DASH_SCOPE_BASE_URL=${DASH_SCOPE_BASE_URL}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ollama-local}
       - QWEN_MODEL=${QWEN_MODEL:-qwen-plus}
       - CODEX_BIN=${CODEX_BIN:-codex}
       - CODEX_SANDBOX=${CODEX_SANDBOX:-workspace-write}
@@ -282,3 +284,4 @@ networks:
 volumes:
   pgdata:
   minio_data:
+

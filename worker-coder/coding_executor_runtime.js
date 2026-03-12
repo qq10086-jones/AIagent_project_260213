@@ -7,22 +7,83 @@ function normalizeProvider(provider) {
   return String(provider || "auto").toLowerCase();
 }
 
-function buildAdapterResult({ adapterRequest, providerUsed, providerRequested, rawResult, fallbackFrom = null }) {
+function normalizeLaneRegistry(runtimeCoderConfig = {}) {
+  const lanes = runtimeCoderConfig && typeof runtimeCoderConfig.execution_lanes === "object"
+    ? runtimeCoderConfig.execution_lanes
+    : {};
+  return lanes && typeof lanes === "object" ? lanes : {};
+}
+
+function resolveExecutionLane({
+  adapterRequest,
+  provider,
+  model,
+  runtimeCoderConfig = {},
+}) {
+  const providerRequested = normalizeProvider(provider || adapterRequest?.provider || "auto");
+  const payload = adapterRequest?.payload && typeof adapterRequest.payload === "object"
+    ? adapterRequest.payload
+    : {};
+  const laneRegistry = normalizeLaneRegistry(runtimeCoderConfig);
+  const requestedLane = String(payload.execution_lane || runtimeCoderConfig.execution_lane_default || "").trim();
+  const laneConfig = requestedLane && laneRegistry[requestedLane] && typeof laneRegistry[requestedLane] === "object"
+    ? laneRegistry[requestedLane]
+    : null;
+  const resolvedProvider = normalizeProvider(
+    laneConfig?.provider || providerRequested || payload.provider_hint || "auto"
+  );
+  const resolvedModel = String(
+    laneConfig?.model || model || payload.model_hint || ""
+  ).trim() || null;
+
+  return {
+    executionLane: requestedLane || null,
+    laneSource: requestedLane ? (laneConfig ? "runtime_config" : "requested_unresolved") : "direct_provider",
+    laneConfig,
+    providerRequested,
+    providerResolved: resolvedProvider,
+    modelResolved: resolvedModel,
+  };
+}
+
+function buildAdapterResult({
+  adapterRequest,
+  resolved,
+  providerUsed,
+  rawResult,
+  fallbackFrom = null,
+  fallbackTarget = null,
+  fallbackTaken = false,
+}) {
+  const providerResolved = String(resolved?.providerResolved || resolved?.providerRequested || "");
+  const diagnostics = {
+    ...(rawResult?.diagnostics || {}),
+    adapter_type: String(adapterRequest?.adapter_type || "coding_executor"),
+    task_type: String(adapterRequest?.task_type || "coding_execution"),
+    execution_lane: resolved?.executionLane || null,
+    execution_lane_source: resolved?.laneSource || null,
+    lane_provider_resolved: providerResolved,
+    lane_model_resolved: resolved?.modelResolved || null,
+    model_provider: String(providerUsed || providerResolved || ""),
+    model_name: rawResult?.model_used || resolved?.modelResolved || null,
+    provider_class: rawResult?.diagnostics?.provider_class || null,
+    provider_error_class: rawResult?.diagnostics?.provider_error_class || null,
+    fallback_from: fallbackFrom,
+    fallback_target: fallbackTarget,
+    fallback_taken: Boolean(fallbackTaken),
+  };
+
   return {
     ok: Boolean(rawResult?.ok),
-    provider_used: String(providerUsed || providerRequested || ""),
-    provider_requested: String(providerRequested || ""),
-    model_used: rawResult?.model_used || null,
+    provider_used: String(providerUsed || providerResolved || ""),
+    provider_requested: String(resolved?.providerRequested || ""),
+    model_used: rawResult?.model_used || resolved?.modelResolved || null,
     command_used: rawResult?.command_used || null,
     command_source: rawResult?.command_source || "unknown",
+    execution_lane: resolved?.executionLane || null,
     stdout: rawResult?.stdout || "",
     stderr: rawResult?.stderr || "",
-    diagnostics: {
-      ...(rawResult?.diagnostics || {}),
-      adapter_type: String(adapterRequest?.adapter_type || "coding_executor"),
-      task_type: String(adapterRequest?.task_type || "coding_execution"),
-      fallback_from: fallbackFrom,
-    },
+    diagnostics,
     error: rawResult?.error || null,
   };
 }
@@ -58,50 +119,65 @@ export async function executeCodingAdapter({
   maxRuntimeS = 600,
   codexCommand = null,
   opencodeCommand = null,
+  allowProviderFallback = false,
+  runtimeCoderConfig = {},
 }) {
-  const providerRequested = normalizeProvider(provider || adapterRequest?.provider || "auto");
-  if (!SUPPORTED_PROVIDERS.has(providerRequested)) {
+  const resolved = resolveExecutionLane({
+    adapterRequest,
+    provider,
+    model,
+    runtimeCoderConfig,
+  });
+
+  if (!SUPPORTED_PROVIDERS.has(resolved.providerRequested)) {
     return {
       ok: false,
-      provider_used: providerRequested,
-      provider_requested: providerRequested,
-      model_used: model || null,
+      provider_used: resolved.providerRequested,
+      provider_requested: resolved.providerRequested,
+      model_used: resolved.modelResolved || null,
       command_used: null,
       command_source: "unsupported",
+      execution_lane: resolved.executionLane,
       stdout: "",
       stderr: "",
       diagnostics: {
         error_code: "E_PROVIDER_UNAVAILABLE",
+        provider_error_class: "PROVIDER_CONFIG_ERROR",
         adapter_type: String(adapterRequest?.adapter_type || "coding_executor"),
         task_type: String(adapterRequest?.task_type || "coding_execution"),
+        execution_lane: resolved.executionLane,
       },
-      error: `Unsupported provider '${providerRequested}'. Use auto/opencode/codex.`,
+      error: `Unsupported provider '${resolved.providerRequested}'. Use auto/opencode/codex.`,
     };
   }
 
-  const preferredProvider = providerRequested === "auto" ? "opencode" : providerRequested;
+  const effectiveProvider = resolved.providerResolved === "auto" ? "opencode" : resolved.providerResolved;
   let rawResult = await runProvider({
-    providerName: preferredProvider,
+    providerName: effectiveProvider,
     adapterRequest,
-    model,
+    model: resolved.modelResolved,
     maxRuntimeS,
     codexCommand,
     opencodeCommand,
     workspaceRoot,
     artifactWorkspaceRoot,
   });
-  let providerUsed = preferredProvider;
+  let providerUsed = effectiveProvider;
   let fallbackFrom = null;
+  let fallbackTarget = null;
+  let fallbackTaken = false;
 
   if (
-    preferredProvider === "opencode" &&
+    allowProviderFallback &&
+    effectiveProvider === "opencode" &&
     String(rawResult?.diagnostics?.error_code || "") === "E_PROVIDER_UNAVAILABLE"
   ) {
     fallbackFrom = "opencode";
+    fallbackTarget = "codex";
     rawResult = await runProvider({
       providerName: "codex",
       adapterRequest,
-      model,
+      model: resolved.modelResolved,
       maxRuntimeS,
       codexCommand,
       opencodeCommand,
@@ -109,13 +185,17 @@ export async function executeCodingAdapter({
       artifactWorkspaceRoot,
     });
     providerUsed = "codex";
+    fallbackTaken = true;
   }
 
   return buildAdapterResult({
     adapterRequest,
+    resolved,
     providerUsed,
-    providerRequested,
     rawResult,
     fallbackFrom,
+    fallbackTarget,
+    fallbackTaken,
   });
 }
+

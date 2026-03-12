@@ -28,7 +28,23 @@
     "verification_command_default": "",
     "max_attempts_default": 2,
     "same_error_repeat_limit_default": 2,
-    "wall_clock_timeout_s_default": 480
+    "wall_clock_timeout_s_default": 480,
+    "execution_lane_default": "stable_local_lane",
+    "allow_provider_fallback_default": false,
+    "execution_lanes": {
+      "stable_local_lane": {
+        "provider": "opencode",
+        "model": "ollama/glm-4.7-flash:latest",
+        "provider_class": "opencode-provider",
+        "purpose": "stable recovery lane for worker-coding validation"
+      },
+      "primary_qwen_lane": {
+        "provider": "opencode",
+        "model": "alibaba-coding-plan/qwen3-coder-plus",
+        "provider_class": "opencode-provider",
+        "purpose": "primary qwen lane under provider triage"
+      }
+    }
   },
   "worker_quant": {
     "llm_provider": "dashscope",

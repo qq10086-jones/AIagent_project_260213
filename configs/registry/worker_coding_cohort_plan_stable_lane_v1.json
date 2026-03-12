@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "cohort_id": "worker_coding_stable_lane_mvp_v1",
+  "tasks": [
+    {
+      "cohort_task_id": "C-FE-02",
+      "task_class": "fe_modify",
+      "beta_template_id": "wc.fe_modify.v1",
+      "scenario": "modify an existing page and add one component",
+      "validation_focus": "repo-aware targeted edit",
+      "verification_tier_target": "lint + type_check + build",
+      "target_path_hints": [
+        "src/pages/",
+        "src/components/",
+        "src/features/"
+      ],
+      "required_artifacts": [
+        "impl/fe_patch_bundle.json",
+        "impl/fe_notes.md"
+      ],
+      "likely_failure_attribution": [
+        "context_failure",
+        "coding_logic_failure",
+        "verification_failure"
+      ]
+    },
+    {
+      "cohort_task_id": "C-BUG-01",
+      "task_class": "bug_fix",
+      "beta_template_id": "wc.bug_fix.v1",
+      "scenario": "repair one scoped defect with stated regression boundary",
+      "validation_focus": "localization and verification quality",
+      "verification_tier_target": "lint + unit_test + build",
+      "target_path_hints": [
+        "src/",
+        "app/",
+        "server/"
+      ],
+      "required_artifacts": [
+        "impl/bugfix_notes.md"
+      ],
+      "likely_failure_attribution": [
+        "context_failure",
+        "coding_logic_failure",
+        "infrastructure_failure"
+      ]
+    }
+  ]
+}

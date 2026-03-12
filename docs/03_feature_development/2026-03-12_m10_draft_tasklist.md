@@ -11,11 +11,11 @@ M10 is about safely transitioning the system from highly-guarded observation (M9
 ## Phase 0: M9 Governance Closeout (Hard Gate)
 *M9 cannot be closed on interrupted or dirty artifacts. A clean run is mandatory.*
 
-- [ ] **T-00 (Hard Gate):** Execute a complete, uninterrupted, and authoritative `full-slice revalidation` of the 4-case shadow cohort. Obtain a clean `4/4` artifact before proceeding.
-- [ ] **T-01:** Update `PROGRESS_LATEST.md` and M9 documentation using the T-00 artifact as the authoritative operational reference for resolving `C-BUG-01`.
-- [ ] **T-02 (Config Cleanup):** Consolidate runtime authority sources. Eliminate compatibility copies of rollout/cohort configs between `root/configs` and `orchestrator/configs` to prevent drift.
-- [ ] **T-03:** Merge `worker-coder` stability fixes and test patches into the main trunk.
-- [ ] **T-04:** Officially declare M9 **CLOSED**.
+- [x] **T-00 (Hard Gate):** Execute a complete, uninterrupted, and authoritative `full-slice revalidation` of the 4-case shadow cohort. Obtain a clean `4/4` artifact before proceeding.
+- [x] **T-01:** Update `PROGRESS_LATEST.md` and M9 documentation using the T-00 artifact as the authoritative operational reference for resolving `C-BUG-01`.
+- [x] **T-02 (Config Cleanup):** Consolidate runtime authority sources. Eliminate compatibility copies of rollout/cohort configs between `root/configs` and `orchestrator/configs` to prevent drift.
+- [x] **T-03:** Merge `worker-coder` stability fixes and test patches into the main trunk.
+- [x] **T-04:** Officially declare M9 **CLOSED**.
 
 ---
 
@@ -23,7 +23,7 @@ M10 is about safely transitioning the system from highly-guarded observation (M9
 *Transitioning from `shadow` mode to `promote` mode requires strict consistency guarantees, not just file copying.*
 
 - [ ] **T-11 (Review & Extend):** Review the existing M9 `promotion_workspace.js` scaffold (preflight, shadow mode, out-of-scope blocking). Define the delta for M10: strict patch generation, diff semantics, and rollback atomicity.
-- [ ] **T-12 (ADR: Promotion Consistency):** Draft an Architecture Decision Record (ADR) detailing:
+- [x] **T-12 (ADR: Promotion Consistency):** Draft an Architecture Decision Record (ADR) detailing:
   - Baseline Authority: (Snapshot manifest vs. Git tree hash).
   - Conflict Unit: (File-level vs. Hunk-level).
   - Promotion Atomicity: (Temp apply + rename vs. Journaled copy).

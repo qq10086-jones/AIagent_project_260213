@@ -1,4 +1,5 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { spawn } from "child_process";
 
@@ -22,6 +23,61 @@ function normalizeOpenCodeModelRef(model) {
   if (/^(gpt|o\d|text-embedding)/i.test(safe)) return `openai/${safe}`;
   if (/^claude/i.test(safe)) return `anthropic/${safe}`;
   return safe;
+}
+
+function validateOpenCodeModelRef(model) {
+  const normalized = normalizeOpenCodeModelRef(model);
+  if (!normalized) {
+    return { ok: true, normalizedModel: normalized };
+  }
+  const providerId = String(normalized.split("/")[0] || "").trim().toLowerCase();
+  if (providerId === "dashscope") {
+    return {
+      ok: false,
+      normalizedModel: normalized,
+      errorCode: "E_PROVIDER_CONFIG",
+      providerErrorClass: "PROVIDER_CONFIG_ERROR",
+      error: "OpenCode does not accept dashscope/* model refs; use alibaba-coding-plan/* or opencode/*.",
+    };
+  }
+  if (providerId === "ollama") {
+    return {
+      ok: false,
+      normalizedModel: normalized,
+      errorCode: "E_PROVIDER_CONFIG",
+      providerErrorClass: "PROVIDER_CONFIG_ERROR",
+      error: "OpenCode does not accept ollama/* model refs; use an OpenCode-supported provider/model id.",
+    };
+  }
+  return { ok: true, normalizedModel: normalized };
+}
+
+function validateOpenCodeCredentials(model) {
+  const normalized = normalizeOpenCodeModelRef(model);
+  const providerId = String(normalized.split("/")[0] || "").trim().toLowerCase();
+  const hasOpenCodeAuth = Boolean(String(process.env.OPENCODE_API_KEY || process.env.OPENCODE_ZEN_API_KEY || "").trim())
+    || fs.existsSync(path.join(os.homedir(), ".local", "share", "opencode", "auth.json"));
+  if (providerId === "opencode" || providerId === "opencode-go") {
+    if (!hasOpenCodeAuth) {
+      return {
+        ok: false,
+        errorCode: "E_AUTH_FAILED",
+        providerErrorClass: "AUTH_FAILURE",
+        error: "OpenCode auth missing: set OPENCODE_API_KEY/OPENCODE_ZEN_API_KEY or login via opencode auth login.",
+      };
+    }
+  }
+  if (providerId === "alibaba-coding-plan" || providerId === "alibaba-coding-plan-cn") {
+    if (!String(process.env.ALIBABA_CODING_PLAN_API_KEY || "").trim()) {
+      return {
+        ok: false,
+        errorCode: "E_AUTH_FAILED",
+        providerErrorClass: "AUTH_FAILURE",
+        error: "Alibaba Coding Plan auth missing: set ALIBABA_CODING_PLAN_API_KEY.",
+      };
+    }
+  }
+  return { ok: true };
 }
 
 function extractPromptValue(prompt, label) {
@@ -536,7 +592,7 @@ function mapErrorCode({ proc, command }) {
   if (commandNotFound) {
     return { errorCode: "E_PROVIDER_UNAVAILABLE", providerErrorClass: "PROVIDER_UNAVAILABLE" };
   }
-  if (/(invalid access token|token expired|unauthorized|authentication failed|auth failed|401)/i.test(stderrText)) {
+  if (/(invalid access token|token expired|unauthorized|authentication failed|auth failed|incorrect api key provided|apikey-error|401)/i.test(stderrText)) {
     return { errorCode: "E_AUTH_FAILED", providerErrorClass: "AUTH_FAILURE" };
   }
   if (/(unknown model|model not found|no such model|unsupported model)/i.test(stderrText)) {
@@ -580,6 +636,46 @@ export async function runOpenCodeTask({
       model,
       opencodeCommand,
     });
+    const modelValidation = validateOpenCodeModelRef(model);
+    if (!modelValidation.ok) {
+      return {
+        ok: false,
+        provider_used: "opencode",
+        model_used: modelValidation.normalizedModel || normalizeOpenCodeModelRef(model) || null,
+        command_used: [invocation.command, ...invocation.args].join(" "),
+        command_source: invocation.commandSource,
+        stdout: "",
+        stderr: "",
+        diagnostics: {
+          error_code: modelValidation.errorCode,
+          exit_code: null,
+          timeout: false,
+          provider_class: "opencode-provider",
+          provider_error_class: modelValidation.providerErrorClass,
+        },
+        error: modelValidation.error,
+      };
+    }
+    const credentialValidation = validateOpenCodeCredentials(modelValidation.normalizedModel || model);
+    if (!credentialValidation.ok) {
+      return {
+        ok: false,
+        provider_used: "opencode",
+        model_used: modelValidation.normalizedModel || normalizeOpenCodeModelRef(model) || null,
+        command_used: [invocation.command, ...invocation.args].join(" "),
+        command_source: invocation.commandSource,
+        stdout: "",
+        stderr: "",
+        diagnostics: {
+          error_code: credentialValidation.errorCode,
+          exit_code: null,
+          timeout: false,
+          provider_class: "opencode-provider",
+          provider_error_class: credentialValidation.providerErrorClass,
+        },
+        error: credentialValidation.error,
+      };
+    }
 
     const effectiveProc = invocation.command === "mock-inline-autofix"
       ? await runInlineMockProcess({ cwd: workspaceRoot, args: invocation.args, artifactWorkspaceRoot })
@@ -592,16 +688,21 @@ export async function runOpenCodeTask({
       });
 
     const { errorCode, providerErrorClass } = mapErrorCode({ proc: effectiveProc, command: invocation.command });
-    const errorMsg = effectiveProc.ok
-      ? null
-      : (effectiveProc.timedOut
-        ? "OpenCode command timed out"
-        : (errorCode === "E_APPLY_FAILED"
-          ? "OpenCode apply phase failed"
-          : "OpenCode command failed"));
+    const fatalProviderError = Boolean(errorCode);
+    const effectiveOk = Boolean(effectiveProc.ok) && !fatalProviderError;
+    let errorMsg = null;
+    if (!effectiveOk) {
+      if (effectiveProc.timedOut) errorMsg = "OpenCode command timed out";
+      else if (errorCode === "E_AUTH_FAILED") errorMsg = "OpenCode authentication failed";
+      else if (errorCode === "E_MODEL_NOT_FOUND") errorMsg = "OpenCode model resolution failed";
+      else if (errorCode === "E_PROVIDER_CONFIG") errorMsg = "OpenCode provider configuration failed";
+      else if (errorCode === "E_REQUEST_SHAPE") errorMsg = "OpenCode request shape invalid";
+      else if (errorCode === "E_APPLY_FAILED") errorMsg = "OpenCode apply phase failed";
+      else errorMsg = "OpenCode command failed";
+    }
 
     return {
-      ok: effectiveProc.ok,
+      ok: effectiveOk,
       provider_used: "opencode",
       model_used: normalizeOpenCodeModelRef(model) || null,
       command_used: [invocation.command, ...invocation.args].join(" "),

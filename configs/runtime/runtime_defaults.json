@@ -34,9 +34,9 @@
     "execution_lanes": {
       "stable_cloud_lane": {
         "provider": "opencode",
-        "model": "dashscope/qwen-flash-2025-07-28",
+        "model": "alibaba-coding-plan/qwen3-coder-plus",
         "provider_class": "opencode-provider",
-        "purpose": "stable cloud recovery lane via opencode for memory-limited environments"
+        "purpose": "cloud recovery lane via opencode using Alibaba Coding Plan"
       },
       "stable_local_lane": {
         "provider": "opencode",

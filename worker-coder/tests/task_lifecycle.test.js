@@ -63,9 +63,43 @@ async function testSuccessWinsSingleFinalization() {
   ]);
 }
 
+async function testFinalizeFallsBackWhenPrimaryEmitFails() {
+  const events = [];
+  let emitCalls = 0;
+  const lifecycle = createTaskLifecycle({
+    taskId: "task-3",
+    msgId: "msg-3",
+    toolName: "coding.delegate",
+    runId: "run-3",
+    emitResult: async (...args) => {
+      emitCalls += 1;
+      if (emitCalls === 1) {
+        throw new Error("stream result payload too large");
+      }
+      events.push(["emit", ...args]);
+    },
+    writeFact: async (...args) => events.push(["fact", ...args]),
+    ackMessage: async (...args) => events.push(["ack", ...args]),
+  });
+
+  const applied = await lifecycle.finalizeResult({
+    ok: false,
+    output: { summary: "oversized result" },
+    error: "delegate failed",
+  });
+
+  assert.equal(applied, true);
+  assert.deepEqual(events, [
+    ["fact", "run-3", "coder", { tool_name: "coding.delegate", output: { summary: "oversized result" }, success: false }],
+    ["emit", "task-3", "failed", { error: "stream result payload too large", plan: "failed_during_result_emit", original_status: "failed" }, "stream result payload too large"],
+    ["ack", "msg-3"],
+  ]);
+}
+
 async function main() {
   await testTimeoutWinsSingleFinalization();
   await testSuccessWinsSingleFinalization();
+  await testFinalizeFallsBackWhenPrimaryEmitFails();
   console.log("task_lifecycle.test.js: all tests passed");
 }
 

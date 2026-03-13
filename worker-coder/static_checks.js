@@ -4,6 +4,14 @@ import { exec } from "child_process";
 
 import { normalizeRelPath } from "./scope_guard.js";
 
+export function clampInt(value, min, max, fallback) {
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+}
+
 async function execFileCapture(command, args, cwd) {
   return new Promise((resolve) => {
     try {

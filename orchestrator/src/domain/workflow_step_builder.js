@@ -149,6 +149,47 @@ function clampInt(value, min, max, fallback) {
   return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
+function shouldEnforceStableCodingLane({ run, stepDef }) {
+  return String(run?.workflow_id || "") === "coding_team_v0"
+    && String(run?.project_type || "") === "webapp_crm"
+    && String(stepDef?.tool || "") === "coding.delegate";
+}
+
+function applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeConfig }) {
+  const runtimeWorkerCoder = runtimeConfig?.worker_coder || {};
+  const laneRegistry = runtimeWorkerCoder.execution_lanes && typeof runtimeWorkerCoder.execution_lanes === "object"
+    ? runtimeWorkerCoder.execution_lanes
+    : {};
+  if (!shouldEnforceStableCodingLane({ run, stepDef })) {
+    return;
+  }
+
+  const configuredLane = String(
+    payload.execution_lane
+      || input.execution_lane
+      || runtimeWorkerCoder.execution_lane_default
+      || ""
+  ).trim();
+  if (!configuredLane) {
+    return;
+  }
+
+  const laneConfig = laneRegistry[configuredLane] && typeof laneRegistry[configuredLane] === "object"
+    ? laneRegistry[configuredLane]
+    : null;
+  payload.execution_lane = configuredLane;
+  if (laneConfig?.provider) {
+    payload.provider = String(laneConfig.provider);
+  } else if (!payload.provider && input.provider) {
+    payload.provider = input.provider;
+  }
+  if (laneConfig?.model) {
+    payload.model = String(laneConfig.model);
+  } else if (!payload.model && input.model) {
+    payload.model = input.model;
+  }
+}
+
 function inferVerificationCommand({ stepId, targetPaths = [], workspaceRoot }) {
   const safeStepId = String(stepId || "");
   const safeTargets = Array.isArray(targetPaths) ? targetPaths : [];
@@ -343,6 +384,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       handoff_contract_out: downstreamHandoff || null,
       handoff_contract_in: upstreamHandoffs,
     };
+    applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeConfig });
     applyWorkerCodingTemplateDefaults({
       payload,
       templateRegistry: workerCodingTemplateRegistry,

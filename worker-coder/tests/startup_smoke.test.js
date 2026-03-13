@@ -21,19 +21,23 @@ function main() {
   const root = process.cwd();
   const workerText = fs.readFileSync(path.join(root, "worker.js"), "utf8");
   const codingServiceText = fs.readFileSync(path.join(root, "coding_service.js"), "utf8");
+  const providerPreflightText = fs.readFileSync(path.join(root, "provider_preflight.js"), "utf8");
 
   assert.match(workerText, /import\s+\{\s*validateSafeCommand\s*\}\s+from\s+"\.\/verification_runner\.js"/);
   assert.doesNotMatch(workerText, /import\s+\{[^}]*validateSafeCommand[^}]*\}\s+from\s+"\.\/coding_service\.js"/);
   assert.match(workerText, /export\s+async\s+function\s+main\s*\(/);
   assert.match(workerText, /import\.meta\.url\s*===\s*pathToFileURL\(process\.argv\[1\]\)\.href/);
+  assert.match(workerText, /startup-preflight/);
 
   assert.match(codingServiceText, /from '\.\/scope_guard\.js'/);
   assert.ok(fs.existsSync(path.join(root, "scope_guard.js")));
+  assert.match(providerPreflightText, /ALIBABA_AUTH_MISSING/);
 
   const syntaxChecks = [
     checkSyntax(root, "worker.js"),
     checkSyntax(root, "coding_service.js"),
     checkSyntax(root, "scope_guard.js"),
+    checkSyntax(root, "provider_preflight.js"),
   ];
   if (syntaxChecks.some((item) => item === false)) {
     console.log("startup_smoke.test.js: syntax subprocess checks skipped due sandbox EPERM");

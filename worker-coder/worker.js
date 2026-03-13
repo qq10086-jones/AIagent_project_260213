@@ -6,6 +6,7 @@ import { CodingService } from "./coding_service.js";
 import { createTaskLifecycle } from "./task_lifecycle.js";
 import { validateSafeCommand } from "./verification_runner.js";
 import { loadRuntimeConfig } from "./runtime_config.js";
+import { validateRuntimePreflight } from "./provider_preflight.js";
 
 const {
   REDIS_URL = "redis://localhost:6379",
@@ -41,10 +42,24 @@ const DEFAULT_ALLOW_PROVIDER_FALLBACK = parseBool(
   parseBool(RUNTIME_CODER.allow_provider_fallback_default, false),
 );
 const GLOBAL_TASK_TIMEOUT_MS = Math.max(30000, Number(process.env.CODER_GLOBAL_TASK_TIMEOUT_MS || RUNTIME_CODER.global_task_timeout_ms || 900000));
+const MAX_RESULT_OUTPUT_BYTES = 48 * 1024;
 
 console.log(
   `[runtime-config] path=${RUNTIME.path || "none"} provider_default=${DEFAULT_PROVIDER} model_default=${DEFAULT_MODEL || "none"} execution_lane_default=${DEFAULT_EXECUTION_LANE || "none"} allow_provider_fallback=${DEFAULT_ALLOW_PROVIDER_FALLBACK} global_timeout_ms=${GLOBAL_TASK_TIMEOUT_MS}`
 );
+const STARTUP_PREFLIGHT = validateRuntimePreflight({
+  defaultProvider: DEFAULT_PROVIDER,
+  defaultModel: DEFAULT_MODEL,
+  defaultExecutionLane: DEFAULT_EXECUTION_LANE,
+  runtimeCoderConfig: RUNTIME_CODER,
+});
+if (STARTUP_PREFLIGHT.ok) {
+  console.log("[startup-preflight] ok");
+} else {
+  for (const issue of STARTUP_PREFLIGHT.issues) {
+    console.warn(`[startup-preflight] ${issue.severity} lane=${issue.lane} code=${issue.code} message=${issue.message}`);
+  }
+}
 
 const redis = new Redis(REDIS_URL);
 const pool = new pg.Pool({
@@ -57,9 +72,78 @@ const pool = new pg.Pool({
 
 async function emitResult(task_id, status, output, error) {
   const msg = { task_id, status };
-  if (output) msg.output = JSON.stringify(output);
+  if (output) msg.output = serializeResultOutput(output);
   if (error) msg.error = String(error);
   await redis.xadd(STREAM_RESULT, "*", ...Object.entries(msg).flat());
+}
+
+function truncateString(value, maxLen = 2000) {
+  const safe = String(value || "");
+  if (safe.length <= maxLen) return safe;
+  return `${safe.slice(0, maxLen)}...<truncated>`;
+}
+
+function compactResultOutput(output) {
+  if (!output || typeof output !== "object") {
+    return output;
+  }
+  const diagnostics = output.diagnostics && typeof output.diagnostics === "object"
+    ? output.diagnostics
+    : {};
+  return {
+    ok: Boolean(output.ok),
+    error: output.error ? truncateString(output.error, 1000) : null,
+    summary: output.summary ? truncateString(output.summary, 1000) : null,
+    provider_used: output.provider_used || null,
+    provider_requested: output.provider_requested || null,
+    model_used: output.model_used || null,
+    execution_lane: output.execution_lane || null,
+    command_source: output.command_source || null,
+    files_changed: Array.isArray(output.files_changed) ? output.files_changed.slice(0, 20) : [],
+    diff_stats: output.diff_stats || null,
+    test_result: output.test_result || null,
+    artifacts: output.artifacts || null,
+    diagnostics: {
+      error_code: diagnostics.error_code || null,
+      provider_error_class: diagnostics.provider_error_class || null,
+      model_provider: diagnostics.model_provider || null,
+      model_name: diagnostics.model_name || null,
+      fallback_taken: diagnostics.fallback_taken || false,
+      fallback_from: diagnostics.fallback_from || null,
+      fallback_target: diagnostics.fallback_target || null,
+      failure_attribution: diagnostics.failure_attribution || null,
+      retry_summary: diagnostics.retry_summary || null,
+      promotion: diagnostics.promotion || null,
+      final_failure_summary: diagnostics.final_failure_summary || null,
+    },
+  };
+}
+
+function serializeResultOutput(output) {
+  const full = JSON.stringify(output);
+  if (Buffer.byteLength(full, "utf8") <= MAX_RESULT_OUTPUT_BYTES) {
+    return full;
+  }
+  const compact = JSON.stringify({
+    truncated: true,
+    payload: compactResultOutput(output),
+  });
+  if (Buffer.byteLength(compact, "utf8") <= MAX_RESULT_OUTPUT_BYTES) {
+    return compact;
+  }
+  return JSON.stringify({
+    truncated: true,
+    payload: {
+      ok: Boolean(output?.ok),
+      error: truncateString(output?.error || "", 1000),
+      provider_used: output?.provider_used || null,
+      execution_lane: output?.execution_lane || null,
+      diagnostics: {
+        error_code: output?.diagnostics?.error_code || null,
+        provider_error_class: output?.diagnostics?.provider_error_class || null,
+      },
+    },
+  });
 }
 
 async function writeFact(run_id, agent_name, payload) {

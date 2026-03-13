@@ -32,6 +32,13 @@ function makeBuilder(workspaceRoot) {
     runtimeConfig: {
       execution: { diff_first_enabled: true },
       worker_coder: {
+        execution_lane_default: "stable_cloud_lane",
+        execution_lanes: {
+          stable_cloud_lane: {
+            provider: "opencode",
+            model: "alibaba-coding-plan/qwen3-coder-plus",
+          },
+        },
         max_attempts_default: 2,
         same_error_repeat_limit_default: 2,
         wall_clock_timeout_s_default: 480,
@@ -67,6 +74,9 @@ test("impl_be payload includes context packet, repo map, and coding context bloc
 
   assert.equal(payload.context_packet.step_id, "impl_be");
   assert.equal(payload.context_packet.role, "backend");
+  assert.equal(payload.execution_lane, "stable_cloud_lane");
+  assert.equal(payload.provider, "opencode");
+  assert.equal(payload.model, "alibaba-coding-plan/qwen3-coder-plus");
   assert.match(JSON.stringify(payload.repo_map.candidate_files), /sandbox\/crm_site\/server\.js/);
   assert.match(payload.task_prompt, /\[Coding Context Packet\]/);
   assert.match(payload.task_prompt, /Target Paths:/);

@@ -3,16 +3,11 @@ import path from "path";
 import { exec } from "child_process";
 
 import { normalizeRelPath } from "./scope_guard.js";
-import { runInlineNodeSyntaxCheck } from "./verification_runner.js";
 
 async function execFileCapture(command, args, cwd) {
-  if (String(command || "").trim() === "node" && Array.isArray(args) && args[0] === "--check" && args[1]) {
-    return runInlineNodeSyntaxCheck(String(args[1]));
-  }
   return new Promise((resolve) => {
-    let child = null;
     try {
-      child = exec(`"${command}" ${args.map((item) => `"${String(item).replace(/"/g, '\\"')}"`).join(" ")}`, { cwd, timeout: 30000 }, (error, stdout, stderr) => {
+      const child = exec(`"${command}" ${args.map((item) => `"${String(item).replace(/"/g, '\\"')}"`).join(" ")}`, { cwd, timeout: 30000 }, (error, stdout, stderr) => {
         resolve({
           ok: !error,
           stdout: String(stdout || ""),
@@ -20,23 +15,22 @@ async function execFileCapture(command, args, cwd) {
           exitCode: error?.code ?? 0,
         });
       });
+      child.on("error", (err) => {
+        resolve({
+          ok: false,
+          stdout: "",
+          stderr: String(err?.message || err || ""),
+          exitCode: 1,
+        });
+      });
     } catch (err) {
       resolve({
         ok: false,
         stdout: "",
-        stderr: String(err?.message || err || ""),
-        exitCode: null,
+        stderr: err.message,
+        exitCode: 1,
       });
-      return;
     }
-    child.on("error", (err) => {
-      resolve({
-        ok: false,
-        stdout: "",
-        stderr: String(err?.message || err || ""),
-        exitCode: null,
-      });
-    });
   });
 }
 
@@ -51,12 +45,12 @@ function flushStaticCheck(taskDir, records, error) {
       error: error || null,
     }, null, 2), "utf8");
   } catch {
-    logPath = null;
+    /* ignore: failed to write static check log is not terminal */
   }
   return {
-    checked: records.length > 0,
+    checked: true,
     ok: !error,
-    commands: records.map((item) => `${item.kind}:${item.file}`),
+    commands: records.map((r) => `${r.kind}:${r.file}`),
     records,
     error: error || null,
     logPath,
@@ -84,7 +78,7 @@ export async function runStaticChecks({ workspaceRoot, filesChanged = [], taskDi
         JSON.parse(fs.readFileSync(abs, "utf8"));
         records.push({ file: rel, kind: "json_parse", ok: true, exit_code: 0, stderr: "" });
       } catch (err) {
-        records.push({ file: rel, kind: "json_parse", ok: false, exit_code: 1, stderr: String(err?.message || err || "") });
+        records.push({ file: rel, kind: "json_parse", ok: false, exit_code: 1, stderr: err.message });
         return flushStaticCheck(taskDir, records, "E_STATIC_CHECK_FAILED: json parse failed");
       }
       continue;
@@ -96,10 +90,4 @@ export async function runStaticChecks({ workspaceRoot, filesChanged = [], taskDi
     }
   }
   return flushStaticCheck(taskDir, records, null);
-}
-
-export function clampInt(value, min, max, fallback) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, Math.trunc(n)));
 }

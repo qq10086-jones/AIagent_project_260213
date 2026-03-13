@@ -18,6 +18,22 @@
           "name": "qwq:latest"
         }
       }
+    },
+    "dashscope": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "DashScope (Cloud)",
+      "options": {
+        "baseURL": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        "apiKey": "${DASH_SCOPE_API_KEY}"
+      },
+      "models": {
+        "qwen-flash-2025-07-28": {
+          "name": "qwen-flash-2025-07-28"
+        },
+        "qwen-plus-2025-04-28": {
+          "name": "qwen-plus-2025-04-28"
+        }
+      }
     }
   }
 }

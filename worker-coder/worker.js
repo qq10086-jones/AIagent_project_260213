@@ -41,6 +41,7 @@ const DEFAULT_ALLOW_PROVIDER_FALLBACK = parseBool(
   parseBool(RUNTIME_CODER.allow_provider_fallback_default, false),
 );
 const GLOBAL_TASK_TIMEOUT_MS = Math.max(30000, Number(process.env.CODER_GLOBAL_TASK_TIMEOUT_MS || RUNTIME_CODER.global_task_timeout_ms || 900000));
+
 console.log(
   `[runtime-config] path=${RUNTIME.path || "none"} provider_default=${DEFAULT_PROVIDER} model_default=${DEFAULT_MODEL || "none"} execution_lane_default=${DEFAULT_EXECUTION_LANE || "none"} allow_provider_fallback=${DEFAULT_ALLOW_PROVIDER_FALLBACK} global_timeout_ms=${GLOBAL_TASK_TIMEOUT_MS}`
 );
@@ -185,44 +186,65 @@ export async function main() {
     if (!e.message.includes("BUSYGROUP")) throw e;
   }
 
+  async function processMessages(messages) {
+    const promises = messages.map(async ([id, fieldValues]) => {
+      const task = {};
+      for (let i = 0; i < fieldValues.length; i += 2) {
+        task[fieldValues[i]] = fieldValues[i + 1];
+      }
+      
+      if (task.tool_name && task.tool_name.startsWith("coding.")) {
+        console.log(`[worker] Processing task ${task.task_id} (${task.tool_name})...`);
+        const lifecycle = createTaskLifecycle({
+          taskId: task.task_id,
+          msgId: id,
+          toolName: task.tool_name,
+          runId: task.run_id,
+          emitResult,
+          writeFact,
+          ackMessage: async (messageId) => {
+            await redis.xack(STREAM_TASK, GROUP, messageId);
+          },
+        });
+        try {
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("GLOBAL_TASK_TIMEOUT")), GLOBAL_TASK_TIMEOUT_MS));
+          await Promise.race([processTask(id, task, lifecycle), timeoutPromise]);
+          console.log(`[worker] Successfully processed and acknowledged task ${task.task_id}`);
+        } catch (err) {
+          console.error(`[worker] Critical error processing task ${task.task_id}:`, err.message);
+          await lifecycle.finalizeTimeout(err);
+        }
+      } else {
+        console.warn(`[worker] Received non-coding task ${task.task_id} (${task.tool_name}), acknowledging and skipping.`);
+        await redis.xack(STREAM_TASK, GROUP, id);
+      }
+    });
+    await Promise.allSettled(promises);
+  }
+
+  let claimStartId = "0-0";
+  const STALE_TASK_MIN_IDLE_MS = 60000; // 1 min timeout for claiming dead worker's tasks
+
   while (true) {
     try {
-      const res = await redis.xreadgroup("GROUP", GROUP, CONSUMER, "COUNT", 1, "BLOCK", 5000, "STREAMS", STREAM_TASK, ">");
+      if (typeof redis.xautoclaim === "function") {
+        const claimRes = await redis.xautoclaim(STREAM_TASK, GROUP, CONSUMER, STALE_TASK_MIN_IDLE_MS, claimStartId, "COUNT", 5);
+        if (claimRes) {
+          claimStartId = Array.isArray(claimRes) ? String(claimRes[0] || "0-0") : "0-0";
+          const claimedMessages = Array.isArray(claimRes?.[1]) ? claimRes[1] : [];
+          if (claimedMessages.length > 0) {
+            console.log(`[worker] XAUTOCLAIM recovered ${claimedMessages.length} stale messages.`);
+            await processMessages(claimedMessages);
+            continue;
+          }
+        }
+      }
+
+      const res = await redis.xreadgroup("GROUP", GROUP, CONSUMER, "COUNT", 5, "BLOCK", 5000, "STREAMS", STREAM_TASK, ">");
       if (res && res.length > 0) {
         const stream = res[0];
         const messages = stream[1];
-        for (const [id, fieldValues] of messages) {
-          const task = {};
-          for (let i = 0; i < fieldValues.length; i += 2) {
-            task[fieldValues[i]] = fieldValues[i + 1];
-          }
-
-          if (task.tool_name && task.tool_name.startsWith("coding.")) {
-            console.log(`[worker] Processing task ${task.task_id} (${task.tool_name})...`);
-            const lifecycle = createTaskLifecycle({
-              taskId: task.task_id,
-              msgId: id,
-              toolName: task.tool_name,
-              runId: task.run_id,
-              emitResult,
-              writeFact,
-              ackMessage: async (messageId) => {
-                await redis.xack(STREAM_TASK, GROUP, messageId);
-              },
-            });
-            try {
-              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("GLOBAL_TASK_TIMEOUT")), GLOBAL_TASK_TIMEOUT_MS));
-              await Promise.race([processTask(id, task, lifecycle), timeoutPromise]);
-              console.log(`[worker] Successfully processed and acknowledged task ${task.task_id}`);
-            } catch (err) {
-              console.error(`[worker] Critical error processing task ${task.task_id}:`, err.message);
-              await lifecycle.finalizeTimeout(err);
-            }
-          } else {
-            console.warn(`[worker] Received non-coding task ${task.task_id} (${task.tool_name}), acknowledging and skipping.`);
-            await redis.xack(STREAM_TASK, GROUP, id);
-          }
-        }
+        await processMessages(messages);
       }
     } catch (e) {
       console.error("[worker] Loop error:", e.message);

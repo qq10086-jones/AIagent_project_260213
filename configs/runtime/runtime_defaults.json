@@ -29,14 +29,20 @@
     "max_attempts_default": 2,
     "same_error_repeat_limit_default": 2,
     "wall_clock_timeout_s_default": 480,
-    "execution_lane_default": "stable_local_lane",
+    "execution_lane_default": "stable_cloud_lane",
     "allow_provider_fallback_default": false,
     "execution_lanes": {
+      "stable_cloud_lane": {
+        "provider": "opencode",
+        "model": "dashscope/qwen-flash-2025-07-28",
+        "provider_class": "opencode-provider",
+        "purpose": "stable cloud recovery lane via opencode for memory-limited environments"
+      },
       "stable_local_lane": {
         "provider": "opencode",
         "model": "ollama/glm-4.7-flash:latest",
         "provider_class": "opencode-provider",
-        "purpose": "stable recovery lane for worker-coding validation"
+        "purpose": "stable local recovery lane for high-resource machines"
       },
       "primary_qwen_lane": {
         "provider": "opencode",

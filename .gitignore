@@ -15,6 +15,7 @@ __pycache__/
 **/.codex/
 **/.opencode/
 **/auth.json
+**/opencode.json
 discord_bot_token.txt
 artifacts/runs/
 artifacts/logs/

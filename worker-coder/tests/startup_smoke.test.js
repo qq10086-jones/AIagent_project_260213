@@ -30,7 +30,9 @@ function main() {
   assert.match(workerText, /startup-preflight/);
 
   assert.match(codingServiceText, /from '\.\/scope_guard\.js'/);
+  assert.match(codingServiceText, /from '\.\/step_artifact_contract\.js'/, "coding_service must import from step_artifact_contract");
   assert.ok(fs.existsSync(path.join(root, "scope_guard.js")));
+  assert.ok(fs.existsSync(path.join(root, "step_artifact_contract.js")), "step_artifact_contract.js must exist");
   assert.match(providerPreflightText, /ALIBABA_AUTH_MISSING/);
 
   const syntaxChecks = [
@@ -38,6 +40,7 @@ function main() {
     checkSyntax(root, "coding_service.js"),
     checkSyntax(root, "scope_guard.js"),
     checkSyntax(root, "provider_preflight.js"),
+    checkSyntax(root, "step_artifact_contract.js"),
   ];
   if (syntaxChecks.some((item) => item === false)) {
     console.log("startup_smoke.test.js: syntax subprocess checks skipped due sandbox EPERM");

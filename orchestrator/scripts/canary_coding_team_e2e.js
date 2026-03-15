@@ -5,10 +5,12 @@
  * Uses stub artifacts — no real LLM required.
  *
  * Test cases:
- *   1. happy_path  — all 6 steps complete, workflow reaches succeeded
- *   2. be_failure  — BE step produces invalid artifacts → workflow fails,
- *                    steps 4-6 (FE/QA/release) never execute,
- *                    steps 1-2 (PM/arch) artifacts preserved
+ *   1. happy_path   — all 6 steps complete, workflow reaches succeeded
+ *   2. be_failure   — BE step produces invalid artifacts → workflow fails,
+ *                     steps 4-6 (FE/QA/release) never execute,
+ *                     steps 1-2 (PM/arch) artifacts preserved
+ *   3. qa_failure   — QA step fails → release_pack never dispatched,
+ *                     workflow fails after 5 tasks (pm/arch/be/fe/qa)
  */
 
 import fs from "fs";
@@ -532,6 +534,78 @@ async function runBeFailureInjection({ workspaceRoot, runName }) {
 }
 
 // ---------------------------------------------------------------------------
+// Test Case 3: QA failure — release_pack must NOT be dispatched
+// ---------------------------------------------------------------------------
+
+async function runQaFailureInjection({ workspaceRoot, runName }) {
+  const harness = createEngineHarness(workspaceRoot);
+  harness.pool.state.runs.push({ run_id: `${runName}-run`, status: "running" });
+
+  const started = await harness.engine.startWorkflowRun({
+    workflow_id: "coding_team_v0",
+    project_type: "webapp_crm",
+    run_id: `${runName}-run`,
+    input: { goal: "Build CRM webapp with auth", provider: "opencode", model: "qwen-max" },
+  });
+
+  // Steps 0-3 succeed normally
+  await advanceStep({ engine: harness.engine, pool: harness.pool,
+    taskIdx: 0, writeArtifacts: writePmArtifacts, workspaceRoot });
+  await advanceStep({ engine: harness.engine, pool: harness.pool,
+    taskIdx: 1, writeArtifacts: writeArchArtifacts, workspaceRoot });
+  await advanceStep({ engine: harness.engine, pool: harness.pool,
+    taskIdx: 2, writeArtifacts: writeBeArtifacts, workspaceRoot });
+  await advanceStep({ engine: harness.engine, pool: harness.pool,
+    taskIdx: 3, writeArtifacts: writeFeArtifacts, workspaceRoot });
+
+  // Step 4 — QA: fails (e.g. verification command returned non-zero)
+  const qaTask = harness.pool.state.tasks[4];
+  if (!qaTask) throw new Error("qa_failure: QA task not dispatched");
+  await harness.engine.handleTaskClaimed(qaTask.task_id);
+  await harness.engine.handleTaskTerminal({
+    task_id: qaTask.task_id,
+    status: "failed",
+    output: {
+      ok: false,
+      error: "QA verification failed: login flow test returned exit code 1",
+      diagnostics: { error_code: "E_VERIFICATION_FAILED" },
+    },
+  });
+
+  // Assertions
+  const workflowRun = harness.pool.state.workflow_runs.find(
+    (r) => r.workflow_run_id === started.workflow_run_id);
+  assertEqual(workflowRun.status, "failed", "qa_failure: workflow status");
+
+  const steps = harness.pool.state.workflow_steps
+    .filter((s) => s.workflow_run_id === started.workflow_run_id)
+    .sort((a, b) => Number(a.step_index) - Number(b.step_index));
+
+  // Steps 0-3 succeeded
+  assertEqual(steps[0].status, "succeeded", "qa_failure: pm_spec succeeded");
+  assertEqual(steps[1].status, "succeeded", "qa_failure: arch_design succeeded");
+  assertEqual(steps[2].status, "succeeded", "qa_failure: impl_be succeeded");
+  assertEqual(steps[3].status, "succeeded", "qa_failure: impl_fe succeeded");
+  // Step 4 (QA) failed
+  assertEqual(steps[4].status, "failed", "qa_failure: qa_verify failed");
+
+  // Step 5 (release_pack) must NOT have been dispatched
+  // Total tasks = 5: pm(0), arch(1), be(2), fe(3), qa(4) — release_pack(5) absent
+  assertEqual(harness.pool.state.tasks.length, 5,
+    "qa_failure: release_pack not dispatched (only 5 tasks)");
+
+  const failedEvent = harness.events.find((e) => e.event_name === "workflow.failed");
+  assert(failedEvent, "qa_failure: workflow.failed event emitted");
+
+  return {
+    workflow_run_id: started.workflow_run_id,
+    workflow_status: workflowRun.status,
+    qa_status: steps[4].status,
+    tasks_dispatched: harness.pool.state.tasks.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -554,6 +628,12 @@ async function main() {
   const failResult = await runBeFailureInjection({ workspaceRoot: failWorkspace, runName: "e2e-be-fail" });
   console.log(`- be_failure: workflow=failed, be_error=${failResult.be_error_code}, tasks_dispatched=${failResult.tasks_dispatched}`);
 
+  // --- QA failure injection ---
+  const qaFailWorkspace = path.join(baseDir, "qa_failure");
+  ensureDir(qaFailWorkspace);
+  const qaFailResult = await runQaFailureInjection({ workspaceRoot: qaFailWorkspace, runName: "e2e-qa-fail" });
+  console.log(`- qa_failure: workflow=${qaFailResult.workflow_status}, qa_step=${qaFailResult.qa_status}, tasks_dispatched=${qaFailResult.tasks_dispatched}`);
+
   // Write canary artifact
   const report = {
     ok: true,
@@ -569,6 +649,12 @@ async function main() {
         workflow_status: failResult.workflow_status,
         be_error_code: failResult.be_error_code,
         tasks_dispatched: failResult.tasks_dispatched,
+      },
+      qa_failure: {
+        verdict: "pass",
+        workflow_status: qaFailResult.workflow_status,
+        qa_status: qaFailResult.qa_status,
+        tasks_dispatched: qaFailResult.tasks_dispatched,
       },
     },
   };

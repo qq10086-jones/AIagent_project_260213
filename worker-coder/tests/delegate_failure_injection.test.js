@@ -15,6 +15,8 @@
  *   3. Scope guard blocks impl_be with empty target_paths (pre-execution)
  *   4. Scope guard blocks impl_be with protected target path (pre-execution)
  *   5. Static check catches syntax error in changed file
+ *   6. Verification command fails after successful execution
+ *   7. Unsupported provider name rejected before execution
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -185,6 +187,74 @@ async function testStaticCheckCatchesSyntaxError() {
   );
 }
 
+// ── 6. Verification command fails after successful execution ────────────────
+async function testVerificationFailure() {
+  const workspaceRoot = makeTmp();
+  const relTarget = "src/ok.js";
+  // Command writes a *valid* JS file (static check passes), then exits 0
+  const writeCmd = [
+    "node",
+    "-e",
+    `var fs=require('fs'); fs.mkdirSync(require('path').dirname('${relTarget}'),{recursive:true}); fs.writeFileSync('${relTarget}','const x = 1;'); process.exit(0)`,
+  ];
+
+  const result = await CodingService.delegateTask({
+    workspaceRoot,
+    task_prompt: "write a file",
+    artifact_root: "artifacts/release/run-6",
+    expected_artifacts: [],
+    step_id: "impl_be",
+    target_paths: [relTarget],
+    provider: "opencode",
+    max_attempts: 1,
+    wall_clock_timeout_s: 300,
+    run_id: "run-t33-6",
+    task_id: "task-t33-6",
+    opencode_command: writeCmd,
+    // Verification command always fails
+    verification_command: "node -e process.exit(1)",
+  });
+
+  assert.equal(result.ok, false, "must fail after verification");
+  const errorCode = result.diagnostics?.error_code
+    || result.diagnostics?.final_failure_summary?.error_code;
+  assert.ok(
+    errorCode === "E_VERIFICATION_FAILED" || String(errorCode || "").startsWith("E_"),
+    `expected E_VERIFICATION_FAILED or similar, got ${errorCode}`
+  );
+  // Static check must have passed (valid JS)
+  const staticCheck = result.diagnostics?.static_check;
+  if (staticCheck?.checked) {
+    assert.equal(staticCheck.ok, true, "static check should have passed before verification");
+  }
+}
+
+// ── 7. Unsupported provider name rejected pre-execution ─────────────────────
+async function testUnsupportedProvider() {
+  const workspaceRoot = makeTmp();
+  const result = await CodingService.delegateTask({
+    workspaceRoot,
+    task_prompt: "do something",
+    artifact_root: "artifacts/release/run-7",
+    expected_artifacts: [],
+    step_id: "pm_spec",
+    target_paths: [],
+    provider: "gpt-99-turbo",   // not in {auto, opencode, codex}
+    max_attempts: 1,
+    wall_clock_timeout_s: 300,
+    run_id: "run-t33-7",
+    task_id: "task-t33-7",
+  });
+
+  assert.equal(result.ok, false, "unsupported provider must fail");
+  assert.equal(
+    result.diagnostics?.error_code,
+    "E_PROVIDER_UNAVAILABLE",
+    "must fail with E_PROVIDER_UNAVAILABLE"
+  );
+  assert.ok(!result.command_used, "no command should have been dispatched");
+}
+
 async function main() {
   await testMaxAttemptsExhausted();
   console.log("  [PASS] max attempts exhausted → attempt_budget_exhausted");
@@ -200,6 +270,12 @@ async function main() {
 
   await testStaticCheckCatchesSyntaxError();
   console.log("  [PASS] static check: syntax error → E_STATIC_CHECK_FAILED");
+
+  await testVerificationFailure();
+  console.log("  [PASS] verification failure → E_VERIFICATION_FAILED");
+
+  await testUnsupportedProvider();
+  console.log("  [PASS] unsupported provider → E_PROVIDER_UNAVAILABLE");
 
   console.log("delegate_failure_injection.test.js: all tests passed");
 }

@@ -15,6 +15,22 @@ function normalizeModel(value) {
   return String(value || "").trim();
 }
 
+function validateCodexLane({ laneName, provider, env = process.env }) {
+  const issues = [];
+  if (normalizeProvider(provider) !== "codex") return issues;
+  const hasApiKey = Boolean(String(env.OPENAI_API_KEY || "").trim());
+  const hasAuthFile = fs.existsSync("/root/.codex/auth.json");
+  if (!hasApiKey && !hasAuthFile) {
+    issues.push({
+      severity: "error",
+      lane: laneName,
+      code: "CODEX_AUTH_MISSING",
+      message: `lane '${laneName}' requires OPENAI_API_KEY or /root/.codex/auth.json`,
+    });
+  }
+  return issues;
+}
+
 function validateOpenCodeLane({ laneName, provider, model, env = process.env }) {
   const issues = [];
   const safeProvider = normalizeProvider(provider);
@@ -74,19 +90,29 @@ export function validateRuntimePreflight({
 
   if (defaultExecutionLane && lanes[defaultExecutionLane]) {
     const lane = lanes[defaultExecutionLane] || {};
-    issues.push(...validateOpenCodeLane({
-      laneName: defaultExecutionLane,
-      provider: lane.provider || defaultProvider,
-      model: lane.model || defaultModel,
-      env,
-    }));
+    const laneProvider = normalizeProvider(lane.provider || defaultProvider);
+    if (laneProvider === "codex") {
+      issues.push(...validateCodexLane({ laneName: defaultExecutionLane, provider: laneProvider, env }));
+    } else {
+      issues.push(...validateOpenCodeLane({
+        laneName: defaultExecutionLane,
+        provider: laneProvider,
+        model: lane.model || defaultModel,
+        env,
+      }));
+    }
   } else {
-    issues.push(...validateOpenCodeLane({
-      laneName: defaultExecutionLane || "default",
-      provider: defaultProvider,
-      model: defaultModel,
-      env,
-    }));
+    const laneProvider = normalizeProvider(defaultProvider);
+    if (laneProvider === "codex") {
+      issues.push(...validateCodexLane({ laneName: defaultExecutionLane || "default", provider: laneProvider, env }));
+    } else {
+      issues.push(...validateOpenCodeLane({
+        laneName: defaultExecutionLane || "default",
+        provider: laneProvider,
+        model: defaultModel,
+        env,
+      }));
+    }
   }
 
   return {

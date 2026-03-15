@@ -81,11 +81,51 @@ function testPassesForConfiguredLocalOllamaLane() {
   assert.equal(result.issues.length, 0);
 }
 
+function testCodexLaneRequiresOpenAIKey() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "codex",
+    defaultModel: "codex-mini-latest",
+    defaultExecutionLane: "stable_codex_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_codex_lane: {
+          provider: "codex",
+          model: "codex-mini-latest",
+        },
+      },
+    },
+    env: {},  // no OPENAI_API_KEY, no auth.json in test env
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.issues[0].code, "CODEX_AUTH_MISSING");
+}
+
+function testCodexLanePassesWhenOpenAIKeyPresent() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "codex",
+    defaultModel: "codex-mini-latest",
+    defaultExecutionLane: "stable_codex_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_codex_lane: {
+          provider: "codex",
+          model: "codex-mini-latest",
+        },
+      },
+    },
+    env: { OPENAI_API_KEY: "sk-test-key" },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.length, 0);
+}
+
 function main() {
   testRejectsDashScopeOnOpenCodeLane();
   testRequiresAlibabaCredential();
   testPassesWhenAlibabaCredentialPresent();
   testPassesForConfiguredLocalOllamaLane();
+  testCodexLaneRequiresOpenAIKey();
+  testCodexLanePassesWhenOpenAIKeyPresent();
   console.log("provider_preflight.test.js: all tests passed");
 }
 

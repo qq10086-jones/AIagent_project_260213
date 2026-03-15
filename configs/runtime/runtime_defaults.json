@@ -29,10 +29,16 @@
     "max_attempts_default": 2,
     "same_error_repeat_limit_default": 2,
     "wall_clock_timeout_s_default": 900,
-    "execution_lane_default": "stable_local_lane",
+    "execution_lane_default": "stable_codex_lane",
     "allow_provider_fallback_default": false,
     "stream_batch_size": 1,
     "execution_lanes": {
+      "stable_codex_lane": {
+        "provider": "codex",
+        "model": "codex-mini-latest",
+        "provider_class": "codex-cli",
+        "purpose": "stable codex lane using OpenAI Codex CLI with OPENAI_API_KEY"
+      },
       "stable_cloud_lane": {
         "provider": "opencode",
         "model": "alibaba-coding-plan/qwen3-coder-plus",

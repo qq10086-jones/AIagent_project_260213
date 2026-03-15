@@ -97,7 +97,7 @@ services:
       - OPENCODE_BIN=${OPENCODE_BIN:-opencode}
       - CODER_PROVIDER_DEFAULT=${CODER_PROVIDER_DEFAULT:-opencode}
       - CODER_MODEL_DEFAULT=${CODER_MODEL_DEFAULT:-alibaba-coding-plan/qwen3-coder-plus}
-      - CODER_EXECUTION_LANE_DEFAULT=${CODER_EXECUTION_LANE_DEFAULT:-stable_local_lane}
+      - CODER_EXECUTION_LANE_DEFAULT=${CODER_EXECUTION_LANE_DEFAULT:-stable_codex_lane}
       - CODER_ISOLATION_MODE=${CODER_ISOLATION_MODE:-promote}
       - RUNTIME_CONFIG_PATH=/workspace/configs/runtime/runtime_defaults.json
       - PGHOST=db

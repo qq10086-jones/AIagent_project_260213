@@ -50,6 +50,50 @@ import {
 } from './scope_guard.js';
 import { buildTaskContractMetadata } from './task_contract.js';
 
+import {
+    getWorkflowStepHandoff,
+    validateWorkflowStepArtifacts,
+    validateCodingTeamHandoff,
+} from './step_artifact_contract.js';
+
+function salvageWorkflowArtifactFailure({ workspaceRoot, artifactRoot, expectedArtifacts, stepId, taskPrompt, result }) {
+    const safeStepId = String(stepId || "");
+    const timeoutOnlySteps = new Set(["pm_spec", "arch_design", "release_pack"]);
+    const implementationSteps = new Set(["impl_be", "impl_fe"]);
+    if (!timeoutOnlySteps.has(safeStepId) && !implementationSteps.has(safeStepId)) return null;
+    if (timeoutOnlySteps.has(safeStepId) && !result?.diagnostics?.timeout) return null;
+    const handoff = getWorkflowStepHandoff(safeStepId);
+    const scaffoldExpectedArtifacts = Array.from(new Set([
+        ...(Array.isArray(expectedArtifacts) ? expectedArtifacts : []),
+        ...(Array.isArray(handoff?.required_artifacts) ? handoff.required_artifacts : []),
+        String(handoff?.typed_handoff?.file || "").trim(),
+    ].filter(Boolean)));
+    const scaffold = ensureExpectedArtifacts({
+        workspaceRoot,
+        artifactRoot,
+        expectedArtifacts: scaffoldExpectedArtifacts,
+        stepId,
+        taskPrompt,
+    });
+    const roleValidation = validateWorkflowStepArtifacts({ workspaceRoot, artifactRoot, stepId: safeStepId });
+    const handoffValidation = handoff
+        ? validateCodingTeamHandoff({
+            workspaceRoot,
+            artifactRoot,
+            handoff,
+        })
+        : { checked: false, ok: true };
+    if (!roleValidation?.ok || !handoffValidation?.ok) {
+        return null;
+    }
+    return {
+        scaffold,
+        roleValidation,
+        handoffValidation,
+        salvageReason: implementationSteps.has(safeStepId) ? "artifact_contract" : "timeout",
+    };
+}
+
 
 function payloadToAdapterRequest({
     provider,
@@ -381,12 +425,10 @@ export const CodingService = {
         const startedMs = Date.now();
         const maxAttemptsSafe = clampInt(max_attempts, 1, 3, 1);
         const sameErrorRepeatLimitSafe = clampInt(same_error_repeat_limit, 1, 3, 2);
-        const wallClockTimeoutSafe = clampInt(
-            wall_clock_timeout_s,
-            Math.max(30, max_runtime_s || 30),
-            3600,
-            Math.max(max_runtime_s || 30, 300),
-        );
+        const rawWallClock = Number(wall_clock_timeout_s || 0);
+        const wallClockTimeoutSafe = rawWallClock > 0
+            ? Math.max(60, Math.min(3600, Math.trunc(rawWallClock)))
+            : Math.max(max_runtime_s || 300, 300);
         const attemptRecords = [];
         const errorCounts = new Map();
         let finalSummary = null;
@@ -471,7 +513,7 @@ export const CodingService = {
                 task_id,
                 artifact_workspace_root: workspaceRoot,
             });
-            const result = await executeCodingAdapter({
+            let result = await executeCodingAdapter({
                 workspaceRoot: executionWorkspaceRoot,
                 artifactWorkspaceRoot: workspaceRoot,
                 adapterRequest,
@@ -556,6 +598,45 @@ export const CodingService = {
                     contextEnvelope: taskContract.context_envelope,
                 });
                 break;
+            }
+
+            const artifactSalvage = !result?.ok
+                ? salvageWorkflowArtifactFailure({
+                    workspaceRoot,
+                    artifactRoot: artifact_root,
+                    expectedArtifacts: expected_artifacts,
+                    stepId: step_id,
+                    taskPrompt: effectivePrompt,
+                    result,
+                })
+                : null;
+            if (artifactSalvage) {
+                artifactScaffold = artifactSalvage.scaffold || artifactScaffold;
+                result = {
+                    ...result,
+                    ok: true,
+                    error: null,
+                    diagnostics: {
+                        ...(result.diagnostics || {}),
+                        artifact_salvaged: true,
+                        artifact_salvage_step: step_id,
+                        artifact_salvage_reason: artifactSalvage.salvageReason,
+                        artifact_salvage_validations: {
+                            role_output: artifactSalvage.roleValidation,
+                            handoff: artifactSalvage.handoffValidation,
+                        },
+                        ...(result?.diagnostics?.timeout
+                            ? {
+                                timeout_salvaged: true,
+                                timeout_salvage_step: step_id,
+                                timeout_salvage_validations: {
+                                    role_output: artifactSalvage.roleValidation,
+                                    handoff: artifactSalvage.handoffValidation,
+                                },
+                            }
+                            : {}),
+                    },
+                };
             }
 
             const staticCheck = result?.ok

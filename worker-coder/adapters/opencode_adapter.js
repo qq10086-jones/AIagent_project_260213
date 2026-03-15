@@ -40,15 +40,6 @@ function validateOpenCodeModelRef(model) {
       error: "OpenCode does not accept dashscope/* model refs; use alibaba-coding-plan/* or opencode/*.",
     };
   }
-  if (providerId === "ollama") {
-    return {
-      ok: false,
-      normalizedModel: normalized,
-      errorCode: "E_PROVIDER_CONFIG",
-      providerErrorClass: "PROVIDER_CONFIG_ERROR",
-      error: "OpenCode does not accept ollama/* model refs; use an OpenCode-supported provider/model id.",
-    };
-  }
   return { ok: true, normalizedModel: normalized };
 }
 
@@ -589,6 +580,9 @@ function mapErrorCode({ proc, command }) {
   if (proc.timedOut) {
     return { errorCode: "E_TIMEOUT", providerErrorClass: "EXECUTION_TIMEOUT" };
   }
+  if (proc.ok) {
+    return { errorCode: null, providerErrorClass: null };
+  }
   if (commandNotFound) {
     return { errorCode: "E_PROVIDER_UNAVAILABLE", providerErrorClass: "PROVIDER_UNAVAILABLE" };
   }
@@ -736,6 +730,3 @@ export async function runOpenCodeTask({
     };
   }
 }
-
-
-

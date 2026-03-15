@@ -3,7 +3,7 @@
   "artifact_count": 0,
   "bytes_total": 0,
   "largest_artifact_bytes": 0,
-  "prompt_chars": 1311,
+  "prompt_chars": 1168,
   "injected_context_bytes": 0,
   "status": "ok",
   "threshold_source": "default_thresholds",
@@ -16,5 +16,5 @@
     "overflow_risk_injected_context_bytes": 300000
   },
   "run_id": "gate-seq-run",
-  "workflow_run_id": "ca27512c-66ee-4323-8706-d067f1aea748"
+  "workflow_run_id": "ec0659f3-8977-4a3e-b17f-13ca9f3aa6d1"
 }

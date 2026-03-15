@@ -32,6 +32,7 @@ export function buildCodingExecutorRequest({
       beta_template_id: String(payload?.beta_template_id || "").trim() || null,
       context_envelope: payload?.context_envelope || null,
       execution_adapter_packet: executionPacket || payload?.execution_adapter_packet || null,
+      execution_lane: String(payload?.execution_lane || ""),
       provider_hint: String(payload?.provider || provider || ""),
       model_hint: String(payload?.model || ""),
     },

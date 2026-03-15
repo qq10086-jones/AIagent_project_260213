@@ -24,12 +24,12 @@
   "worker_coder": {
     "provider_default": "opencode",
     "model_default": "alibaba-coding-plan/qwen3-coder-plus",
-    "global_task_timeout_ms": 900000,
+    "global_task_timeout_ms": 1800000,
     "verification_command_default": "",
     "max_attempts_default": 2,
     "same_error_repeat_limit_default": 2,
-    "wall_clock_timeout_s_default": 480,
-    "execution_lane_default": "stable_cloud_lane",
+    "wall_clock_timeout_s_default": 900,
+    "execution_lane_default": "stable_local_lane",
     "allow_provider_fallback_default": false,
     "execution_lanes": {
       "stable_cloud_lane": {
@@ -62,7 +62,7 @@
     "llm_timeout_s": 25
   },
   "watchdog": {
-    "running_timeout_sec": 900,
+    "running_timeout_sec": 1800,
     "queued_timeout_sec": 21600,
     "interval_sec": 30,
     "auto_dlq": true

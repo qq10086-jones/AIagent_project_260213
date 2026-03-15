@@ -408,9 +408,31 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
       fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
       return { repaired: true, reason: "pm_placeholder_upgraded" };
     }
+    if (rel === "plan/spec.md" && ext === ".md") {
+      const expectedHeadings = ["scope", "user stories", "acceptance criteria", "non-goals", "artifact list"];
+      if (!markdownHasHeadings(raw, expectedHeadings)) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "pm_spec_headings_repaired" };
+      }
+    }
     if ((rel === "plan/arch.md" || rel === "plan/interfaces.md" || rel === "plan/workplan.md") && ext === ".md" && /Scaffold note: baseline content generated for workflow continuity\./i.test(raw)) {
       fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
       return { repaired: true, reason: "arch_placeholder_upgraded" };
+    }
+    if (rel === "plan/arch.md" && ext === ".md") {
+      const expectedHeadings = ["module breakdown", "interfaces", "dependency choices", "risk notes"];
+      if (!markdownHasHeadings(raw, expectedHeadings)) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "arch_headings_repaired" };
+      }
+    }
+    if (rel === "plan/interfaces.md" && ext === ".md") {
+      // Only require the generic "interfaces" section — specific endpoint headings vary by project type
+      const expectedHeadings = ["interfaces"];
+      if (!markdownHasHeadings(raw, expectedHeadings)) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "interfaces_headings_repaired" };
+      }
     }
     if (file === "acceptance.json" && ext === ".json") {
       let parsed = null;
@@ -418,6 +440,34 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
       if (!(Array.isArray(parsed?.criteria) && parsed.criteria.length > 0 && Array.isArray(parsed?.artifacts) && parsed.artifacts.length > 0 && typeof parsed?.owner === "string" && parsed.owner.trim() && typeof parsed?.version === "string" && parsed.version.trim())) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "acceptance_schema_repaired" };
+      }
+    }
+    if (rel === "handoff/pm_to_architect.json" && ext === ".json") {
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch {}
+      const criteria = Array.isArray(parsed?.acceptance?.criteria) ? parsed.acceptance.criteria : [];
+      if (!(typeof parsed?.from_step === "string" && parsed.from_step.trim()
+        && Array.isArray(parsed?.to_steps) && parsed.to_steps.length > 0
+        && typeof parsed?.scope_summary === "string" && parsed.scope_summary.trim()
+        && Array.isArray(parsed?.artifacts) && parsed.artifacts.length > 0
+        && criteria.length > 0)) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "pm_handoff_schema_repaired" };
+      }
+    }
+    if (rel === "handoff/architect_to_impl.json" && ext === ".json") {
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch {}
+      const decisions = Array.isArray(parsed?.decisions) ? parsed.decisions : [];
+      const risks = Array.isArray(parsed?.risks) ? parsed.risks : [];
+      if (!(typeof parsed?.from_step === "string" && parsed.from_step.trim()
+        && Array.isArray(parsed?.to_steps) && parsed.to_steps.length > 0
+        && Array.isArray(parsed?.modules) && parsed.modules.length > 0
+        && Array.isArray(parsed?.interfaces) && parsed.interfaces.length > 0
+        && decisions.length > 0
+        && risks.length > 0)) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "arch_handoff_schema_repaired" };
       }
     }
     if (file === "risk_report.json" && ext === ".json") {
@@ -432,6 +482,30 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
       if (!isQaReportValid(raw, rootAbs)) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "qa_report_invalid" };
+      }
+    }
+    if (rel === "release/release_notes.md" && ext === ".md") {
+      if (String(raw || "").trim().length < 10) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "release_notes_invalid" };
+      }
+    }
+    if (rel === "release/artifact_manifest.json" && ext === ".json") {
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch {}
+      const artifacts = Array.isArray(parsed?.artifacts) ? parsed.artifacts : [];
+      const artifactsValid = artifacts.length > 0 && artifacts.every((item) =>
+        item
+        && typeof item.path === "string" && item.path.trim()
+        && typeof item.type === "string" && item.type.trim()
+        && Number.isInteger(item.size_bytes) && item.size_bytes >= 0
+      );
+      if (!(typeof parsed?.run_id === "string" && parsed.run_id.trim()
+        && typeof parsed?.workflow_id === "string" && parsed.workflow_id.trim()
+        && typeof parsed?.completed_at === "string" && parsed.completed_at.trim()
+        && artifactsValid)) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "release_manifest_schema_repaired" };
       }
     }
     if ((rel === "tests/test_plan.md" || rel === "qa/smoke_report.md") && ext === ".md") {

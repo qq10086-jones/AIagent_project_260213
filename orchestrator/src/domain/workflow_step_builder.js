@@ -118,6 +118,18 @@ function chooseImplementationMode({
       contextBudgetPreview: null,
     };
   }
+  const requestedLane = String(payload?.execution_lane || "").trim();
+  // stable_local_lane uses a local ollama model with a limited context window.
+  // Structured patch (diff-first) requires injecting target file content which
+  // can overflow that budget. Force full_file_fallback to keep the prompt small.
+  if (["impl_be", "impl_fe"].includes(String(stepDef?.id || "")) && requestedLane === "stable_local_lane") {
+    return {
+      executionModeRequested: "full_file_fallback",
+      promptScriptId: String(stepDef?.prompt_script_id || ""),
+      targetFileContext: [],
+      contextBudgetPreview: null,
+    };
+  }
   const diffFirstEnabled = runtimeConfig?.execution?.diff_first_enabled !== false;
   const targetPaths = Array.isArray(payload?.target_paths) ? payload.target_paths : ["sandbox/crm_site/"];
   const targetFileContext = diffFirstEnabled
@@ -187,6 +199,15 @@ function applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeCo
     payload.model = String(laneConfig.model);
   } else if (!payload.model && input.model) {
     payload.model = input.model;
+  }
+  if (!payload.wall_clock_timeout_s && runtimeWorkerCoder.wall_clock_timeout_s_default) {
+    payload.wall_clock_timeout_s = Number(runtimeWorkerCoder.wall_clock_timeout_s_default);
+  }
+  if (!payload.max_attempts && runtimeWorkerCoder.max_attempts_default) {
+    payload.max_attempts = Number(runtimeWorkerCoder.max_attempts_default);
+  }
+  if (!payload.same_error_repeat_limit && runtimeWorkerCoder.same_error_repeat_limit_default) {
+    payload.same_error_repeat_limit = Number(runtimeWorkerCoder.same_error_repeat_limit_default);
   }
 }
 
@@ -460,7 +481,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     }
 
     if (stepDef.tool === "coding.delegate") {
-      const runtimeByStep = { pm_spec: 120, arch_design: 180, impl_fe: 240, impl_be: 240, release_pack: 120 };
+      const runtimeByStep = { pm_spec: 360, arch_design: 480, impl_fe: 360, impl_be: 240, release_pack: 120 };
       payload.task_prompt = payload.task_prompt || buildStepPrompt({ run, stepDef: effectiveStepDef, input, payload, promptScript });
       if (Array.isArray(payload.target_file_context) && payload.target_file_context.length > 0) {
         payload.task_prompt = `${payload.task_prompt}${buildTargetFileContextBlock(payload.target_file_context)}`;

@@ -1,10 +1,10 @@
 {
-  "workflow_run_id": "0809dc57-845f-43ae-ba07-7cf320385733",
+  "workflow_run_id": "d6ef756f-d6d5-484f-91c0-ece12d08f8d2",
   "run_id": "e2e-happy-run",
   "workflow_id": "coding_team_v0",
   "project_type": "webapp_crm",
   "status": "succeeded",
-  "generated_at": "2026-03-08T10:38:46.444Z",
+  "generated_at": "2026-03-15T04:56:00.598Z",
   "required_artifacts": [
     "spec",
     "arch",
@@ -58,6 +58,198 @@
       "artifacts": []
     }
   ],
+  "context_budget_reports": [
+    {
+      "step_index": 0,
+      "step_id": "pm_spec",
+      "role_name": "pm",
+      "status": "ok",
+      "report_path": "artifacts/release/e2e-happy-run/metrics/context_budget_pm_spec.json",
+      "threshold_source": "default_thresholds"
+    },
+    {
+      "step_index": 1,
+      "step_id": "arch_design",
+      "role_name": "architect",
+      "status": "ok",
+      "report_path": "artifacts/release/e2e-happy-run/metrics/context_budget_arch_design.json",
+      "threshold_source": "role_overrides.architect"
+    },
+    {
+      "step_index": 2,
+      "step_id": "impl_be",
+      "role_name": "backend",
+      "status": "ok",
+      "report_path": "artifacts/release/e2e-happy-run/metrics/context_budget_impl_be.json",
+      "threshold_source": "role_overrides.backend"
+    },
+    {
+      "step_index": 3,
+      "step_id": "impl_fe",
+      "role_name": "frontend",
+      "status": "ok",
+      "report_path": "artifacts/release/e2e-happy-run/metrics/context_budget_impl_fe.json",
+      "threshold_source": "role_overrides.frontend"
+    },
+    {
+      "step_index": 4,
+      "step_id": "qa_verify",
+      "role_name": "qa",
+      "status": "ok",
+      "report_path": "artifacts/release/e2e-happy-run/metrics/context_budget_qa_verify.json",
+      "threshold_source": "default_thresholds"
+    },
+    {
+      "step_index": 5,
+      "step_id": "release_pack",
+      "role_name": "release",
+      "status": "ok",
+      "report_path": "artifacts/release/e2e-happy-run/metrics/context_budget_release_pack.json",
+      "threshold_source": "default_thresholds"
+    }
+  ],
+  "context_budget_summary": {
+    "total_steps": 6,
+    "ok": 6,
+    "warning": 0,
+    "overflow_risk": 0,
+    "missing": 0
+  },
+  "context_artifacts": [
+    {
+      "step_index": 0,
+      "step_id": "pm_spec",
+      "context_packet_path": null,
+      "repo_map_path": null
+    },
+    {
+      "step_index": 1,
+      "step_id": "arch_design",
+      "context_packet_path": null,
+      "repo_map_path": null
+    },
+    {
+      "step_index": 2,
+      "step_id": "impl_be",
+      "context_packet_path": "artifacts/release/e2e-happy-run/context/context_packet_impl_be.json",
+      "repo_map_path": "artifacts/release/e2e-happy-run/context/repo_map_impl_be.json"
+    },
+    {
+      "step_index": 3,
+      "step_id": "impl_fe",
+      "context_packet_path": "artifacts/release/e2e-happy-run/context/context_packet_impl_fe.json",
+      "repo_map_path": "artifacts/release/e2e-happy-run/context/repo_map_impl_fe.json"
+    },
+    {
+      "step_index": 4,
+      "step_id": "qa_verify",
+      "context_packet_path": null,
+      "repo_map_path": null
+    },
+    {
+      "step_index": 5,
+      "step_id": "release_pack",
+      "context_packet_path": null,
+      "repo_map_path": null
+    }
+  ],
+  "coding_execution_evidence": [
+    {
+      "step_index": 0,
+      "step_id": "pm_spec",
+      "test_result": null,
+      "test_log_path": null,
+      "verification_checked": false,
+      "verification_ok": null,
+      "verification_command": null,
+      "retry_summary": null,
+      "final_failure_summary": null,
+      "prompt_contract_path": null,
+      "coding_failure_memory_latest_path": null,
+      "coding_failure_memory_jsonl_path": null
+    },
+    {
+      "step_index": 1,
+      "step_id": "arch_design",
+      "test_result": null,
+      "test_log_path": null,
+      "verification_checked": false,
+      "verification_ok": null,
+      "verification_command": null,
+      "retry_summary": null,
+      "final_failure_summary": null,
+      "prompt_contract_path": null,
+      "coding_failure_memory_latest_path": null,
+      "coding_failure_memory_jsonl_path": null
+    },
+    {
+      "step_index": 2,
+      "step_id": "impl_be",
+      "test_result": null,
+      "test_log_path": null,
+      "verification_checked": false,
+      "verification_ok": null,
+      "verification_command": null,
+      "retry_summary": null,
+      "final_failure_summary": null,
+      "prompt_contract_path": null,
+      "coding_failure_memory_latest_path": null,
+      "coding_failure_memory_jsonl_path": null
+    },
+    {
+      "step_index": 3,
+      "step_id": "impl_fe",
+      "test_result": null,
+      "test_log_path": null,
+      "verification_checked": false,
+      "verification_ok": null,
+      "verification_command": null,
+      "retry_summary": null,
+      "final_failure_summary": null,
+      "prompt_contract_path": null,
+      "coding_failure_memory_latest_path": null,
+      "coding_failure_memory_jsonl_path": null
+    },
+    {
+      "step_index": 4,
+      "step_id": "qa_verify",
+      "test_result": null,
+      "test_log_path": null,
+      "verification_checked": false,
+      "verification_ok": null,
+      "verification_command": null,
+      "retry_summary": null,
+      "final_failure_summary": null,
+      "prompt_contract_path": null,
+      "coding_failure_memory_latest_path": null,
+      "coding_failure_memory_jsonl_path": null
+    },
+    {
+      "step_index": 5,
+      "step_id": "release_pack",
+      "test_result": null,
+      "test_log_path": null,
+      "verification_checked": false,
+      "verification_ok": null,
+      "verification_command": null,
+      "retry_summary": null,
+      "final_failure_summary": null,
+      "prompt_contract_path": null,
+      "coding_failure_memory_latest_path": null,
+      "coding_failure_memory_jsonl_path": null
+    }
+  ],
+  "coding_execution_summary": {
+    "total_steps": 6,
+    "verification_checked": 0,
+    "verification_passed": 0,
+    "verification_failed": 0,
+    "test_logs_present": 0,
+    "retry_enabled_steps": 0,
+    "retry_attempted_steps": 0,
+    "final_failures_present": 0,
+    "failure_memory_entries": 0
+  },
   "steps": [
     {
       "step_index": 0,
@@ -67,7 +259,7 @@
       "gate_name": "low",
       "task_id": "task-1",
       "status": "succeeded",
-      "checkpoint_id": "1374056f-ca71-4677-9aa2-234542a28e1d",
+      "checkpoint_id": "a4ff8375-00ad-478e-a036-20692cbae9ed",
       "error_code": null
     },
     {
@@ -78,7 +270,7 @@
       "gate_name": "policy",
       "task_id": "task-2",
       "status": "succeeded",
-      "checkpoint_id": "a53b3bb2-4dce-4a71-b906-6bf206a51aea",
+      "checkpoint_id": "ae0acd5c-9a13-4b80-8dc7-028c55661753",
       "error_code": null
     },
     {
@@ -89,7 +281,7 @@
       "gate_name": "policy",
       "task_id": "task-3",
       "status": "succeeded",
-      "checkpoint_id": "8e205375-7fb3-47c5-a09b-4da42d2e9080",
+      "checkpoint_id": "dcda04ef-f0f1-4bdd-9a73-4b14896872ee",
       "error_code": null
     },
     {
@@ -100,7 +292,7 @@
       "gate_name": "policy",
       "task_id": "task-4",
       "status": "succeeded",
-      "checkpoint_id": "6970c984-5e85-4e22-b578-9b72fb03e09b",
+      "checkpoint_id": "5c84a496-cfb9-4dbf-bf71-01f285005bab",
       "error_code": null
     },
     {
@@ -111,7 +303,7 @@
       "gate_name": "acceptance",
       "task_id": "task-5",
       "status": "succeeded",
-      "checkpoint_id": "076de375-3d3d-4b80-8f87-d3c43973555c",
+      "checkpoint_id": "86ee943a-93b2-4e43-a89f-af22c60986ca",
       "error_code": null
     },
     {
@@ -122,52 +314,52 @@
       "gate_name": "finalize",
       "task_id": "task-6",
       "status": "succeeded",
-      "checkpoint_id": "fc408f43-59f0-45e6-94a6-c27f09944588",
+      "checkpoint_id": "e33eb1d2-3329-49e7-ad46-b11c52e4a2fd",
       "error_code": null
     }
   ],
   "checkpoints": [
     {
-      "checkpoint_id": "1374056f-ca71-4677-9aa2-234542a28e1d",
+      "checkpoint_id": "a4ff8375-00ad-478e-a036-20692cbae9ed",
       "step_index": 0,
       "step_id": "pm_spec",
       "task_id": "task-1",
-      "workspace_hash": "3d528969e0e982ad1b97dc88f20c00332aa962939e2a6195d6456236b171c943"
+      "workspace_hash": "a923613b3cb73956a4661e6467046db3902b5982167b9ca2a5387d238ded69d9"
     },
     {
-      "checkpoint_id": "a53b3bb2-4dce-4a71-b906-6bf206a51aea",
+      "checkpoint_id": "ae0acd5c-9a13-4b80-8dc7-028c55661753",
       "step_index": 1,
       "step_id": "arch_design",
       "task_id": "task-2",
-      "workspace_hash": "405a1a1dcb7aa406bbf4332594c453e007746f699d3b8f18a843b480df573930"
+      "workspace_hash": "fb984fe6bc615325e67e525b86a619314581deb94759cd5274bcc0bb48fa64be"
     },
     {
-      "checkpoint_id": "8e205375-7fb3-47c5-a09b-4da42d2e9080",
+      "checkpoint_id": "dcda04ef-f0f1-4bdd-9a73-4b14896872ee",
       "step_index": 2,
       "step_id": "impl_be",
       "task_id": "task-3",
-      "workspace_hash": "9723aa46ace54b61fa00519d48176ee9a0f8f82b5ee917b4d7da65f1d2d1fc50"
+      "workspace_hash": "4b92bb6129f6f05c9ef332d4cf542e198390f39c21a768bd7f3cd7b3c3f6102e"
     },
     {
-      "checkpoint_id": "6970c984-5e85-4e22-b578-9b72fb03e09b",
+      "checkpoint_id": "5c84a496-cfb9-4dbf-bf71-01f285005bab",
       "step_index": 3,
       "step_id": "impl_fe",
       "task_id": "task-4",
-      "workspace_hash": "72c16420a82bb7f31765ad2b0c18d11edc57adf62ebfc82dc2bf6c82cd42ed72"
+      "workspace_hash": "de4503e653669cbec576cdc5e693fe63e8c2fb05d46ebd90b35c435af85ce89b"
     },
     {
-      "checkpoint_id": "076de375-3d3d-4b80-8f87-d3c43973555c",
+      "checkpoint_id": "86ee943a-93b2-4e43-a89f-af22c60986ca",
       "step_index": 4,
       "step_id": "qa_verify",
       "task_id": "task-5",
-      "workspace_hash": "34b5d14cfaa6c2428e01f1296d4ffae9a38d1c6fd580e2115fedce3f3adc08aa"
+      "workspace_hash": "792424b7cb6952bfb1643f0382cfae719bc82b66664369c7045918d08cbbd95b"
     },
     {
-      "checkpoint_id": "fc408f43-59f0-45e6-94a6-c27f09944588",
+      "checkpoint_id": "e33eb1d2-3329-49e7-ad46-b11c52e4a2fd",
       "step_index": 5,
       "step_id": "release_pack",
       "task_id": "task-6",
-      "workspace_hash": "396304e7c4a2ef1607c06978b3abac6798c0eaaf4b384752f33f08afc5055764"
+      "workspace_hash": "e54d14ea5fd1f18333b8ed46d4cf2f0d91aa53864d66f03952828bc50e284246"
     }
   ],
   "strict_canary": {

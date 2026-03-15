@@ -109,20 +109,20 @@ async function testRunOpenCodeTaskAuthFailed() {
   assert.strictEqual(result.diagnostics.provider_error_class, "AUTH_FAILURE");
 }
 
-async function testRunOpenCodeTaskAuthFailedEvenWhenExitZero() {
+async function testRunOpenCodeTaskIgnoresAuthLikeStderrWhenExitZero() {
   const result = await runOpenCodeTask({
     workspaceRoot: process.cwd(),
-    taskPrompt: "auth failed with zero exit",
-    opencodeCommand: [process.execPath, "-e", "console.error('Incorrect API key provided'); process.exit(0)"],
+    taskPrompt: "auth-like stderr with zero exit",
+    opencodeCommand: [process.execPath, "-e", "console.error('Incorrect API key provided'); console.log('completed'); process.exit(0)"],
     maxRuntimeS: 10,
   });
   if (shouldSkipSpawn(result)) {
-    console.log("opencode auth-failed-zero-exit test skipped due sandbox EPERM");
+    console.log("opencode auth-like-stderr-zero-exit test skipped due sandbox EPERM");
     return;
   }
-  assert.strictEqual(result.ok, false);
-  assert.strictEqual(result.diagnostics.error_code, "E_AUTH_FAILED");
-  assert.strictEqual(result.error, "OpenCode authentication failed");
+  assert.strictEqual(result.ok, true, JSON.stringify(result));
+  assert.strictEqual(result.diagnostics.error_code, null);
+  assert.ok(String(result.stdout || "").includes("completed"));
 }
 
 async function testRunOpenCodeTaskRejectsDashScopeModelRef() {
@@ -136,6 +136,22 @@ async function testRunOpenCodeTaskRejectsDashScopeModelRef() {
   assert.strictEqual(result.ok, false);
   assert.strictEqual(result.diagnostics.error_code, "E_PROVIDER_CONFIG");
   assert.match(String(result.error || ""), /does not accept dashscope/i);
+}
+
+async function testRunOpenCodeTaskAllowsOllamaModelRef() {
+  const result = await runOpenCodeTask({
+    workspaceRoot: process.cwd(),
+    taskPrompt: "local ollama probe",
+    model: "ollama/glm-4.7-flash:latest",
+    opencodeCommand: [process.execPath, "-e", "console.log('ollama ok')"],
+    maxRuntimeS: 10,
+  });
+  if (shouldSkipSpawn(result)) {
+    console.log("opencode ollama-model test skipped due sandbox EPERM");
+    return;
+  }
+  assert.strictEqual(result.ok, true, JSON.stringify(result));
+  assert.strictEqual(result.model_used, "ollama/glm-4.7-flash:latest");
 }
 
 async function testRunOpenCodeTaskRequiresAlibabaCredential() {
@@ -189,8 +205,9 @@ async function main() {
   await testRunOpenCodeTaskApplyFailed();
   await testRunOpenCodeTaskProviderUnavailable();
   await testRunOpenCodeTaskAuthFailed();
-  await testRunOpenCodeTaskAuthFailedEvenWhenExitZero();
+  await testRunOpenCodeTaskIgnoresAuthLikeStderrWhenExitZero();
   await testRunOpenCodeTaskRejectsDashScopeModelRef();
+  await testRunOpenCodeTaskAllowsOllamaModelRef();
   await testRunOpenCodeTaskRequiresAlibabaCredential();
   await testRunOpenCodeTaskRequiresOpenCodeCredential();
   console.log("opencode_adapter.test.js: all tests passed");

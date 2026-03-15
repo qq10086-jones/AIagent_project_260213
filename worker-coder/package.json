@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node worker.js",
+    "test": "npm run test:adapter",
     "test:adapter": "node tests/codex_adapter.test.js && node tests/opencode_adapter.test.js && node tests/coding_executor_runtime.test.js && node tests/verification_command.test.js && node tests/prompt_contract.test.js && node tests/retry_policy.test.js && node tests/failure_memory.test.js && node tests/scope_guard.test.js && node tests/artifact_scaffold.test.js && node tests/scoped_delta.test.js && node tests/static_checks.test.js && node tests/task_contract.test.js && node tests/task_lifecycle.test.js && node tests/git_side_effects.test.js && node tests/startup_smoke.test.js",
     "canary:m9_autofix_retry": "node scripts/canary_m9_autofix_retry.js"
   },

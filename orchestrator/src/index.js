@@ -64,7 +64,7 @@ const {
   APPROVAL_TOKEN = "dev-approval-token", TOOLS_CONFIG_PATH = "configs/tools.json",
   REGISTRY_PATH = "", RESUME_TOKEN_SECRET = "dev-resume-secret",
   RESUME_TOKEN_TTL_SEC = "86400", WORKSPACE_ROOT = "",
-  STREAM_TASK_DLQ = "stream:task:dlq", TASK_RUNNING_TIMEOUT_SEC = "900",
+  STREAM_TASK_DLQ = "stream:task:dlq", TASK_RUNNING_TIMEOUT_SEC = "",
   TASK_QUEUED_TIMEOUT_SEC = "21600", TASK_WATCHDOG_INTERVAL_SEC = "30",
   TASK_TIMEOUT_AUTO_DLQ = "1", RUNTIME_CONFIG_PATH = "configs/runtime/runtime_defaults.json",
   RELEASE_PACK_ARCHIVE_TO_MINIO = "1", RELEASE_PACK_BUCKET = "nexus-artifacts",

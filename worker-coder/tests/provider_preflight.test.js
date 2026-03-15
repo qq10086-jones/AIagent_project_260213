@@ -60,10 +60,32 @@ function testPassesWhenAlibabaCredentialPresent() {
   assert.equal(result.issues.length, 0);
 }
 
+function testPassesForConfiguredLocalOllamaLane() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "opencode",
+    defaultModel: "ollama/glm-4.7-flash:latest",
+    defaultExecutionLane: "stable_local_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_local_lane: {
+          provider: "opencode",
+          model: "ollama/glm-4.7-flash:latest",
+        },
+      },
+    },
+    env: {
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434",
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.length, 0);
+}
+
 function main() {
   testRejectsDashScopeOnOpenCodeLane();
   testRequiresAlibabaCredential();
   testPassesWhenAlibabaCredentialPresent();
+  testPassesForConfiguredLocalOllamaLane();
   console.log("provider_preflight.test.js: all tests passed");
 }
 

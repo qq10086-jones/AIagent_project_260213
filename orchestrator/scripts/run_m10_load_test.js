@@ -177,7 +177,7 @@ async function main() {
   const port = toInt(args.port, 3000);
   const endpoint = String(args.endpoint || "/vnext/dispatch");
   const provider = String(args.provider || "opencode");
-  const model = String(args.model || "alibaba-coding-plan/qwen3-coder-plus");
+  const model = String(args.model || "ollama/glm-4.7-flash:latest");
   const warmupCount = toInt(args.warmup, 6);
   const baselineCount = toInt(args.baseline, 30);
   const intervalMs = toInt(args["interval-ms"], 1500);

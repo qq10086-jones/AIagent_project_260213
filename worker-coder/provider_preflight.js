@@ -31,7 +31,7 @@ function validateOpenCodeLane({ laneName, provider, model, env = process.env }) 
     });
     return issues;
   }
-  if (modelProvider === "dashscope" || modelProvider === "ollama") {
+  if (modelProvider === "dashscope") {
     issues.push({
       severity: "error",
       lane: laneName,

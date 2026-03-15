@@ -22,7 +22,10 @@ artifacts/release/
 artifacts/canary/
 orchestrator/artifacts/canary/
 orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_*/
+orchestrator/artifacts/validation/m10_load_test/
+orchestrator/orchestrator/
 sandbox/worker_coding_cohort/c-*/
+sandbox/crm_site/workflow_impl_*.js
 backup_20260301*/
 coder_test/
 __write_test*.txt

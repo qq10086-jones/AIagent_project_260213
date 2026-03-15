@@ -120,9 +120,9 @@ function chooseImplementationMode({
   }
   const requestedLane = String(payload?.execution_lane || "").trim();
   // stable_local_lane uses a local ollama model with a limited context window.
-  // Structured patch (diff-first) requires injecting target file content which
-  // can overflow that budget. Force full_file_fallback to keep the prompt small.
-  if (["impl_be", "impl_fe"].includes(String(stepDef?.id || "")) && requestedLane === "stable_local_lane") {
+  // stable_cloud_lane currently shows weak structured-patch reliability on impl steps.
+  // Force full_file_fallback on both lanes to keep prompts smaller and avoid empty patch bundles.
+  if (["impl_be", "impl_fe"].includes(String(stepDef?.id || "")) && ["stable_local_lane", "stable_cloud_lane"].includes(requestedLane)) {
     return {
       executionModeRequested: "full_file_fallback",
       promptScriptId: String(stepDef?.prompt_script_id || ""),
@@ -624,3 +624,4 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
 
   return { buildStepPayload };
 }
+

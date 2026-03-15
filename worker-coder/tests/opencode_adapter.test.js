@@ -1,4 +1,4 @@
-import assert from "assert";
+﻿import assert from "assert";
 import { buildOpenCodeInvocation, runOpenCodeTask } from "../adapters/opencode_adapter.js";
 
 function shouldSkipSpawn(result) {
@@ -197,6 +197,26 @@ async function testRunOpenCodeTaskRequiresOpenCodeCredential() {
     else process.env.OPENCODE_ZEN_API_KEY = prevOpenCodeZenKey;
   }
 }
+async function testRunOpenCodeTaskRequiresMiniMaxCredential() {
+  const prevMiniMaxKey = process.env.MINIMAX_API_KEY;
+  delete process.env.MINIMAX_API_KEY;
+  try {
+    const result = await runOpenCodeTask({
+      workspaceRoot: process.cwd(),
+      taskPrompt: "missing minimax credential",
+      model: "minimax/MiniMax-M2.5",
+      opencodeCommand: [process.execPath, "-e", "console.log('should not run')"],
+      maxRuntimeS: 10,
+    });
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.diagnostics.error_code, "E_AUTH_FAILED");
+    assert.match(String(result.error || ""), /MINIMAX_API_KEY/i);
+  } finally {
+    if (prevMiniMaxKey === undefined) delete process.env.MINIMAX_API_KEY;
+    else process.env.MINIMAX_API_KEY = prevMiniMaxKey;
+  }
+}
+
 async function main() {
   await testBuildInvocation();
   await testRunOpenCodeTaskWithMockCommand();
@@ -210,6 +230,7 @@ async function main() {
   await testRunOpenCodeTaskAllowsOllamaModelRef();
   await testRunOpenCodeTaskRequiresAlibabaCredential();
   await testRunOpenCodeTaskRequiresOpenCodeCredential();
+  await testRunOpenCodeTaskRequiresMiniMaxCredential();
   console.log("opencode_adapter.test.js: all tests passed");
 }
 
@@ -218,5 +239,6 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
 
 

@@ -34,6 +34,19 @@
           "name": "qwen-plus-2025-04-28"
         }
       }
+    },
+    "minimax": {
+      "npm": "@ai-sdk/anthropic",
+      "name": "MiniMax (minimaxi.com)",
+      "options": {
+        "baseURL": "https://api.minimaxi.com/anthropic/v1",
+        "apiKey": "${MINIMAX_API_KEY}"
+      },
+      "models": {
+        "MiniMax-M2.5": {
+          "name": "MiniMax-M2.5"
+        }
+      }
     }
   }
 }

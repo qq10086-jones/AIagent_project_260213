@@ -1,4 +1,4 @@
-import fs from "fs";
+﻿import fs from "fs";
 import os from "os";
 import path from "path";
 import { spawn } from "child_process";
@@ -67,6 +67,14 @@ function validateOpenCodeCredentials(model) {
         error: "Alibaba Coding Plan auth missing: set ALIBABA_CODING_PLAN_API_KEY.",
       };
     }
+  }
+  if (providerId === "minimax" && !String(process.env.MINIMAX_API_KEY || "").trim()) {
+    return {
+      ok: false,
+      errorCode: "E_AUTH_FAILED",
+      providerErrorClass: "AUTH_FAILURE",
+      error: "MiniMax auth missing: set MINIMAX_API_KEY.",
+    };
   }
   return { ok: true };
 }
@@ -730,3 +738,4 @@ export async function runOpenCodeTask({
     };
   }
 }
+

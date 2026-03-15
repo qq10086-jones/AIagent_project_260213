@@ -73,6 +73,14 @@ function validateOpenCodeLane({ laneName, provider, model, env = process.env }) 
       message: `lane '${laneName}' requires ALIBABA_CODING_PLAN_API_KEY`,
     });
   }
+  if (modelProvider === "minimax" && !String(env.MINIMAX_API_KEY || "").trim()) {
+    issues.push({
+      severity: "error",
+      lane: laneName,
+      code: "MINIMAX_AUTH_MISSING",
+      message: `lane '${laneName}' requires MINIMAX_API_KEY`,
+    });
+  }
   return issues;
 }
 

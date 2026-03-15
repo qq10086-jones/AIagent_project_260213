@@ -81,6 +81,44 @@ function testPassesForConfiguredLocalOllamaLane() {
   assert.equal(result.issues.length, 0);
 }
 
+function testRequiresMiniMaxCredential() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "opencode",
+    defaultModel: "minimax/MiniMax-M2.5",
+    defaultExecutionLane: "stable_cloud_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_cloud_lane: {
+          provider: "opencode",
+          model: "minimax/MiniMax-M2.5",
+        },
+      },
+    },
+    env: {},
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.issues[0].code, "MINIMAX_AUTH_MISSING");
+}
+
+function testPassesWhenMiniMaxCredentialPresent() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "opencode",
+    defaultModel: "minimax/MiniMax-M2.5",
+    defaultExecutionLane: "stable_cloud_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_cloud_lane: {
+          provider: "opencode",
+          model: "minimax/MiniMax-M2.5",
+        },
+      },
+    },
+    env: { MINIMAX_API_KEY: "test-key" },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.length, 0);
+}
+
 function testCodexLaneRequiresOpenAIKey() {
   const result = validateRuntimePreflight({
     defaultProvider: "codex",

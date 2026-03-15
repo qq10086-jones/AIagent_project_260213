@@ -1,0 +1,10 @@
+{
+  "workflow_id": "coding_team_v0",
+  "project_type": "webapp_crm",
+  "input": {
+    "goal": "Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.",
+    "provider": "opencode",
+    "model": "qwen3-coder-next",
+    "fast_mode": true
+  }
+}

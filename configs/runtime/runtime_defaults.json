@@ -41,9 +41,9 @@
       },
       "stable_cloud_lane": {
         "provider": "opencode",
-        "model": "alibaba-coding-plan/qwen3-coder-plus",
+        "model": "minimax/MiniMax-M2.5",
         "provider_class": "opencode-provider",
-        "purpose": "cloud recovery lane via opencode using Alibaba Coding Plan"
+        "purpose": "cloud recovery lane via opencode using MiniMax M2.5 Coding Plan"
       },
       "stable_local_lane": {
         "provider": "opencode",

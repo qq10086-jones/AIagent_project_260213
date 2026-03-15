@@ -1,0 +1,88 @@
+{
+  "generated_at": "2026-03-15T16:25:37.361Z",
+  "scenario": "mixed_lane_parallel_baseline",
+  "runs": [
+    {
+      "lane": "stable_local_lane",
+      "input": "crm_mini_default_timeout.json",
+      "workflow_run_id": "b819029c-4a5d-4cf0-ba20-adaa0e279cff",
+      "run_id": "2ea12610-7d5d-49b9-bce5-157610413160",
+      "status": "failed",
+      "error_code": "ARCH_REQUIRED_SECTIONS_MISSING",
+      "error_message": "workflow failed at step 'arch_design'",
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded",
+          "error_code": null
+        },
+        {
+          "step_id": "arch_design",
+          "status": "failed",
+          "error_code": "ARCH_REQUIRED_SECTIONS_MISSING"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "pending",
+          "error_code": null
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "pending",
+          "error_code": null
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "pending",
+          "error_code": null
+        },
+        {
+          "step_id": "release_pack",
+          "status": "pending",
+          "error_code": null
+        }
+      ]
+    },
+    {
+      "lane": "stable_cloud_lane",
+      "input": "crm_mini_stable_cloud_lane.json",
+      "workflow_run_id": "e29d41ce-9704-4656-84d8-5515edc19d48",
+      "run_id": "f507a1be-dda6-4534-9edc-bf35e081c0d0",
+      "status": "succeeded",
+      "error_code": null,
+      "error_message": null,
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded",
+          "error_code": null
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded",
+          "error_code": null
+        },
+        {
+          "step_id": "impl_be",
+          "status": "succeeded",
+          "error_code": null
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "succeeded",
+          "error_code": null
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "succeeded",
+          "error_code": null
+        },
+        {
+          "step_id": "release_pack",
+          "status": "succeeded",
+          "error_code": null
+        }
+      ]
+    }
+  ]
+}

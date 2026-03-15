@@ -119,14 +119,14 @@ test("wall_clock_timeout_s is clamped UP when config is below max_runtime_s", ()
     stepDef: { id: "impl_be", role: "backend", tool: "coding.delegate", gate: "policy", prompt_script_id: "" },
     stepIndex: 2,
   });
-  // clamp(60, max(30,240), 3600, max(240,300)) = clamp(60, 240, 3600, 300) → clamped up to 240
+  // clamp(60, max(30,240), 3600, max(240,300)) = clamp(60, 240, 3600, 300) ↁEclamped up to 240
   assert.equal(payload.wall_clock_timeout_s, 240,
     "wall_clock below max_runtime_s must be clamped up to max_runtime_s");
 });
 
 test("wall_clock_timeout_s=900 passes through for arch_design (max_runtime_s=480)", () => {
   // Production scenario: runtime_defaults.json wall_clock_timeout_s_default=900
-  // arch_design max_runtime_s=480 → clamp(900, max(30,480), 3600, max(480,300)) = 900
+  // arch_design max_runtime_s=480 ↁEclamp(900, max(30,480), 3600, max(480,300)) = 900
   const workspaceRoot = makeWorkspace();
   const builder = createStepBuilder({
     workspaceRoot,
@@ -154,8 +154,8 @@ test("wall_clock_timeout_s=900 passes through for arch_design (max_runtime_s=480
 });
 
 test("wall_clock_timeout_s defaults to max(max_runtime_s, 300) when not configured", () => {
-  // No wall_clock_timeout_s_default → fallback = max(max_runtime_s, 300)
-  // impl_be max_runtime_s=240 → default = max(240, 300) = 300
+  // No wall_clock_timeout_s_default ↁEfallback = max(max_runtime_s, 300)
+  // impl_be max_runtime_s=240 ↁEdefault = max(240, 300) = 300
   const workspaceRoot = makeWorkspace();
   const builder = createStepBuilder({
     workspaceRoot,
@@ -180,3 +180,58 @@ test("wall_clock_timeout_s defaults to max(max_runtime_s, 300) when not configur
   assert.equal(payload.wall_clock_timeout_s, 300,
     "missing wall_clock config must default to max(max_runtime_s=240, 300)=300");
 });
+
+
+test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outputs", () => {
+  const workspaceRoot = makeWorkspace();
+  writeFile(workspaceRoot, "package.json", JSON.stringify({ name: "crm-app" }, null, 2));
+  writeFile(workspaceRoot, "sandbox/crm_site/server.js", "function startServer() { return 'ok'; }\n");
+
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: {
+      scripts: {
+        "backend.impl.v2": { script_id: "backend.impl.v2", role: "backend", llm_role: "backend", validation: {} },
+        "backend.impl.v1": { script_id: "backend.impl.v1", role: "backend", llm_role: "backend", validation: {} },
+      },
+    },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {
+      execution: { diff_first_enabled: true },
+      worker_coder: {
+        execution_lane_default: "stable_cloud_lane",
+        execution_lanes: {
+          stable_cloud_lane: { provider: "opencode", model: "minimax/MiniMax-M2.5" },
+        },
+        wall_clock_timeout_s_default: 900,
+        max_attempts_default: 2,
+        same_error_repeat_limit_default: 2,
+      },
+    },
+  });
+
+  const payload = builder.buildStepPayload({
+    run: {
+      run_id: "mini-cloud-run",
+      workflow_run_id: "mini-cloud-wf",
+      workflow_id: "coding_team_v0",
+      project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "Implement backend API", provider: "opencode", model: "minimax/MiniMax-M2.5", execution_lane: "stable_cloud_lane" }),
+    },
+    stepDef: {
+      id: "impl_be",
+      role: "backend",
+      tool: "coding.delegate",
+      gate: "policy",
+      prompt_script_id: "backend.impl.v1",
+    },
+    stepIndex: 2,
+  });
+
+  assert.equal(payload.execution_lane, "stable_cloud_lane");
+  assert.equal(payload.execution_mode_requested, "full_file_fallback");
+  assert.equal(payload.prompt_script_id, "backend.impl.v1");
+  assert.deepEqual(payload.expected_artifacts, ["impl/be_changes/server.js", "impl/be_notes.md", "handoff/be_to_fe.json"]);
+});
+

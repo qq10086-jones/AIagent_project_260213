@@ -1,13 +1,20 @@
 # Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-15 (T-33 failure injection complete; worker-coder 19/19; orchestrator 150/150)
+**Last updated:** 2026-03-16 (MiniMax mixed-lane parallel evidence captured; N2 remains in progress)
 **Author:** PM / Architecture Review
 
 ---
 
 ## Execution Evidence
 
-- **M10 load test (stable_local_lane):** `PASS / GO` — run a48a521e, 6/6 steps, 23 min (2026-03-15)
+- **M10 load test (stable_local_lane):** `PASS / GO` - run a48a521e, 6/6 steps, 23 min (2026-03-15)
+- **N1 live runtime validation, failure-path canary:** `PASS AS EXPECTED` - run `919efc21-32dc-4733-8fd2-421f0c76168e` failed at `impl_be` because the validation input explicitly set `max_runtime_s=180` (2026-03-15)
+- **N1 live runtime validation, default-timeout canary:** `PASS / GO` - run `1b71e15d-df8a-48b0-8557-3b0e0ef7d4b4`, `coding_team_v0` completed `6/6` on `stable_local_lane` after restart with default runtime timeout behavior (2026-03-15)
+- **N2 concurrent baseline, initial run:** `FAIL` - one workflow failed at `arch_design` with `ARCH_REQUIRED_SECTIONS_MISSING`; a second workflow remained stuck at `arch_design` under 2-workflow concurrency (2026-03-15)
+- **N2 concurrent baseline, rerun after arch prompt hardening:** `PARTIAL IMPROVEMENT / NOT GO` - both workflows advanced past `arch_design` and reached `impl_be`, but neither reached terminal state within the observation window; primary bottleneck moved from `arch_design` to `impl_be` (2026-03-15)
+- **M11-A MiniMax cloud lane wiring:** `CONFIGURED` - `stable_cloud_lane` now points to `opencode + minimax/MiniMax-M2.5`, `MINIMAX_API_KEY` is injected into `worker-coder`, and preflight/adapter coverage was updated (2026-03-16)
+- **M11-A MiniMax cloud lane smoke:** `PASS / GO` - after switching `opencode.json` to the official MiniMax provider shape and forcing full-file fallback on `stable_cloud_lane` impl steps, live workflow `8418008d-a2d2-4317-bac3-879e81016f0a` / `87658374-e4b8-43eb-9491-842e7510bef0` completed `6/6` on MiniMax (2026-03-16)
+- **M11-A mixed-lane parallel baseline:** `PARTIAL PASS` - concurrent `stable_local_lane + stable_cloud_lane` run showed `stable_cloud_lane` succeeded `6/6` (`e29d41ce-9704-4656-84d8-5515edc19d48` / `f507a1be-dda6-4534-9edc-bf35e081c0d0`) while `stable_local_lane` still failed at `arch_design` with `ARCH_REQUIRED_SECTIONS_MISSING` (`b819029c-4a5d-4cf0-ba20-adaa0e279cff` / `2ea12610-7d5d-49b9-bce5-157610413160`) (2026-03-16)
 - **Post-M10 code quality hardening (2 audit rounds):** complete (2026-03-15)
 - **T-33 failure injection suite:** complete, 7 failure paths covered (2026-03-15)
 
@@ -36,31 +43,31 @@
 Current governance state:
 - `production_parallel_rollout.json`: `master_enabled=true`, `dynamic_routing_enabled=true`, `router_mode=dynamic_routing_enforced`
 - Default execution lane: `stable_local_lane` (opencode + ollama/glm-4.7-flash:latest)
-- `stable_codex_lane` defined in runtime config (provider=codex, model=codex-mini-latest) — deferred until OPENAI_API_KEY is available
-- `stable_cloud_lane` defined but not end-to-end tested (Qwen alibaba-coding-plan auth unresolved)
+- `stable_codex_lane` defined in runtime config (provider=codex, model=codex-mini-latest)  Edeferred until OPENAI_API_KEY is available
+- `stable_cloud_lane` now targets `opencode + minimax/MiniMax-M2.5`; official MiniMax provider shape validated and a full `coding_team_v0` live run completed `6/6`
 
 ---
 
-## What Was Done (2026-03-13 → 2026-03-15)
+## What Was Done (2026-03-13 ↁE2026-03-15)
 
-### Round 1 — QA/Architect audit fixes (6 issues)
+### Round 1  EQA/Architect audit fixes (6 issues)
 
 | Fix | Commit |
 |-----|--------|
-| `TASK_RUNNING_TIMEOUT_SEC = "900"` default overrode config 1800s → changed to `""` | `d365036` |
-| `stream_batch_size` hardcoded 5 in worker.js → configurable (default 1) | `d365036` |
-| `coding_service.js` inline dynamic import plumbing → extracted to `step_artifact_contract.js` | `d365036` |
-| `salvageWorkflowArtifactFailure` private/untested → exported + `coding_service_salvage.test.js` (5 cases) | `e0dcab6` |
-| `artifact_scaffold.js` CRM-specific heading check → generalized | `d365036` |
-| `opencode_adapter.js` blocked `ollama/*` refs → removed; added `mapErrorCode` fast-path | `25b0860` |
+| `TASK_RUNNING_TIMEOUT_SEC = "900"` default overrode config 1800s ↁEchanged to `""` | `d365036` |
+| `stream_batch_size` hardcoded 5 in worker.js ↁEconfigurable (default 1) | `d365036` |
+| `coding_service.js` inline dynamic import plumbing ↁEextracted to `step_artifact_contract.js` | `d365036` |
+| `salvageWorkflowArtifactFailure` private/untested ↁEexported + `coding_service_salvage.test.js` (5 cases) | `e0dcab6` |
+| `artifact_scaffold.js` CRM-specific heading check ↁEgeneralized | `d365036` |
+| `opencode_adapter.js` blocked `ollama/*` refs ↁEremoved; added `mapErrorCode` fast-path | `25b0860` |
 
-### Round 2 — Deeper audit fixes (P0–P2)
+### Round 2  EDeeper audit fixes (P0–P2)
 
 | Fix | Commit |
 |-----|--------|
 | `step_artifact_contract.test.js`: 18 assertions, 6 step IDs, fresh-object guarantee | `e0dcab6` |
 | `startup_smoke.test.js`: import wiring + file existence assertions | `e0dcab6` |
-| `wall_clock_timeout_s` clamp boundary tests (3 cases); orchestrator 147→150 | `36cb2a7` |
+| `wall_clock_timeout_s` clamp boundary tests (3 cases); orchestrator 147ↁE50 | `36cb2a7` |
 | 16 `context_budget_*.json` golden files updated | `148c166` |
 | `payloadToAdapterRequest` + `requiresScopedTargetPaths` exported + `coding_service_pure.test.js` (44 assertions) | `9c68bbf` |
 
@@ -105,13 +112,17 @@ Current governance state:
 ## Current Verification Status
 
 ```
-npm --prefix orchestrator test    → 150 / 150 PASS  (2026-03-15)
-npm --prefix worker-coder test    →  19 /  19 PASS  (2026-03-15)
+npm --prefix orchestrator test    - 150 / 150 PASS  (2026-03-15)
+npm --prefix worker-coder test    -  19 /  19 PASS  (2026-03-15)
 node scripts/canary_coding_team_e2e.js
-  happy_path (6/6 steps)          → PASS
-  be_failure (artifacts missing)  → PASS
-  qa_failure (QA blocks release)  → PASS
-M10 load test (stable_local_lane) → PASS / GO verdict (2026-03-15)
+  happy_path (6/6 steps)          - PASS
+  be_failure (artifacts missing)  - PASS
+  qa_failure (QA blocks release)  - PASS
+M10 load test (stable_local_lane) - PASS / GO verdict (2026-03-15)
+node orchestrator/scripts/live_validate_workflow_runtime.js --base-url http://localhost:3000 --input crm_mini.json --timeout-ms 480000
+  failure-path canary (`max_runtime_s=180`) - PASS AS EXPECTED
+node orchestrator/scripts/live_validate_workflow_runtime.js --base-url http://localhost:3000 --input crm_mini_default_timeout.json --timeout-ms 1500000
+  default-timeout live canary                - PASS / GO
 ```
 
 ---
@@ -146,7 +157,7 @@ M10 load test (stable_local_lane) → PASS / GO verdict (2026-03-15)
 
 | Path | Reason deferred |
 |------|----------------|
-| `E_WALL_CLOCK_TIMEOUT` | Minimum clamp 60s — needs real elapsed time; covered by salvage tests conceptually |
+| `E_WALL_CLOCK_TIMEOUT` | Minimum clamp 60s  Eneeds real elapsed time; covered by salvage tests conceptually |
 | `E_PROMOTION_FAILED` | Only fires when `CODER_ISOLATION_MODE=promote` and promotion fails; covered in `promotion_workspace.test.js` |
 | `createStepBuilder` inner `buildStepPayload` | Captures 4 services; extracting it adds noise with no testability gain |
 
@@ -163,35 +174,36 @@ None active.
 | Hardcoded `TASK_RUNNING_TIMEOUT_SEC="900"` overrode config | Changed default to `""` |
 | `stream_batch_size` hardcoded 5 caused GPU saturation | Configurable, default 1 |
 | `ollama/*` model refs rejected by opencode_adapter | Removed rejection block |
-| Qwen/opencode `alibaba-coding-plan` auth fails | Ongoing non-blocker — stable_local_lane is primary |
+| Qwen/opencode `alibaba-coding-plan` auth fails | Ongoing non-blocker  Estable_local_lane is primary |
 
 ### Known non-blocking issues
 
 | Issue | Severity |
 |-------|----------|
-| Qwen via `opencode alibaba-coding-plan` auth fails | Medium — stable_local_lane is proven |
-| Codex lane deferred (no OPENAI_API_KEY) | Low — lane defined, activate when key available |
-| `createStepBuilder` inner closure not independently testable | Low — integration coverage sufficient |
+| Qwen via `opencode alibaba-coding-plan` auth fails | Medium - stable_local_lane is proven |
+| Codex lane deferred (no OPENAI_API_KEY) | Low - lane defined, activate when key available |
+| `createStepBuilder` inner closure not independently testable | Low - integration coverage sufficient |
+| `crm_mini.json` forces `max_runtime_s=180` and should be used only for timeout-path validation | Low - use `crm_mini_default_timeout.json` for default-timeout GO validation |
 
 ---
 
-## TODO — Next Steps (ordered by value)
+## TODO  ENext Steps (ordered by value)
 
 ### Immediate (next session)
 
 | # | Task | Value |
 |---|------|-------|
-| N1 | **End-to-end live run** — restart docker stack, run one full `coding_team_v0` workflow on `stable_local_lane`, confirm the hardened timeout chain works end-to-end with the new config | High — validates all config changes together in the real runtime |
-| N2 | **Multi-concurrent baseline** — run 2 workflows in parallel with `stream_batch_size=1` (current), measure wall time vs sequential; then try `stream_batch_size=2` and observe GPU queue behaviour | Medium — establishes throughput ceiling before any horizontal scaling |
+| N1 | **End-to-end live run** - restart docker stack, run one full `coding_team_v0` workflow on `stable_local_lane`, confirm the hardened timeout chain works end-to-end with the new config | **Completed 2026-03-15** - restart evidence, timeout/failure-path evidence, and default-timeout success evidence captured |
+| N2 | **Multi-concurrent baseline** - run 2 workflows in parallel with `stream_batch_size=1` (current), measure wall time vs sequential; then try `stream_batch_size=2` and observe GPU queue behaviour | **In progress (2026-03-16)** - `arch_design` concurrency failure mitigated, but `impl_be` is now the active bottleneck; do not raise `stream_batch_size` yet |
 
 ### Near-term (M11 candidates)
 
 | # | Task | Scope |
 |---|------|-------|
-| M11-A | Qwen cloud lane activation — resolve `alibaba-coding-plan` provider auth and promote `stable_cloud_lane` to production-ready | Medium |
-| M11-B | Cohort expansion — add a second project type beyond `webapp_crm` | Medium |
-| M11-C | Watchdog + DLQ observability — add alerting when tasks hit the DLQ (`stream:task:dlq`) | Low-medium |
-| M11-D | `E_WALL_CLOCK_TIMEOUT` integration test — add a canary that uses a short `max_runtime_s` + verifies the timeout chain fires correctly with a slow mock command | Low |
+| M11-A | MiniMax cloud lane activation - official `opencode` provider shape validated; mixed-lane evidence shows MiniMax can carry real load in parallel, so decide whether to promote `stable_cloud_lane` as explicit overflow/default-for-heavy-tasks lane | Medium |
+| M11-B | Cohort expansion  Eadd a second project type beyond `webapp_crm` | Medium |
+| M11-C | Watchdog + DLQ observability  Eadd alerting when tasks hit the DLQ (`stream:task:dlq`) | Low-medium |
+| M11-D | `E_WALL_CLOCK_TIMEOUT` integration test  Eadd a canary that uses a short `max_runtime_s` + verifies the timeout chain fires correctly with a slow mock command | Low |
 
 ---
 
@@ -220,3 +232,7 @@ None active.
 | `orchestrator/src/index.js` | ~546 | HTTP router |
 | `orchestrator/src/workflow_engine.js` | ~431 | Workflow engine |
 | `orchestrator/src/domain/workflow_step_builder.js` | 626 | Step builder + timeout logic |
+
+
+
+

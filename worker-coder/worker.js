@@ -42,10 +42,14 @@ const DEFAULT_ALLOW_PROVIDER_FALLBACK = parseBool(
   parseBool(RUNTIME_CODER.allow_provider_fallback_default, false),
 );
 const GLOBAL_TASK_TIMEOUT_MS = Math.max(30000, Number(process.env.CODER_GLOBAL_TASK_TIMEOUT_MS || RUNTIME_CODER.global_task_timeout_ms || 900000));
+// stream_batch_size controls how many Redis messages are fetched per loop iteration.
+// Set to 1 for single-GPU (ollama) setups to prevent concurrent LLM saturation.
+// Increase for multi-GPU or cloud provider setups.
+const STREAM_BATCH_SIZE = Math.max(1, Math.min(20, Number(process.env.CODER_STREAM_BATCH_SIZE || RUNTIME_CODER.stream_batch_size || 1)));
 const MAX_RESULT_OUTPUT_BYTES = 48 * 1024;
 
 console.log(
-  `[runtime-config] path=${RUNTIME.path || "none"} provider_default=${DEFAULT_PROVIDER} model_default=${DEFAULT_MODEL || "none"} execution_lane_default=${DEFAULT_EXECUTION_LANE || "none"} allow_provider_fallback=${DEFAULT_ALLOW_PROVIDER_FALLBACK} global_timeout_ms=${GLOBAL_TASK_TIMEOUT_MS}`
+  `[runtime-config] path=${RUNTIME.path || "none"} provider_default=${DEFAULT_PROVIDER} model_default=${DEFAULT_MODEL || "none"} execution_lane_default=${DEFAULT_EXECUTION_LANE || "none"} allow_provider_fallback=${DEFAULT_ALLOW_PROVIDER_FALLBACK} global_timeout_ms=${GLOBAL_TASK_TIMEOUT_MS} stream_batch_size=${STREAM_BATCH_SIZE}`
 );
 const STARTUP_PREFLIGHT = validateRuntimePreflight({
   defaultProvider: DEFAULT_PROVIDER,
@@ -312,7 +316,7 @@ export async function main() {
   while (true) {
     try {
       if (typeof redis.xautoclaim === "function") {
-        const claimRes = await redis.xautoclaim(STREAM_TASK, GROUP, CONSUMER, STALE_TASK_MIN_IDLE_MS, claimStartId, "COUNT", 5);
+        const claimRes = await redis.xautoclaim(STREAM_TASK, GROUP, CONSUMER, STALE_TASK_MIN_IDLE_MS, claimStartId, "COUNT", STREAM_BATCH_SIZE);
         if (claimRes) {
           claimStartId = Array.isArray(claimRes) ? String(claimRes[0] || "0-0") : "0-0";
           const claimedMessages = Array.isArray(claimRes?.[1]) ? claimRes[1] : [];
@@ -324,7 +328,7 @@ export async function main() {
         }
       }
 
-      const res = await redis.xreadgroup("GROUP", GROUP, CONSUMER, "COUNT", 5, "BLOCK", 5000, "STREAMS", STREAM_TASK, ">");
+      const res = await redis.xreadgroup("GROUP", GROUP, CONSUMER, "COUNT", STREAM_BATCH_SIZE, "BLOCK", 5000, "STREAMS", STREAM_TASK, ">");
       if (res && res.length > 0) {
         const stream = res[0];
         const messages = stream[1];

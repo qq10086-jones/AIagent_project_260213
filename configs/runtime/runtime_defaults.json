@@ -31,6 +31,7 @@
     "wall_clock_timeout_s_default": 900,
     "execution_lane_default": "stable_local_lane",
     "allow_provider_fallback_default": false,
+    "stream_batch_size": 1,
     "execution_lanes": {
       "stable_cloud_lane": {
         "provider": "opencode",

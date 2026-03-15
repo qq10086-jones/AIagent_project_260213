@@ -91,3 +91,92 @@ test("impl_be payload includes context packet, repo map, and coding context bloc
   assert.equal(payload.tool_adapter_request.payload.same_error_repeat_limit, 2);
   assert.equal(payload.tool_adapter_request.payload.wall_clock_timeout_s, 480);
 });
+
+// wall_clock_timeout_s clamp boundary tests
+// The clamp is: clampInt(configured, max(30, max_runtime_s), 3600, max(max_runtime_s, 300))
+// impl_be max_runtime_s=240, arch_design=480 (from runtimeByStep in workflow_step_builder.js)
+
+test("wall_clock_timeout_s is clamped UP when config is below max_runtime_s", () => {
+  const workspaceRoot = makeWorkspace();
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: { scripts: {} },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {
+      worker_coder: {
+        execution_lane_default: "stable_cloud_lane",
+        execution_lanes: { stable_cloud_lane: { provider: "opencode", model: "m" } },
+        wall_clock_timeout_s_default: 60,  // below impl_be max_runtime_s=240
+        max_attempts_default: 1,
+        same_error_repeat_limit_default: 1,
+      },
+    },
+  });
+  const payload = builder.buildStepPayload({
+    run: { run_id: "r1", workflow_run_id: "w1", workflow_id: "coding_team_v0", project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "impl", provider: "opencode" }) },
+    stepDef: { id: "impl_be", role: "backend", tool: "coding.delegate", gate: "policy", prompt_script_id: "" },
+    stepIndex: 2,
+  });
+  // clamp(60, max(30,240), 3600, max(240,300)) = clamp(60, 240, 3600, 300) → clamped up to 240
+  assert.equal(payload.wall_clock_timeout_s, 240,
+    "wall_clock below max_runtime_s must be clamped up to max_runtime_s");
+});
+
+test("wall_clock_timeout_s=900 passes through for arch_design (max_runtime_s=480)", () => {
+  // Production scenario: runtime_defaults.json wall_clock_timeout_s_default=900
+  // arch_design max_runtime_s=480 → clamp(900, max(30,480), 3600, max(480,300)) = 900
+  const workspaceRoot = makeWorkspace();
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: { scripts: {} },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {
+      worker_coder: {
+        execution_lane_default: "stable_local_lane",
+        execution_lanes: { stable_local_lane: { provider: "opencode", model: "ollama/glm-4.7-flash:latest" } },
+        wall_clock_timeout_s_default: 900,
+        max_attempts_default: 2,
+        same_error_repeat_limit_default: 2,
+      },
+    },
+  });
+  const payload = builder.buildStepPayload({
+    run: { run_id: "r2", workflow_run_id: "w2", workflow_id: "coding_team_v0", project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "arch", provider: "opencode" }) },
+    stepDef: { id: "arch_design", role: "architect", tool: "coding.delegate", gate: "policy", prompt_script_id: "" },
+    stepIndex: 1,
+  });
+  assert.equal(payload.wall_clock_timeout_s, 900,
+    "wall_clock=900 must not be clamped down when max_runtime_s=480");
+});
+
+test("wall_clock_timeout_s defaults to max(max_runtime_s, 300) when not configured", () => {
+  // No wall_clock_timeout_s_default → fallback = max(max_runtime_s, 300)
+  // impl_be max_runtime_s=240 → default = max(240, 300) = 300
+  const workspaceRoot = makeWorkspace();
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: { scripts: {} },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {
+      worker_coder: {
+        execution_lane_default: "stable_cloud_lane",
+        execution_lanes: { stable_cloud_lane: { provider: "opencode", model: "m" } },
+        max_attempts_default: 1,
+        same_error_repeat_limit_default: 1,
+      },
+    },
+  });
+  const payload = builder.buildStepPayload({
+    run: { run_id: "r3", workflow_run_id: "w3", workflow_id: "coding_team_v0", project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "impl", provider: "opencode" }) },
+    stepDef: { id: "impl_be", role: "backend", tool: "coding.delegate", gate: "policy", prompt_script_id: "" },
+    stepIndex: 2,
+  });
+  assert.equal(payload.wall_clock_timeout_s, 300,
+    "missing wall_clock config must default to max(max_runtime_s=240, 300)=300");
+});

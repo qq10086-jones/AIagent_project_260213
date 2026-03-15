@@ -1,5 +1,5 @@
 {
-  "_comment": "M8 Go/No-Go APPROVED 2026-03-09. master_enabled=true activates M6 GO_LIMITED_EXPOSURE (static policy, fe_led/crm/coding_team_v0 whitelist only). dynamic_routing_enabled remains false — M7 dynamic routing on HOLD pending production baseline data. See docs/governance/m8_go_no_go.md § 6.",
+  "_comment": "M8 Go/No-Go APPROVED 2026-03-09. master_enabled=true activates M6 GO_LIMITED_EXPOSURE (static policy, fe_led/crm/coding_team_v0 whitelist only). dynamic_routing_enabled=true and router_mode=dynamic_routing_enforced activated 2026-03-10 (M7 Phase A advisory-only, m7_exposure_cohorts.json). See docs/governance/m8_go_no_go.md § 6.",
   "version": "1.2",
   "master_enabled": true,
   "force_sequential": false,

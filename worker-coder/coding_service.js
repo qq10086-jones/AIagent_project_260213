@@ -56,7 +56,7 @@ import {
     validateCodingTeamHandoff,
 } from './step_artifact_contract.js';
 
-function salvageWorkflowArtifactFailure({ workspaceRoot, artifactRoot, expectedArtifacts, stepId, taskPrompt, result }) {
+export function salvageWorkflowArtifactFailure({ workspaceRoot, artifactRoot, expectedArtifacts, stepId, taskPrompt, result }) {
     const safeStepId = String(stepId || "");
     const timeoutOnlySteps = new Set(["pm_spec", "arch_design", "release_pack"]);
     const implementationSteps = new Set(["impl_be", "impl_fe"]);

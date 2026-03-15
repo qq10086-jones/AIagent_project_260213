@@ -95,7 +95,7 @@ export function salvageWorkflowArtifactFailure({ workspaceRoot, artifactRoot, ex
 }
 
 
-function payloadToAdapterRequest({
+export function payloadToAdapterRequest({
     provider,
     task_prompt,
     artifact_root,
@@ -145,7 +145,7 @@ function payloadToAdapterRequest({
     };
 }
 
-function requiresScopedTargetPaths(stepId, targetPaths) {
+export function requiresScopedTargetPaths(stepId, targetPaths) {
     const safeStepId = String(stepId || "").trim().toLowerCase();
     const safeTargetPaths = Array.isArray(targetPaths) ? targetPaths.filter(Boolean) : [];
     if (safeTargetPaths.length > 0) return true;

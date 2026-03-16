@@ -29,7 +29,7 @@
     "max_attempts_default": 2,
     "same_error_repeat_limit_default": 2,
     "wall_clock_timeout_s_default": 900,
-    "execution_lane_default": "stable_local_lane",
+    "execution_lane_default": "stable_cloud_lane",
     "allow_provider_fallback_default": false,
     "stream_batch_size": 1,
     "execution_lanes": {
@@ -41,9 +41,9 @@
       },
       "stable_cloud_lane": {
         "provider": "opencode",
-        "model": "minimax/MiniMax-M2.5",
+        "model": "minimax-coding-plan/MiniMax-M2.5",
         "provider_class": "opencode-provider",
-        "purpose": "cloud recovery lane via opencode using MiniMax M2.5 Coding Plan"
+        "purpose": "cloud recovery lane via opencode using MiniMax Coding Plan M2.5"
       },
       "stable_local_lane": {
         "provider": "opencode",

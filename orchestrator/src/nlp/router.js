@@ -8,6 +8,13 @@ export function setQwenModel(modelName) {
 // Define the available tools (Agents) and their capabilities for the LLM Dispatcher
 const AGENT_TOOLS_SCHEMA = [
   {
+    "tool_name": "coding.delegate",
+    "description": "Trigger the coding team workflow. Use this whenever the user asks to build an app, create a website, implement a feature, fix a bug, or write code. This initiates a multi-agent software engineering process.",
+    "parameters": {
+      "project_type": "Optional: e.g., 'webapp_crm' or 'generic_app'."
+    }
+  },
+  {
     "tool_name": "quant.deep_analysis",
     "description": "Analyze a specific stock, company, or ticker. Fetches technical indicators, regression models, and news. Can also provide execution/sizing suggestions if capital is provided.",
     "parameters": {

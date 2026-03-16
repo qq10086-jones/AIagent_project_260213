@@ -1,4 +1,4 @@
-import os, json, time, subprocess, hashlib, base64, io, re, traceback, math, statistics
+import os, json, time, subprocess, hashlib, base64, io, re, traceback, math, statistics, socket, shutil
 import html
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import urllib.request
 import urllib.error
 import urllib.parse
+import tomllib
 from PIL import Image, ImageDraw, ImageStat
 import requests
 from jinja2 import Template
@@ -65,6 +66,14 @@ RECLAIM_INTERVAL_S = int(os.getenv("RECLAIM_INTERVAL_S", "30"))
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "nexus")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "nexuspassword")
+WORKSPACE_ROOT = Path(os.getenv("WORKSPACE_ROOT", "/workspace"))
+RENDER_API_KEY = os.getenv("RENDER_API_KEY", "")
+RENDER_API_BASE_URL = os.getenv("RENDER_API_BASE_URL", "https://api.render.com/v1")
+PREVIEW_PORT_START = int(os.getenv("PREVIEW_PORT_START", "46000"))
+PREVIEW_PORT_END = int(os.getenv("PREVIEW_PORT_END", "46020"))
+PREVIEW_PUBLIC_HOST = os.getenv("PREVIEW_PUBLIC_HOST", "localhost").strip() or "localhost"
+PREVIEW_HEALTH_TIMEOUT_S = int(os.getenv("PREVIEW_HEALTH_TIMEOUT_S", "15"))
+PREVIEW_REGISTRY_PATH = WORKSPACE_ROOT / "artifacts" / "preview_runtime_registry.json"
 
 # --- LLM Config ---
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", RUNTIME_QUANT.get("llm_provider", "ollama")).lower() # ollama, openai, dashscope, gemini
@@ -4199,6 +4208,522 @@ def tdnet_close_flash(payload: dict):
         "facts": {"sentiment": sentiment, "geo_risk": geo_risk, "key_sectors": sectors, "degraded": degraded},
     }
 
+def _safe_workspace_path(rel_path: str) -> Path | None:
+    rel = str(rel_path or "").replace("\\", "/").lstrip("/")
+    if not rel:
+        return None
+    candidate = (WORKSPACE_ROOT / rel).resolve()
+    try:
+        candidate.relative_to(WORKSPACE_ROOT.resolve())
+        return candidate
+    except Exception:
+        return None
+
+def _load_preview_blocklist() -> dict:
+    candidates = [
+        WORKSPACE_ROOT / "configs" / "preview" / "db_dependency_blocklist.json",
+        Path("/app/configs/preview/db_dependency_blocklist.json"),
+    ]
+    for fp in candidates:
+        try:
+            if fp.exists():
+                return json.loads(fp.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+    return {"node": [], "python": []}
+
+def _parse_requirements_names(req_path: Path) -> list[str]:
+    out = []
+    try:
+        for raw in req_path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            base = re.split(r"[<>=!~\[]", line, maxsplit=1)[0].strip().lower()
+            if base:
+                out.append(base)
+    except Exception:
+        return []
+    return out
+
+def _parse_pyproject_names(pyproject_path: Path) -> list[str]:
+    out = []
+    try:
+        data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    project = data.get("project", {}) if isinstance(data, dict) else {}
+    for item in project.get("dependencies", []) or []:
+        base = re.split(r"[<>=!~\[]", str(item), maxsplit=1)[0].strip().lower()
+        if base:
+            out.append(base)
+    optional = project.get("optional-dependencies", {}) if isinstance(project, dict) else {}
+    if isinstance(optional, dict):
+        for deps in optional.values():
+            for item in deps or []:
+                base = re.split(r"[<>=!~\[]", str(item), maxsplit=1)[0].strip().lower()
+                if base:
+                    out.append(base)
+    return out
+
+def _find_preview_project_root(payload: dict) -> tuple[Path | None, str]:
+    candidates = []
+    for value in payload.get("project_root_candidates", []) or []:
+        if isinstance(value, str) and value.strip():
+            candidates.append(value)
+    for value in payload.get("target_paths", []) or []:
+        if isinstance(value, str) and value.strip():
+            candidates.append(value)
+    candidates.extend(["sandbox/crm_site", "ui"])
+    seen = set()
+    for rel in candidates:
+        if rel in seen:
+            continue
+        seen.add(rel)
+        abs_path = _safe_workspace_path(rel)
+        if not abs_path or not abs_path.exists():
+            continue
+        return (abs_path if abs_path.is_dir() else abs_path.parent), rel
+    return None, ""
+
+def _scan_preview_eligibility(project_root: Path) -> dict:
+    blocklist = _load_preview_blocklist()
+    package_json = project_root / "package.json"
+    requirements_txt = project_root / "requirements.txt"
+    pyproject_toml = project_root / "pyproject.toml"
+    result = {
+        "project_type": "unknown",
+        "status": "unknown",
+        "blocked_dependencies": [],
+        "manifest_path": "",
+    }
+
+    if package_json.exists():
+        result["project_type"] = "node"
+        result["manifest_path"] = str(package_json)
+        try:
+            data = json.loads(package_json.read_text(encoding="utf-8"))
+            deps = set()
+            for key in ["dependencies", "devDependencies"]:
+                section = data.get(key, {})
+                if isinstance(section, dict):
+                    deps.update(str(name).lower() for name in section.keys())
+            blocked = sorted(name for name in deps if name in set(blocklist.get("node", [])))
+            result["blocked_dependencies"] = blocked
+            result["status"] = "ineligible" if blocked else "eligible"
+        except Exception as err:
+            result["status"] = "unknown"
+            result["scan_error"] = f"package.json parse failed: {err}"
+        return result
+
+    if requirements_txt.exists() or pyproject_toml.exists():
+        result["project_type"] = "python"
+        manifest = requirements_txt if requirements_txt.exists() else pyproject_toml
+        result["manifest_path"] = str(manifest)
+        deps = set()
+        deps.update(_parse_requirements_names(requirements_txt) if requirements_txt.exists() else [])
+        deps.update(_parse_pyproject_names(pyproject_toml) if pyproject_toml.exists() else [])
+        blocked = sorted(name for name in deps if name in set(blocklist.get("python", [])))
+        result["blocked_dependencies"] = blocked
+        result["status"] = "ineligible" if blocked else "eligible"
+        return result
+
+    static_markers = list(project_root.glob("*.html")) + list(project_root.glob("*.css")) + list(project_root.glob("*.js"))
+    if static_markers:
+        result["project_type"] = "static"
+        result["status"] = "eligible"
+        result["manifest_path"] = str(static_markers[0])
+        return result
+
+    return result
+
+def _render_extract_preview_url(service_payload: dict) -> str:
+    if not isinstance(service_payload, dict):
+        return ""
+    for key in ["url", "preview_url", "serviceUrl"]:
+        value = service_payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    nested = service_payload.get("serviceDetails")
+    if isinstance(nested, dict):
+        return _render_extract_preview_url(nested)
+    service_obj = service_payload.get("service")
+    if isinstance(service_obj, dict):
+        return _render_extract_preview_url(service_obj)
+    return ""
+
+def _render_trigger_existing_service(service_id: str, api_base: str) -> dict:
+    headers = {
+        "Authorization": f"Bearer {RENDER_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    deploy_url = f"{api_base.rstrip('/')}/services/{service_id}/deploys"
+    deploy_resp = requests.post(deploy_url, headers=headers, json={}, timeout=30)
+    body = {}
+    try:
+        body = deploy_resp.json()
+    except Exception:
+        body = {"raw": deploy_resp.text[:400]}
+    if deploy_resp.status_code < 200 or deploy_resp.status_code >= 300:
+        return {"ok": False, "error": f"render deploy trigger failed: http {deploy_resp.status_code}", "response": body}
+
+    service_resp = requests.get(f"{api_base.rstrip('/')}/services/{service_id}", headers=headers, timeout=30)
+    service_body = {}
+    try:
+        service_body = service_resp.json()
+    except Exception:
+        service_body = {}
+    return {
+        "ok": True,
+        "deploy_id": body.get("id") if isinstance(body, dict) else None,
+        "preview_url": _render_extract_preview_url(service_body),
+        "response": body,
+    }
+
+def _load_preview_registry() -> dict:
+    try:
+        if PREVIEW_REGISTRY_PATH.exists():
+            data = json.loads(PREVIEW_REGISTRY_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                items = data.get("items", [])
+                return {"items": items if isinstance(items, list) else []}
+    except Exception:
+        pass
+    return {"items": []}
+
+def _save_preview_registry(registry: dict):
+    PREVIEW_REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PREVIEW_REGISTRY_PATH.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def _is_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+def _kill_preview_process(pid: int):
+    if pid <= 0:
+        return
+    try:
+        os.killpg(pid, 15)
+    except Exception:
+        try:
+            os.kill(pid, 15)
+        except Exception:
+            pass
+
+def _cleanup_expired_preview_runtimes(now_ts: float | None = None) -> dict:
+    registry = _load_preview_registry()
+    now_ts = float(now_ts or time.time())
+    kept = []
+    removed = []
+    for item in registry.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        pid = int(item.get("pid") or 0)
+        expires_at_ts = float(item.get("expires_at_ts") or 0)
+        should_remove = False
+        reason = ""
+        if expires_at_ts and expires_at_ts <= now_ts:
+            _kill_preview_process(pid)
+            should_remove = True
+            reason = "expired"
+        elif pid and not _is_pid_alive(pid):
+            should_remove = True
+            reason = "dead_process"
+        if should_remove:
+            removed.append({
+                "run_id": str(item.get("run_id") or ""),
+                "port": int(item.get("port") or 0),
+                "pid": pid,
+                "reason": reason,
+            })
+        else:
+            kept.append(item)
+    registry["items"] = kept
+    _save_preview_registry(registry)
+    return {"removed": removed, "kept_count": len(kept)}
+
+def _is_port_available(port: int) -> bool:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("0.0.0.0", int(port)))
+            return True
+    except OSError:
+        return False
+
+def _allocate_preview_port(registry: dict) -> int | None:
+    active_ports = {
+        int(item.get("port") or 0)
+        for item in registry.get("items", [])
+        if isinstance(item, dict) and int(item.get("port") or 0) > 0 and _is_pid_alive(int(item.get("pid") or 0))
+    }
+    for port in range(PREVIEW_PORT_START, PREVIEW_PORT_END + 1):
+        if port in active_ports:
+            continue
+        if _is_port_available(port):
+            return port
+    return None
+
+def _read_json_file(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def _detect_local_preview_contract(project_root: Path, eligibility: dict) -> dict:
+    project_type = str(eligibility.get("project_type") or "unknown")
+    index_html = project_root / "index.html"
+    package_json = project_root / "package.json"
+    if index_html.exists():
+        return {
+            "mode": "static",
+            "command": ["python", "-m", "http.server"],
+            "command_source": "index.html",
+            "working_dir": str(project_root),
+        }
+
+    if project_type == "node" and package_json.exists():
+        package_data = _read_json_file(package_json)
+        scripts = package_data.get("scripts", {}) if isinstance(package_data, dict) else {}
+        if isinstance(scripts, dict):
+            for script_name in ["preview", "start"]:
+                if isinstance(scripts.get(script_name), str) and scripts.get(script_name).strip():
+                    npm_cmd = shutil.which("npm") or shutil.which("npm.cmd")
+                    if npm_cmd:
+                        return {
+                            "mode": "node_script",
+                            "command": [npm_cmd, "run", script_name],
+                            "command_source": f"package.json:scripts.{script_name}",
+                            "working_dir": str(project_root),
+                        }
+        node_cmd = shutil.which("node")
+        for entry in ["server.js", "app.js", "main.js"]:
+            entry_path = project_root / entry
+            if node_cmd and entry_path.exists():
+                return {
+                    "mode": "node_entry",
+                    "command": [node_cmd, entry],
+                    "command_source": entry,
+                    "working_dir": str(project_root),
+                }
+
+    if project_type == "python":
+        for entry in ["app.py", "server.py", "main.py"]:
+            entry_path = project_root / entry
+            if entry_path.exists():
+                return {
+                    "mode": "python_entry",
+                    "command": ["python", entry],
+                    "command_source": entry,
+                    "working_dir": str(project_root),
+                }
+
+    return {"mode": "unknown", "command": [], "command_source": "", "working_dir": str(project_root)}
+
+def _wait_for_preview_http(port: int, timeout_s: int) -> bool:
+    deadline = time.time() + max(1, int(timeout_s))
+    url = f"http://127.0.0.1:{int(port)}/"
+    while time.time() < deadline:
+        try:
+            resp = requests.get(url, timeout=1)
+            if resp.status_code < 500:
+                return True
+        except Exception:
+            time.sleep(0.5)
+    return False
+
+def _launch_local_preview(project_root: Path, payload: dict, preview_dir: Path | None, eligibility: dict) -> dict:
+    cleanup = _cleanup_expired_preview_runtimes()
+    registry = _load_preview_registry()
+    contract = _detect_local_preview_contract(project_root, eligibility)
+    if contract.get("mode") == "unknown":
+        return {
+            "ok": False,
+            "error": "could not detect a deterministic local preview startup contract",
+            "cleanup": cleanup,
+            "contract": contract,
+        }
+
+    port = _allocate_preview_port(registry)
+    if not port:
+        return {
+            "ok": False,
+            "error": f"no preview port available in configured range {PREVIEW_PORT_START}-{PREVIEW_PORT_END}",
+            "cleanup": cleanup,
+            "contract": contract,
+        }
+
+    if preview_dir:
+        preview_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = preview_dir / f"preview_stdout_{port}.log" if preview_dir else None
+    stderr_path = preview_dir / f"preview_stderr_{port}.log" if preview_dir else None
+    runtime_path = preview_dir / "preview_runtime.json" if preview_dir else None
+
+    env = os.environ.copy()
+    env["PORT"] = str(port)
+    env["HOST"] = "0.0.0.0"
+    env["PREVIEW_PORT"] = str(port)
+    env["PREVIEW_HOST"] = PREVIEW_PUBLIC_HOST
+
+    command = list(contract.get("command") or [])
+    if contract.get("mode") == "static":
+        command = command + [str(port), "--bind", "0.0.0.0"]
+
+    stdout_handle = open(stdout_path, "a", encoding="utf-8") if stdout_path else subprocess.DEVNULL
+    stderr_handle = open(stderr_path, "a", encoding="utf-8") if stderr_path else subprocess.DEVNULL
+    try:
+        proc = subprocess.Popen(
+            command,
+            cwd=str(project_root),
+            env=env,
+            stdout=stdout_handle,
+            stderr=stderr_handle,
+            start_new_session=True,
+        )
+    finally:
+        if hasattr(stdout_handle, "close"):
+            stdout_handle.close()
+        if hasattr(stderr_handle, "close"):
+            stderr_handle.close()
+
+    if not _wait_for_preview_http(port, PREVIEW_HEALTH_TIMEOUT_S):
+        _kill_preview_process(proc.pid)
+        return {
+            "ok": False,
+            "error": f"preview process failed readiness check on port {port}",
+            "port": port,
+            "pid": proc.pid,
+            "cleanup": cleanup,
+            "contract": contract,
+        }
+
+    preview_ttl_hours = max(1, int(payload.get("preview_ttl_hours") or 24))
+    expires_at_ts = time.time() + preview_ttl_hours * 3600
+    item = {
+        "run_id": str(payload.get("run_id") or payload.get("workflow_run_id") or ""),
+        "workflow_run_id": str(payload.get("workflow_run_id") or ""),
+        "port": int(port),
+        "pid": int(proc.pid),
+        "mode": str(contract.get("mode") or ""),
+        "project_root": str(project_root),
+        "command": command,
+        "command_source": str(contract.get("command_source") or ""),
+        "created_at": datetime.utcnow().isoformat() + "Z",
+        "expires_at": datetime.utcfromtimestamp(expires_at_ts).isoformat() + "Z",
+        "expires_at_ts": expires_at_ts,
+    }
+    registry_items = []
+    for existing in registry.get("items", []):
+        if isinstance(existing, dict) and str(existing.get("run_id") or "") == item["run_id"]:
+            _kill_preview_process(int(existing.get("pid") or 0))
+            continue
+        registry_items.append(existing)
+    registry_items.append(item)
+    registry["items"] = registry_items
+    _save_preview_registry(registry)
+    if runtime_path:
+        runtime_path.write_text(json.dumps(item, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "ok": True,
+        "port": port,
+        "pid": proc.pid,
+        "preview_url": f"http://{PREVIEW_PUBLIC_HOST}:{port}",
+        "preview_host": PREVIEW_PUBLIC_HOST,
+        "mode": contract.get("mode"),
+        "command_source": contract.get("command_source"),
+        "cleanup": cleanup,
+        "runtime_path": str(runtime_path) if runtime_path else "",
+    }
+
+def deploy_preview(payload: dict):
+    artifact_root_rel = str(payload.get("artifact_root") or "").strip()
+    artifact_root = _safe_workspace_path(artifact_root_rel) if artifact_root_rel else None
+    if artifact_root:
+        artifact_root.mkdir(parents=True, exist_ok=True)
+    preview_dir = artifact_root / "preview" if artifact_root else None
+    if preview_dir:
+        preview_dir.mkdir(parents=True, exist_ok=True)
+
+    project_root, project_root_source = _find_preview_project_root(payload)
+    eligibility = _scan_preview_eligibility(project_root) if project_root else {
+        "project_type": "unknown",
+        "status": "unknown",
+        "blocked_dependencies": [],
+        "manifest_path": "",
+    }
+
+    result = {
+        "ok": True,
+        "preview_status": "skipped",
+        "preview_url": None,
+        "fallback_reason": "",
+        "deployment_result_path": "preview/deployment_result.json" if preview_dir else "",
+        "project_root": str(project_root) if project_root else "",
+        "project_root_source": project_root_source,
+        "eligibility": eligibility,
+        "preview_provider": str(payload.get("preview_provider") or "local"),
+        "preview_ttl_hours": int(payload.get("preview_ttl_hours") or 24),
+        "render_deploy_mode": str(payload.get("render_deploy_mode") or ""),
+        "render_service_id": str(payload.get("render_service_id") or ""),
+    }
+
+    if not project_root:
+        result["fallback_reason"] = "project root not found under target_paths"
+    elif eligibility.get("status") == "ineligible":
+        blocked = ", ".join(eligibility.get("blocked_dependencies", []))
+        result["preview_status"] = "ineligible"
+        result["fallback_reason"] = f"preview blocked by database dependencies: {blocked}"
+    elif eligibility.get("status") == "unknown":
+        result["fallback_reason"] = "preview eligibility scan could not classify the project"
+    else:
+        preview_provider = str(payload.get("preview_provider") or "local").strip().lower()
+        if preview_provider in ["", "local", "localhost"]:
+            deploy = _launch_local_preview(project_root, payload, preview_dir, eligibility)
+            if deploy.get("ok"):
+                result["preview_status"] = "deployed"
+                result["preview_url"] = deploy.get("preview_url") or None
+                result["deployment"] = deploy
+            else:
+                result["preview_status"] = "failed"
+                result["fallback_reason"] = str(deploy.get("error") or "local preview launch failed")
+                result["deployment"] = deploy
+        elif preview_provider == "render":
+            deploy_mode = str(payload.get("render_deploy_mode") or "").strip().lower()
+            render_service_id = str(payload.get("render_service_id") or "").strip()
+            render_api_base = str(payload.get("render_api_base") or RENDER_API_BASE_URL).strip() or RENDER_API_BASE_URL
+            if not RENDER_API_KEY:
+                result["fallback_reason"] = "RENDER_API_KEY is missing"
+            elif deploy_mode != "existing_service_redeploy":
+                result["fallback_reason"] = "render_deploy_mode is not configured for a safe deploy path"
+            elif not render_service_id:
+                result["fallback_reason"] = "render_service_id is missing"
+            else:
+                deploy = _render_trigger_existing_service(render_service_id, render_api_base)
+                if deploy.get("ok"):
+                    result["preview_status"] = "deployed"
+                    result["preview_url"] = deploy.get("preview_url") or None
+                    result["deployment"] = deploy
+                    if not result["preview_url"]:
+                        result["fallback_reason"] = "deploy triggered but preview URL was not returned by Render"
+                else:
+                    result["preview_status"] = "failed"
+                    result["fallback_reason"] = str(deploy.get("error") or "render deployment failed")
+                    result["deployment"] = deploy
+        else:
+            result["fallback_reason"] = f"preview provider '{preview_provider}' is unsupported"
+
+    if preview_dir:
+        result_path = preview_dir / "deployment_result.json"
+        result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    return result
+
 TOOLS = {
     "dummy.echo": lambda p: p,
     "quant.fetch_price": fetch_stock_price,
@@ -4218,6 +4743,7 @@ TOOLS = {
     "news.tdnet_close_flash": tdnet_close_flash,
     "github.skills_daily_report": github_skills_daily_report,
     "web.search_and_browse": web_search_and_browse,
+    "ops.deploy_preview": deploy_preview,
 }
 
 def main():

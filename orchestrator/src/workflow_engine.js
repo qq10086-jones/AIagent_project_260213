@@ -11,6 +11,7 @@ import { createArtifactPackService } from "./domain/workflow_artifact_pack.js";
 import { createTaskHandlerService } from "./domain/workflow_task_handler.js";
 import { createResumeService } from "./domain/workflow_resume.js";
 import { persistWorkflowMemory } from "./domain/memory_writer.js";
+import { resolveWorkflowResultUrl } from "./domain/workflow_preview_result.js";
 import { createPatchBundleService } from "./domain/patch_bundle_service.js";
 import { createContextBudgetService } from "./domain/context_budget_service.js";
 import { createWorkflowParallelizationRuntime } from "./domain/workflow_parallelization_runtime.js";
@@ -95,9 +96,19 @@ export function createWorkflowEngine({
       error: String(error_message || "workflow failed"),
       failure_payload: failure_payload || null,
     });
+    
+    if (typeof onStepTransition === "function") {
+      onStepTransition({
+        event: "workflow.failed",
+        workflow_run_id: run.workflow_run_id,
+        step_id: stepDef?.id || null,
+        error_message: String(error_message || "workflow failed")
+      }).catch(() => {});
+    }
   }
 
   async function succeedWorkflowRun(run) {
+    const steps = await getSteps(run.workflow_run_id);
     let pack = null;
     try {
       pack = await artifactPack.generateArtifactPack(run);
@@ -137,6 +148,16 @@ export function createWorkflowEngine({
       await updateRunStatus(pool, run.run_id, "completed").catch(() => {});
     }
     await recordEvent(run.workflow_run_id, "workflow.succeeded", { workflow_run_id: run.workflow_run_id });
+    const workflowResult = resolveWorkflowResultUrl({ steps, minio, minioBucket, run });
+    
+    if (typeof onStepTransition === "function") {
+      onStepTransition({
+        event: "workflow.completed",
+        workflow_run_id: run.workflow_run_id,
+        result_url: workflowResult.result_url
+      }).catch(() => {});
+    }
+
     await recordEvent(run.workflow_run_id, "artifact.pack.generated", {
       workflow_run_id: run.workflow_run_id,
       run_manifest: pack.run_manifest_path,
@@ -146,6 +167,10 @@ export function createWorkflowEngine({
       strict_canary_report: pack.strict_canary_report_path || null,
       strict_canary_json: pack.strict_canary_json_path || null,
       strict_canary_verdict: pack.strict_canary_verdict || null,
+      preview_url: workflowResult.preview_url,
+      preview_status: workflowResult.preview_status,
+      preview_fallback_reason: workflowResult.fallback_reason,
+      deployment_result_path: workflowResult.deployment_result_path,
     });
     try {
       const releaseRoot = path.dirname(path.dirname(pack.run_manifest_path || ""));
@@ -242,6 +267,17 @@ export function createWorkflowEngine({
         workflow_run_id, step_id: stepDef.id, step_index: stepIndex,
         waiting_approval: Boolean(enq.waiting_approval),
       });
+
+      if (typeof onStepTransition === "function" && !enq.waiting_approval) {
+        onStepTransition({
+          event: "step.started",
+          workflow_run_id,
+          step_id: stepDef.id,
+          step_index: stepIndex,
+          action_summary: `Executing task: ${stepDef.tool}`
+        }).catch(() => {});
+      }
+
       return {
         ok: true,
         task_id: enq.task_id,
@@ -490,6 +526,18 @@ export function createWorkflowEngine({
     const genericMsg = String(error_code || (gateName === "acceptance" ? "acceptance gate failed" : "step failed"));
     const genericFailurePayload = buildFailurePayload({ errorCode: genericCode, failedStep: step_id, detail: genericMsg });
     await updateWorkflowStepFailed(pool, workflow_run_id, step_index, { ...(output || {}), failure_payload: genericFailurePayload }, genericCode);
+    
+    if (typeof onStepTransition === "function") {
+      onStepTransition({
+        event: "step.failed",
+        workflow_run_id,
+        step_id: step_id,
+        step_index: step_index,
+        error_code: genericCode,
+        error_message: genericMsg
+      }).catch(() => {});
+    }
+
     const next = await reconcileWorkflowState(workflow_run_id);
     return { handled: true, workflow_run_id, step_index, next };
   }

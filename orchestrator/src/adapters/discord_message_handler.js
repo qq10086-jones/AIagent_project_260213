@@ -230,9 +230,12 @@ export function createDiscordMessageHandler({
       if (result.response_mode === "direct_reply") { await replyChunked(msg, result.reply || "I didn't understand that."); return; }
 
       if (result.execution?.workflow_run_id) {
-        workflowRunToContext.set(result.execution.workflow_run_id, { channelId: context.channelId, lang });
-        const queuedText = await safeTranslate(`\u5df2\u63d0\u4ea4 ${result.execution.workflow_id || "workflow"}\u3002run_id=${run_id}\uff0cworkflow_run_id=${result.execution.workflow_run_id}\u3002`, lang);
-        await msg.reply(`[NEXUS] ${queuedText}`);
+        const initialMsg = await msg.reply(`[NEXUS] 🛠️ **项目制作中**\n⏳ [⏳] (排队中...) \`Initializing\`\n💬 Waiting for workflow to start...`);
+        workflowRunToContext.set(result.execution.workflow_run_id, { 
+          channelId: context.channelId, 
+          lang, 
+          progressMessageId: initialMsg.id 
+        });
         if (result.execution?.first_step?.waiting_approval && result.execution?.first_step?.task_id) {
           await msg.reply(`[NEXUS] \u4efb\u52a1\u7b49\u5f85\u5ba1\u6279\uff1atask_id=${result.execution.first_step.task_id}\n\u6279\u51c6\uff1a\`/approve: ${result.execution.first_step.task_id}\`\n\u62d2\u7edd\uff1a\`/reject: ${result.execution.first_step.task_id}\``);
         }

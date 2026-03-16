@@ -1,22 +1,27 @@
 # Feature Progress - Latest Snapshot
 
-**Last updated:** 2026-03-16 (MiniMax mixed-lane parallel evidence captured; N2 remains in progress)
+**Last updated:** 2026-03-16 (MiniMax M2.5 fully activated; Discord Live Progress Bar landed; M12 local-preview design approved)
 **Author:** PM / Architecture Review
+
+---
+
+## M11/M12 UX & Local Preview (Current Focus)
+
+- **MiniMax M2.5 Cloud Lane (M11-A):** `COMPLETE` - `stable_cloud_lane` now targets MiniMax M2.5 via OpenCode. `MINIMAX_API_KEY` injected and verified with a 6/6 step successful workflow run (`15952cc0-3b6a-471f-86e3-00c018fa7b91`).
+- **Discord Live Progress Bar (M12 Phase A):** `LANDED` - Real-time, debounced progress tracking implemented (`discord_progress_manager.js`). Workflow engine now emits fine-grained step events to Discord messages.
+- **M12 Local Preview Pivot:** `APPROVED` - Live Preview primary path changed from Render-first to localhost-first. Render is now a deferred public-preview enhancement.
+- **Brain Model Upgrade:** `COMPLETE` - Brain upgraded to `qwen3.5-397b-a17b`. Intent detection hardened for Chinese natural language via regex refactoring and `coding.delegate` schema registration.
+- **Project Renaming:** All internal references and Discord branding updated to **Nexus**.
 
 ---
 
 ## Execution Evidence
 
-- **M10 load test (stable_local_lane):** `PASS / GO` - run a48a521e, 6/6 steps, 23 min (2026-03-15)
-- **N1 live runtime validation, failure-path canary:** `PASS AS EXPECTED` - run `919efc21-32dc-4733-8fd2-421f0c76168e` failed at `impl_be` because the validation input explicitly set `max_runtime_s=180` (2026-03-15)
-- **N1 live runtime validation, default-timeout canary:** `PASS / GO` - run `1b71e15d-df8a-48b0-8557-3b0e0ef7d4b4`, `coding_team_v0` completed `6/6` on `stable_local_lane` after restart with default runtime timeout behavior (2026-03-15)
-- **N2 concurrent baseline, initial run:** `FAIL` - one workflow failed at `arch_design` with `ARCH_REQUIRED_SECTIONS_MISSING`; a second workflow remained stuck at `arch_design` under 2-workflow concurrency (2026-03-15)
-- **N2 concurrent baseline, rerun after arch prompt hardening:** `PARTIAL IMPROVEMENT / NOT GO` - both workflows advanced past `arch_design` and reached `impl_be`, but neither reached terminal state within the observation window; primary bottleneck moved from `arch_design` to `impl_be` (2026-03-15)
-- **M11-A MiniMax cloud lane wiring:** `CONFIGURED` - `stable_cloud_lane` now points to `opencode + minimax/MiniMax-M2.5`, `MINIMAX_API_KEY` is injected into `worker-coder`, and preflight/adapter coverage was updated (2026-03-16)
-- **M11-A MiniMax cloud lane smoke:** `PASS / GO` - after switching `opencode.json` to the official MiniMax provider shape and forcing full-file fallback on `stable_cloud_lane` impl steps, live workflow `8418008d-a2d2-4317-bac3-879e81016f0a` / `87658374-e4b8-43eb-9491-842e7510bef0` completed `6/6` on MiniMax (2026-03-16)
-- **M11-A mixed-lane parallel baseline:** `PARTIAL PASS` - concurrent `stable_local_lane + stable_cloud_lane` run showed `stable_cloud_lane` succeeded `6/6` (`e29d41ce-9704-4656-84d8-5515edc19d48` / `f507a1be-dda6-4534-9edc-bf35e081c0d0`) while `stable_local_lane` still failed at `arch_design` with `ARCH_REQUIRED_SECTIONS_MISSING` (`b819029c-4a5d-4cf0-ba20-adaa0e279cff` / `2ea12610-7d5d-49b9-bce5-157610413160`) (2026-03-16)
-- **Post-M10 code quality hardening (2 audit rounds):** complete (2026-03-15)
-- **T-33 failure injection suite:** complete, 7 failure paths covered (2026-03-15)
+- **M11-A MiniMax cloud lane smoke:** `PASS / GO` - full workflow `15952cc0-3b6a-471f-86e3-00c018fa7b91` completed `6/6` on MiniMax M2.5 (2026-03-16).
+- **M12 Phase A (UX) verification:** `PASS` - Discord message updates dynamically with heartbeat and step status; debouncing (3s) verified against rate limits (2026-03-16).
+- **M12 Phase B design decision:** `LOCKED` - `deploy_preview` should first launch local ephemeral previews on `localhost`, not depend on paid cloud infrastructure (2026-03-16).
+- **Chinese Intent Routing:** `FIXED` - Correctly routes "做个网站" to `coding_team_v0` after removing `\b` boundary restrictions and updating `AGENT_TOOLS_SCHEMA` (2026-03-16).
+- **Environment Sanitation:** `COMPLETE` - Cleared persistent Shell environment leaks (`QWEN_MODEL`, `CODER_PROVIDER`) that caused config drift (2026-03-16).
 
 ---
 
@@ -24,27 +29,57 @@
 
 | Milestone | Description | Status | Date |
 |-----------|-------------|--------|------|
-| M2 | Core Orchestration | **CLOSED** | 2026-03-07 |
-| M3 | vNext Service Layer | **CLOSED** | 2026-03-07 |
-| M4 | LLM Dispatcher + Role Policy | **CLOSED** | 2026-03-08 |
-| M5 | Workflow DAG Engine | **CLOSED** | 2026-03-08 |
-| M6 | Parallel Rollout Readiness | **GO_LIMITED_EXPOSURE** | 2026-03-09 |
-| M7 | Limited Dynamic Routing v1 | **CLOSED - ACCEPTED WITH DEVIATION** | 2026-03-09 |
-| M8 | Staging Evidence and Live Routing Validation | **CLOSED** | 2026-03-09 |
-| M9 | Coding Precision & Sandbox Guardrails | **CLOSED** | 2026-03-12 |
 | M10 | Load Test + Execution Lane Validation | **CLOSED** | 2026-03-15 |
+| M11 | Cloud Lane Scaling (MiniMax) | **CLOSED** | 2026-03-16 |
+| M12 | Discord UX & Live Preview | **IN PROGRESS** | 2026-03-16 |
 
 ---
 
 ## Active Design Authority
 
-**No active milestone.** System is in stabilization / T-33 hardening phase.
+**M12: Discord UX & Live Preview (v2.2)**
+- **Approved Design:** Local ephemeral preview runtime on `localhost` + static dependency scanning for eligibility.
+- **Current State:** Phase A (Progress Bar) completed. Phase B (Local Preview Launcher) pending.
 
 Current governance state:
-- `production_parallel_rollout.json`: `master_enabled=true`, `dynamic_routing_enabled=true`, `router_mode=dynamic_routing_enforced`
-- Default execution lane: `stable_local_lane` (opencode + ollama/glm-4.7-flash:latest)
-- `stable_codex_lane` defined in runtime config (provider=codex, model=codex-mini-latest)  Edeferred until OPENAI_API_KEY is available
-- `stable_cloud_lane` now targets `opencode + minimax/MiniMax-M2.5`; official MiniMax provider shape validated and a full `coding_team_v0` live run completed `6/6`
+- `production_parallel_rollout.json`: `router_mode=dynamic_routing_enforced`
+- Default execution lane: `stable_cloud_lane` (MiniMax M2.5) - **Promoted from local lane for Alpha testing.**
+- Brain Model: `qwen3.5-397b-a17b`
+
+---
+
+## TODO — Next Steps (ordered by value)
+
+### Immediate (M12 Phase B/C)
+
+| # | Task | Value |
+|---|------|-------|
+| WS-40 | **Local Preview Launcher** - Implement localhost preview boot, port allocation, and TTL cleanup for `ops.deploy_preview`. | High |
+| WS-41 | **Workflow Extension** - Keep `deploy_preview` in `coding_team_v0` and update Arch Design prompts for deterministic local boot metadata. | High |
+| WS-39 | **Persistent Progress State** - Move Discord message mapping from in-memory Map to Redis/SQLite for restart resilience. | Medium |
+
+### Near-term
+
+| # | Task | Scope |
+|---|------|-------|
+| WS-40-03 | **Static Dependency Scanner** - Implement `package.json`/`requirements.txt` scanner to block DB-heavy previews. | Medium |
+| WS-42-03 | **Preview Runtime Registry** - Persist local preview pid/port/expiry metadata for restart-safe cleanup. | Medium |
+| WS-42-04 | **Cloud Upgrade Path** - Revisit Render only after localhost preview is stable. | Low |
+| N2 | **Concurrency Tuning** - Address `impl_be` bottleneck to allow `stream_batch_size > 1`. | Medium |
+
+---
+
+## Key Runtime Parameters (current)
+
+```json
+{
+  "execution_lane_default":    "stable_cloud_lane",
+  "provider_default":          "opencode",
+  "model_default":             "minimax/MiniMax-M2.5",
+  "qwen_model":                "qwen3.5-397b-a17b",
+  "stream_batch_size":         1
+}
+```
 
 ---
 

@@ -92,7 +92,8 @@
     },
     "release": {
       "tools": [
-        "coding.delegate"
+        "coding.delegate",
+        "ops.deploy_preview"
       ],
       "description": "Release pack production from verified QA artifacts."
     },
@@ -249,6 +250,26 @@
         "required": []
       }
     },
+    "ops.deploy_preview": {
+      "kind": "builtin",
+      "params": {
+        "properties": {
+          "artifact_root": {
+            "type": "string"
+          },
+          "target_paths": {
+            "type": "array"
+          },
+          "render_service_id": {
+            "type": "string"
+          },
+          "preview_ttl_hours": {
+            "type": "number"
+          }
+        },
+        "required": []
+      }
+    },
     "openclaw.run": {
       "kind": "http",
       "params": {}
@@ -303,6 +324,15 @@
           "tool": "coding.delegate",
           "gate": "finalize",
           "prompt_script_id": "release.pack.v1"
+        },
+        {
+          "id": "deploy_preview",
+          "role": "release",
+          "tool": "ops.deploy_preview",
+          "gate": "finalize",
+          "depends_on": [
+            "release_pack"
+          ]
         }
       ]
     }

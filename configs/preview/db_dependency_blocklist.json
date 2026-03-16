@@ -1,0 +1,38 @@
+{
+  "node": [
+    "pg",
+    "pg-native",
+    "pg-pool",
+    "mysql",
+    "mysql2",
+    "mongoose",
+    "mongodb",
+    "sequelize",
+    "typeorm",
+    "prisma",
+    "@prisma/client",
+    "knex",
+    "redis",
+    "ioredis",
+    "sqlite3",
+    "better-sqlite3",
+    "mssql",
+    "tedious"
+  ],
+  "python": [
+    "psycopg2",
+    "psycopg",
+    "asyncpg",
+    "mysqlclient",
+    "pymysql",
+    "aiomysql",
+    "pymongo",
+    "motor",
+    "sqlalchemy",
+    "django",
+    "tortoise-orm",
+    "peewee",
+    "redis",
+    "aioredis"
+  ]
+}

@@ -619,6 +619,26 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       };
     }
 
+    if (String(stepDef.tool || "") === "ops.deploy_preview") {
+      const defaultTargetPaths = Array.isArray(payload.target_paths) && payload.target_paths.length > 0
+        ? payload.target_paths
+        : ["sandbox/crm_site/"];
+      payload.target_paths = defaultTargetPaths;
+      payload.project_root_candidates = defaultTargetPaths;
+      payload.release_manifest_path = `${artifactRoot}/meta/run_manifest.json`;
+      payload.release_notes_path = `${artifactRoot}/release/release_notes.md`;
+      payload.preview_ttl_hours = clampInt(
+        payload.preview_ttl_hours ?? input.preview_ttl_hours ?? 24,
+        1,
+        168,
+        24,
+      );
+      payload.preview_provider = String(payload.preview_provider || input.preview_provider || "local");
+      payload.render_service_id = String(payload.render_service_id || input.render_service_id || "");
+      payload.render_api_base = String(payload.render_api_base || input.render_api_base || "");
+      payload.render_deploy_mode = String(payload.render_deploy_mode || input.render_deploy_mode || "");
+    }
+
     return payload;
   }
 

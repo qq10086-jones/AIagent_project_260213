@@ -1,0 +1,132 @@
+{
+  "suite_id": "discord_coding_light_suite_v1",
+  "description": "Discord-style light coding requests focused on websites, utility scripts, and lightweight automation.",
+  "defaults": {
+    "channel_prefix": "load-test-chan",
+    "user_prefix": "load-test-user",
+    "guild_id": "guild-load-test",
+    "thread_prefix": "load-test-thread"
+  },
+  "scenarios": [
+    {
+      "id": "fashion_landing_page",
+      "class": "short",
+      "weight": 5,
+      "message": "/coder: 帮我做一个服饰商品宣传网站，首页要有主视觉、商品卖点、用户评价和联系我们。"
+    },
+    {
+      "id": "coffee_shop_microsite",
+      "class": "short",
+      "weight": 4,
+      "message": "/coder: 做一个咖啡店宣传网页，包含门店介绍、菜单卡片、营业时间和地图占位。"
+    },
+    {
+      "id": "portfolio_site",
+      "class": "short",
+      "weight": 4,
+      "message": "/coder: 做一个个人作品集网站，包含首页介绍、项目展示、技能列表和联系表单占位。"
+    },
+    {
+      "id": "event_registration_page",
+      "class": "medium",
+      "weight": 4,
+      "message": "/coder: 做一个活动报名网站，包含活动介绍、日程安排、报名表单和报名成功提示页面。"
+    },
+    {
+      "id": "mini_blog_homepage",
+      "class": "medium",
+      "weight": 3,
+      "message": "/coder: 做一个轻量博客首页，有文章列表、标签筛选和文章详情页占位。"
+    },
+    {
+      "id": "todo_webapp",
+      "class": "medium",
+      "weight": 4,
+      "message": "/coder: 做一个简单待办事项网站，支持新增、完成和删除任务，界面清爽一点。"
+    },
+    {
+      "id": "pricing_page",
+      "class": "short",
+      "weight": 3,
+      "message": "/coder: 给一个SaaS产品做定价页，包含三档套餐、FAQ和购买按钮占位。"
+    },
+    {
+      "id": "marketing_hero_ab",
+      "class": "short",
+      "weight": 2,
+      "message": "/coder: 做一个营销落地页，重点展示主视觉、CTA按钮、三段卖点和用户反馈。"
+    },
+    {
+      "id": "csv_to_json_script",
+      "class": "short",
+      "weight": 4,
+      "message": "/coder: 写一个小脚本，把CSV文件转成JSON数组，要求命令行可传输入输出路径。"
+    },
+    {
+      "id": "batch_rename_script",
+      "class": "short",
+      "weight": 3,
+      "message": "/coder: 写一个批量重命名脚本，给目标目录里的文件统一加上日期前缀。"
+    },
+    {
+      "id": "log_summary_script",
+      "class": "medium",
+      "weight": 3,
+      "message": "/coder: 写一个日志分析脚本，统计错误次数、警告次数，并输出按天汇总结果。"
+    },
+    {
+      "id": "markdown_toc_script",
+      "class": "short",
+      "weight": 2,
+      "message": "/coder: 写一个Markdown目录生成脚本，扫描标题层级并更新文档里的TOC区域。"
+    },
+    {
+      "id": "image_manifest_script",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: 写一个脚本，扫描图片目录并输出manifest.json，记录文件名、大小和修改时间。"
+    },
+    {
+      "id": "meeting_notes_formatter",
+      "class": "short",
+      "weight": 2,
+      "message": "/coder: 写一个小工具，把会议纪要文本整理成标题、行动项和待确认问题三部分。"
+    },
+    {
+      "id": "product_dashboard_static",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: 做一个静态产品数据看板页面，展示概览卡片、趋势图占位和最近更新列表。"
+    },
+    {
+      "id": "faq_knowledge_site",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: 做一个FAQ知识库网页，支持分类展示、搜索框占位和问题折叠展开。"
+    },
+    {
+      "id": "invoice_template_generator",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: 写一个脚本，根据输入的客户信息和商品列表生成简易发票HTML模板。"
+    },
+    {
+      "id": "restaurant_reservation_page",
+      "class": "long",
+      "weight": 1,
+      "message": "/coder: 做一个餐厅预约网站，包含首页、菜品展示、预约表单、成功页和基础校验。"
+    },
+    {
+      "id": "course_landing_page",
+      "class": "long",
+      "weight": 1,
+      "message": "/coder: 做一个线上课程宣传网站，包含课程介绍、讲师信息、课程大纲、价格和报名入口。"
+    },
+    {
+      "id": "small_ops_utility",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: 写一个小型运维脚本，读取配置文件后检查指定目录是否存在并输出结果报告。"
+    }
+  ]
+}

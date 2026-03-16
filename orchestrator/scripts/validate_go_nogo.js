@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { validateArtifactPack } from "../src/artifact_pack_validator.js";
+import { getExpectedWorkflowStepCount } from "../src/domain/workflow_artifact_audit.js";
 import { getDefaultRegistryPath, loadRegistryOrThrow } from "../src/registry.js";
 import { getDefaultWorkspaceRoot } from "./_paths.js";
 
@@ -139,7 +140,7 @@ function main() {
 
   const expectedSteps = Number.isFinite(expectedStepsArg) && expectedStepsArg > 0
     ? expectedStepsArg
-    : (run.workflow_id === "coding_team_v0" ? 6 : 0);
+    : getExpectedWorkflowStepCount(registry, run.workflow_id);
   const acceptanceStep = steps.find((s) => String(s.gate_name || "") === "acceptance") || steps.find((s) => String(s.step_id || "") === "qa_verify");
 
   const checks = [];

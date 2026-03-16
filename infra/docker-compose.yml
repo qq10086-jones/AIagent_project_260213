@@ -38,11 +38,13 @@ services:
       QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}
       QUANT_LLM_MODEL: ${QUANT_LLM_MODEL}
       LLM_PROVIDER: ${LLM_PROVIDER:-dashscope}
+      DISABLE_LOCAL_LLM_FALLBACK: ${DISABLE_LOCAL_LLM_FALLBACK:-0}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       DASH_SCOPE_API_KEY: ${DASH_SCOPE_API_KEY}
       ALIBABA_CODING_PLAN_API_KEY: ${ALIBABA_CODING_PLAN_API_KEY}
       OPENCODE_API_KEY: ${OPENCODE_API_KEY}
       OPENCODE_ZEN_API_KEY: ${OPENCODE_ZEN_API_KEY}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY}
       AUTO_REPORT_CHANNEL_ID: ${AUTO_REPORT_CHANNEL_ID}
       AUTO_REPORT_TIMEZONE: ${AUTO_REPORT_TIMEZONE:-Asia/Shanghai}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
@@ -88,6 +90,7 @@ services:
       - ALIBABA_CODING_PLAN_API_KEY=${ALIBABA_CODING_PLAN_API_KEY}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY}
       - OPENCODE_ZEN_API_KEY=${OPENCODE_ZEN_API_KEY}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - DASH_SCOPE_BASE_URL=${DASH_SCOPE_BASE_URL}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ollama-local}
@@ -143,13 +146,22 @@ services:
       QWEN_BASE_URL: ${QWEN_BASE_URL}
       QUANT_LLM_MODEL: ${QUANT_LLM_MODEL:-deepseek-r1:1.5b}
       RUNTIME_CONFIG_PATH: /workspace/configs/runtime/runtime_defaults.json
+      WORKSPACE_ROOT: /workspace
+      RENDER_API_KEY: ${RENDER_API_KEY}
+      RENDER_API_BASE_URL: ${RENDER_API_BASE_URL:-https://api.render.com/v1}
+      PREVIEW_PORT_START: ${PREVIEW_PORT_START:-46000}
+      PREVIEW_PORT_END: ${PREVIEW_PORT_END:-46020}
+      PREVIEW_PUBLIC_HOST: ${PREVIEW_PUBLIC_HOST:-localhost}
       MINIO_ENDPOINT: http://nexus-minio:9000
       MINIO_ACCESS_KEY: nexus
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-nexuspassword}
+    ports:
+      - "46000-46020:46000-46020"
     volumes:
       - ../configs/tools.json:/app/configs/tools.json:ro
       - ../configs/universe_us.json:/app/configs/universe_us.json:ro
       - ../configs/runtime:/app/configs/runtime:ro
+      - ..:/workspace
     depends_on:
       - redis
     networks: ["nexus-net"]

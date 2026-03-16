@@ -2,6 +2,14 @@ import { makeErrorResponse } from "./response_protocol.js";
 import { assertDispatchErrorResponse } from "./contract_validator.js";
 import { callLocalOllamaChat, callQwenChat } from "./local_llm_client.js";
 
+function parseBoolEnv(value, defaultValue = false) {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return defaultValue;
+  if (["1", "true", "yes", "on"].includes(raw)) return true;
+  if (["0", "false", "no", "off"].includes(raw)) return false;
+  return defaultValue;
+}
+
 export function shouldUseLegacyChatToolPath(intent) {
   const toolName = String(intent?.tool_name || "").trim();
   if (!toolName) return false;
@@ -73,12 +81,17 @@ export async function generateBrainDirectReply({
   currentLocalModel = "",
   projectContext = "",
 }) {
+  const disableLocalFallback = parseBoolEnv(process.env.DISABLE_LOCAL_LLM_FALLBACK, false);
   const useCloudChat = modelPreference === "api" || (!forceLocalLlm && hasQwenKey);
   if (useCloudChat) {
     try {
       const reply = await callQwenChat([{ role: "user", content: rawInput }], { qwenBase, qwenModel });
       if (String(reply || "").trim()) return reply;
     } catch (err) {
+      if (disableLocalFallback) {
+        console.warn("[vnext] cloud direct reply failed, local fallback disabled:", err?.message || err);
+        throw err;
+      }
       console.warn("[vnext] cloud direct reply failed, fallback to local:", err?.message || err);
     }
   }

@@ -16,6 +16,12 @@ function normalizeOpenCodeModelRef(model) {
   const safe = String(model || "").trim();
   if (!safe) return "";
   if (safe.includes("/")) return safe;
+  if (/^minimax(?:-m2(?:\.5)?|-m2\.5-highspeed)$/i.test(safe)) {
+    const normalizedName = /^minimax-m2\.5-highspeed$/i.test(safe)
+      ? "MiniMax-M2.5-highspeed"
+      : "MiniMax-M2.5";
+    return `minimax-coding-plan/${normalizedName}`;
+  }
   if (/^qwen3-coder-plus(?:-\d{4}-\d{2}-\d{2})?$/i.test(safe)) {
     return "alibaba-coding-plan/qwen3-coder-plus";
   }
@@ -68,7 +74,7 @@ function validateOpenCodeCredentials(model) {
       };
     }
   }
-  if (providerId === "minimax" && !String(process.env.MINIMAX_API_KEY || "").trim()) {
+  if ((providerId === "minimax" || providerId.startsWith("minimax-")) && !String(process.env.MINIMAX_API_KEY || "").trim()) {
     return {
       ok: false,
       errorCode: "E_AUTH_FAILED",
@@ -588,13 +594,10 @@ function mapErrorCode({ proc, command }) {
   if (proc.timedOut) {
     return { errorCode: "E_TIMEOUT", providerErrorClass: "EXECUTION_TIMEOUT" };
   }
-  if (proc.ok) {
-    return { errorCode: null, providerErrorClass: null };
-  }
   if (commandNotFound) {
     return { errorCode: "E_PROVIDER_UNAVAILABLE", providerErrorClass: "PROVIDER_UNAVAILABLE" };
   }
-  if (/(invalid access token|token expired|unauthorized|authentication failed|auth failed|incorrect api key provided|apikey-error|401)/i.test(stderrText)) {
+  if (/(invalid access token|token expired|unauthorized|authentication failed|auth failed|incorrect api key provided|apikey-error|401|login fail|api secret key|authorization field)/i.test(stderrText)) {
     return { errorCode: "E_AUTH_FAILED", providerErrorClass: "AUTH_FAILURE" };
   }
   if (/(unknown model|model not found|no such model|unsupported model)/i.test(stderrText)) {
@@ -605,6 +608,9 @@ function mapErrorCode({ proc, command }) {
   }
   if (/(invalid request|bad request|request shape|malformed request|400 bad request)/i.test(stderrText)) {
     return { errorCode: "E_REQUEST_SHAPE", providerErrorClass: "REQUEST_SHAPE_ERROR" };
+  }
+  if (proc.ok) {
+    return { errorCode: null, providerErrorClass: null };
   }
   if (!proc.ok && /(apply|patch).*(fail|error)/i.test(stderrText)) {
     return { errorCode: "E_APPLY_FAILED", providerErrorClass: null };

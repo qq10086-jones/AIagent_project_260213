@@ -36,7 +36,10 @@ function applyRoutingPolicy(rawInput, llmResult, heuristicIntent = null) {
   }
 
   const tokens = input.trim().split(/\s+/).filter(Boolean);
-  if (tokens.length < 3) {
+  const isChinese = /[\u4e00-\u9fa5]/.test(input);
+  const effectiveLength = isChinese ? input.trim().length : tokens.length;
+  
+  if (effectiveLength < 3) {
     const result = {
       applied_rule: "P-02",
       decision: "direct_reply",

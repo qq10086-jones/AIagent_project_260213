@@ -31,6 +31,7 @@ export const STEP_CONTRACTS = {
       "Publish top risks and mitigations in risk/risk_report.json.",
       "Split implementation work for FE/BE/QA in plan/workplan.md.",
       "Define all API endpoints or internal interfaces in plan/interfaces.md.",
+      "Document the application boot strategy so preview deployment can infer an entrypoint or manifest.",
     ],
   },
   impl_fe: {
@@ -67,6 +68,15 @@ export const STEP_CONTRACTS = {
       "Assemble release/release_notes.md as the human-readable package summary.",
       "Assemble release/artifact_manifest.json as the machine-readable package manifest.",
       "Ensure artifact references are complete and traceable.",
+    ],
+  },
+  deploy_preview: {
+    title: "Deploy Preview",
+    required_artifacts: ["preview/deployment_result.json"],
+    instructions: [
+      "Validate preview eligibility using static dependency scanning before any remote deployment call.",
+      "Attempt preview deployment only when required credentials and deployment metadata are available.",
+      "Persist preview/deployment_result.json with preview_url or an explicit fallback reason.",
     ],
   },
 };

@@ -2,13 +2,20 @@ import { createTaskEnvelope } from "./task_envelope.js";
 import { applyRoutingPolicy } from "./brain_router_policy.js";
 import { classifyTask } from "./brain_router_classifier.js";
 
-const CODING_RE = /\b(build|implement|feature|fix|bug|patch|refactor|frontend|backend|full[- ]?stack|api|database|repo|code|coding|pm|architect|ui|qa|测试|修复|开发|功能|需求|前端|后端|架构|设计文档)\b/i;
-const QUANT_RE = /\b(quant|ticker|stock|portfolio|market|trading|alpha|strategy|backtest|日股|美股|选股|量化|股票|仓位)\b/i;
-const DOCS_RE = /\b(doc|docs|design|prd|spec|proposal|milestone|roadmap|文档|方案|规划|拆解|需求文档)\b/i;
-const RESEARCH_RE = /\b(research|compare|comparison|benchmark|investigate|analysis memo|调研|对比|评估)\b/i;
-const OPS_RE = /\b(deploy|docker|k8s|infra|ops|operation|monitor|log|restart|部署|运维|日志)\b/i;
-const SIMPLE_CODING_RE = /\b(fix|bug|patch|small|minor|单个|简单|小改|修补)\b/i;
-const COMPLEX_CUE_RE = /\b(system|platform|workflow|multi[- ]?agent|full project|mvp|end[- ]?to[- ]?end|architecture|orchestrat|多角色|全栈|项目|系统|工作流)\b/i;
+const CODING_RE_EN = /\b(build|implement|feature|fix|bug|patch|refactor|frontend|backend|full[- ]?stack|api|database|repo|code|coding|pm|architect|ui|qa)\b/i;
+const CODING_RE_ZH = /(测试|修复|开发|功能|需求|前端|后端|架构|设计文档|网站|做个|制作|系统|平台|网页|小程序)/;
+const QUANT_RE_EN = /\b(quant|ticker|stock|portfolio|market|trading|alpha|strategy|backtest)\b/i;
+const QUANT_RE_ZH = /(日股|美股|选股|量化|股票|仓位)/;
+const DOCS_RE_EN = /\b(doc|docs|design|prd|spec|proposal|milestone|roadmap)\b/i;
+const DOCS_RE_ZH = /(文档|方案|规划|拆解|需求文档)/;
+const RESEARCH_RE_EN = /\b(research|compare|comparison|benchmark|investigate|analysis memo)\b/i;
+const RESEARCH_RE_ZH = /(调研|对比|评估)/;
+const OPS_RE_EN = /\b(deploy|docker|k8s|infra|ops|operation|monitor|log|restart)\b/i;
+const OPS_RE_ZH = /(部署|运维|日志)/;
+const SIMPLE_CODING_RE_EN = /\b(fix|bug|patch|small|minor)\b/i;
+const SIMPLE_CODING_RE_ZH = /(单个|简单|小改|修补)/;
+const COMPLEX_CUE_RE_EN = /\b(system|platform|workflow|multi[- ]?agent|full project|mvp|end[- ]?to[- ]?end|architecture|orchestrat)\b/i;
+const COMPLEX_CUE_RE_ZH = /(多角色|全栈|项目|系统|工作流)/;
 
 function countWords(text) {
   return String(text || "").trim().split(/\s+/).filter(Boolean).length;
@@ -16,10 +23,10 @@ function countWords(text) {
 
 function inferComplexity(text) {
   const normalized = String(text || "");
-  if (COMPLEX_CUE_RE.test(normalized) || normalized.length > 220 || countWords(normalized) > 35) {
+  if (COMPLEX_CUE_RE_EN.test(normalized) || COMPLEX_CUE_RE_ZH.test(normalized) || normalized.length > 220 || countWords(normalized) > 35) {
     return "complex";
   }
-  if (SIMPLE_CODING_RE.test(normalized) || normalized.length < 80) {
+  if (SIMPLE_CODING_RE_EN.test(normalized) || SIMPLE_CODING_RE_ZH.test(normalized) || normalized.length < 80) {
     return "simple";
   }
   return "medium";
@@ -27,11 +34,11 @@ function inferComplexity(text) {
 
 function inferIntentFromText(text) {
   const normalized = String(text || "");
-  if (CODING_RE.test(normalized)) return "coding";
-  if (QUANT_RE.test(normalized)) return "quant";
-  if (DOCS_RE.test(normalized)) return "docs";
-  if (RESEARCH_RE.test(normalized)) return "research";
-  if (OPS_RE.test(normalized)) return "ops";
+  if (CODING_RE_EN.test(normalized) || CODING_RE_ZH.test(normalized)) return "coding";
+  if (QUANT_RE_EN.test(normalized) || QUANT_RE_ZH.test(normalized)) return "quant";
+  if (DOCS_RE_EN.test(normalized) || DOCS_RE_ZH.test(normalized)) return "docs";
+  if (RESEARCH_RE_EN.test(normalized) || RESEARCH_RE_ZH.test(normalized)) return "research";
+  if (OPS_RE_EN.test(normalized) || OPS_RE_ZH.test(normalized)) return "ops";
   return "unknown";
 }
 

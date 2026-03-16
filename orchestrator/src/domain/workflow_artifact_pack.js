@@ -20,6 +20,7 @@ import {
   buildStrictCanaryMarkdown,
   buildStrictCanaryReport,
   ensureDir,
+  getExpectedWorkflowStepCount,
   inferProjectArtifactCoverage,
   writeJsonFile,
 } from "./workflow_artifact_audit.js";
@@ -255,7 +256,7 @@ export function createArtifactPackService({
       fs.appendFileSync(summaryPath, `${qLines.join("\n")}\n`, "utf8");
     } catch { /* ignore: summary write error is non-fatal */ }
 
-    const expectedSteps = String(run.workflow_id || "") === "coding_team_v0" ? 6 : 0;
+    const expectedSteps = getExpectedWorkflowStepCount(registry, run.workflow_id);
     const goNoGo = buildGoNoGoResult({ run, manifest, steps, validator, canaryReport, expectedSteps, strict: true });
     writeJsonFile(goNoGoJsonPath, goNoGo);
 

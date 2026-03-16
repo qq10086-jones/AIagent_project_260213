@@ -26,7 +26,7 @@ export function parseCoderDirectiveOptions(rawText, defaults = {}) {
       model = "gpt-5.3";
       cleaned = cleaned.replace(/@gpt-5\.3\b/gi, " ");
     } else if (/@minimax\b/i.test(cleaned)) {
-      model = "minimax-m2.5";
+      model = "minimax-coding-plan/MiniMax-M2.5";
       cleaned = cleaned.replace(/@minimax\b/gi, " ");
     } else if (/@qwen-coder-next\b/i.test(cleaned) || /@qwen\b/i.test(cleaned)) {
       model = DEFAULT_CODER_MODEL;

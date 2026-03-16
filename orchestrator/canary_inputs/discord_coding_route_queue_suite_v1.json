@@ -1,0 +1,72 @@
+{
+  "suite_id": "discord_coding_route_queue_suite_v1",
+  "description": "High-frequency Discord coding prompts for routing, queue admission, and workflow creation pressure. Keep tasks lightweight so the bottleneck reflects intake and queueing more than deep implementation.",
+  "defaults": {
+    "channel_prefix": "route-queue-chan",
+    "user_prefix": "route-queue-user",
+    "guild_id": "guild-route-queue",
+    "thread_prefix": "route-queue-thread"
+  },
+  "scenarios": [
+    {
+      "id": "promo_site_fast",
+      "class": "short",
+      "weight": 6,
+      "message": "/coder: 做一个商品宣传网页，包含首页横幅、三段卖点和底部联系方式。"
+    },
+    {
+      "id": "landing_page_fast",
+      "class": "short",
+      "weight": 6,
+      "message": "/coder: 做一个简洁落地页，有主标题、CTA按钮、功能亮点和FAQ。"
+    },
+    {
+      "id": "portfolio_fast",
+      "class": "short",
+      "weight": 5,
+      "message": "/coder: 做一个个人作品集网站，展示简介、项目卡片和联系方式。"
+    },
+    {
+      "id": "pricing_fast",
+      "class": "short",
+      "weight": 5,
+      "message": "/coder: 做一个SaaS产品定价页，包含套餐卡片、常见问题和购买按钮占位。"
+    },
+    {
+      "id": "csv_script_fast",
+      "class": "short",
+      "weight": 5,
+      "message": "/coder: 写一个小脚本，把CSV文件转成JSON，命令行支持输入输出路径。"
+    },
+    {
+      "id": "rename_script_fast",
+      "class": "short",
+      "weight": 5,
+      "message": "/coder: 写一个批量重命名脚本，给目录里的文件统一加前缀。"
+    },
+    {
+      "id": "manifest_script_fast",
+      "class": "short",
+      "weight": 4,
+      "message": "/coder: 写一个脚本，扫描目录并生成manifest.json，记录文件名和大小。"
+    },
+    {
+      "id": "faq_site_fast",
+      "class": "medium",
+      "weight": 3,
+      "message": "/coder: 做一个FAQ知识库网页，带搜索框占位和问题折叠区。"
+    },
+    {
+      "id": "todo_fast",
+      "class": "medium",
+      "weight": 3,
+      "message": "/coder: 做一个简单待办事项网页，支持新增、完成和删除。"
+    },
+    {
+      "id": "report_script_fast",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: 写一个小工具，把输入文本整理成标题、摘要和行动项三部分。"
+    }
+  ]
+}

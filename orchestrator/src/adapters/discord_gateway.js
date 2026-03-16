@@ -1,4 +1,5 @@
 import { AttachmentBuilder, Client, EmbedBuilder, GatewayIntentBits } from "discord.js";
+import { handleWorkflowEvent } from "./discord_progress_manager.js";
 
 const DISCORD_MAX_CONTENT = 1900;
 
@@ -96,12 +97,21 @@ export function createDiscordGateway({ translate }) {
     const channel = await client.channels.fetch(notifyCtx.channelId).catch(() => null);
     if (!channel || typeof channel.send !== "function") return;
 
+    if (notifyCtx.progressMessageId) {
+      handleWorkflowEvent(client, event, {
+        workflow_run_id,
+        channel_id: notifyCtx.channelId,
+        message_id: notifyCtx.progressMessageId,
+        step_id: rest.step_id || rest.first_step_id || rest.completed_step_id,
+        step_index: rest.step_index,
+        step_count: rest.step_count,
+        error_message: rest.error_message || rest.detail,
+        result_url: rest.result_url
+      });
+    }
+
     let notifMsg = "";
-    if (event === "workflow.started") {
-      notifMsg = `🚀 工作流已启动（共 ${rest.step_count} 步），正在执行第一步：**${rest.first_step_id}**...`;
-    } else if (event === "step.completed") {
-      notifMsg = `✅ 步骤 **${rest.completed_step_id}** 完成。⏳ 进入下一步：**${rest.next_step_id}**...`;
-    } else if (event === "step.approval_required") {
+    if (event === "step.approval_required") {
       notifMsg = `⏸️ 步骤 **${rest.step_id}** 需要人工审批后才能继续执行。`;
     }
     if (!notifMsg) return;

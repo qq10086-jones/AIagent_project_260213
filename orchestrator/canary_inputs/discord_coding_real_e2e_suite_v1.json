@@ -1,0 +1,72 @@
+{
+  "suite_id": "discord_coding_real_e2e_suite_v1",
+  "description": "Lower-throughput but higher-fidelity Discord coding prompts intended to exercise the full coding workflow end-to-end on realistic lightweight projects.",
+  "defaults": {
+    "channel_prefix": "real-e2e-chan",
+    "user_prefix": "real-e2e-user",
+    "guild_id": "guild-real-e2e",
+    "thread_prefix": "real-e2e-thread"
+  },
+  "scenarios": [
+    {
+      "id": "fashion_brand_site",
+      "class": "medium",
+      "weight": 3,
+      "message": "/coder: 帮我做一个服饰品牌宣传网站，包含首页主视觉、商品卖点、用户评价、品牌故事和联系我们。"
+    },
+    {
+      "id": "coffee_shop_site",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: 做一个咖啡店网站，包含门店介绍、菜单展示、营业时间、门店地址和预约按钮占位。"
+    },
+    {
+      "id": "event_registration_site",
+      "class": "long",
+      "weight": 2,
+      "message": "/coder: 做一个活动报名网站，包含活动介绍、日程安排、报名表单、成功页和基础字段校验。"
+    },
+    {
+      "id": "restaurant_reservation_site",
+      "class": "long",
+      "weight": 2,
+      "message": "/coder: 做一个餐厅预约网站，包含首页、菜品展示、预约表单、成功提示页和基础交互。"
+    },
+    {
+      "id": "course_landing_site",
+      "class": "long",
+      "weight": 2,
+      "message": "/coder: 做一个线上课程宣传网站，展示课程亮点、讲师信息、课程大纲、价格和报名入口。"
+    },
+    {
+      "id": "todo_webapp_e2e",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: 做一个轻量待办事项网站，支持新增、完成、删除任务，并保留清晰的页面结构。"
+    },
+    {
+      "id": "log_summary_tool",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: 写一个日志分析脚本，统计错误和警告数量，按天输出汇总报表。"
+    },
+    {
+      "id": "invoice_template_tool",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: 写一个脚本，根据客户信息和商品清单生成简易发票HTML模板。"
+    },
+    {
+      "id": "markdown_toc_tool",
+      "class": "short",
+      "weight": 1,
+      "message": "/coder: 写一个Markdown目录生成工具，自动更新文档中的TOC区域。"
+    },
+    {
+      "id": "image_manifest_tool",
+      "class": "medium",
+      "weight": 1,
+      "message": "/coder: 写一个脚本，扫描图片目录并输出manifest.json，包含文件名、大小和修改时间。"
+    }
+  ]
+}

@@ -22,7 +22,7 @@ export function createExecuteVNextDispatch({
   workflowEngine,
   routeTaskRequest = defaultRouteTaskRequest,
   coderProviderDefault = "opencode",
-  coderModelDefault = "minimax-m2.5",
+  coderModelDefault = "minimax-coding-plan/MiniMax-M2.5",
   waterfallTraceService = null,
 }) {
   if (typeof ensureRun !== "function") throw new Error("ensureRun is required");

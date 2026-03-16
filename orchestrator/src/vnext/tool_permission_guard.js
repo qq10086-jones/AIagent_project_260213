@@ -22,8 +22,8 @@ const DEFAULT_MATRIX = {
   "backend_agent": ["coding.delegate", "file.read", "file.write", "bash.execute", "database.query"],
   "qa": ["coding.delegate", "file.read", "bash.execute", "browser.test", "document.write", "coding.execute"],
   "qa_agent": ["coding.delegate", "file.read", "bash.execute", "browser.test", "document.write"],
-  "release": ["coding.delegate", "document.read", "document.write", "file.read"],
-  "release_agent": ["coding.delegate", "document.read", "document.write", "file.read"],
+  "release": ["coding.delegate", "ops.deploy_preview", "document.read", "document.write", "file.read"],
+  "release_agent": ["coding.delegate", "ops.deploy_preview", "document.read", "document.write", "file.read"],
   "quant_analyst": ["quant.fetch_price", "quant.compute_news_risk_factor"],
   "quant_agent": ["broker.query", "broker.trade", "data.fetch", "file.write"],
   "brain": ["none"]

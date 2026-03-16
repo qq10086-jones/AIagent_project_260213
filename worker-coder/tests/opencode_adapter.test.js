@@ -109,7 +109,7 @@ async function testRunOpenCodeTaskAuthFailed() {
   assert.strictEqual(result.diagnostics.provider_error_class, "AUTH_FAILURE");
 }
 
-async function testRunOpenCodeTaskIgnoresAuthLikeStderrWhenExitZero() {
+async function testRunOpenCodeTaskRejectsAuthLikeStderrWhenExitZero() {
   const result = await runOpenCodeTask({
     workspaceRoot: process.cwd(),
     taskPrompt: "auth-like stderr with zero exit",
@@ -120,9 +120,26 @@ async function testRunOpenCodeTaskIgnoresAuthLikeStderrWhenExitZero() {
     console.log("opencode auth-like-stderr-zero-exit test skipped due sandbox EPERM");
     return;
   }
-  assert.strictEqual(result.ok, true, JSON.stringify(result));
-  assert.strictEqual(result.diagnostics.error_code, null);
+  assert.strictEqual(result.ok, false, JSON.stringify(result));
+  assert.strictEqual(result.diagnostics.error_code, "E_AUTH_FAILED");
+  assert.strictEqual(result.diagnostics.provider_error_class, "AUTH_FAILURE");
   assert.ok(String(result.stdout || "").includes("completed"));
+}
+
+async function testRunOpenCodeTaskRejectsMiniMaxLoginFailMessage() {
+  const result = await runOpenCodeTask({
+    workspaceRoot: process.cwd(),
+    taskPrompt: "minimax auth-like stderr with zero exit",
+    opencodeCommand: [process.execPath, "-e", "console.error(\"Error: login fail: Please carry the API secret key in the 'Authorization' field of the request header\"); process.exit(0)"],
+    maxRuntimeS: 10,
+  });
+  if (shouldSkipSpawn(result)) {
+    console.log("opencode minimax-login-fail test skipped due sandbox EPERM");
+    return;
+  }
+  assert.strictEqual(result.ok, false, JSON.stringify(result));
+  assert.strictEqual(result.diagnostics.error_code, "E_AUTH_FAILED");
+  assert.strictEqual(result.diagnostics.provider_error_class, "AUTH_FAILURE");
 }
 
 async function testRunOpenCodeTaskRejectsDashScopeModelRef() {
@@ -177,8 +194,16 @@ async function testRunOpenCodeTaskRequiresAlibabaCredential() {
 async function testRunOpenCodeTaskRequiresOpenCodeCredential() {
   const prevOpenCodeKey = process.env.OPENCODE_API_KEY;
   const prevOpenCodeZenKey = process.env.OPENCODE_ZEN_API_KEY;
+  const prevHome = process.env.HOME;
+  const prevUserProfile = process.env.USERPROFILE;
+  const prevHomeDrive = process.env.HOMEDRIVE;
+  const prevHomePath = process.env.HOMEPATH;
   delete process.env.OPENCODE_API_KEY;
   delete process.env.OPENCODE_ZEN_API_KEY;
+  process.env.HOME = "C:\\opencode-auth-missing-home";
+  process.env.USERPROFILE = "C:\\opencode-auth-missing-home";
+  process.env.HOMEDRIVE = "C:";
+  process.env.HOMEPATH = "\\opencode-auth-missing-home";
   try {
     const result = await runOpenCodeTask({
       workspaceRoot: process.cwd(),
@@ -195,6 +220,14 @@ async function testRunOpenCodeTaskRequiresOpenCodeCredential() {
     else process.env.OPENCODE_API_KEY = prevOpenCodeKey;
     if (prevOpenCodeZenKey === undefined) delete process.env.OPENCODE_ZEN_API_KEY;
     else process.env.OPENCODE_ZEN_API_KEY = prevOpenCodeZenKey;
+    if (prevHome === undefined) delete process.env.HOME;
+    else process.env.HOME = prevHome;
+    if (prevUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = prevUserProfile;
+    if (prevHomeDrive === undefined) delete process.env.HOMEDRIVE;
+    else process.env.HOMEDRIVE = prevHomeDrive;
+    if (prevHomePath === undefined) delete process.env.HOMEPATH;
+    else process.env.HOMEPATH = prevHomePath;
   }
 }
 async function testRunOpenCodeTaskRequiresMiniMaxCredential() {
@@ -225,7 +258,8 @@ async function main() {
   await testRunOpenCodeTaskApplyFailed();
   await testRunOpenCodeTaskProviderUnavailable();
   await testRunOpenCodeTaskAuthFailed();
-  await testRunOpenCodeTaskIgnoresAuthLikeStderrWhenExitZero();
+  await testRunOpenCodeTaskRejectsAuthLikeStderrWhenExitZero();
+  await testRunOpenCodeTaskRejectsMiniMaxLoginFailMessage();
   await testRunOpenCodeTaskRejectsDashScopeModelRef();
   await testRunOpenCodeTaskAllowsOllamaModelRef();
   await testRunOpenCodeTaskRequiresAlibabaCredential();

@@ -235,3 +235,40 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
   assert.deepEqual(payload.expected_artifacts, ["impl/be_changes/server.js", "impl/be_notes.md", "handoff/be_to_fe.json"]);
 });
 
+test("deploy_preview payload includes release metadata and preview defaults", () => {
+  const workspaceRoot = makeWorkspace();
+  writeFile(workspaceRoot, "sandbox/crm_site/index.html", "<!doctype html><html></html>");
+
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: { scripts: {} },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {},
+  });
+
+  const payload = builder.buildStepPayload({
+    run: {
+      run_id: "preview-run",
+      workflow_run_id: "preview-wf",
+      workflow_id: "coding_team_v0",
+      project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "Build CRM preview" }),
+    },
+    stepDef: {
+      id: "deploy_preview",
+      role: "release",
+      tool: "ops.deploy_preview",
+      gate: "finalize",
+    },
+    stepIndex: 6,
+  });
+
+  assert.equal(payload.preview_provider, "local");
+  assert.equal(payload.preview_ttl_hours, 24);
+  assert.equal(payload.release_manifest_path, "artifacts/release/preview-run/meta/run_manifest.json");
+  assert.equal(payload.release_notes_path, "artifacts/release/preview-run/release/release_notes.md");
+  assert.deepEqual(payload.target_paths, ["sandbox/crm_site/"]);
+  assert.equal(payload.render_service_id, "");
+});
+

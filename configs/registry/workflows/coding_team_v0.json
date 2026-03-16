@@ -45,6 +45,13 @@
       "tool": "coding.delegate",
       "gate": "finalize",
       "prompt_script_id": "release.pack.v1"
+    },
+    {
+      "id": "deploy_preview",
+      "role": "release",
+      "tool": "ops.deploy_preview",
+      "gate": "finalize",
+      "depends_on": ["release_pack"]
     }
   ]
 }

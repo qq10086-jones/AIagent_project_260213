@@ -198,6 +198,14 @@ export function buildStrictCanaryMarkdown(report, jsonRelPath = "") {
   return lines.join("\n");
 }
 
+export function getExpectedWorkflowStepCount(registry = {}, workflowId = "") {
+  const safeWorkflowId = String(workflowId || "").trim();
+  if (!safeWorkflowId) return 0;
+  const workflowDef = registry?.workflows?.[safeWorkflowId];
+  const steps = Array.isArray(workflowDef?.steps) ? workflowDef.steps : [];
+  return steps.length > 0 ? steps.length : 0;
+}
+
 export function buildGoNoGoResult({
   run,
   manifest,

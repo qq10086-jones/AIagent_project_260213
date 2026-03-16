@@ -111,6 +111,13 @@
     "timeout_s": 900
   },
 
+  "ops.deploy_preview": {
+    "kind": "builtin",
+    "default_risk": "medium",
+    "requires_approval": false,
+    "timeout_s": 180
+  },
+
   "openclaw.run": {
     "kind": "http",
     "requires_approval": true,

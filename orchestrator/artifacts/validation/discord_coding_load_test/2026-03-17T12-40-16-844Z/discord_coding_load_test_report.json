@@ -1,0 +1,78 @@
+{
+  "generated_at": "2026-03-17T12:41:41.789Z",
+  "config": {
+    "base_url": "http://localhost:3000",
+    "suite_file": "C:\\Users\\linweiye\\AIagent_project_260213\\orchestrator\\canary_inputs\\discord_coding_route_queue_suite_v1.json",
+    "suite_id": "discord_coding_route_queue_suite_v1",
+    "workspace_root": "C:\\Users\\linweiye\\AIagent_project_260213",
+    "run_count": 1,
+    "warmup_count": 0,
+    "concurrency": 1,
+    "stagger_ms": 300,
+    "poll_ms": 5000,
+    "timeout_ms": 1800000,
+    "min_workflow_success_rate": 1,
+    "min_go_rate": 1,
+    "max_dispatch_p95_ms": 15000,
+    "max_total_p95_ms": null,
+    "strict": false
+  },
+  "execution_window": {
+    "started_at": "2026-03-17T12:40:16.904Z",
+    "finished_at": "2026-03-17T12:41:41.789Z",
+    "elapsed_ms": 84885
+  },
+  "latency": {
+    "dispatch_p50_ms": 9504,
+    "dispatch_p95_ms": 9504,
+    "total_p50_ms": 84884,
+    "total_p95_ms": 84884
+  },
+  "summary": {
+    "total_runs": 1,
+    "success_count": 1,
+    "failure_count": 0,
+    "workflow_success_count": 1,
+    "go_pass_count": 1,
+    "dispatch_mode_counts": {
+      "progress_update": 1
+    },
+    "workflow_status_counts": {
+      "succeeded": 1
+    },
+    "scenario_counts": {
+      "promo_site_fast": 1
+    },
+    "class_counts": {
+      "short": 1
+    }
+  },
+  "rates": {
+    "workflow_success_rate": 1,
+    "go_rate": 1
+  },
+  "gate_failures": [],
+  "verdict": "PASS",
+  "results": [
+    {
+      "index": 1,
+      "scenario_id": "promo_site_fast",
+      "class": "short",
+      "discord_message": "/coder: 做一个商品宣传网页，包含首页横幅、三段卖点和底部联系方式。 [DLT 2026-03-17T12-40-16-844Z #1 scenario=promo_site_fast]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 9504,
+      "run_id": "91242550-471c-47c5-b953-860eb1c798b6",
+      "workflow_run_id": "12d155da-772f-4b18-afd5-686892d24876",
+      "workflow_status": "succeeded",
+      "go_no_go_verdict": "GO",
+      "go_no_go_exists": true,
+      "go_no_go_failed_checks": 0,
+      "ok": true,
+      "error_code": "",
+      "error_message": "",
+      "total_duration_ms": 84884
+    }
+  ]
+}

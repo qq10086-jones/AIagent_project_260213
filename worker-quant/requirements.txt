@@ -13,3 +13,4 @@ lxml
 matplotlib
 psycopg2-binary
 python-dateutil
+openbb

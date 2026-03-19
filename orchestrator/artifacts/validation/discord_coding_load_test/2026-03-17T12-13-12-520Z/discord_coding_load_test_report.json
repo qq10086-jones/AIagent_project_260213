@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-03-17T12:13:34.052Z",
+  "config": {
+    "base_url": "http://localhost:3000",
+    "suite_file": "C:\\Users\\linweiye\\AIagent_project_260213\\orchestrator\\canary_inputs\\discord_coding_route_queue_suite_v1.json",
+    "suite_id": "discord_coding_route_queue_suite_v1",
+    "workspace_root": "C:\\Users\\linweiye\\AIagent_project_260213",
+    "run_count": 1,
+    "warmup_count": 0,
+    "concurrency": 1,
+    "stagger_ms": 300,
+    "poll_ms": 5000,
+    "timeout_ms": 1800000,
+    "min_workflow_success_rate": 1,
+    "min_go_rate": 1,
+    "max_dispatch_p95_ms": 15000,
+    "max_total_p95_ms": null,
+    "strict": false
+  },
+  "execution_window": {
+    "started_at": "2026-03-17T12:13:12.575Z",
+    "finished_at": "2026-03-17T12:13:34.052Z",
+    "elapsed_ms": 21477
+  },
+  "latency": {
+    "dispatch_p50_ms": 16448,
+    "dispatch_p95_ms": 16448,
+    "total_p50_ms": 21476,
+    "total_p95_ms": 21476
+  },
+  "summary": {
+    "total_runs": 1,
+    "success_count": 0,
+    "failure_count": 1,
+    "workflow_success_count": 0,
+    "go_pass_count": 0,
+    "dispatch_mode_counts": {
+      "progress_update": 1
+    },
+    "workflow_status_counts": {
+      "failed": 1
+    },
+    "scenario_counts": {
+      "promo_site_fast": 1
+    },
+    "class_counts": {
+      "short": 1
+    }
+  },
+  "rates": {
+    "workflow_success_rate": 0,
+    "go_rate": 0
+  },
+  "gate_failures": [
+    "workflow_success_rate 0.000 < 1.000",
+    "go_rate 0.000 < 1.000",
+    "dispatch_p95_ms 16448 > 15000"
+  ],
+  "verdict": "FAIL",
+  "results": [
+    {
+      "index": 1,
+      "scenario_id": "promo_site_fast",
+      "class": "short",
+      "discord_message": "/coder: 做一个商品宣传网页，包含首页横幅、三段卖点和底部联系方式。 [DLT 2026-03-17T12-13-12-520Z #1 scenario=promo_site_fast]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 16448,
+      "run_id": "ef940885-aa60-4ab3-a057-cdba37e0cb2b",
+      "workflow_run_id": "ac523a8a-023c-480d-affb-57a5b57e828c",
+      "workflow_status": "failed",
+      "go_no_go_verdict": "",
+      "go_no_go_exists": false,
+      "go_no_go_failed_checks": 0,
+      "ok": false,
+      "error_code": "OpenCode authentication failed",
+      "error_message": "workflow failed at step 'pm_spec'",
+      "total_duration_ms": 21476
+    }
+  ]
+}

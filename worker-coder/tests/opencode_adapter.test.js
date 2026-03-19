@@ -12,7 +12,7 @@ async function testBuildInvocation() {
     opencodeCommand: ["opencode", "run", "fix bug", "--model", "{{model}}"],
   });
   assert.strictEqual(inv.command, "opencode");
-  assert.deepStrictEqual(inv.args, ["run", "fix bug", "--model", "alibaba-coding-plan/qwen3-coder-plus"]);
+  assert.deepStrictEqual(inv.args, ["run", "fix bug", "--model", "dashscope/qwen-plus-2025-04-28"]);
   assert.strictEqual(inv.commandSource, "payload.opencode_command");
 }
 
@@ -142,19 +142,6 @@ async function testRunOpenCodeTaskRejectsMiniMaxLoginFailMessage() {
   assert.strictEqual(result.diagnostics.provider_error_class, "AUTH_FAILURE");
 }
 
-async function testRunOpenCodeTaskRejectsDashScopeModelRef() {
-  const result = await runOpenCodeTask({
-    workspaceRoot: process.cwd(),
-    taskPrompt: "invalid provider/model pairing",
-    model: "dashscope/qwen-flash-2025-07-28",
-    opencodeCommand: [process.execPath, "-e", "console.log('should not run')"],
-    maxRuntimeS: 10,
-  });
-  assert.strictEqual(result.ok, false);
-  assert.strictEqual(result.diagnostics.error_code, "E_PROVIDER_CONFIG");
-  assert.match(String(result.error || ""), /does not accept dashscope/i);
-}
-
 async function testRunOpenCodeTaskAllowsOllamaModelRef() {
   const result = await runOpenCodeTask({
     workspaceRoot: process.cwd(),
@@ -171,23 +158,86 @@ async function testRunOpenCodeTaskAllowsOllamaModelRef() {
   assert.strictEqual(result.model_used, "ollama/glm-4.7-flash:latest");
 }
 
-async function testRunOpenCodeTaskRequiresAlibabaCredential() {
-  const prevAlibabaKey = process.env.ALIBABA_CODING_PLAN_API_KEY;
-  delete process.env.ALIBABA_CODING_PLAN_API_KEY;
+async function testRunOpenCodeTaskAcceptsQwenCredentialForDashScopeModel() {
+  const prevQwenKey = process.env.QWEN_API_KEY;
+  const prevDashKey = process.env.DASH_SCOPE_API_KEY;
+  delete process.env.DASH_SCOPE_API_KEY;
+  process.env.QWEN_API_KEY = "test-qwen-key";
   try {
     const result = await runOpenCodeTask({
       workspaceRoot: process.cwd(),
-      taskPrompt: "missing alibaba credential",
-      model: "alibaba-coding-plan/qwen3-coder-plus",
+      taskPrompt: "dashscope model with qwen credential",
+      model: "dashscope/qwen-plus-2025-04-28",
+      opencodeCommand: [process.execPath, "-e", "console.log('qwen credential ok')"],
+      maxRuntimeS: 10,
+    });
+    if (shouldSkipSpawn(result)) {
+      console.log("opencode qwen-credential test skipped due sandbox EPERM");
+      return;
+    }
+    assert.strictEqual(result.ok, true, JSON.stringify(result));
+  } finally {
+    if (prevQwenKey === undefined) delete process.env.QWEN_API_KEY;
+    else process.env.QWEN_API_KEY = prevQwenKey;
+    if (prevDashKey === undefined) delete process.env.DASH_SCOPE_API_KEY;
+    else process.env.DASH_SCOPE_API_KEY = prevDashKey;
+  }
+}
+
+async function testRunOpenCodeTaskRequiresDashScopeCredential() {
+  const prevAlibabaKey = process.env.ALIBABA_CODING_PLAN_API_KEY;
+  const prevQwenKey = process.env.QWEN_API_KEY;
+  const prevDashKey = process.env.DASH_SCOPE_API_KEY;
+  delete process.env.ALIBABA_CODING_PLAN_API_KEY;
+  delete process.env.QWEN_API_KEY;
+  delete process.env.DASH_SCOPE_API_KEY;
+  try {
+    const result = await runOpenCodeTask({
+      workspaceRoot: process.cwd(),
+      taskPrompt: "missing dashscope credential",
+      model: "dashscope/qwen-plus-2025-04-28",
       opencodeCommand: [process.execPath, "-e", "console.log('should not run')"],
       maxRuntimeS: 10,
     });
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.diagnostics.error_code, "E_AUTH_FAILED");
-    assert.match(String(result.error || ""), /ALIBABA_CODING_PLAN_API_KEY/i);
+    assert.match(String(result.error || ""), /DASHSCOPE_API_KEY|DASH_SCOPE_API_KEY|QWEN_API_KEY|ALIBABA_CODING_PLAN_API_KEY/i);
   } finally {
     if (prevAlibabaKey === undefined) delete process.env.ALIBABA_CODING_PLAN_API_KEY;
     else process.env.ALIBABA_CODING_PLAN_API_KEY = prevAlibabaKey;
+    if (prevQwenKey === undefined) delete process.env.QWEN_API_KEY;
+    else process.env.QWEN_API_KEY = prevQwenKey;
+    if (prevDashKey === undefined) delete process.env.DASH_SCOPE_API_KEY;
+    else process.env.DASH_SCOPE_API_KEY = prevDashKey;
+  }
+}
+
+async function testRunOpenCodeTaskAcceptsDashScopeCredential() {
+  const prevQwenKey = process.env.QWEN_API_KEY;
+  const prevDashScopeKey = process.env.DASHSCOPE_API_KEY;
+  const prevDashKey = process.env.DASH_SCOPE_API_KEY;
+  delete process.env.QWEN_API_KEY;
+  process.env.DASHSCOPE_API_KEY = "test-dashscope-key";
+  try {
+    const result = await runOpenCodeTask({
+      workspaceRoot: process.cwd(),
+      taskPrompt: "dashscope model with dashscope credential",
+      model: "dashscope/qwen-plus-2025-04-28",
+      opencodeCommand: [process.execPath, "-e", "console.log('dashscope credential ok')"],
+      maxRuntimeS: 10,
+    });
+    if (shouldSkipSpawn(result)) {
+      console.log("opencode dashscope-credential test skipped due sandbox EPERM");
+      return;
+    }
+    assert.strictEqual(result.ok, true, JSON.stringify(result));
+  } finally {
+    if (prevQwenKey === undefined) delete process.env.QWEN_API_KEY;
+    else process.env.QWEN_API_KEY = prevQwenKey;
+    if (prevDashScopeKey === undefined) delete process.env.DASHSCOPE_API_KEY;
+    else process.env.DASHSCOPE_API_KEY = prevDashScopeKey;
+    if (prevDashKey === undefined) delete process.env.DASH_SCOPE_API_KEY;
+    else process.env.DASH_SCOPE_API_KEY = prevDashKey;
   }
 }
 
@@ -260,9 +310,10 @@ async function main() {
   await testRunOpenCodeTaskAuthFailed();
   await testRunOpenCodeTaskRejectsAuthLikeStderrWhenExitZero();
   await testRunOpenCodeTaskRejectsMiniMaxLoginFailMessage();
-  await testRunOpenCodeTaskRejectsDashScopeModelRef();
   await testRunOpenCodeTaskAllowsOllamaModelRef();
-  await testRunOpenCodeTaskRequiresAlibabaCredential();
+  await testRunOpenCodeTaskAcceptsQwenCredentialForDashScopeModel();
+  await testRunOpenCodeTaskRequiresDashScopeCredential();
+  await testRunOpenCodeTaskAcceptsDashScopeCredential();
   await testRunOpenCodeTaskRequiresOpenCodeCredential();
   await testRunOpenCodeTaskRequiresMiniMaxCredential();
   console.log("opencode_adapter.test.js: all tests passed");

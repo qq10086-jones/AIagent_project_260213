@@ -4,7 +4,7 @@
     "qwen_base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
     "qwen_model": "qwen-flash",
     "coder_provider_default": "opencode",
-    "coder_model_default": "alibaba-coding-plan/qwen3-coder-plus",
+    "coder_model_default": "minimax-coding-plan/MiniMax-M2.5",
     "quant_llm_model": "qwen-plus-2025-04-28",
     "workflow_step_artifact_audit": true,
     "workflow_strict_step_artifacts": true,
@@ -23,7 +23,7 @@
   },
   "worker_coder": {
     "provider_default": "opencode",
-    "model_default": "alibaba-coding-plan/qwen3-coder-plus",
+    "model_default": "minimax-coding-plan/MiniMax-M2.5",
     "global_task_timeout_ms": 1800000,
     "verification_command_default": "",
     "max_attempts_default": 2,
@@ -43,7 +43,7 @@
         "provider": "opencode",
         "model": "minimax-coding-plan/MiniMax-M2.5",
         "provider_class": "opencode-provider",
-        "purpose": "cloud recovery lane via opencode using MiniMax Coding Plan M2.5"
+        "purpose": "frozen internal-beta cloud lane via opencode using DashScope Qwen Plus"
       },
       "stable_local_lane": {
         "provider": "opencode",

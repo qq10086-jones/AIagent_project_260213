@@ -19,6 +19,7 @@ services:
   orchestrator:
     build: ../orchestrator
     container_name: nexus-orchestrator
+    env_file: .env
     environment:
       WORKSPACE_ROOT: /workspace
       REDIS_URL: redis://redis:6379
@@ -33,24 +34,10 @@ services:
       GROUP_TASK: cg:workers
       GROUP_RESULT: cg:orchestrator
       DISCORD_TOKEN: ${DISCORD_TOKEN}
-      QWEN_API_KEY: ${QWEN_API_KEY}
-      QWEN_BASE_URL: ${QWEN_BASE_URL}
-      QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}
-      QUANT_LLM_MODEL: ${QUANT_LLM_MODEL}
-      LLM_PROVIDER: ${LLM_PROVIDER:-dashscope}
-      DISABLE_LOCAL_LLM_FALLBACK: ${DISABLE_LOCAL_LLM_FALLBACK:-0}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      DASH_SCOPE_API_KEY: ${DASH_SCOPE_API_KEY}
-      ALIBABA_CODING_PLAN_API_KEY: ${ALIBABA_CODING_PLAN_API_KEY}
-      OPENCODE_API_KEY: ${OPENCODE_API_KEY}
-      OPENCODE_ZEN_API_KEY: ${OPENCODE_ZEN_API_KEY}
-      MINIMAX_API_KEY: ${MINIMAX_API_KEY}
-      AUTO_REPORT_CHANNEL_ID: ${AUTO_REPORT_CHANNEL_ID}
-      AUTO_REPORT_TIMEZONE: ${AUTO_REPORT_TIMEZONE:-Asia/Shanghai}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       APPROVAL_TOKEN: ${APPROVAL_TOKEN:-dev-approval-token}
       CODER_PROVIDER_DEFAULT: ${CODER_PROVIDER_DEFAULT:-opencode}
-      CODER_MODEL_DEFAULT: ${CODER_MODEL_DEFAULT:-alibaba-coding-plan/qwen3-coder-plus}
+      CODER_MODEL_DEFAULT: ${CODER_MODEL_DEFAULT:-minimax-coding-plan/MiniMax-M2.5}
       RUNTIME_CONFIG_PATH: /app/configs/runtime/runtime_defaults.json
     ports:
       - "3000:3000"
@@ -79,27 +66,18 @@ services:
   worker-coder:
     build: ../worker-coder
     container_name: nexus-worker-coder
+    env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379
       - STREAM_TASK=stream:task:coding
       - GROUP_TASK=cg:workers:coding
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - QWEN_API_KEY=${QWEN_API_KEY}
-      - QWEN_BASE_URL=${QWEN_BASE_URL}
-      - DASH_SCOPE_API_KEY=${DASH_SCOPE_API_KEY}
-      - ALIBABA_CODING_PLAN_API_KEY=${ALIBABA_CODING_PLAN_API_KEY}
-      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
-      - OPENCODE_ZEN_API_KEY=${OPENCODE_ZEN_API_KEY}
-      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
-      - DASH_SCOPE_BASE_URL=${DASH_SCOPE_BASE_URL}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ollama-local}
-      - QWEN_MODEL=${QWEN_MODEL:-qwen-plus}
       - CODEX_BIN=${CODEX_BIN:-codex}
       - CODEX_SANDBOX=${CODEX_SANDBOX:-workspace-write}
       - OPENCODE_BIN=${OPENCODE_BIN:-opencode}
       - CODER_PROVIDER_DEFAULT=${CODER_PROVIDER_DEFAULT:-opencode}
-      - CODER_MODEL_DEFAULT=${CODER_MODEL_DEFAULT:-alibaba-coding-plan/qwen3-coder-plus}
+      - CODER_MODEL_DEFAULT=${CODER_MODEL_DEFAULT:-minimax-coding-plan/MiniMax-M2.5}
       - CODER_EXECUTION_LANE_DEFAULT=${CODER_EXECUTION_LANE_DEFAULT:-stable_local_lane}
       - CODER_ISOLATION_MODE=${CODER_ISOLATION_MODE:-promote}
       - RUNTIME_CONFIG_PATH=/workspace/configs/runtime/runtime_defaults.json
@@ -115,7 +93,6 @@ services:
       - ..:/workspace
       - ../opencode.json:/app/opencode.json:ro
       - ../configs/runtime:/app/configs/runtime:ro
-      # - C:/Users/jones/.codex/auth.json:/root/.codex/auth.json:ro
     depends_on:
       - redis
       - db
@@ -124,6 +101,7 @@ services:
   worker-quant:
     build: ../worker-quant
     container_name: nexus-worker-quant
+    env_file: .env
     environment:
       PYTHONUNBUFFERED: "1"
       PGHOST: db
@@ -140,10 +118,6 @@ services:
       OPENCLAW_BASE_URL: http://nexus-openclaw-adapter:18081
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      DASH_SCOPE_API_KEY: ${DASH_SCOPE_API_KEY}
-      QWEN_API_KEY: ${QWEN_API_KEY}
-      QWEN_BASE_URL: ${QWEN_BASE_URL}
       QUANT_LLM_MODEL: ${QUANT_LLM_MODEL:-deepseek-r1:1.5b}
       RUNTIME_CONFIG_PATH: /workspace/configs/runtime/runtime_defaults.json
       WORKSPACE_ROOT: /workspace
@@ -169,6 +143,7 @@ services:
   brain:
     build: ../brain
     container_name: brain
+    env_file: .env
     environment:
       - WORKSPACE_ROOT=/workspace
       - PGHOST=db
@@ -176,15 +151,10 @@ services:
       - PGUSER=nexus
       - PGPASSWORD=${POSTGRES_PASSWORD:-nexus}
       - PGDATABASE=nexus
-      - QWEN_API_KEY=${QWEN_API_KEY}
-      - QWEN_BASE_URL=${QWEN_BASE_URL}
-      - QWEN_MODEL=${QWEN_MODEL:-qwen-plus}
       - ENABLE_BROWSER_FACTS=${ENABLE_BROWSER_FACTS:-auto}
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - QUANT_LLM_MODEL=${QUANT_LLM_MODEL:-deepseek-r1:1.5b}
       - LLM_PROVIDER=${LLM_PROVIDER:-dashscope}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - DASH_SCOPE_API_KEY=${DASH_SCOPE_API_KEY}
       - RUNTIME_CONFIG_PATH=/workspace/configs/runtime/runtime_defaults.json
     ports:
       - "5005:5000"

@@ -36,7 +36,7 @@ function makeBuilder(workspaceRoot) {
         execution_lanes: {
           stable_cloud_lane: {
             provider: "opencode",
-            model: "alibaba-coding-plan/qwen3-coder-plus",
+            model: "dashscope/qwen-plus-2025-04-28",
           },
         },
         max_attempts_default: 2,
@@ -76,7 +76,7 @@ test("impl_be payload includes context packet, repo map, and coding context bloc
   assert.equal(payload.context_packet.role, "backend");
   assert.equal(payload.execution_lane, "stable_cloud_lane");
   assert.equal(payload.provider, "opencode");
-  assert.equal(payload.model, "alibaba-coding-plan/qwen3-coder-plus");
+  assert.equal(payload.model, "dashscope/qwen-plus-2025-04-28");
   assert.match(JSON.stringify(payload.repo_map.candidate_files), /sandbox\/crm_site\/server\.js/);
   assert.match(payload.task_prompt, /\[Coding Context Packet\]/);
   assert.match(payload.task_prompt, /Target Paths:/);
@@ -202,7 +202,7 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
       worker_coder: {
         execution_lane_default: "stable_cloud_lane",
         execution_lanes: {
-          stable_cloud_lane: { provider: "opencode", model: "minimax/MiniMax-M2.5" },
+          stable_cloud_lane: { provider: "opencode", model: "dashscope/qwen-plus-2025-04-28" },
         },
         wall_clock_timeout_s_default: 900,
         max_attempts_default: 2,
@@ -217,7 +217,7 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
       workflow_run_id: "mini-cloud-wf",
       workflow_id: "coding_team_v0",
       project_type: "webapp_crm",
-      input_json: JSON.stringify({ goal: "Implement backend API", provider: "opencode", model: "minimax/MiniMax-M2.5", execution_lane: "stable_cloud_lane" }),
+      input_json: JSON.stringify({ goal: "Implement backend API", provider: "opencode", model: "dashscope/qwen-plus-2025-04-28", execution_lane: "stable_cloud_lane" }),
     },
     stepDef: {
       id: "impl_be",

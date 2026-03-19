@@ -23,9 +23,9 @@ function normalizeOpenCodeModelRef(model) {
     return `minimax-coding-plan/${normalizedName}`;
   }
   if (/^qwen3-coder-plus(?:-\d{4}-\d{2}-\d{2})?$/i.test(safe)) {
-    return "alibaba-coding-plan/qwen3-coder-plus";
+    return "dashscope/qwen-plus-2025-04-28";
   }
-  if (/^qwen/i.test(safe)) return `alibaba-coding-plan/${safe}`;
+  if (/^qwen/i.test(safe)) return `dashscope/${safe}`;
   if (/^(gpt|o\d|text-embedding)/i.test(safe)) return `openai/${safe}`;
   if (/^claude/i.test(safe)) return `anthropic/${safe}`;
   return safe;
@@ -37,15 +37,6 @@ function validateOpenCodeModelRef(model) {
     return { ok: true, normalizedModel: normalized };
   }
   const providerId = String(normalized.split("/")[0] || "").trim().toLowerCase();
-  if (providerId === "dashscope") {
-    return {
-      ok: false,
-      normalizedModel: normalized,
-      errorCode: "E_PROVIDER_CONFIG",
-      providerErrorClass: "PROVIDER_CONFIG_ERROR",
-      error: "OpenCode does not accept dashscope/* model refs; use alibaba-coding-plan/* or opencode/*.",
-    };
-  }
   return { ok: true, normalizedModel: normalized };
 }
 
@@ -64,13 +55,19 @@ function validateOpenCodeCredentials(model) {
       };
     }
   }
-  if (providerId === "alibaba-coding-plan" || providerId === "alibaba-coding-plan-cn") {
-    if (!String(process.env.ALIBABA_CODING_PLAN_API_KEY || "").trim()) {
+  if (providerId === "dashscope") {
+    const hasDashScopeKey = Boolean(
+      String(process.env.DASHSCOPE_API_KEY || "").trim()
+      || String(process.env.DASH_SCOPE_API_KEY || "").trim()
+      || String(process.env.QWEN_API_KEY || "").trim()
+      || String(process.env.ALIBABA_CODING_PLAN_API_KEY || "").trim()
+    );
+    if (!hasDashScopeKey) {
       return {
         ok: false,
         errorCode: "E_AUTH_FAILED",
         providerErrorClass: "AUTH_FAILURE",
-        error: "Alibaba Coding Plan auth missing: set ALIBABA_CODING_PLAN_API_KEY.",
+        error: "DashScope auth missing: set DASHSCOPE_API_KEY, DASH_SCOPE_API_KEY, QWEN_API_KEY, or ALIBABA_CODING_PLAN_API_KEY.",
       };
     }
   }

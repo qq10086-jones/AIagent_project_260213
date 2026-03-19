@@ -1,23 +1,44 @@
 import assert from "assert";
 import { validateRuntimePreflight } from "../provider_preflight.js";
 
-function testRejectsDashScopeOnOpenCodeLane() {
+function testPassesWhenDashScopeCredentialPresent() {
   const result = validateRuntimePreflight({
     defaultProvider: "opencode",
-    defaultModel: "dashscope/qwen-flash-2025-07-28",
+    defaultModel: "dashscope/qwen-plus-2025-04-28",
     defaultExecutionLane: "stable_cloud_lane",
     runtimeCoderConfig: {
       execution_lanes: {
         stable_cloud_lane: {
           provider: "opencode",
-          model: "dashscope/qwen-flash-2025-07-28",
+          model: "dashscope/qwen-plus-2025-04-28",
+        },
+      },
+    },
+    env: {
+      DASHSCOPE_API_KEY: "test-key",
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.length, 0);
+}
+
+function testRequiresDashScopeCredential() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "opencode",
+    defaultModel: "dashscope/qwen-plus-2025-04-28",
+    defaultExecutionLane: "stable_cloud_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_cloud_lane: {
+          provider: "opencode",
+          model: "dashscope/qwen-plus-2025-04-28",
         },
       },
     },
     env: {},
   });
   assert.equal(result.ok, false);
-  assert.equal(result.issues[0].code, "MODEL_PROVIDER_MISMATCH");
+  assert.equal(result.issues[0].code, "DASHSCOPE_AUTH_MISSING");
 }
 
 function testRequiresAlibabaCredential() {
@@ -54,6 +75,27 @@ function testPassesWhenAlibabaCredentialPresent() {
     },
     env: {
       ALIBABA_CODING_PLAN_API_KEY: "test-key",
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.length, 0);
+}
+
+function testPassesWhenQwenCredentialPresentForAlibabaLane() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "opencode",
+    defaultModel: "alibaba-coding-plan/qwen3-coder-plus",
+    defaultExecutionLane: "stable_cloud_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_cloud_lane: {
+          provider: "opencode",
+          model: "alibaba-coding-plan/qwen3-coder-plus",
+        },
+      },
+    },
+    env: {
+      QWEN_API_KEY: "test-key",
     },
   });
   assert.equal(result.ok, true);
@@ -158,9 +200,11 @@ function testCodexLanePassesWhenOpenAIKeyPresent() {
 }
 
 function main() {
-  testRejectsDashScopeOnOpenCodeLane();
+  testPassesWhenDashScopeCredentialPresent();
+  testRequiresDashScopeCredential();
   testRequiresAlibabaCredential();
   testPassesWhenAlibabaCredentialPresent();
+  testPassesWhenQwenCredentialPresentForAlibabaLane();
   testPassesForConfiguredLocalOllamaLane();
   testCodexLaneRequiresOpenAIKey();
   testCodexLanePassesWhenOpenAIKeyPresent();

@@ -1,0 +1,108 @@
+{
+  "generated_at": "2026-03-16T15:07:51.303Z",
+  "config": {
+    "base_url": "http://localhost:3000",
+    "input_file": "C:\\Users\\linweiye\\AIagent_project_260213\\orchestrator\\canary_inputs\\crm_mini_stable_cloud_lane.json",
+    "workspace_root": "C:\\Users\\linweiye\\AIagent_project_260213",
+    "provider": "opencode",
+    "model": "minimax-coding-plan/MiniMax-M2.5",
+    "execution_lane": "stable_cloud_lane",
+    "fast_mode": true,
+    "run_count": 1,
+    "warmup_count": 0,
+    "concurrency": 1,
+    "stagger_ms": 250,
+    "poll_ms": 3000,
+    "timeout_ms": 180000,
+    "strict": false
+  },
+  "execution_window": {
+    "started_at": "2026-03-16T15:07:13.840Z",
+    "finished_at": "2026-03-16T15:07:51.303Z",
+    "elapsed_ms": 37463
+  },
+  "latency": {
+    "dispatch_p50_ms": 4220,
+    "dispatch_p95_ms": 4220,
+    "total_p50_ms": 37463,
+    "total_p95_ms": 37463
+  },
+  "summary": {
+    "total_runs": 1,
+    "success_count": 0,
+    "failure_count": 1,
+    "workflow_success_count": 0,
+    "go_no_go_pass_count": 0,
+    "workflow_status_counts": {
+      "failed": 1
+    },
+    "failed_step_counts": {}
+  },
+  "verdict": "FAIL",
+  "results": [
+    {
+      "index": 1,
+      "class": "long",
+      "ok": false,
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_latency_ms": 4220,
+      "run_id": "5aac5026-05eb-47fa-8b5c-9f8da1872e90",
+      "workflow_run_id": "60c39646-bc6b-49c6-8119-65a49d705bd0",
+      "workflow_status": "failed",
+      "error_code": "ARTIFACT_INCOMPLETE",
+      "error_message": "artifact pack incomplete",
+      "total_duration_ms": 37463,
+      "go_no_go_verdict": "NO_GO",
+      "go_no_go_exists": true,
+      "go_no_go_failed_checks": 1,
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded",
+          "task_id": "3cf75de0-c2e3-47c2-a59d-c0e78c5d9b40",
+          "error_code": ""
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded",
+          "task_id": "7a21ef3b-2c4a-43c2-9b2d-c149e5f18132",
+          "error_code": ""
+        },
+        {
+          "step_id": "impl_be",
+          "status": "succeeded",
+          "task_id": "24b5f98b-56a4-4e48-bfaa-8b1082d5fff8",
+          "error_code": ""
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "succeeded",
+          "task_id": "2336ae62-1315-4f24-915d-a31f030c1b87",
+          "error_code": ""
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "succeeded",
+          "task_id": "6a17f85c-0b7a-4731-8e95-6e6a7317313c",
+          "error_code": ""
+        },
+        {
+          "step_id": "release_pack",
+          "status": "succeeded",
+          "task_id": "b91f7dc3-da9e-40e7-9a65-fe8f11841fd3",
+          "error_code": ""
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "succeeded",
+          "task_id": "c263e07e-9b44-4dce-b27e-9945a62fc6b4",
+          "error_code": ""
+        }
+      ],
+      "step_status_counts": {
+        "succeeded": 7
+      }
+    }
+  ]
+}

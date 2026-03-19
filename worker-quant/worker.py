@@ -1075,12 +1075,73 @@ def _fetch_news_from_quote_page(symbol: str, max_items: int = 5) -> list[dict]:
     except Exception:
         return []
 
+def _fetch_news_from_openbb(symbol: str, max_items: int = 5) -> list[dict]:
+    """Fetch news using OpenBB Platform SDK v4 with timeout and environment variable credentials."""
+    import concurrent.futures
+    import os
+    try:
+        from openbb import obb
+        
+        # Inject API keys if present in the environment to avoid free tier rate limits
+        fmp_key = os.getenv("OPENBB_FMP_KEY")
+        if fmp_key:
+            # We use try/except because openbb structure might slightly differ across versions
+            try: obb.user.credentials.fmp_api_key = fmp_key
+            except Exception: pass
+
+        q_sym = symbol.replace('.T', '') if symbol.endswith('.T') else symbol
+        
+        # Run the fetch in a separate thread with a strict 10-second timeout
+        # to prevent blocking the worker event loop
+        def do_fetch():
+            return obb.news.company(symbol=q_sym, limit=max_items)
+            
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(do_fetch)
+            res = future.result(timeout=10)
+
+        if not res or not res.results:
+            return []
+        
+        out = []
+        for item in res.results:
+            if isinstance(item, dict):
+                title = item.get('title', '')
+                url = item.get('url', '')
+                pub_date = item.get('date', '')
+                publisher = item.get('source', 'openbb')
+            else:
+                title = getattr(item, 'title', '')
+                url = getattr(item, 'url', '')
+                pub_date = getattr(item, 'date', '')
+                publisher = getattr(item, 'source', 'openbb')
+                
+            out.append({
+                "title": str(title),
+                "url": str(url),
+                "publisher": str(publisher),
+                "published_at": str(pub_date),
+                "source": "openbb"
+            })
+        return out
+    except concurrent.futures.TimeoutError:
+        print(f"[openbb] Timeout (10s) fetching news for {symbol}")
+        return []
+    except Exception as e:
+        print(f"[openbb] Failed to fetch news for {symbol}: {e}")
+        return []
+
 def _merge_recent_news(quote: dict, max_items: int = 5) -> list[dict]:
     news = list((quote or {}).get("recent_news") or [])
     symbol = str((quote or {}).get("symbol") or "")
     company_name = (quote or {}).get("company_name")
-    news.extend(_fetch_news_from_quote_page(symbol, max_items=max_items * 2))
-    news.extend(_fetch_news_from_google_rss(symbol, company_name, max_items=max_items * 3))
+    
+    openbb_news = _fetch_news_from_openbb(symbol, max_items=max_items * 2)
+    news.extend(openbb_news)
+    
+    if len(openbb_news) < max_items:
+        news.extend(_fetch_news_from_quote_page(symbol, max_items=max_items * 2))
+        news.extend(_fetch_news_from_google_rss(symbol, company_name, max_items=max_items * 3))
 
     trusted_publishers = [
         "reuters", "nikkei", "bloomberg", "wsj", "financial times", "marketwatch",
@@ -1101,7 +1162,7 @@ def _merge_recent_news(quote: dict, max_items: int = 5) -> list[dict]:
         publisher_low = publisher.lower()
         if any(b in publisher_low for b in blocked_publishers):
             continue
-        key = (title.lower(), url.lower())
+        key = title.lower()
         if key in seen:
             continue
         seen.add(key)

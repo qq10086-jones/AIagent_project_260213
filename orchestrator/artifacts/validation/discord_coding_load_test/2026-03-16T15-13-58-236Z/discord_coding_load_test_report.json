@@ -1,0 +1,68 @@
+{
+  "generated_at": "2026-03-16T15:14:35.860Z",
+  "config": {
+    "base_url": "http://localhost:3000",
+    "suite_file": "C:\\Users\\linweiye\\AIagent_project_260213\\orchestrator\\canary_inputs\\discord_coding_light_suite_v1.json",
+    "suite_id": "discord_coding_light_suite_v1",
+    "workspace_root": "C:\\Users\\linweiye\\AIagent_project_260213",
+    "run_count": 1,
+    "warmup_count": 0,
+    "concurrency": 1,
+    "stagger_ms": 300,
+    "poll_ms": 3000,
+    "timeout_ms": 180000,
+    "strict": false
+  },
+  "execution_window": {
+    "started_at": "2026-03-16T15:13:58.337Z",
+    "finished_at": "2026-03-16T15:14:35.860Z",
+    "elapsed_ms": 37523
+  },
+  "latency": {
+    "dispatch_p50_ms": 7340,
+    "dispatch_p95_ms": 7340,
+    "total_p50_ms": 37522,
+    "total_p95_ms": 37522
+  },
+  "summary": {
+    "total_runs": 1,
+    "success_count": 0,
+    "failure_count": 1,
+    "workflow_success_count": 0,
+    "dispatch_mode_counts": {
+      "progress_update": 1
+    },
+    "workflow_status_counts": {
+      "failed": 1
+    },
+    "scenario_counts": {
+      "fashion_landing_page": 1
+    },
+    "class_counts": {
+      "short": 1
+    }
+  },
+  "verdict": "FAIL",
+  "results": [
+    {
+      "index": 1,
+      "scenario_id": "fashion_landing_page",
+      "class": "short",
+      "discord_message": "/coder: 帮我做一个服饰商品宣传网站，首页要有主视觉、商品卖点、用户评价和联系我们。 [DLT 2026-03-16T15-13-58-236Z #1 scenario=fashion_landing_page]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 7340,
+      "run_id": "6ca4e6d5-66d9-42b1-bc05-4019e94e9697",
+      "workflow_run_id": "75587167-c1f4-47cc-af71-718ca7fc05fe",
+      "workflow_status": "failed",
+      "go_no_go_verdict": "NO_GO",
+      "go_no_go_exists": true,
+      "go_no_go_failed_checks": 1,
+      "ok": false,
+      "error_code": "ARTIFACT_INCOMPLETE",
+      "error_message": "artifact pack incomplete",
+      "total_duration_ms": 37522
+    }
+  ]
+}

@@ -4,7 +4,7 @@
   "input": {
     "goal": "Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.",
     "provider": "opencode",
-    "model": "minimax-coding-plan/MiniMax-M2.5",
+    "model": "dashscope/qwen-plus-2025-04-28",
     "execution_lane": "stable_cloud_lane",
     "fast_mode": true
   }

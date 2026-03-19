@@ -47,15 +47,6 @@ function validateOpenCodeLane({ laneName, provider, model, env = process.env }) 
     });
     return issues;
   }
-  if (modelProvider === "dashscope") {
-    issues.push({
-      severity: "error",
-      lane: laneName,
-      code: "MODEL_PROVIDER_MISMATCH",
-      message: `opencode lane uses unsupported model ref '${safeModel}'`,
-    });
-    return issues;
-  }
   if ((modelProvider === "opencode" || modelProvider === "opencode-go") && !hasOpenCodeAuth(env)) {
     issues.push({
       severity: "error",
@@ -64,13 +55,27 @@ function validateOpenCodeLane({ laneName, provider, model, env = process.env }) 
       message: `lane '${laneName}' requires OPENCODE_API_KEY/OPENCODE_ZEN_API_KEY or opencode auth login`,
     });
   }
-  if ((modelProvider === "alibaba-coding-plan" || modelProvider === "alibaba-coding-plan-cn")
+  if (modelProvider === "dashscope"
+    && !String(env.DASHSCOPE_API_KEY || "").trim()
+    && !String(env.DASH_SCOPE_API_KEY || "").trim()
+    && !String(env.QWEN_API_KEY || "").trim()
     && !String(env.ALIBABA_CODING_PLAN_API_KEY || "").trim()) {
     issues.push({
       severity: "error",
       lane: laneName,
+      code: "DASHSCOPE_AUTH_MISSING",
+      message: `lane '${laneName}' requires DASHSCOPE_API_KEY, DASH_SCOPE_API_KEY, QWEN_API_KEY, or ALIBABA_CODING_PLAN_API_KEY`,
+    });
+  }
+  if ((modelProvider === "alibaba-coding-plan" || modelProvider === "alibaba-coding-plan-cn")
+    && !String(env.ALIBABA_CODING_PLAN_API_KEY || "").trim()
+    && !String(env.QWEN_API_KEY || "").trim()
+    && !String(env.DASH_SCOPE_API_KEY || "").trim()) {
+    issues.push({
+      severity: "error",
+      lane: laneName,
       code: "ALIBABA_AUTH_MISSING",
-      message: `lane '${laneName}' requires ALIBABA_CODING_PLAN_API_KEY`,
+      message: `lane '${laneName}' requires ALIBABA_CODING_PLAN_API_KEY, QWEN_API_KEY, or DASH_SCOPE_API_KEY`,
     });
   }
   if (modelProvider === "minimax" && !String(env.MINIMAX_API_KEY || "").trim()) {

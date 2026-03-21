@@ -7,6 +7,31 @@ function hasOpenCodeAuth(env = process.env) {
     || fs.existsSync(path.join(os.homedir(), ".local", "share", "opencode", "auth.json"));
 }
 
+// MiniMax key may come from MINIMAX_API_KEY env var OR from opencode.json
+// (provider.minimax.options.apiKey), which is how the opencode CLI is configured
+// in the container.  Check both so the preflight does not false-negative when
+// the key lives only in opencode.json.
+function hasMiniMaxKey(env = process.env) {
+  if (String(env.MINIMAX_API_KEY || "").trim()) return true;
+  const candidates = [
+    env.OPENCODE_JSON_PATH,
+    path.join(process.cwd(), "opencode.json"),
+    "/app/opencode.json",
+  ].filter(Boolean);
+  for (const p of candidates) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+      const key = String(
+        cfg?.provider?.["minimax-coding-plan"]?.options?.apiKey ||
+        cfg?.provider?.minimax?.options?.apiKey || ""
+      ).trim();
+      // Reject unresolved env-var placeholders like "${MINIMAX_API_KEY}"
+      if (key && !key.startsWith("${")) return true;
+    } catch { /* not found or parse error — try next */ }
+  }
+  return false;
+}
+
 function normalizeProvider(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -78,12 +103,12 @@ function validateOpenCodeLane({ laneName, provider, model, env = process.env }) 
       message: `lane '${laneName}' requires ALIBABA_CODING_PLAN_API_KEY, QWEN_API_KEY, or DASH_SCOPE_API_KEY`,
     });
   }
-  if (modelProvider === "minimax" && !String(env.MINIMAX_API_KEY || "").trim()) {
+  if (modelProvider === "minimax" && !hasMiniMaxKey(env)) {
     issues.push({
       severity: "error",
       lane: laneName,
       code: "MINIMAX_AUTH_MISSING",
-      message: `lane '${laneName}' requires MINIMAX_API_KEY`,
+      message: `lane '${laneName}' requires MINIMAX_API_KEY or provider.minimax.options.apiKey in opencode.json`,
     });
   }
   return issues;

@@ -40,6 +40,30 @@ function validateOpenCodeModelRef(model) {
   return { ok: true, normalizedModel: normalized };
 }
 
+// MiniMax key may live in MINIMAX_API_KEY env var OR in opencode.json
+// (provider.minimax.options.apiKey).  Check both to avoid false-negative preflight.
+function hasMiniMaxKeyFromConfig() {
+  if (String(process.env.MINIMAX_API_KEY || "").trim()) return true;
+  const candidates = [
+    process.env.OPENCODE_JSON_PATH,
+    path.join(process.cwd(), "opencode.json"),
+    "/app/opencode.json",
+  ].filter(Boolean);
+  for (const p of candidates) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+      // Check both legacy "minimax" and canonical "minimax-coding-plan" provider keys
+      const key = String(
+        cfg?.provider?.["minimax-coding-plan"]?.options?.apiKey ||
+        cfg?.provider?.minimax?.options?.apiKey || ""
+      ).trim();
+      // Reject unresolved env-var placeholders like "${MINIMAX_API_KEY}"
+      if (key && !key.startsWith("${")) return true;
+    } catch { /* not found or parse error — try next */ }
+  }
+  return false;
+}
+
 function validateOpenCodeCredentials(model) {
   const normalized = normalizeOpenCodeModelRef(model);
   const providerId = String(normalized.split("/")[0] || "").trim().toLowerCase();
@@ -71,12 +95,12 @@ function validateOpenCodeCredentials(model) {
       };
     }
   }
-  if ((providerId === "minimax" || providerId.startsWith("minimax-")) && !String(process.env.MINIMAX_API_KEY || "").trim()) {
+  if ((providerId === "minimax" || providerId.startsWith("minimax-")) && !hasMiniMaxKeyFromConfig()) {
     return {
       ok: false,
       errorCode: "E_AUTH_FAILED",
       providerErrorClass: "AUTH_FAILURE",
-      error: "MiniMax auth missing: set MINIMAX_API_KEY.",
+      error: "MiniMax auth missing: set MINIMAX_API_KEY or configure provider.minimax.options.apiKey in opencode.json.",
     };
   }
   return { ok: true };

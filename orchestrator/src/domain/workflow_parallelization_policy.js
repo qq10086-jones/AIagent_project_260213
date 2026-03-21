@@ -8,8 +8,13 @@ function findStepIndex(steps, stepId) {
   return steps.findIndex((step) => String(step?.id || "") === String(stepId || ""));
 }
 
+// Only treat the workflow as pre-wired if the BE/FE/QA steps (the ones this
+// service manages) already carry explicit depends_on.  Post-processing steps
+// like deploy_preview may carry static deps without implying the full DAG is
+// declared, and must not short-circuit the rollout gate evaluation.
+const MANAGED_STEP_IDS = new Set(["impl_be", "impl_fe", "qa_verify"]);
 function hasExplicitDagMetadata(steps = []) {
-  return steps.some((step) => Array.isArray(step?.depends_on));
+  return steps.some((step) => MANAGED_STEP_IDS.has(step.id) && Array.isArray(step?.depends_on));
 }
 
 export function createWorkflowParallelizationPolicyService({ registry, workspaceRoot }) {

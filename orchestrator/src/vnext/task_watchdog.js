@@ -31,12 +31,15 @@ export function createTaskWatchdog({
   autoDlq,
   streamTaskDlq,
 }) {
+  let running = false;
+
   async function start() {
+    running = true;
     console.log(
       `[watchdog] enabled interval=${intervalMs}ms running_timeout=${runningTimeoutSec}s queued_timeout=${queuedTimeoutSec}s auto_dlq=${autoDlq}`
     );
 
-    while (true) {
+    while (running) {
       try {
         const staleRunning = await listStaleRunningTasks(pool, runningTimeoutSec);
 
@@ -118,7 +121,12 @@ export function createTaskWatchdog({
       }
       await new Promise(r => setTimeout(r, intervalMs));
     }
+    console.log("[watchdog] Stopped.");
   }
 
-  return { start };
+  function stop() {
+    running = false;
+  }
+
+  return { start, stop };
 }

@@ -6,14 +6,24 @@
  * Does NOT auto-recover — manual operator reset required.
  */
 
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, renameSync } from "fs";
+import { join, dirname } from "path";
 
 function loadJson(p) {
   try { return JSON.parse(readFileSync(p, "utf8")); } catch { return null; }
 }
 
+// Write via tmp + rename for atomic disk update.  If the write fails the
+// original file is untouched; there is no partial-write window.
 function saveJson(p, value) {
-  writeFileSync(p, JSON.stringify(value, null, 2), "utf8");
+  const tmp = join(dirname(p), "." + Date.now() + ".tmp.json");
+  try {
+    writeFileSync(tmp, JSON.stringify(value, null, 2), "utf8");
+    renameSync(tmp, p);
+  } catch (err) {
+    try { writeFileSync(tmp, "", "utf8"); renameSync(tmp, tmp + ".dead"); } catch { /* best-effort cleanup */ }
+    throw new Error(`circuit-breaker: failed to persist config to ${p}: ${err.message}`);
+  }
 }
 
 /**

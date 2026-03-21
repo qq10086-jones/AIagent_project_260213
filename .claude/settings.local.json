@@ -31,7 +31,27 @@
       "Bash(mv \"$BASE/design/NEWS_SYSTEM_TASKS_v1.md\" \"$BASE/news/design/NEWS_SYSTEM_TASKS_v1.md\")",
       "Bash(rmdir \"$BASE/design\")",
       "Read(//e/AIagent_project_260213/$BASE/**)",
-      "Read(//e/AIagent_project_260213/$BASE/news/**)"
+      "Read(//e/AIagent_project_260213/$BASE/news/**)",
+      "Bash(cd /d E:\\\\AIagent_project_260213 && docker-compose -f infra/docker-compose.yml ps 2>&1)",
+      "Bash(docker-compose -f \"E:/AIagent_project_260213/infra/docker-compose.yml\" ps 2>&1)",
+      "Bash(docker restart:*)",
+      "Bash(sleep 5 && docker ps --filter \"name=nexus-worker-coder\" --filter \"name=nexus-orchestrator\" --format \"table {{.Names}}\\\\t{{.Status}}\" 2>&1)",
+      "Bash(docker exec:*)",
+      "Bash(find /e/AIagent_project_260213/orchestrator/artifacts -path \"*/37920*\" -o -path \"*/fe06946b*\" 2>/dev/null | head -20)",
+      "Bash(docker logs:*)",
+      "Bash(docker ps:*)",
+      "Bash(find /e/AIagent_project_260213/sandbox -name \"*.json\" -newer /e/AIagent_project_260213/infra/docker-compose.yml 2>/dev/null | head -20)",
+      "Bash(find /e/AIagent_project_260213 -path \"*14-04-57*\" -o -path \"*14-05*\" -o -path \"*14-06*\" -o -path \"*14-07*\" -o -path \"*14-08*\" 2>/dev/null | head -10)",
+      "Bash(grep -n \"delegateTask\" /e/AIagent_project_260213/worker-coder/*.js)",
+      "Bash(kill 1995 2>/dev/null && echo \"killed\" || echo \"process already gone\")",
+      "Bash(docker compose:*)",
+      "Bash(curl -s http://localhost:11434/api/ps 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s http://localhost:11434/api/ps 2>/dev/null)",
+      "Bash(grep -rn \"RUNTIME_CONFIG_PATH\\\\|runtime_defaults\\\\|global_task_timeout\\\\|runtimePath\" /e/AIagent_project_260213/worker-coder/*.js | head -10)",
+      "Bash(docker top:*)",
+      "Bash(cd /e/AIagent_project_260213/worker-coder && npm test 2>&1 | grep -E \"passed$|failed$\" | tail -17)",
+      "Bash(find \"E:\\\\AIagent_project_260213/orchestrator/artifacts/canary\" -name \"*fail*\" -o -name \"*error*\" 2>/dev/null | head -20)",
+      "Bash(ls -la \"E:\\\\AIagent_project_260213/worker-coder/tests/\" | grep -E \"\\\\.test\\\\.js$\" | head -10)",
+      "Bash(ls /e/AIagent_project_260213/orchestrator/scripts/canary_*.js | xargs -I{} basename {})"
     ]
   }
 }

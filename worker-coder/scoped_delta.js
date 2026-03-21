@@ -138,13 +138,14 @@ export async function ensureImplementationDelta({
     return current;
   }
 
-  const targetRoot = firstTargetPath;
-  const summaryTargetPaths = effectiveTargetPaths;
   const safeTaskId = String(taskId || "standalone").replace(/[^a-zA-Z0-9_-]/g, "_");
   const fileName = safeStepId === "impl_fe"
     ? `workflow_impl_fe_stub_${safeTaskId}.js`
     : `workflow_impl_be_stub_${safeTaskId}.js`;
-  const targetAbs = path.resolve(workspaceRoot, targetRoot, fileName);
+  // Write the stub as an audit artifact inside taskDir only — NOT into workspaceRoot/sandbox.
+  // impl_be and impl_fe are parallel steps so the stub cannot serve as a real BE→FE handoff.
+  // Promoting it into the shared workspace pollutes candidate_files for all subsequent tasks.
+  const targetAbs = path.resolve(taskDir, fileName);
   const stamp = new Date().toISOString();
   const promptSnippet = String(taskPrompt || "").slice(0, 160);
   fs.mkdirSync(path.dirname(targetAbs), { recursive: true });
@@ -160,5 +161,6 @@ export async function ensureImplementationDelta({
     }, null, 2)};\n`,
     "utf8"
   );
-  return gatherGitSummary(workspaceRoot, taskDir, baselineSnapshot, summaryTargetPaths);
+  // Return the original (empty) summary — workspace is unchanged, promotion is a no-op.
+  return current;
 }

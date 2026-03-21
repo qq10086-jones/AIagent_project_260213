@@ -437,6 +437,15 @@ export function createWorkflowEngine({
     const stepRow = await getWorkflowStepGateByIndex(pool, workflow_run_id, step_index);
     const gateName = String(stepRow?.gate_name || "");
 
+    // Idempotency guard: if the step is already in a terminal DB state, this
+    // message was redelivered after a consumer crash between updateTaskTerminalResult
+    // and XACK.  Skip re-processing to prevent duplicate step dispatch.
+    const stepStatus = String(stepRow?.status || "");
+    if (stepStatus === "succeeded" || stepStatus === "failed") {
+      console.warn(`[workflow] handleTaskTerminal: step ${step_id}[${step_index}] already ${stepStatus} — skipping duplicate`);
+      return { handled: false, skipped_duplicate: true };
+    }
+
     if (status === "succeeded") {
       const budgetMetrics = writeContextBudgetReport(payload);
       const contextArtifacts = writeContextArtifacts(payload);

@@ -34,6 +34,25 @@ Expected child artifacts:
 - `orchestrator/artifacts/canary/live_vnext_runtime/live_vnext_runtime_report.json`
 - `orchestrator/artifacts/canary/live_m9_workflow/live_m9_workflow_report.json`
 
+### Live Workflow Shortcuts
+
+Use the timeout/failure-path canary when you want to prove timeout enforcement and failure closure:
+
+```powershell
+node orchestrator/scripts/live_validate_workflow_runtime.js --base-url http://localhost:3000 --input crm_mini.json --timeout-ms 480000
+```
+
+Use the default-timeout success canary when you want a true GO check for the current runtime config:
+
+```powershell
+node orchestrator/scripts/live_validate_workflow_runtime.js --base-url http://localhost:3000 --input crm_mini_default_timeout.json --timeout-ms 1500000
+```
+
+Interpretation:
+
+- `crm_mini.json` intentionally sets `max_runtime_s=180` and may fail at `impl_be` or `impl_fe` by design.
+- `crm_mini_default_timeout.json` does not override the runtime default and should be used for post-restart success validation.
+
 ---
 
 ## 3. When To Run

@@ -316,9 +316,12 @@ export function createResultConsumer({
     return { processed };
   }
 
+  let running = false;
+
   async function start() {
+    running = true;
     console.log(`[result-consumer] Starting on stream ${streamResult}...`);
-    while (true) {
+    while (running) {
       try {
         await tick();
       } catch (err) {
@@ -326,7 +329,12 @@ export function createResultConsumer({
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
+    console.log("[result-consumer] Stopped.");
   }
 
-  return { start, tick, reclaimPendingMessages };
+  function stop() {
+    running = false;
+  }
+
+  return { start, stop, tick, reclaimPendingMessages };
 }

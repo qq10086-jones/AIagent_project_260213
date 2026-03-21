@@ -39,7 +39,7 @@
       "validation": {
         "required_sections": ["module_breakdown", "interfaces", "dependency_choices", "risk_notes"]
       },
-      "system_prompt": "Generate a system specification with module boundaries, interfaces, dependency choices, implementation sequence, and risk notes."
+      "system_prompt": "Generate a system specification with module boundaries, interfaces, dependency choices, implementation sequence, and risk notes. In plan/interfaces.md, define every concrete HTTP endpoint, internal RPC, or event as its own markdown heading such as '## GET /api/customers' or '## Event: customer.created'. Under each heading, include request shape, response shape or payload shape, and auth requirement. In plan/arch.md, keep the Interfaces section as a short summary that points to plan/interfaces.md rather than replacing it."
     },
     "architect.system_spec.v2": {
       "script_id": "architect.system_spec.v2",

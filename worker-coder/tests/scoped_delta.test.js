@@ -55,6 +55,7 @@ async function main() {
     false,
   );
 
+  // Dir-target case: stub goes to taskDir only, workspace remains clean.
   const dirFallbackWorkspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scoped-delta-dir-fallback-"));
   const dirFallbackTaskDir = path.join(dirFallbackWorkspaceRoot, "artifacts", "runs", "run-3", "task_3");
   fs.mkdirSync(dirFallbackTaskDir, { recursive: true });
@@ -70,11 +71,19 @@ async function main() {
     baselineSnapshot: dirBaseline,
     current: emptyCurrent,
   });
-  assert.equal(recoveredDir.diffStats.files, 1);
-  assert.deepEqual(recoveredDir.filesChanged, ["sandbox/crm_site/workflow_impl_fe_stub_task-dir.js"]);
+  // Workspace unchanged: stub is NOT promoted, filesChanged is empty.
+  assert.equal(recoveredDir.diffStats.files, 0);
+  assert.deepEqual(recoveredDir.filesChanged, []);
+  // Stub written as audit artifact inside taskDir — NOT into workspace/sandbox.
   assert.equal(
     fs.existsSync(path.join(dirFallbackWorkspaceRoot, "sandbox", "crm_site", "workflow_impl_fe_stub_task-dir.js")),
+    false,
+    "stub must not appear in workspace sandbox",
+  );
+  assert.equal(
+    fs.existsSync(path.join(dirFallbackTaskDir, "workflow_impl_fe_stub_task-dir.js")),
     true,
+    "stub must be written to taskDir as audit artifact",
   );
 
   console.log("scoped_delta.test.js: all tests passed");

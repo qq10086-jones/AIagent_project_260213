@@ -1,12 +1,12 @@
 # Run Summary
 
 - run_id: e2e-happy-run
-- workflow_run_id: d6ef756f-d6d5-484f-91c0-ece12d08f8d2
+- workflow_run_id: 2d6e901c-8c45-4d33-b27b-c328576fab07
 - workflow_id: coding_team_v0
 - project_type: webapp_crm
 - status: succeeded
 - strict_canary_verdict: PASS
-- generated_at: 2026-03-15T04:56:00.598Z
+- generated_at: 2026-03-15T06:58:19.930Z
 
 ## Context Budget
 - total_steps: 6

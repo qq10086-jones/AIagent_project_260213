@@ -1075,6 +1075,25 @@ def _fetch_news_from_quote_page(symbol: str, max_items: int = 5) -> list[dict]:
     except Exception:
         return []
 
+def _fetch_news_from_yfinance(symbol: str, max_items: int = 5) -> list[dict]:
+    sym = _normalize_symbol_for_lookup(symbol)
+    try:
+        ticker = yf.Ticker(sym)
+        news_raw = ticker.news or []
+        out = []
+        for n in news_raw[:max_items]:
+            title = str(n.get("title") or "").strip()
+            link = str(n.get("link") or "").strip()
+            pub = str(n.get("publisher") or "").strip()
+            ts = n.get("providerPublishTime")
+            if title:
+                out.append({"title": title, "url": link, "publisher": pub, "published_ts": ts, "source": "yfinance"})
+        return out
+    except Exception as e:
+        print(f"[yfinance] Failed to fetch news for {symbol}: {e}")
+        return []
+
+
 def _fetch_news_from_openbb(symbol: str, max_items: int = 5) -> list[dict]:
     """Fetch news using OpenBB Platform SDK v4 with timeout and environment variable credentials."""
     import concurrent.futures
@@ -1136,10 +1155,14 @@ def _merge_recent_news(quote: dict, max_items: int = 5) -> list[dict]:
     symbol = str((quote or {}).get("symbol") or "")
     company_name = (quote or {}).get("company_name")
     
-    openbb_news = _fetch_news_from_openbb(symbol, max_items=max_items * 2)
-    news.extend(openbb_news)
-    
-    if len(openbb_news) < max_items:
+    try:
+        yfinance_news = _fetch_news_from_yfinance(symbol, max_items=max_items * 2)
+    except Exception as e:
+        print(f"[merge_news] yfinance fetch failed for {symbol}: {e}")
+        yfinance_news = []
+    news.extend(yfinance_news)
+
+    if len(yfinance_news) < max_items:
         news.extend(_fetch_news_from_quote_page(symbol, max_items=max_items * 2))
         news.extend(_fetch_news_from_google_rss(symbol, company_name, max_items=max_items * 3))
 

@@ -588,7 +588,24 @@ async function main() {
   try { await redis.xgroup("CREATE", STREAM_RESULT, GROUP_RESULT, "$", "MKSTREAM"); } catch { /* ignore: BUSYGROUP expected after first call */ }
   resultConsumer.start();
   taskWatchdog.start();
-  app.listen(3000, () => console.log("Orchestrator listening on :3000"));
+  const server = app.listen(3000, () => console.log("Orchestrator listening on :3000"));
+
+  async function shutdown(signal) {
+    console.log(`[orchestrator] ${signal} received — shutting down gracefully`);
+    resultConsumer.stop();
+    taskWatchdog.stop();
+    server.close(async () => {
+      try { await pool.end(); } catch { /* best-effort */ }
+      try { await redis.quit(); } catch { /* best-effort */ }
+      console.log("[orchestrator] Shutdown complete.");
+      process.exit(0);
+    });
+    // Force exit if graceful shutdown stalls beyond 10 s
+    setTimeout(() => { console.error("[orchestrator] Forced exit after shutdown timeout"); process.exit(1); }, 10000).unref();
+  }
+
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT",  () => shutdown("SIGINT"));
 }
 
 main().catch(console.error);

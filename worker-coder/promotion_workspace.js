@@ -76,8 +76,12 @@ export function promoteIsolatedChanges({
     : [];
     
   const driftedFiles = detectBaselineDrift(workspaceRoot, allowedTargetPaths, baselineSnapshot);
-  const isDrifted = driftedFiles.length > 0;
-  
+  // Only treat drift as a conflict when it overlaps files this task is changing.
+  // Additive drift from concurrent workflows writing non-overlapping files is safe.
+  const changedFileSet = new Set(changedFiles);
+  const conflictingDrift = driftedFiles.filter(f => changedFileSet.has(f));
+  const isDrifted = conflictingDrift.length > 0;
+
   const preflight = {
     generated_at: new Date().toISOString(),
     mode: normalizedMode,
@@ -85,19 +89,21 @@ export function promoteIsolatedChanges({
     allowed_target_paths: Array.isArray(allowedTargetPaths) ? allowedTargetPaths : [],
     isolated_workspace_root: isolatedWorkspaceRoot,
     promotion_attempted: normalizedMode === "promote",
-    baseline_drift_detected: isDrifted,
+    baseline_drift_detected: driftedFiles.length > 0,
     drifted_files: driftedFiles,
+    conflicting_drift_detected: isDrifted,
+    conflicting_drifted_files: conflictingDrift,
   };
 
   const scopeCheck = validateChangedFilesWithinScope({
     filesChanged: changedFiles,
     allowedTargetPaths,
   });
-  
+
   const preflightOk = scopeCheck.ok && !isDrifted;
   let preflightError = null;
   if (!scopeCheck.ok) preflightError = scopeCheck.error;
-  else if (isDrifted) preflightError = `PROMOTION_CONFLICT: Workspace drifted since task start. Drifted files: ${driftedFiles.join(", ")}`;
+  else if (isDrifted) preflightError = `PROMOTION_CONFLICT: Workspace drifted on files also changed by this task: ${conflictingDrift.join(", ")}`;
 
   const preflightPath = writeJson(
     path.join(promotionDir, "promotion_preflight.json"),

@@ -1,5 +1,5 @@
 {
-  "_comment": "M8 Go/No-Go APPROVED 2026-03-09. master_enabled=true activates M6 GO_LIMITED_EXPOSURE (static policy, fe_led/crm/coding_team_v0 whitelist only). dynamic_routing_enabled=true and router_mode=dynamic_routing_enforced activated 2026-03-10 (M7 Phase A advisory-only, m7_exposure_cohorts.json). See docs/governance/m8_go_no_go.md § 6.",
+  "_comment": "M8 Go/No-Go APPROVED 2026-03-09. master_enabled=true activates M6 GO_LIMITED_EXPOSURE (static policy, fe_led/crm/coding_team_v0 whitelist only). dynamic_routing_enabled=true and router_mode=dynamic_routing_enforced activated 2026-03-10 (M7 Phase A advisory-only, m7_exposure_cohorts.json). See docs/governance/m8_go_no_go.md § 6. M12 Internal Beta: validated max_concurrent_workflows=3 (Gate B 17/17 PASS, Gate A concurrency-3 PASS 2026-03-21). Concurrency-6 causes GPU saturation at MiniMax-M2.5 layer; hard limit is 3 concurrent workflows in production.",
   "version": "1.2",
   "master_enabled": true,
   "force_sequential": false,
@@ -19,5 +19,6 @@
     "alert_destination": "ops-alerts"
   },
   "limited_exposure_cohort_pct": null,
-  "last_policy_change": "2026-03-10T00:00:00Z"
+  "max_concurrent_workflows_validated": 3,
+  "last_policy_change": "2026-03-21T00:00:00Z"
 }

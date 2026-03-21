@@ -68,7 +68,7 @@ function main() {
   assert.equal(blocked.applied, false);
   assert.match(blocked.error, /outside scope/);
 
-  // Test drift detection
+  // Test drift detection — conflicting drift (drifted file overlaps with changedFiles)
   writeFile(root, "sandbox/crm_site/app.js", "export const value = 3;\n"); // mutate host after baseline
   const drifted = promoteIsolatedChanges({
     workspaceRoot: root,
@@ -82,6 +82,28 @@ function main() {
   assert.equal(drifted.ok, false);
   assert.equal(drifted.applied, false);
   assert.match(drifted.error, /PROMOTION_CONFLICT/);
+
+  // Test additive drift — another workflow added a NEW file this task doesn't touch.
+  // This should NOT block promotion (concurrent workflows writing different files is safe).
+  const taskDir2 = path.join(root, "artifacts", "runs", "run-1", "task_2");
+  const isolatedRoot2 = path.join(taskDir2, "isolated_workspace");
+  fs.mkdirSync(taskDir2, { recursive: true });
+  writeFile(root, "sandbox/crm_site/stub_from_other_workflow.js", "// other workflow\n");
+  const baselineSnapshotOther = captureScopedSnapshot(root, ["sandbox/crm_site/other.js"]);
+  writeFile(isolatedRoot2, "sandbox/crm_site/other.js", "export const x = 42;\n");
+  // The workspace has stub_from_other_workflow.js (from another workflow), but this task
+  // only touches other.js — that's additive drift, not a conflict.
+  const additiveDrift = promoteIsolatedChanges({
+    workspaceRoot: root,
+    isolatedWorkspaceRoot: isolatedRoot2,
+    taskDir: taskDir2,
+    filesChanged: ["sandbox/crm_site/other.js"],
+    allowedTargetPaths: ["sandbox/crm_site/other.js"],
+    mode: "promote",
+    baselineSnapshot: baselineSnapshotOther,
+  });
+  assert.equal(additiveDrift.ok, true, `additive drift should not block: ${additiveDrift.error}`);
+  assert.equal(additiveDrift.applied, true);
 
   console.log("promotion_workspace.test.js: all tests passed");
 }

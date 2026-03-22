@@ -1,0 +1,138 @@
+{
+  "generated_at": "2026-03-22T13:54:01.006Z",
+  "config": {
+    "base_url": "http://localhost:3000",
+    "suite_file": "E:\\AIagent_project_260213\\orchestrator\\canary_inputs\\discord_coding_real_e2e_suite_v1.json",
+    "suite_id": "discord_coding_real_e2e_suite_v1",
+    "workspace_root": "E:\\AIagent_project_260213",
+    "run_count": 3,
+    "warmup_count": 1,
+    "concurrency": 1,
+    "stagger_ms": 300,
+    "poll_ms": 5000,
+    "timeout_ms": 3600000,
+    "min_workflow_success_rate": null,
+    "min_go_rate": null,
+    "max_dispatch_p95_ms": null,
+    "max_total_p95_ms": null,
+    "strict": false
+  },
+  "execution_window": {
+    "started_at": "2026-03-22T06:29:02.084Z",
+    "finished_at": "2026-03-22T13:54:01.005Z",
+    "elapsed_ms": 26698921
+  },
+  "latency": {
+    "dispatch_p50_ms": 9350,
+    "dispatch_p95_ms": 10023,
+    "total_p50_ms": 3240570,
+    "total_p95_ms": 18830378
+  },
+  "summary": {
+    "total_runs": 3,
+    "success_count": 2,
+    "failure_count": 1,
+    "workflow_success_count": 2,
+    "go_pass_count": 2,
+    "dispatch_mode_counts": {
+      "progress_update": 3
+    },
+    "workflow_status_counts": {
+      "timeout": 1,
+      "succeeded": 2
+    },
+    "scenario_counts": {
+      "fashion_brand_site": 2,
+      "coffee_shop_site": 1
+    },
+    "class_counts": {
+      "medium": 3
+    }
+  },
+  "rates": {
+    "workflow_success_rate": 0.6666666666666666,
+    "go_rate": 0.6666666666666666
+  },
+  "gate_failures": [],
+  "verdict": "FAIL",
+  "results": [
+    {
+      "index": 1,
+      "scenario_id": "fashion_brand_site",
+      "class": "medium",
+      "discord_message": "/coder: 帮我做一个服饰品牌宣传网站，包含首页主视觉、商品卖点、用户评价、品牌故事和联系我们。 [DLT 2026-03-22T06-29-02-053Z #1 scenario=fashion_brand_site]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 7336,
+      "run_id": "f50a5958-7560-4e12-bdc7-4f5fb86816f9",
+      "workflow_run_id": "e6c4749a-c9cc-4fd4-bf96-801f09067983",
+      "workflow_status": "timeout",
+      "go_no_go_verdict": "",
+      "go_no_go_exists": false,
+      "ok": false,
+      "error_code": "LOAD_TEST_TIMEOUT",
+      "error_message": "timeout waiting workflow e6c4749a-c9cc-4fd4-bf96-801f09067983",
+      "total_duration_ms": 3609156
+    },
+    {
+      "index": 2,
+      "scenario_id": "fashion_brand_site",
+      "class": "medium",
+      "discord_message": "/coder: 帮我做一个服饰品牌宣传网站，包含首页主视觉、商品卖点、用户评价、品牌故事和联系我们。 [DLT 2026-03-22T06-29-02-053Z #2 scenario=fashion_brand_site]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 10023,
+      "run_id": "bbbd510e-1b7d-4424-a6d9-5c4882c44be8",
+      "workflow_run_id": "c5858f85-bf5f-44e3-850b-bd735c1617aa",
+      "workflow_status": "timeout",
+      "go_no_go_verdict": "",
+      "go_no_go_exists": false,
+      "ok": false,
+      "error_code": "LOAD_TEST_TIMEOUT",
+      "error_message": "timeout waiting workflow c5858f85-bf5f-44e3-850b-bd735c1617aa",
+      "total_duration_ms": 18830378
+    },
+    {
+      "index": 3,
+      "scenario_id": "fashion_brand_site",
+      "class": "medium",
+      "discord_message": "/coder: 帮我做一个服饰品牌宣传网站，包含首页主视觉、商品卖点、用户评价、品牌故事和联系我们。 [DLT 2026-03-22T06-29-02-053Z #3 scenario=fashion_brand_site]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 9350,
+      "run_id": "065c4cd5-789e-42a2-986f-c1e2f2fd1221",
+      "workflow_run_id": "16eef7b9-ad2d-4b39-a4bc-467a74b5fc7d",
+      "workflow_status": "succeeded",
+      "go_no_go_verdict": "GO",
+      "go_no_go_exists": true,
+      "go_no_go_failed_checks": 0,
+      "ok": true,
+      "error_code": "",
+      "error_message": "",
+      "total_duration_ms": 3240570
+    },
+    {
+      "index": 4,
+      "scenario_id": "coffee_shop_site",
+      "class": "medium",
+      "discord_message": "/coder: 做一个咖啡店网站，包含门店介绍、菜单展示、营业时间、门店地址和预约按钮占位。 [DLT 2026-03-22T06-29-02-053Z #4 scenario=coffee_shop_site]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 4592,
+      "run_id": "9d78156b-3fd6-47a9-8683-9e69d64be409",
+      "workflow_run_id": "3c3c1cd9-4b96-44aa-b9ce-ff761b702841",
+      "workflow_status": "succeeded",
+      "go_no_go_verdict": "GO",
+      "go_no_go_exists": true,
+      "go_no_go_failed_checks": 0,
+      "ok": true,
+      "error_code": "",
+      "error_message": "",
+      "total_duration_ms": 1018775
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "generated_at": "2026-03-15T23:00:00+09:00",
+  "validation": "N2 concurrent baseline",
+  "config": {
+    "input": "orchestrator/canary_inputs/crm_mini_default_timeout.json",
+    "execution_lane": "stable_local_lane",
+    "stream_batch_size": 1,
+    "concurrency": 2,
+    "mode": "real workflow-runs/start"
+  },
+  "runs": [
+    {
+      "workflow_run_id": "34f47612-e7b0-4231-9456-940dd3c0764a",
+      "run_id": "c77bcb2a-1e8a-46a7-9c24-dfd2a7f10755",
+      "status": "failed",
+      "failed_step": "arch_design",
+      "error_code": "ARCH_REQUIRED_SECTIONS_MISSING",
+      "notes": [
+        "pm_spec succeeded only after timeout salvage evidence appeared",
+        "arch_design hit timeout/retry pressure before terminal validation failure"
+      ]
+    },
+    {
+      "workflow_run_id": "91bf258c-ded4-47c9-97a5-1448d4d8d70e",
+      "run_id": "b7ace6df-b535-4344-95e1-1bdcd5a8cbe0",
+      "status": "running",
+      "current_step": "arch_design",
+      "error_code": null,
+      "notes": [
+        "pm_spec completed after timeout salvage evidence appeared",
+        "arch_design remained stuck and did not reach terminal state within the observation window"
+      ]
+    }
+  ],
+  "summary": {
+    "verdict": "FAIL",
+    "reason": "Two concurrent full workflows on stable_local_lane are not currently stable even with stream_batch_size=1.",
+    "do_not_proceed": [
+      "Do not raise stream_batch_size to 2 yet",
+      "Do not treat stable_local_lane as concurrency-ready for dual workflow traffic"
+    ],
+    "next_focus": "Targeted arch_design concurrent diagnosis"
+  }
+}

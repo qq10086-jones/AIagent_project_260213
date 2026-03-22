@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-03-15T14:47:51.769Z",
+  "base_url": "http://localhost:3000",
+  "input": "crm_mini_default_timeout.json",
+  "runs": [
+    {
+      "index": 1,
+      "workflow_run_id": "21787f20-fc6e-499f-9e4b-a25c99ba80f7",
+      "run_id": "20ae588f-1e2d-4918-8249-50483862b9ef",
+      "final_status": "running",
+      "current_step_index": 1,
+      "current_step_id": null,
+      "error_code": null,
+      "error": null,
+      "steps": null
+    },
+    {
+      "index": 2,
+      "workflow_run_id": "e83773dc-ad4b-49d6-824f-15f5eccc49b4",
+      "run_id": "f1f41937-967c-48a9-9043-eeb605242ac3",
+      "final_status": "running",
+      "current_step_index": 1,
+      "current_step_id": null,
+      "error_code": null,
+      "error": null,
+      "steps": null
+    }
+  ]
+}

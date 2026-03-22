@@ -1,0 +1,192 @@
+{
+  "api_contracts": {
+    "GET /api/content": {
+      "description": "Get all landing page content",
+      "response": {
+        "success": true,
+        "data": {
+          "hero": { "title": "string", "subtitle": "string", "ctaText": "string" },
+          "features": [{ "icon": "string", "title": "string", "description": "string" }],
+          "faqs": [{ "question": "string", "answer": "string" }],
+          "contact": { "email": "string", "phone": "string", "address": "string" }
+        }
+      }
+    },
+    "GET /api/hero": {
+      "description": "Get hero section data",
+      "response": {
+        "success": true,
+        "data": { "title": "string", "subtitle": "string", "ctaText": "string" }
+      }
+    },
+    "GET /api/features": {
+      "description": "Get product selling points",
+      "response": {
+        "success": true,
+        "data": [{ "icon": "string", "title": "string", "description": "string" }]
+      }
+    },
+    "GET /api/faqs": {
+      "description": "Get FAQ items",
+      "response": {
+        "success": true,
+        "data": [{ "question": "string", "answer": "string" }]
+      }
+    },
+    "GET /api/contact": {
+      "description": "Get contact information",
+      "response": {
+        "success": true,
+        "data": { "email": "string", "phone": "string", "address": "string" }
+      }
+    },
+    "POST /api/contact": {
+      "description": "Submit contact form",
+      "request": {
+        "name": "string",
+        "email": "string",
+        "message": "string"
+      },
+      "response": {
+        "success": true,
+        "message": "string"
+      },
+      "errors": {
+        "400": "Missing required fields"
+      }
+    },
+    "GET /api/icons": {
+      "description": "Get SVG icons",
+      "response": {
+        "success": true,
+        "data": { "quality": "string", "design": "string", "sustainability": "string" }
+      }
+    },
+    "GET /api/story": {
+      "description": "Get brand story",
+      "response": {
+        "success": true,
+        "data": {
+          "title": "string",
+          "subtitle": "string",
+          "content": [{ "heading": "string", "paragraph": "string" }],
+          "timeline": [{ "year": "string", "event": "string" }]
+        }
+      }
+    },
+    "GET /api/reviews": {
+      "description": "Get all user reviews",
+      "response": {
+        "success": true,
+        "data": [{ "id": "number", "name": "string", "rating": "number", "comment": "string", "date": "string" }]
+      }
+    },
+    "GET /api/reviews/latest": {
+      "description": "Get latest 3 reviews",
+      "response": {
+        "success": true,
+        "data": [{ "id": "number", "name": "string", "rating": "number", "comment": "string", "date": "string" }]
+      }
+    },
+    "POST /api/reviews": {
+      "description": "Submit a new review",
+      "request": {
+        "name": "string",
+        "rating": "number",
+        "comment": "string"
+      },
+      "response": {
+        "success": true,
+        "message": "string",
+        "data": { "id": "number", "name": "string", "rating": "number", "comment": "string", "date": "string" }
+      },
+      "errors": {
+        "400": "Missing required fields or invalid rating"
+      }
+    }
+  },
+  "shared_types": {
+    "Hero": {
+      "title": "string",
+      "subtitle": "string",
+      "ctaText": "string"
+    },
+    "Feature": {
+      "icon": "string",
+      "title": "string",
+      "description": "string"
+    },
+    "Faq": {
+      "question": "string",
+      "answer": "string"
+    },
+    "Contact": {
+      "email": "string",
+      "phone": "string",
+      "address": "string"
+    },
+    "ContactForm": {
+      "name": "string",
+      "email": "string",
+      "message": "string"
+    },
+    "BrandStory": {
+      "title": "string",
+      "subtitle": "string",
+      "content": [{ "heading": "string", "paragraph": "string" }],
+      "timeline": [{ "year": "string", "event": "string" }]
+    },
+    "StorySection": {
+      "heading": "string",
+      "paragraph": "string"
+    },
+    "TimelineItem": {
+      "year": "string",
+      "event": "string"
+    },
+    "Review": {
+      "id": "number",
+      "name": "string",
+      "rating": "number",
+      "comment": "string",
+      "date": "string"
+    },
+    "ReviewForm": {
+      "name": "string",
+      "rating": "number",
+      "comment": "string"
+    },
+    "ApiResponse<T>": {
+      "success": "boolean",
+      "data": "T",
+      "error?": "string",
+      "message?": "string"
+    }
+  },
+  "scope_constraints": {
+    "supported_features": [
+      "Static file serving (index.html, styles.css, app.js)",
+      "Landing page content API endpoints (hero, features, faqs, contact)",
+      "Contact form submission endpoint",
+      "Brand story endpoint",
+      "User reviews endpoints (list, latest, submit)"
+    ],
+    "not_in_scope": [
+      "User authentication",
+      "Database persistence",
+      "Email sending",
+      "Admin dashboard",
+      "CRM functionality",
+      "Shopping cart",
+      "Product catalog",
+      "Order management"
+    ],
+    "assumptions": [
+      "Promotional site with static content",
+      "No user accounts required",
+      "Contact form is demo/inquiry only",
+      "Reviews are displayed but not persisted long-term",
+      "Content can be fetched from API or hardcoded in frontend"
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "generated_at": "2026-03-15T15:42:19.605Z",
+  "base_url": "http://localhost:3000",
+  "input": "crm_mini_stable_cloud_lane.json",
+  "workflow_run_id": "55480add-9b61-4928-b22a-003117d4d2fb",
+  "run_id": "b1bb17d9-28ca-4daa-ab5c-51357f725dc7",
+  "status": "failed",
+  "current_step_index": 2,
+  "steps": null
+}

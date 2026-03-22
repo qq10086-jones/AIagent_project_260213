@@ -1,0 +1,42 @@
+{
+  "generated_at": "2026-03-15T16:01:28.967Z",
+  "base_url": "http://localhost:3000",
+  "input": "crm_mini_stable_cloud_lane.json",
+  "workflow_run_id": "8974a08d-4afe-46d7-abce-90a69e6dc9a5",
+  "run_id": "c43fb6f6-581b-44f2-b39d-beaf8641cb2e",
+  "status": "running",
+  "error_code": null,
+  "error_message": null,
+  "steps": [
+    {
+      "step_id": "pm_spec",
+      "status": "succeeded",
+      "error_code": null
+    },
+    {
+      "step_id": "arch_design",
+      "status": "succeeded",
+      "error_code": null
+    },
+    {
+      "step_id": "impl_be",
+      "status": "succeeded",
+      "error_code": null
+    },
+    {
+      "step_id": "impl_fe",
+      "status": "pending",
+      "error_code": null
+    },
+    {
+      "step_id": "qa_verify",
+      "status": "pending",
+      "error_code": null
+    },
+    {
+      "step_id": "release_pack",
+      "status": "pending",
+      "error_code": null
+    }
+  ]
+}

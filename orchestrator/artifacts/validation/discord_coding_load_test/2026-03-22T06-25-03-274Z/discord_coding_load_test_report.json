@@ -1,0 +1,139 @@
+{
+  "generated_at": "2026-03-22T06:27:56.817Z",
+  "config": {
+    "base_url": "http://localhost:3000",
+    "suite_file": "E:\\AIagent_project_260213\\orchestrator\\canary_inputs\\discord_coding_real_e2e_suite_v1.json",
+    "suite_id": "discord_coding_real_e2e_suite_v1",
+    "workspace_root": "E:\\AIagent_project_260213",
+    "run_count": 3,
+    "warmup_count": 1,
+    "concurrency": 1,
+    "stagger_ms": 300,
+    "poll_ms": 5000,
+    "timeout_ms": 3600000,
+    "min_workflow_success_rate": null,
+    "min_go_rate": null,
+    "max_dispatch_p95_ms": null,
+    "max_total_p95_ms": null,
+    "strict": false
+  },
+  "execution_window": {
+    "started_at": "2026-03-22T06:25:03.306Z",
+    "finished_at": "2026-03-22T06:27:56.816Z",
+    "elapsed_ms": 173510
+  },
+  "latency": {
+    "dispatch_p50_ms": 9080,
+    "dispatch_p95_ms": 10558,
+    "total_p50_ms": 14100,
+    "total_p95_ms": 15574
+  },
+  "summary": {
+    "total_runs": 3,
+    "success_count": 0,
+    "failure_count": 3,
+    "workflow_success_count": 0,
+    "go_pass_count": 0,
+    "dispatch_mode_counts": {
+      "progress_update": 3
+    },
+    "workflow_status_counts": {
+      "failed": 3
+    },
+    "scenario_counts": {
+      "fashion_brand_site": 2,
+      "coffee_shop_site": 1
+    },
+    "class_counts": {
+      "medium": 3
+    }
+  },
+  "rates": {
+    "workflow_success_rate": 0,
+    "go_rate": 0
+  },
+  "gate_failures": [],
+  "verdict": "FAIL",
+  "results": [
+    {
+      "index": 1,
+      "scenario_id": "fashion_brand_site",
+      "class": "medium",
+      "discord_message": "/coder: 帮我做一个服饰品牌宣传网站，包含首页主视觉、商品卖点、用户评价、品牌故事和联系我们。 [DLT 2026-03-22T06-25-03-274Z #1 scenario=fashion_brand_site]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 5739,
+      "run_id": "ed777483-1b4c-4c85-ae9a-b499ebb72ff7",
+      "workflow_run_id": "a387bf2c-b105-4393-9c97-791e10c51a0b",
+      "workflow_status": "failed",
+      "go_no_go_verdict": "",
+      "go_no_go_exists": false,
+      "go_no_go_failed_checks": 0,
+      "ok": false,
+      "error_code": "OpenCode authentication failed",
+      "error_message": "workflow failed at step 'pm_spec'",
+      "total_duration_ms": 131108
+    },
+    {
+      "index": 2,
+      "scenario_id": "fashion_brand_site",
+      "class": "medium",
+      "discord_message": "/coder: 帮我做一个服饰品牌宣传网站，包含首页主视觉、商品卖点、用户评价、品牌故事和联系我们。 [DLT 2026-03-22T06-25-03-274Z #2 scenario=fashion_brand_site]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 10558,
+      "run_id": "fa89864c-1600-4d19-921f-c762d2707e04",
+      "workflow_run_id": "608ecf78-19f5-42c4-9bc6-cd088819ee91",
+      "workflow_status": "failed",
+      "go_no_go_verdict": "",
+      "go_no_go_exists": false,
+      "go_no_go_failed_checks": 0,
+      "ok": false,
+      "error_code": "OpenCode authentication failed",
+      "error_message": "workflow failed at step 'pm_spec'",
+      "total_duration_ms": 15574
+    },
+    {
+      "index": 3,
+      "scenario_id": "fashion_brand_site",
+      "class": "medium",
+      "discord_message": "/coder: 帮我做一个服饰品牌宣传网站，包含首页主视觉、商品卖点、用户评价、品牌故事和联系我们。 [DLT 2026-03-22T06-25-03-274Z #3 scenario=fashion_brand_site]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 7686,
+      "run_id": "59f5ad57-f966-43ad-b65d-7a237c22a838",
+      "workflow_run_id": "88a5267f-98e2-4958-b2c0-fe2d567fb4ae",
+      "workflow_status": "failed",
+      "go_no_go_verdict": "",
+      "go_no_go_exists": false,
+      "go_no_go_failed_checks": 0,
+      "ok": false,
+      "error_code": "OpenCode authentication failed",
+      "error_message": "workflow failed at step 'pm_spec'",
+      "total_duration_ms": 12700
+    },
+    {
+      "index": 4,
+      "scenario_id": "coffee_shop_site",
+      "class": "medium",
+      "discord_message": "/coder: 做一个咖啡店网站，包含门店介绍、菜单展示、营业时间、门店地址和预约按钮占位。 [DLT 2026-03-22T06-25-03-274Z #4 scenario=coffee_shop_site]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 9080,
+      "run_id": "fa91da4e-bbd9-4604-bb30-1edf377f54c1",
+      "workflow_run_id": "1e8b4076-9db5-44e3-8309-5b4cacf0a921",
+      "workflow_status": "failed",
+      "go_no_go_verdict": "",
+      "go_no_go_exists": false,
+      "go_no_go_failed_checks": 0,
+      "ok": false,
+      "error_code": "OpenCode authentication failed",
+      "error_message": "workflow failed at step 'pm_spec'",
+      "total_duration_ms": 14100
+    }
+  ]
+}

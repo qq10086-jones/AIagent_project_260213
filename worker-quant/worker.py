@@ -652,8 +652,8 @@ def _compute_quant_metrics(symbol: str) -> dict:
     ss6 = _fetch_ss6_signal(sym)
     
     try:
-        # Use a bit more data for better SMA/RSI stability
-        hist = ticker.history(period="1y", interval="1d", auto_adjust=False)
+        # E-03: Use auto_adjust=True (split/dividend-adjusted) to avoid spurious signals on ex-div dates
+        hist = ticker.history(period="1y", interval="1d", auto_adjust=True)
     except Exception:
         hist = None
 
@@ -2793,7 +2793,41 @@ def deep_analysis(payload: dict):
     news = _merge_recent_news(quote, max_items=5)
     quote["recent_news"] = news
     analysis = _grounded_quant_summary(quote)
-    
+
+    # E-02: Integrate news sentiment into signal score (small weight to avoid overfitting)
+    news_sentiment = 0.0
+    try:
+        nr = compute_news_risk_factor({"symbol": symbol, "run_id": run_id})
+        news_sentiment = float(nr.get("sentiment", 0) or 0)
+        if "alpha_score" in metrics and metrics["alpha_score"] is not None:
+            metrics["alpha_score"] = round(metrics["alpha_score"] + 0.5 * news_sentiment, 3)
+    except Exception:
+        pass
+    metrics["news_sentiment"] = round(news_sentiment, 3)
+
+    # B-05: Check for TDnet announcements for this symbol
+    today_announcements = []
+    try:
+        today_announcements = _fetch_tdnet_announcements(symbols=[symbol], lookback_hours=24)
+        if today_announcements:
+            # Catalyst adjustment: up/down one tier based on announcement category
+            cats_up   = {"earnings_revision_up", "dividend_increase", "special_dividend", "buyback"}
+            cats_down = {"earnings_revision_down", "dividend_cut", "scandal", "regulatory"}
+            for ann in today_announcements:
+                cat = ann.get("category", "")
+                if cat in cats_up and metrics.get("alpha_score") is not None:
+                    metrics["alpha_score"] = round(metrics["alpha_score"] + 1.0, 3)
+                    metrics["catalyst_boost"] = f"+1.0 ({cat})"
+                elif cat in cats_down and metrics.get("alpha_score") is not None:
+                    metrics["alpha_score"] = round(metrics["alpha_score"] - 1.5, 3)
+                    metrics["catalyst_boost"] = f"-1.5 ({cat})"
+    except Exception:
+        pass
+    metrics["today_announcements"] = today_announcements
+
+    # D-01: Log signal for IC tracking
+    _log_signal(symbol, metrics.get("signal", "N/A"), metrics.get("alpha_score"), quote.get("price"))
+
     # --- Execution Logic (v1.2.7) ---
     raw_signal = (metrics.get("signal") or "").upper()
     side = metrics.get("signal_side") or payload.get("mode")
@@ -3268,6 +3302,22 @@ def discovery_workflow(payload: dict):
     news_risk_z = macro_risk.get("effective_news_risk_z", 0.0)
     print(f"[discovery] Final Combined News Factor: Sentiment={news_sentiment_bias}, Risk_Z={news_risk_z}")
 
+    # --- D-03: Cross-Sectional Rank Pre-computation ---
+    # Compute 20d excess-return percentile rank for the relevant universe.
+    # This captures cross-sectional momentum: top-quartile stocks get a boost,
+    # bottom-quartile stocks are penalized. Computed once, reused across all attempts.
+    cs_rank_map: dict = {}
+    if not quick_mode:
+        try:
+            cs_universe = list(jp_list)[:40] if market_focus in ("JP", "ALL") else list(us_list)[:30]
+            if market_focus == "US":
+                cs_universe = list(us_list)[:30]
+            print(f"[discovery] Computing cross-sectional ranks for {len(cs_universe)} symbols...")
+            cs_rank_map = _compute_cross_sectional_rank(cs_universe)
+            print(f"[discovery] CS rank computed: {len(cs_rank_map)} symbols")
+        except Exception as _e:
+            print(f"[discovery] CS rank skipped: {_e}")
+
     def _run_attempt(profile: dict) -> tuple:
         market_key = str(profile.get("market") or market_focus).upper()
         market_key = market_key if market_key in {"JP", "US", "ALL"} else market_focus
@@ -3348,7 +3398,20 @@ def discovery_workflow(payload: dict):
             if capital_base_jpy <= 600000 and is_jp:
                 size_score += 0.08
 
-            selection_score = alpha + affordability_score + size_score
+            # D-03: Cross-sectional rank adjustment (momentum overlay)
+            cs_percentile = cs_rank_map.get(sym)
+            cs_rank_score = 0.0
+            if cs_percentile is not None:
+                if cs_percentile >= 0.75:
+                    cs_rank_score = 0.30   # top quartile: strong momentum
+                elif cs_percentile >= 0.50:
+                    cs_rank_score = 0.10   # above median: mild tailwind
+                elif cs_percentile < 0.25:
+                    cs_rank_score = -0.30  # bottom quartile: momentum headwind
+                else:
+                    cs_rank_score = -0.10  # below median: mild drag
+
+            selection_score = alpha + affordability_score + size_score + cs_rank_score
             lots = int(math.floor(max_pos_jpy / cost_per_lot_jpy))
 
             results_local.append({
@@ -3371,6 +3434,8 @@ def discovery_workflow(payload: dict):
                 "estimated_cost_jpy": lots * cost_per_lot_jpy,
                 "max_position_pct_used": round(max_pos_pct, 4),
                 "alpha_floor_used": round(alpha_floor, 4),
+                "cs_percentile": round(cs_percentile, 3) if cs_percentile is not None else None,
+                "cs_rank_score": round(cs_rank_score, 2),
             })
 
         results_local.sort(
@@ -4058,10 +4123,15 @@ def preclose_brief_jp(payload: dict):
 def tdnet_close_flash(payload: dict):
     """
     Japanese market post-close flash (15:35 JST) with structured output and source links.
+    E-01: Primary source is now _fetch_tdnet_announcements (Kabutan/Google-ja);
+          GDELT retained as supplementary macro context only.
     """
     run_id = payload.get("run_id")
     date_str = payload.get("date") or _now_date_str()
     freshness_hours = float(payload.get("freshness_hours", 24))
+
+    # E-01: Pull real TDnet/Kabutan announcements first
+    tdnet_items = _fetch_tdnet_announcements(lookback_hours=freshness_hours)
 
     search_query = "決算 OR 発表 OR 地政学 OR 原油 OR 利下げ"
     raw_google = _fetch_news_from_google_rss(
@@ -4808,6 +4878,1190 @@ def deploy_preview(payload: dict):
         result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return result
 
+# ─────────────────────────────────────────────────────────────
+# SECTION: User Profile  (A-05)
+# ─────────────────────────────────────────────────────────────
+_USER_PROFILE_PATH = Path("/app/quant_trading/Project_optimized/user_profile.json")
+_USER_PROFILE_DEFAULTS = {
+    "capital_base_jpy": 400000,
+    "max_position_pct": 0.35,
+    "stop_loss_pct": 0.08,
+    "take_profit_pct": 0.20,
+    "max_positions": 5,
+    "horizon_days": 20,
+    "risk_profile": "medium",
+    "preferred_markets": ["JP"],
+    "avoid_sectors": [],
+    "preferred_sectors": [],
+    "notify_on_stop_loss": True,
+    "notify_on_catalyst": True,
+    "language": "zh",
+}
+
+def _load_user_profile() -> dict:
+    try:
+        if _USER_PROFILE_PATH.exists():
+            data = json.loads(_USER_PROFILE_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                merged = dict(_USER_PROFILE_DEFAULTS)
+                merged.update(data)
+                return merged
+    except Exception:
+        pass
+    return dict(_USER_PROFILE_DEFAULTS)
+
+def _save_user_profile(profile: dict):
+    try:
+        _USER_PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _USER_PROFILE_PATH.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[user_profile] save failed: {e}")
+
+def portfolio_set_preference(payload: dict):
+    """Update one or more user profile fields. E.g. {\"stop_loss_pct\": 0.10}"""
+    profile = _load_user_profile()
+    allowed_keys = set(_USER_PROFILE_DEFAULTS.keys())
+    updated = []
+    for k, v in payload.items():
+        if k in allowed_keys:
+            profile[k] = v
+            updated.append(k)
+    _save_user_profile(profile)
+    return {"ok": True, "updated": updated, "profile": profile}
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Watchlist Alias Map  (B-04)
+# ─────────────────────────────────────────────────────────────
+_ALIAS_PATH = Path("/app/quant_trading/Project_optimized/watchlist_alias.json")
+
+def _load_alias_map() -> dict:
+    """Return {ticker: [alias1, alias2, ...]} mapping."""
+    try:
+        if _ALIAS_PATH.exists():
+            data = json.loads(_ALIAS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+def _build_reverse_alias(alias_map: dict) -> dict:
+    """Return {alias_lower: ticker} reverse map."""
+    rev = {}
+    for ticker, aliases in alias_map.items():
+        for a in aliases:
+            rev[str(a).lower()] = ticker
+        # Also map the 4-digit code (e.g. "5020" → "5020.T")
+        code = ticker.replace(".T", "").replace(".t", "")
+        rev[code] = ticker
+    return rev
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Cost Price & Position Snapshot  (A-01, A-02)
+# ─────────────────────────────────────────────────────────────
+_DB_PATH = Path("/app/quant_trading/Project_optimized/japan_market.db")
+
+def _ensure_positions_snapshot_table(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS positions_snapshot (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            asof TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            net_qty REAL NOT NULL,
+            avg_cost REAL,
+            current_price REAL,
+            unrealized_pnl REAL,
+            unrealized_pnl_pct REAL,
+            stop_loss REAL,
+            take_profit REAL,
+            days_held INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(asof, symbol)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS signal_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            asof TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            signal TEXT NOT NULL,
+            alpha_score REAL,
+            price_at_signal REAL,
+            price_5d REAL,
+            price_20d REAL,
+            ret_5d REAL,
+            ret_20d REAL,
+            ic_contrib REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+
+def _calc_avg_cost(symbol: str) -> float | None:
+    """Weighted-average cost for current open position (WAVG method)."""
+    if not _DB_PATH.exists():
+        return None
+    try:
+        conn = sqlite3.connect(str(_DB_PATH))
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT side, qty, price FROM fills WHERE UPPER(symbol)=? ORDER BY ts ASC, id ASC",
+            (symbol.upper(),),
+        )
+        rows = cur.fetchall()
+        conn.close()
+        total_qty = 0.0
+        total_cost = 0.0
+        for side, qty, price in rows:
+            qty = float(qty or 0)
+            price = float(price or 0)
+            if side.upper() == "BUY":
+                total_cost += qty * price
+                total_qty += qty
+            elif side.upper() == "SELL":
+                sell_qty = min(qty, total_qty)
+                if total_qty > 0:
+                    cost_per_share = total_cost / total_qty
+                    total_cost -= sell_qty * cost_per_share
+                total_qty -= sell_qty
+                if total_qty <= 0:
+                    total_qty = 0.0
+                    total_cost = 0.0
+        if total_qty <= 0:
+            return None
+        return total_cost / total_qty
+    except Exception:
+        return None
+
+def _calc_days_held(symbol: str) -> int:
+    """Days since first BUY that has net-positive open position."""
+    if not _DB_PATH.exists():
+        return 0
+    try:
+        conn = sqlite3.connect(str(_DB_PATH))
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT asof FROM fills WHERE UPPER(symbol)=? AND UPPER(side)='BUY' ORDER BY ts ASC LIMIT 1",
+            (symbol.upper(),),
+        )
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return 0
+        first_date = datetime.strptime(str(row[0])[:10], "%Y-%m-%d").date()
+        return (datetime.utcnow().date() - first_date).days
+    except Exception:
+        return 0
+
+def _write_positions_snapshot(positions: list[dict], date_str: str | None = None):
+    """Upsert today's positions snapshot into DB."""
+    if not _DB_PATH.exists():
+        return
+    asof = date_str or _now_date_str()
+    try:
+        conn = sqlite3.connect(str(_DB_PATH))
+        _ensure_positions_snapshot_table(conn)
+        for p in positions:
+            conn.execute("""
+                INSERT INTO positions_snapshot
+                    (asof, symbol, net_qty, avg_cost, current_price,
+                     unrealized_pnl, unrealized_pnl_pct, stop_loss, take_profit, days_held)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(asof, symbol) DO UPDATE SET
+                    net_qty=excluded.net_qty, avg_cost=excluded.avg_cost,
+                    current_price=excluded.current_price,
+                    unrealized_pnl=excluded.unrealized_pnl,
+                    unrealized_pnl_pct=excluded.unrealized_pnl_pct,
+                    stop_loss=excluded.stop_loss, take_profit=excluded.take_profit,
+                    days_held=excluded.days_held
+            """, (
+                asof, p["symbol"], p.get("net_qty", 0),
+                p.get("avg_cost"), p.get("current_price"),
+                p.get("unrealized_pnl"), p.get("unrealized_pnl_pct"),
+                p.get("stop_loss"), p.get("take_profit"),
+                p.get("days_held", 0),
+            ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[positions_snapshot] write failed: {e}")
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Signal Log  (D-01)
+# ─────────────────────────────────────────────────────────────
+def _log_signal(symbol: str, signal: str, alpha_score: float | None, price: float | None):
+    """Append a signal record to signal_log for IC tracking."""
+    if not _DB_PATH.exists():
+        return
+    try:
+        conn = sqlite3.connect(str(_DB_PATH))
+        _ensure_positions_snapshot_table(conn)
+        conn.execute("""
+            INSERT INTO signal_log (asof, symbol, signal, alpha_score, price_at_signal)
+            VALUES (?, ?, ?, ?, ?)
+        """, (_now_date_str(), symbol.upper(), signal, alpha_score, price))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[signal_log] write failed: {e}")
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: TDnet RSS Fetcher  (B-01)
+# ─────────────────────────────────────────────────────────────
+_TDNET_CATEGORY_MAP = {
+    "上方修正": "earnings_revision_up",
+    "下方修正": "earnings_revision_down",
+    "増配":     "dividend_increase",
+    "特別配当": "special_dividend",
+    "自己株式": "buyback",
+    "自社株":   "buyback",
+    "業績修正": "earnings_revision",
+    "決算短信": "earnings",
+    "M&A":      "ma",
+    "業務提携": "partnership",
+    "不祥事":   "scandal",
+    "行政処分": "regulatory",
+    "減配":     "dividend_cut",
+}
+_TDNET_ALPHA_STRENGTH = {
+    "earnings_revision_up":   5,
+    "earnings_revision_down": 5,
+    "dividend_increase":      4,
+    "special_dividend":       4,
+    "buyback":                4,
+    "earnings":               3,
+    "ma":                     3,
+    "partnership":            2,
+    "dividend_cut":           4,
+    "scandal":                4,
+    "regulatory":             4,
+    "earnings_revision":      3,
+}
+
+def _classify_tdnet_announcement(title: str) -> str:
+    for kw, cat in _TDNET_CATEGORY_MAP.items():
+        if kw in title:
+            return cat
+    return "general"
+
+def _fetch_tdnet_announcements(symbols: list | None = None, lookback_hours: float = 24.0) -> list[dict]:
+    """
+    Fetch TDnet announcements via multiple sources (priority order):
+    1. Kabutan market news RSS (Japanese, reliable)
+    2. Google News RSS with Japanese keywords
+    3. GDELT fallback
+    Returns list of {code, title, category, alpha_strength, published_at, url, source}
+    """
+    results = []
+    cutoff = datetime.utcnow() - timedelta(hours=lookback_hours)
+
+    # Source 1: Kabutan news RSS
+    kabutan_urls = [
+        "https://kabutan.jp/news/rss/?category=marketnews",
+        "https://kabutan.jp/news/rss/?category=disclosure",
+    ]
+    for rss_url in kabutan_urls:
+        try:
+            resp = requests.get(rss_url, timeout=8,
+                                headers={"User-Agent": "Mozilla/5.0 (compatible; NexusBot/1.0)"})
+            if resp.status_code == 200:
+                root = ET.fromstring(resp.content)
+                for item in root.iter("item"):
+                    title = (item.findtext("title") or "").strip()
+                    link  = (item.findtext("link")  or "").strip()
+                    pub   = (item.findtext("pubDate") or "").strip()
+                    if not title:
+                        continue
+                    try:
+                        pub_dt = parsedate_to_datetime(pub).replace(tzinfo=None) if pub else None
+                    except Exception:
+                        pub_dt = None
+                    if pub_dt and pub_dt < cutoff:
+                        continue
+                    # Extract 4-digit code from title/link if present
+                    code_match = re.search(r'[＜<](\d{4})[＞>]', title) or re.search(r'/stock/(\d{4})/', link)
+                    code = (code_match.group(1) + ".T") if code_match else None
+                    cat = _classify_tdnet_announcement(title)
+                    results.append({
+                        "code": code,
+                        "title": title,
+                        "category": cat,
+                        "alpha_strength": _TDNET_ALPHA_STRENGTH.get(cat, 1),
+                        "published_at": pub_dt.isoformat() if pub_dt else "",
+                        "url": link,
+                        "source": "kabutan",
+                    })
+        except Exception:
+            pass
+        if results:
+            break
+
+    # Source 2: Google News RSS (Japanese keywords)
+    if not results:
+        jp_keywords = ["決算 OR 増配 OR 自社株買い OR 業績修正 OR 上方修正 OR 下方修正"]
+        for kw in jp_keywords:
+            try:
+                rss_url = f"https://news.google.com/rss/search?q={urllib.parse.quote(kw)}&hl=ja&gl=JP&ceid=JP:ja"
+                resp = requests.get(rss_url, timeout=8,
+                                    headers={"User-Agent": "Mozilla/5.0 (compatible; NexusBot/1.0)"})
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.content)
+                    for item in root.iter("item"):
+                        title = (item.findtext("title") or "").strip()
+                        link  = (item.findtext("link")  or "").strip()
+                        pub   = (item.findtext("pubDate") or "").strip()
+                        if not title:
+                            continue
+                        try:
+                            pub_dt = parsedate_to_datetime(pub).replace(tzinfo=None) if pub else None
+                        except Exception:
+                            pub_dt = None
+                        if pub_dt and pub_dt < cutoff:
+                            continue
+                        code_match = re.search(r'[＜<](\d{4})[＞>]', title)
+                        code = (code_match.group(1) + ".T") if code_match else None
+                        cat = _classify_tdnet_announcement(title)
+                        results.append({
+                            "code": code,
+                            "title": title,
+                            "category": cat,
+                            "alpha_strength": _TDNET_ALPHA_STRENGTH.get(cat, 1),
+                            "published_at": pub_dt.isoformat() if pub_dt else "",
+                            "url": link,
+                            "source": "google_news_ja",
+                        })
+            except Exception:
+                pass
+
+    # Filter by symbols if provided
+    if symbols and results:
+        alias_map = _load_alias_map()
+        rev = _build_reverse_alias(alias_map)
+        filtered = []
+        for ann in results:
+            # Direct code match
+            if ann.get("code") and ann["code"] in symbols:
+                filtered.append(ann)
+                continue
+            # Alias text match in title
+            title_lower = ann["title"].lower()
+            for alias_lower, ticker in rev.items():
+                if ticker in symbols and alias_lower in title_lower:
+                    ann["code"] = ann.get("code") or ticker
+                    filtered.append(ann)
+                    break
+        return filtered
+
+    return results[:40]  # cap at 40 items
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Announcement → Ticker Mapping  (B-02)
+# ─────────────────────────────────────────────────────────────
+def _match_announcement_to_tickers(announcement: dict, watchlist_symbols: list) -> list[str]:
+    """Match an announcement to one or more watchlist tickers."""
+    alias_map = _load_alias_map()
+    rev = _build_reverse_alias(alias_map)
+    matched = []
+
+    # 1. Direct code field
+    code = announcement.get("code")
+    if code and code in watchlist_symbols:
+        matched.append(code)
+
+    # 2. Text search in title
+    title_lower = str(announcement.get("title", "")).lower()
+    for alias_lower, ticker in rev.items():
+        if ticker in watchlist_symbols and alias_lower in title_lower and ticker not in matched:
+            matched.append(ticker)
+
+    return list(dict.fromkeys(matched))
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Cross-Sectional Rank Factor  (D-03)
+# ─────────────────────────────────────────────────────────────
+def _compute_cross_sectional_rank(symbols: list[str]) -> dict:
+    """
+    Compute 20d excess-return percentile rank for each symbol within the universe.
+    Returns {symbol: percentile_rank_0_to_1}
+    """
+    scores = {}
+    for sym in symbols:
+        try:
+            ticker = yf.Ticker(_normalize_symbol_for_lookup(sym))
+            hist = ticker.history(period="3mo", interval="1d", auto_adjust=True)
+            if hist is not None and not hist.empty and len(hist) >= 21:
+                close = hist["Close"].dropna()
+                ret20 = float(close.iloc[-1] / close.iloc[-21] - 1.0)
+                scores[sym] = ret20
+        except Exception:
+            pass
+    if not scores:
+        return {}
+    vals = sorted(scores.values())
+    n = len(vals)
+    result = {}
+    for sym, score in scores.items():
+        rank = vals.index(score)
+        result[sym] = round(rank / max(n - 1, 1), 3)
+    return result
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Portfolio Position Review  (A-03)
+# ─────────────────────────────────────────────────────────────
+def _build_enriched_positions() -> list[dict]:
+    """Fetch net positions and enrich with avg_cost, current price, P&L."""
+    raw = _get_current_positions_from_fills(max_symbols=20)
+    if not raw:
+        return []
+    profile = _load_user_profile()
+    stop_pct  = float(profile.get("stop_loss_pct",  0.08))
+    take_pct  = float(profile.get("take_profit_pct", 0.20))
+    enriched = []
+    for pos in raw:
+        sym = pos["symbol"]
+        net_qty = float(pos.get("net_qty", 0))
+        avg_cost = _calc_avg_cost(sym)
+        days_held = _calc_days_held(sym)
+        # Fetch current price
+        current_price = None
+        try:
+            q = _fetch_quote_facts(sym)
+            current_price = _safe_float(q.get("price"))
+        except Exception:
+            pass
+        # P&L
+        unrealized_pnl = None
+        unrealized_pnl_pct = None
+        if avg_cost and current_price:
+            unrealized_pnl = (current_price - avg_cost) * net_qty
+            unrealized_pnl_pct = (current_price / avg_cost - 1.0) * 100.0
+        stop_loss   = round(avg_cost * (1 - stop_pct), 1)  if avg_cost else None
+        take_profit = round(avg_cost * (1 + take_pct), 1) if avg_cost else None
+        # Signal
+        try:
+            metrics = _compute_quant_metrics(sym)
+            signal = metrics.get("signal", "N/A")
+            alpha_score = metrics.get("alpha_score")
+        except Exception:
+            signal, alpha_score = "N/A", None
+        enriched.append({
+            "symbol": sym,
+            "net_qty": net_qty,
+            "avg_cost": round(avg_cost, 2) if avg_cost else None,
+            "current_price": round(current_price, 2) if current_price else None,
+            "unrealized_pnl": round(unrealized_pnl, 0) if unrealized_pnl is not None else None,
+            "unrealized_pnl_pct": round(unrealized_pnl_pct, 2) if unrealized_pnl_pct is not None else None,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "days_held": days_held,
+            "signal": signal,
+            "alpha_score": alpha_score,
+            "market": pos.get("market", ""),
+        })
+    return enriched
+
+def portfolio_position_review(payload: dict) -> dict:
+    """
+    Active position review: P&L, risk flags, per-position action suggestion.
+    Tool: portfolio.position_review
+    """
+    run_id = payload.get("run_id")
+    positions = _build_enriched_positions()
+    profile   = _load_user_profile()
+    account   = _get_account_state_snapshot()
+    stop_pct  = float(profile.get("stop_loss_pct", 0.08))
+    horizon   = int(profile.get("horizon_days", 20))
+
+    if not positions:
+        return {
+            "ok": True,
+            "positions": [],
+            "summary": f"当前无持仓。可用资金: {account.get('starting_capital', 'N/A')} {account.get('base_ccy', 'JPY')}",
+            "risk_flags": [],
+            "suggestions": [],
+        }
+
+    # Aggregate stats
+    total_cost_value = sum(
+        (p["avg_cost"] or 0) * p["net_qty"] for p in positions if p["avg_cost"]
+    )
+    total_market_value = sum(
+        (p["current_price"] or 0) * p["net_qty"] for p in positions if p["current_price"]
+    )
+    total_pnl = sum(p["unrealized_pnl"] or 0 for p in positions)
+    total_pnl_pct = (total_pnl / total_cost_value * 100) if total_cost_value else 0
+    cash = _safe_float(account.get("starting_capital", 0)) or 0
+    position_utilization_pct = (total_market_value / (total_market_value + cash) * 100) if (total_market_value + cash) > 0 else 0
+
+    # Risk flags
+    risk_flags = []
+    suggestions = []
+    for p in positions:
+        sym = p["symbol"]
+        pnl_pct = p.get("unrealized_pnl_pct")
+        sig = p.get("signal", "")
+        days = p.get("days_held", 0)
+
+        # Stop loss trigger
+        if pnl_pct is not None and pnl_pct <= -stop_pct * 100:
+            risk_flags.append(f"⚠️ {sym}: 浮亏 {pnl_pct:.1f}%，触及止损线（-{stop_pct*100:.0f}%）")
+            suggestions.append({"symbol": sym, "action": "STOP_LOSS", "reason": f"浮亏超止损阈值 {pnl_pct:.1f}%"})
+        elif sig in ("Underweight", "Strong Sell"):
+            risk_flags.append(f"⚠️ {sym}: 信号已转为 {sig}")
+            suggestions.append({"symbol": sym, "action": "REDUCE", "reason": f"信号转空: {sig}"})
+        elif days > horizon:
+            risk_flags.append(f"⏰ {sym}: 已持仓 {days} 天，超出目标周期 {horizon} 天")
+            suggestions.append({"symbol": sym, "action": "REVIEW", "reason": f"持仓超期 {days}d > {horizon}d 目标"})
+        elif sig in ("Strong Buy", "Overweight"):
+            suggestions.append({"symbol": sym, "action": "HOLD", "reason": f"信号强势 ({sig})，继续持有"})
+        else:
+            suggestions.append({"symbol": sym, "action": "HOLD", "reason": "信号中性，暂无操作"})
+
+    # LLM narrative
+    pos_text = "\n".join(
+        f"- {p['symbol']}: {p['net_qty']}股 | 成本{p['avg_cost']} | 现价{p['current_price']} | "
+        f"浮盈{p['unrealized_pnl_pct']:.1f}% | 持{p['days_held']}天 | 信号:{p['signal']}"
+        for p in positions if p.get("avg_cost")
+    )
+    flag_text = "\n".join(risk_flags) if risk_flags else "无风险预警"
+    llm_summary = ""
+    try:
+        system = (
+            "你是资深量化交易员。请基于以下持仓数据，用中文给出简洁的综合操作建议（3-5句话）。"
+            "重点关注：1)整体仓位是否合理 2)有无需要立即处理的风险仓位 3)今日需关注的要点。"
+            "直接给结论，不要废话。"
+        )
+        user_msg = f"持仓:\n{pos_text}\n\n风险预警:\n{flag_text}\n总浮盈:{total_pnl:.0f}JPY ({total_pnl_pct:.1f}%)"
+        llm_summary = get_llm_response(system, user_msg, model=QUANT_LLM_MODEL) or ""
+    except Exception:
+        pass
+
+    # Write snapshot
+    _write_positions_snapshot(positions)
+
+    # Log signals
+    for p in positions:
+        _log_signal(p["symbol"], p.get("signal", "N/A"), p.get("alpha_score"), p.get("current_price"))
+
+    summary_header = (
+        f"持仓 {len(positions)} 只 | 市值 {total_market_value:,.0f} JPY | "
+        f"总浮盈 {total_pnl:+,.0f} JPY ({total_pnl_pct:+.1f}%) | 仓位使用率 {position_utilization_pct:.0f}%"
+    )
+
+    return {
+        "ok": True,
+        "positions": positions,
+        "summary": summary_header,
+        "total_market_value_jpy": round(total_market_value, 0),
+        "total_unrealized_pnl_jpy": round(total_pnl, 0),
+        "total_unrealized_pnl_pct": round(total_pnl_pct, 2),
+        "position_utilization_pct": round(position_utilization_pct, 1),
+        "risk_flags": risk_flags,
+        "suggestions": suggestions,
+        "llm_narrative": llm_summary,
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Midday P&L Flash  (A-04)
+# ─────────────────────────────────────────────────────────────
+def portfolio_midday_pnl(payload: dict) -> dict:
+    """Lightweight midday P&L flash. No LLM call. Target < 10s."""
+    positions = _build_enriched_positions()
+    if not positions:
+        return {"ok": True, "message": "当前无持仓"}
+    lines = ["【午间持仓快报 12:00 JST】"]
+    total_pnl = 0.0
+    for p in positions:
+        sym   = p["symbol"]
+        qty   = p["net_qty"]
+        cost  = p.get("avg_cost")
+        price = p.get("current_price")
+        pnl   = p.get("unrealized_pnl") or 0
+        pct   = p.get("unrealized_pnl_pct")
+        total_pnl += pnl
+        arrow = "▲" if (pct or 0) >= 0 else "▼"
+        pct_str = f"{pct:+.1f}%" if pct is not None else "N/A"
+        lines.append(f"  {sym}  {qty:.0f}股  ¥{price or 'N/A'}  {arrow}{pct_str}  ({pnl:+.0f}JPY)")
+    lines.append(f"  ─────────────────────")
+    lines.append(f"  总浮盈: {total_pnl:+,.0f} JPY")
+    return {"ok": True, "positions": positions, "total_pnl_jpy": round(total_pnl, 0), "message": "\n".join(lines)}
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Event Alert  (B-03)
+# ─────────────────────────────────────────────────────────────
+def quant_event_alert(payload: dict) -> dict:
+    """
+    Cross-reference latest TDnet announcements with current positions.
+    Generates targeted alerts for held securities.
+    """
+    lookback_hours = float(payload.get("lookback_hours", 24))
+    positions = _build_enriched_positions()
+    if not positions:
+        return {"ok": True, "alerts": [], "message": "当前无持仓，无需预警"}
+
+    held_symbols = [p["symbol"] for p in positions]
+    announcements = _fetch_tdnet_announcements(symbols=held_symbols, lookback_hours=lookback_hours)
+
+    pos_map = {p["symbol"]: p for p in positions}
+    alerts = []
+    for ann in announcements:
+        matched = _match_announcement_to_tickers(ann, held_symbols)
+        for sym in matched:
+            pos = pos_map.get(sym, {})
+            pnl_pct = pos.get("unrealized_pnl_pct")
+            stop    = pos.get("stop_loss")
+            cat     = ann.get("category", "general")
+            strength = ann.get("alpha_strength", 1)
+            # Positive or negative catalyst
+            if cat in ("earnings_revision_up", "dividend_increase", "special_dividend", "buyback"):
+                icon = "✅"
+                action_hint = "催化剂利好，可考虑持有/加仓"
+            elif cat in ("earnings_revision_down", "dividend_cut", "scandal", "regulatory"):
+                icon = "⚠️"
+                action_hint = f"利空公告，确认止损线 ¥{stop}，决策前勿冲动"
+            else:
+                icon = "📋"
+                action_hint = "关注后续市场反应"
+            pnl_str = f"{pnl_pct:+.1f}%" if pnl_pct is not None else "N/A"
+            alerts.append({
+                "symbol": sym,
+                "icon": icon,
+                "title": ann["title"],
+                "category": cat,
+                "alpha_strength": strength,
+                "action_hint": action_hint,
+                "current_pnl_pct": pnl_str,
+                "stop_loss": stop,
+                "url": ann.get("url", ""),
+                "published_at": ann.get("published_at", ""),
+            })
+
+    if not alerts:
+        return {"ok": True, "alerts": [], "message": "持仓标的无相关公告（过去%dh）" % int(lookback_hours)}
+
+    # LLM narrative
+    alert_text = "\n".join(
+        f"[{a['icon']}] {a['symbol']}: {a['title']} ({a['category']}) → {a['action_hint']}"
+        for a in alerts
+    )
+    llm_msg = ""
+    try:
+        system = "你是资深量化交易员。根据以下持仓相关公告，给出简洁中文操作建议（不超过150字）。"
+        llm_msg = get_llm_response(system, alert_text, model=QUANT_LLM_MODEL) or ""
+    except Exception:
+        pass
+
+    return {"ok": True, "alerts": alerts, "llm_narrative": llm_msg, "announcement_count": len(announcements)}
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Morning Brief  (C-01)
+# ─────────────────────────────────────────────────────────────
+def _fetch_market_overview() -> dict:
+    """Fetch N225, Topix, VIX quick stats."""
+    indices = {"N225": "^N225", "TOPIX": "1306.T", "VIX": "^VIX", "USDJPY": "JPY=X"}
+    result = {}
+    for name, sym in indices.items():
+        try:
+            t = yf.Ticker(sym)
+            fi = t.fast_info
+            price = _safe_float(getattr(fi, "last_price", None) or fi.get("last_price"))
+            prev  = _safe_float(getattr(fi, "previous_close", None) or fi.get("previous_close"))
+            chg_pct = ((price / prev - 1) * 100) if price and prev else None
+            result[name] = {"price": round(price, 2) if price else None,
+                            "change_pct": round(chg_pct, 2) if chg_pct else None}
+        except Exception:
+            result[name] = {"price": None, "change_pct": None}
+    return result
+
+def portfolio_morning_brief(payload: dict) -> dict:
+    """
+    Daily morning brief (08:45 JST):
+    Market overview + TDnet announcements + position status + today's focus.
+    """
+    run_id   = payload.get("run_id")
+    date_str = payload.get("date") or _now_date_str()
+
+    # 1. Market overview
+    overview = _fetch_market_overview()
+
+    # 2. TDnet announcements (yesterday + today)
+    all_announcements = _fetch_tdnet_announcements(lookback_hours=20)
+    positions = _build_enriched_positions()
+    held_symbols = [p["symbol"] for p in positions]
+
+    # Split: position-related vs general
+    pos_announcements = []
+    general_announcements = []
+    for ann in all_announcements:
+        matched = _match_announcement_to_tickers(ann, held_symbols)
+        if matched:
+            ann["matched_holdings"] = matched
+            pos_announcements.append(ann)
+        else:
+            general_announcements.append(ann)
+
+    # 3. Position snapshot
+    total_pnl = sum(p.get("unrealized_pnl") or 0 for p in positions)
+
+    # 4. Build context for LLM
+    mkt_text = " | ".join(
+        f"{k}: {v.get('price','N/A')} ({v.get('change_pct',0):+.1f}%)" if v.get("change_pct") is not None
+        else f"{k}: N/A"
+        for k, v in overview.items()
+    )
+    ann_text = "\n".join(f"- [{a['category']}] {a['title']}" for a in (pos_announcements + general_announcements[:5]))
+    pos_text = "\n".join(
+        f"- {p['symbol']}: {p['net_qty']}股 浮盈{p.get('unrealized_pnl_pct',0):+.1f}% 信号:{p.get('signal','N/A')}"
+        for p in positions
+    ) or "当前无持仓"
+
+    focus_items = []
+    try:
+        system = (
+            "你是资深日本股市量化交易员。基于今日市场环境和持仓状态，生成今日3个最重要的关注事项（每条不超过30字，纯中文）。"
+            "直接输出3行，不要编号和多余格式。"
+        )
+        user_msg = f"市场: {mkt_text}\n公告:\n{ann_text}\n持仓:\n{pos_text}"
+        llm_out = get_llm_response(system, user_msg, model=QUANT_LLM_MODEL) or ""
+        focus_items = [l.strip("•-– ").strip() for l in llm_out.splitlines() if l.strip()][:3]
+    except Exception:
+        pass
+    if not focus_items:
+        focus_items = ["关注日元汇率变动对出口股影响", "注意N225期货与现货价差", "确认持仓止损线是否需要调整"]
+
+    # Build readable output
+    pos_lines = []
+    for p in positions:
+        pct = p.get("unrealized_pnl_pct")
+        arrow = "▲" if (pct or 0) >= 0 else "▼"
+        pos_lines.append(
+            f"  {p['symbol']}  {p['net_qty']:.0f}股  ¥{p.get('current_price','N/A')}  "
+            f"{arrow}{pct:+.1f}%  信号:{p.get('signal','N/A')}"
+            if pct is not None else f"  {p['symbol']}  {p['net_qty']:.0f}股  信号:{p.get('signal','N/A')}"
+        )
+
+    output_lines = [
+        f"【早间情报 {date_str} 08:45 JST】",
+        "",
+        "▌市场环境",
+    ]
+    for k, v in overview.items():
+        chg = v.get("change_pct")
+        output_lines.append(
+            f"  {k}: {v.get('price','N/A')}  {chg:+.2f}%"
+            if chg is not None else f"  {k}: N/A"
+        )
+    output_lines.append("")
+    output_lines.append("▌TDnet公告（持仓相关）")
+    if pos_announcements:
+        for a in pos_announcements[:5]:
+            output_lines.append(f"  [{a['icon'] if 'icon' in a else '📋'}] {','.join(a.get('matched_holdings',[]))}: {a['title']}")
+    else:
+        output_lines.append("  ✅ 持仓标的今日无重要公告")
+    output_lines.append("")
+    output_lines.append("▌持仓状态")
+    if pos_lines:
+        output_lines.extend(pos_lines)
+        output_lines.append(f"  总浮盈: {total_pnl:+,.0f} JPY")
+    else:
+        output_lines.append("  当前无持仓")
+    output_lines.append("")
+    output_lines.append("▌今日3项关注")
+    for i, f in enumerate(focus_items, 1):
+        output_lines.append(f"  {i}. {f}")
+
+    briefing_text = "\n".join(output_lines)
+
+    return {
+        "ok": True,
+        "date": date_str,
+        "market_overview": overview,
+        "position_announcements": pos_announcements,
+        "general_announcements": general_announcements[:10],
+        "positions": positions,
+        "focus_items": focus_items,
+        "briefing": briefing_text,
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Post-Close Review  (C-02)
+# ─────────────────────────────────────────────────────────────
+def portfolio_post_close(payload: dict) -> dict:
+    """
+    Post-close review (15:35 JST):
+    Day's P&L change, TDnet announcements, tomorrow's plan.
+    """
+    run_id   = payload.get("run_id")
+    date_str = payload.get("date") or _now_date_str()
+
+    positions = _build_enriched_positions()
+    all_announcements = _fetch_tdnet_announcements(lookback_hours=10)  # Today's announcements
+
+    # Load yesterday's snapshot for comparison
+    prev_snapshot = {}
+    if _DB_PATH.exists():
+        try:
+            conn = sqlite3.connect(str(_DB_PATH))
+            _ensure_positions_snapshot_table(conn)
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT symbol, current_price, unrealized_pnl_pct
+                FROM positions_snapshot
+                WHERE asof < ? ORDER BY asof DESC
+            """, (date_str,))
+            for row in cur.fetchall():
+                if row[0] not in prev_snapshot:
+                    prev_snapshot[row[0]] = {"price": row[1], "pnl_pct": row[2]}
+            conn.close()
+        except Exception:
+            pass
+
+    # Day change vs yesterday
+    day_changes = []
+    for p in positions:
+        sym = p["symbol"]
+        prev = prev_snapshot.get(sym, {})
+        prev_price = prev.get("price")
+        curr_price = p.get("current_price")
+        day_chg_pct = ((curr_price / prev_price - 1) * 100) if (curr_price and prev_price) else None
+        day_changes.append({
+            "symbol": sym,
+            "prev_price": prev_price,
+            "current_price": curr_price,
+            "day_change_pct": round(day_chg_pct, 2) if day_chg_pct is not None else None,
+            "unrealized_pnl_pct": p.get("unrealized_pnl_pct"),
+        })
+
+    # Save today's snapshot
+    _write_positions_snapshot(positions, date_str)
+
+    # LLM: tomorrow's plan
+    day_text = "\n".join(
+        f"- {d['symbol']}: 今日{d['day_change_pct']:+.1f}% 总浮盈{d['unrealized_pnl_pct']:+.1f}%"
+        if d['day_change_pct'] is not None else f"- {d['symbol']}: 价格N/A"
+        for d in day_changes
+    ) or "当前无持仓"
+    ann_text = "\n".join(f"- {a['title']}" for a in all_announcements[:8]) or "今日无重要公告"
+
+    tomorrow_plan = []
+    try:
+        system = (
+            "你是资深量化交易员。基于今日持仓收益和公告，生成明日2-3条可执行计划（每条不超过40字，中文）。"
+            "直接输出，不要编号和多余格式。"
+        )
+        user_msg = f"今日持仓表现:\n{day_text}\n\n今日公告:\n{ann_text}"
+        llm_out = get_llm_response(system, user_msg, model=QUANT_LLM_MODEL) or ""
+        tomorrow_plan = [l.strip("•-– ").strip() for l in llm_out.splitlines() if l.strip()][:3]
+    except Exception:
+        pass
+    if not tomorrow_plan:
+        tomorrow_plan = ["关注持仓标的开盘动向", "复核止损线是否需要调整"]
+
+    output_lines = [f"【收盘复盘 {date_str} 15:35 JST】", ""]
+    output_lines.append("▌今日持仓涨跌")
+    for d in day_changes:
+        chg = d.get("day_change_pct")
+        pnl = d.get("unrealized_pnl_pct")
+        arrow = "▲" if (chg or 0) >= 0 else "▼"
+        output_lines.append(
+            f"  {d['symbol']}  今日{arrow}{chg:+.1f}%  总浮盈{pnl:+.1f}%"
+            if chg is not None and pnl is not None
+            else f"  {d['symbol']}  数据不完整"
+        )
+    output_lines.extend(["", "▌今日重要公告"])
+    if all_announcements:
+        for a in all_announcements[:5]:
+            output_lines.append(f"  [{a.get('category','?')}] {a['title']}")
+    else:
+        output_lines.append("  今日无重要公告")
+    output_lines.extend(["", "▌明日计划"])
+    for i, p in enumerate(tomorrow_plan, 1):
+        output_lines.append(f"  {i}. {p}")
+
+    return {
+        "ok": True,
+        "date": date_str,
+        "day_changes": day_changes,
+        "announcements": all_announcements[:10],
+        "tomorrow_plan": tomorrow_plan,
+        "review": "\n".join(output_lines),
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Signal Backfill & IC Tracking  (D-02)
+# ─────────────────────────────────────────────────────────────
+def quant_signal_backfill(payload: dict) -> dict:
+    """
+    Backfill ret_5d / ret_20d for past signals and compute rolling IC.
+    Run weekly to evaluate signal quality.
+    """
+    if not _DB_PATH.exists():
+        return {"ok": False, "error": "DB not found"}
+    try:
+        conn = sqlite3.connect(str(_DB_PATH))
+        _ensure_positions_snapshot_table(conn)
+        cur = conn.cursor()
+        # Fetch signals with missing ret_20d
+        cur.execute("""
+            SELECT id, symbol, asof, price_at_signal, alpha_score
+            FROM signal_log
+            WHERE ret_20d IS NULL AND price_at_signal IS NOT NULL
+        """)
+        rows = cur.fetchall()
+        updated = 0
+        today = datetime.utcnow().date()
+        for row_id, symbol, asof, price_at_signal, alpha_score in rows:
+            try:
+                signal_date = datetime.strptime(asof[:10], "%Y-%m-%d").date()
+                days_passed = (today - signal_date).days
+                if days_passed < 5:
+                    continue  # Not enough time for 5d return
+                ticker = yf.Ticker(_normalize_symbol_for_lookup(symbol))
+                hist = ticker.history(start=signal_date.isoformat(), end=today.isoformat(),
+                                      interval="1d", auto_adjust=True)
+                if hist is None or hist.empty:
+                    continue
+                close = hist["Close"].dropna()
+                p0 = float(price_at_signal)
+                ret5  = (float(close.iloc[4]) / p0 - 1.0) if len(close) >= 5  else None
+                ret20 = (float(close.iloc[19]) / p0 - 1.0) if len(close) >= 20 else None
+                p5    = float(close.iloc[4])  if len(close) >= 5  else None
+                p20   = float(close.iloc[19]) if len(close) >= 20 else None
+                conn.execute("""
+                    UPDATE signal_log
+                    SET price_5d=?, price_20d=?, ret_5d=?, ret_20d=?
+                    WHERE id=?
+                """, (p5, p20, ret5, ret20, row_id))
+                updated += 1
+            except Exception:
+                continue
+        conn.commit()
+
+        # Compute rolling IC (last 30 signals with ret_20d)
+        cur.execute("""
+            SELECT alpha_score, ret_20d FROM signal_log
+            WHERE ret_20d IS NOT NULL AND alpha_score IS NOT NULL
+            ORDER BY created_at DESC LIMIT 30
+        """)
+        ic_rows = cur.fetchall()
+        ic_value = None
+        icir = None
+        if len(ic_rows) >= 5:
+            scores = [r[0] for r in ic_rows]
+            rets   = [r[1] for r in ic_rows]
+            # Spearman rank correlation
+            n = len(scores)
+            rank_s = sorted(range(n), key=lambda i: scores[i])
+            rank_r = sorted(range(n), key=lambda i: rets[i])
+            rs = [0.0] * n
+            rr = [0.0] * n
+            for rank, idx in enumerate(rank_s):
+                rs[idx] = rank
+            for rank, idx in enumerate(rank_r):
+                rr[idx] = rank
+            mean_rs = sum(rs) / n
+            mean_rr = sum(rr) / n
+            num = sum((rs[i]-mean_rs)*(rr[i]-mean_rr) for i in range(n))
+            den = (sum((rs[i]-mean_rs)**2 for i in range(n)) * sum((rr[i]-mean_rr)**2 for i in range(n))) ** 0.5
+            ic_value = round(num/den, 4) if den else 0.0
+            # Rolling IC series (chunks of 10)
+            chunk_ics = []
+            for i in range(0, n, 10):
+                chunk = ic_rows[i:i+10]
+                if len(chunk) < 5:
+                    continue
+                cs = [r[0] for r in chunk]
+                cr = [r[1] for r in chunk]
+                m_cs, m_cr = sum(cs)/len(cs), sum(cr)/len(cr)
+                num_c = sum((cs[j]-m_cs)*(cr[j]-m_cr) for j in range(len(chunk)))
+                den_c = ((sum((cs[j]-m_cs)**2 for j in range(len(chunk))) *
+                          sum((cr[j]-m_cr)**2 for j in range(len(chunk))))**0.5)
+                chunk_ics.append(num_c/den_c if den_c else 0.0)
+            if len(chunk_ics) >= 2:
+                ic_mean = sum(chunk_ics)/len(chunk_ics)
+                ic_std  = statistics.stdev(chunk_ics)
+                icir = round(ic_mean/ic_std, 3) if ic_std else None
+
+        conn.close()
+        valid = abs(ic_value) > 0.05 if ic_value is not None else False
+        return {
+            "ok": True,
+            "backfilled": updated,
+            "ic_signals_used": len(ic_rows),
+            "rolling_ic": ic_value,
+            "icir": icir,
+            "signal_valid": valid,
+            "verdict": "✅ 信号有效" if valid else "⚠️ 信号弱，建议检查因子配置",
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Portfolio Risk  (D-04)
+# ─────────────────────────────────────────────────────────────
+def quant_portfolio_risk(payload: dict) -> dict:
+    """
+    Portfolio risk metrics: correlation matrix, portfolio vol, concentration flags.
+    """
+    positions = _build_enriched_positions()
+    if len(positions) < 2:
+        single = positions[0] if positions else None
+        return {
+            "ok": True,
+            "message": "持仓不足2只，无需计算组合相关性",
+            "single_position_vol": (
+                round((_compute_quant_metrics(single["symbol"]) or {}).get("vol_20d_pct", 0), 2)
+                if single else None
+            ),
+        }
+
+    symbols = [p["symbol"] for p in positions]
+    weights = []
+    total_val = sum((p.get("current_price") or 0) * p["net_qty"] for p in positions)
+    for p in positions:
+        val = (p.get("current_price") or 0) * p["net_qty"]
+        weights.append(val / total_val if total_val else 1.0 / len(positions))
+
+    # Fetch 60-day returns
+    returns_data = {}
+    for sym in symbols:
+        try:
+            ticker = yf.Ticker(_normalize_symbol_for_lookup(sym))
+            hist = ticker.history(period="3mo", interval="1d", auto_adjust=True)
+            if hist is not None and not hist.empty:
+                close = hist["Close"].dropna()
+                if len(close) >= 30:
+                    returns_data[sym] = list(close.pct_change().dropna().tail(60))
+        except Exception:
+            pass
+
+    valid_syms = [s for s in symbols if s in returns_data]
+    if len(valid_syms) < 2:
+        return {"ok": True, "message": "数据不足，无法计算相关矩阵", "symbols": symbols}
+
+    # Correlation matrix
+    n = len(valid_syms)
+    min_len = min(len(returns_data[s]) for s in valid_syms)
+    ret_mat = [[returns_data[s][i] for i in range(min_len)] for s in valid_syms]
+
+    corr_matrix = [[0.0]*n for _ in range(n)]
+    for i in range(n):
+        for j in range(n):
+            ri, rj = ret_mat[i], ret_mat[j]
+            mi, mj = sum(ri)/len(ri), sum(rj)/len(rj)
+            num = sum((ri[k]-mi)*(rj[k]-mj) for k in range(len(ri)))
+            di  = (sum((ri[k]-mi)**2 for k in range(len(ri)))**0.5)
+            dj  = (sum((rj[k]-mj)**2 for k in range(len(rj)))**0.5)
+            corr_matrix[i][j] = round(num/(di*dj), 3) if (di*dj) else (1.0 if i==j else 0.0)
+
+    # Portfolio volatility (annualized)
+    port_var = 0.0
+    sym_vols = {}
+    for i, si in enumerate(valid_syms):
+        std_i = statistics.stdev(ret_mat[i]) if len(ret_mat[i]) > 1 else 0
+        sym_vols[si] = round(std_i * (252**0.5) * 100, 2)
+        for j, sj in enumerate(valid_syms):
+            wi = weights[symbols.index(si)] if si in symbols else 1.0/n
+            wj = weights[symbols.index(sj)] if sj in symbols else 1.0/n
+            std_j = statistics.stdev(ret_mat[j]) if len(ret_mat[j]) > 1 else 0
+            port_var += wi * wj * corr_matrix[i][j] * std_i * std_j
+    port_vol = round((port_var**0.5) * (252**0.5) * 100, 2) if port_var > 0 else 0.0
+
+    # Flags
+    flags = []
+    for i in range(n):
+        for j in range(i+1, n):
+            if corr_matrix[i][j] > 0.7:
+                flags.append(f"⚠️ {valid_syms[i]} ↔ {valid_syms[j]} 相关性高 ({corr_matrix[i][j]:.2f})，考虑分散风险")
+    for i, sym in enumerate(valid_syms):
+        w = weights[symbols.index(sym)] if sym in symbols else 0
+        if w > 0.4:
+            flags.append(f"⚠️ {sym} 仓位集中度 {w*100:.0f}%，超过40%预警线")
+
+    return {
+        "ok": True,
+        "symbols": valid_syms,
+        "weights": [round(w, 3) for w in weights],
+        "correlation_matrix": corr_matrix,
+        "individual_vols_pct": sym_vols,
+        "portfolio_vol_pct": port_vol,
+        "flags": flags,
+        "summary": f"组合年化波动率 {port_vol}% | 持仓{n}只 | {'有' if flags else '无'}集中度风险",
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# SECTION: Watchlist Management  (E-04)
+# ─────────────────────────────────────────────────────────────
+def quant_watchlist_manage(payload: dict) -> dict:
+    """
+    Add / remove / list watchlist symbols.
+    action: 'add' | 'remove' | 'list'
+    symbol: ticker string (e.g. '5020.T')
+    name: optional display name
+    """
+    action = str(payload.get("action", "list")).lower()
+    wl = _load_watchlists()
+    jp_syms = list(wl.get("jp_symbols", []))
+    us_syms = list(wl.get("us_symbols", []))
+
+    selected_path = Path("/app/quant_trading/Project_optimized/selected_tickers.json")
+
+    if action == "list":
+        return {"ok": True, "jp_symbols": jp_syms, "us_symbols": us_syms,
+                "total": len(jp_syms) + len(us_syms)}
+
+    symbol = str(payload.get("symbol", "")).strip().upper()
+    if not symbol:
+        return {"ok": False, "error": "symbol is required for add/remove"}
+
+    is_jp = symbol.endswith(".T")
+
+    if action == "add":
+        target = jp_syms if is_jp else us_syms
+        if symbol not in target:
+            target.append(symbol)
+            # Persist
+            if is_jp:
+                try:
+                    data = json.loads(selected_path.read_text(encoding="utf-8")) if selected_path.exists() else {}
+                    data["symbols"] = target
+                    selected_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+            return {"ok": True, "action": "added", "symbol": symbol, "total_jp": len(jp_syms), "total_us": len(us_syms)}
+        return {"ok": True, "action": "already_exists", "symbol": symbol}
+
+    if action == "remove":
+        target = jp_syms if is_jp else us_syms
+        if symbol in target:
+            target.remove(symbol)
+            if is_jp:
+                try:
+                    data = json.loads(selected_path.read_text(encoding="utf-8")) if selected_path.exists() else {}
+                    data["symbols"] = target
+                    selected_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+            return {"ok": True, "action": "removed", "symbol": symbol}
+        return {"ok": True, "action": "not_found", "symbol": symbol}
+
+    return {"ok": False, "error": f"unknown action: {action}"}
+
+
 TOOLS = {
     "dummy.echo": lambda p: p,
     "quant.fetch_price": fetch_stock_price,
@@ -4816,8 +6070,17 @@ TOOLS = {
     "quant.compute_news_risk_factor": compute_news_risk_factor,
     "quant.calc_limit_price": calc_limit_price_tool,
     "quant.run_optimized_pipeline": run_optimized_pipeline,
+    "quant.signal_backfill": quant_signal_backfill,
+    "quant.portfolio_risk": quant_portfolio_risk,
+    "quant.event_alert": quant_event_alert,
+    "quant.watchlist": quant_watchlist_manage,
     "portfolio.set_account": portfolio_set_account,
     "portfolio.record_fill": portfolio_record_fill,
+    "portfolio.position_review": portfolio_position_review,
+    "portfolio.midday_pnl": portfolio_midday_pnl,
+    "portfolio.morning_brief": portfolio_morning_brief,
+    "portfolio.post_close": portfolio_post_close,
+    "portfolio.set_preference": portfolio_set_preference,
     "browser.screenshot": browser_screenshot,
     "ai.analyze": ai_analyze_report,
     "media.generate_report_card": generate_report_card,
@@ -4825,6 +6088,8 @@ TOOLS = {
     "news.active_hot_search": news_active_hot_search,
     "news.preclose_brief_jp": preclose_brief_jp,
     "news.tdnet_close_flash": tdnet_close_flash,
+    "news.tdnet_announcements": lambda p: {"ok": True, "announcements": _fetch_tdnet_announcements(
+        symbols=p.get("symbols"), lookback_hours=float(p.get("lookback_hours", 24)))},
     "github.skills_daily_report": github_skills_daily_report,
     "web.search_and_browse": web_search_and_browse,
     "ops.deploy_preview": deploy_preview,

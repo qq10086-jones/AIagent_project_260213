@@ -1,0 +1,15 @@
+{
+  "capital_base_jpy": 400000,
+  "max_position_pct": 0.35,
+  "stop_loss_pct": 0.08,
+  "take_profit_pct": 0.20,
+  "max_positions": 5,
+  "horizon_days": 20,
+  "risk_profile": "medium",
+  "preferred_markets": ["JP"],
+  "avoid_sectors": [],
+  "preferred_sectors": [],
+  "notify_on_stop_loss": true,
+  "notify_on_catalyst": true,
+  "language": "zh"
+}

@@ -1,34 +1,105 @@
-# Nexus Project Progress Report - 2026-03-17 (QA Stress Test Milestone)
+# Nexus Project Progress Report - 2026-03-23 (worker-quant v1.1 交付，M12 Final Gate 准备中)
 
-## 1. 核心进展：worker-coder 强度验证 (Internal Beta Ready)
-- **修复确认**：`E_AUTH_FAILED` 问题已彻底根除。系统已从 `dashscope/qwen` 平稳迁移至 `minimax-coding-plan/MiniMax-M2.5`。
-- **配置规范**：已完成 `infra/.env` 环境配置规范化，移除了 `docker-compose.yml` 中的硬编码。
-- **压力测试结果**：
-    - **测试套件**：Gate B (Real E2E)
-    - **负载模型**：Runs: 15, Concurrency: 3, Warmup: 2
-    - **执行情况**：完成 17/17 任务（含 Warmup），全链路成功。
-    - **成功率**：**100% (100% Workflow Success Rate)**。
-    - **稳定性指标**：在 3 并发下，Redis 队列和 LLM 适配器表现稳定，无长尾延迟波动。
-- **状态**：**代码任务链路 (Coding Track) 已达成发布标准**。
+## 1. 核心进展：worker-quant v1.1 专属量化AI员工（2026-03-23 完成）
 
-## 2. 进展：worker-quant OpenBB 集成
-- **已完成**：代码层面集成了 `openbb` v4 SDK，实现了新闻采集逻辑及降级采集管道。
-- **当前瓶颈**：尚未进行容器构建验证和真实 API 联调。
-- **状态**：**开发完成，待验证 (Dev Done, Pending Validation)**。
+### 1a. 交付范围
+本次迭代将 worker-quant 从"基础行情工具集"升级为具备完整工作日流程的专属量化AI员工。21/22 任务完成（1项设计上延迟）。
 
-## 3. 遗留问题与风险记录 (Risk & Issues)
+**工具数量**：19 → 29 个（新增10个）
 
-### A. 环境一致性 (P1)
-- **.env 维护**：目前的 `infra/.env` 包含敏感 API Key。由于该文件通常不提交，需确保在生产/测试环境部署时，CI/CD 或运维手册中有明确的 Key 注入步骤。
-- **Docker 运行环境**：由于测试是在本地 Docker 中通过挂载卷 (`/app`) 进行的，需确保最终镜像构建 (`docker build`) 时，代码修复也被正确包含进去（目前代码挂载是动态的）。
+| 新增工具 | 功能 |
+|----------|------|
+| `portfolio.position_review` | 持仓审查：成本价、P&L、风控标记、LLM叙事 |
+| `portfolio.midday_pnl` | 盘中P&L快速查询（< 10秒，无LLM） |
+| `portfolio.morning_brief` | 早盘简报：大盘概览 + 持仓状况 + 今日TDnet公告 |
+| `portfolio.post_close` | 收盘复盘：当日P&L、快照归档、持仓建议 |
+| `portfolio.set_preference` | 用户偏好持久化（止损比例、仓位上限等） |
+| `quant.event_alert` | TDnet公告事件预警（与持仓交叉比对） |
+| `quant.signal_backfill` | 信号IC/ICIR回测（Spearman秩相关，无scipy依赖） |
+| `quant.portfolio_risk` | 相关性矩阵 + 组合波动率 + 集中度预警 |
+| `quant.watchlist` | 观察名单管理（add/remove/list） |
+| `news.tdnet_announcements` | TDnet公告直查（Kabutan RSS → Google News → GDELT降级） |
 
-### B. 验证缺口 (P1)
-- **OpenBB 依赖冲突风险**：`openbb` 的依赖树较为复杂，可能与现有 `worker-quant` 的 `pandas<3.0.0` 或 `numpy<2.0.0` 产生冲突。
-- **OpenBB 降级稳健性**：需要模拟 OpenBB API 超时或不可用场景，确认 Yahoo/Google RSS 采集能平滑接管，不影响 `worker-quant` 的整体吞吐。
+### 1b. 核心能力升级
 
-## 4. 下一步动作路线图 (Next Steps)
+**新闻信号改造（Epic B）**
+- TDnet公告替代GDELT作为日股alpha主源，抓取延迟 < 1小时（原GDELT：1-2天）
+- `deep_analysis` 现整合新闻情绪因子（`news_sentiment`）和TDnet催化剂（`today_announcements`）
+- 上调修正/增配/回购等8类事件的alpha权重映射已配置
 
-1.  **[Validation] worker-quant 容器构建**：运行 `docker-compose build worker-quant` 验证依赖一致性。
-2.  **[Test] OpenBB 回退逻辑测试**：编写针对 `_merge_recent_news` 的离线单元测试。
-3.  **[Final Gate] Gate B (Full Load)**：执行一次涵盖 Coding 和 Quant 两个 Worker 的全量混合负载测试。
-4.  **[Release] 代码提交与内部测试宣告**：整理 Git Commits，编写 Release Note，正式开启 Internal Beta。
+**持仓管理基础（Epic A）**
+- WAVG成本价计算（BUY/SELL序列精确核算）
+- `positions_snapshot` 表每日归档，支持日间P&L对比
+- 风控标记：止损触发 / 信号反转 / 持仓超期（> 20天）
+
+**统计因子工程（Epic D）**
+- `signal_log` 表自动记录每次信号，5d/20d收益率异步回填
+- 横截面相对强弱因子（D-03）接入 `discovery_workflow`，对4分位分档调整 `selection_score`（±0.30/±0.10）
+- IC/ICIR计算就绪，待4周历史积累后启用自适应权重（D-05）
+
+**个性化与修复（Epic E）**
+- `user_profile.json` 持久化用户偏好，`portfolio.set_preference` 可在线修改
+- `watchlist_alias.json` 支持29只日股的中英文别名识别
+- `auto_adjust=True` 修复除权日虚假信号（E-03）
+
+### 1c. 新增文件
+- `worker-quant/quant_trading/Project_optimized/watchlist_alias.json` — 29只日股别名映射
+- `worker-quant/quant_trading/Project_optimized/user_profile.json` — 用户偏好（资金40万JPY，止损8%，中等风险）
+- `worker-quant/quant_trading/Project_optimized/docs/design/QUANT_AI_EMPLOYEE_DESIGN_v1.md` — 完整架构设计文档
+- `worker-quant/quant_trading/Project_optimized/docs/design/QUANT_AI_EMPLOYEE_TASKS_v1.md` — 22项任务清单（21/22完成）
+
+---
+
+## 2. 历史里程碑回顾
+
+### M12 Internal Beta 准入状态（2026-03-22 Gate A 关闭）
+- **Gate B Real E2E**：17/17 PASS，并发3，成功率100%
+- **Gate A**：治理决策关闭（dispatch 100%验证，workflow质量由Gate B覆盖，见 `docs/governance/m12_gate_a_closure_note.md`）
+- **worker-coder**：19/19单元测试PASS，已迁移至MiniMax-M2.5
+
+### M10 负载测试（2026-03-15 PASS）
+- `stable_local_lane` 单run 6/6步骤全通过，GO verdict
+
+### M8 Go/No-Go（2026-03-09 APPROVED）
+- `master_enabled=true` 激活，M6 GO_LIMITED_EXPOSURE 生效
+
+### worker-quant OpenBB验证（2026-03-19 PASS）
+- 容器构建无冲突，`_merge_recent_news` 10/10离线测试通过，外层异常捕获bug修复
+
+---
+
+## 3. 当前生产配置
+
+```
+master_enabled: true
+dynamic_routing_enabled: true
+router_mode: dynamic_routing_enforced
+execution_lane_default: stable_cloud_lane
+force_sequential: false
+```
+
+**测试基线**（2026-03-23）
+- `npm --prefix orchestrator test` → 150/150 PASS
+- `npm --prefix worker-coder test` → 19/19 PASS
+- worker-quant syntax check → OK，容器运行正常
+
+---
+
+## 4. 遗留问题与风险
+
+| 项目 | 优先级 | 说明 |
+|------|--------|------|
+| D-05 信号加权合成 | P2（延迟） | 需≥4周 signal_log 历史才有统计意义 |
+| C-03 cron调度 | P2 | 工具已就绪，Discord bot侧定时触发尚未配置 |
+| TDnet/J-Quants真实API验证 | P1 | 需真实网络环境运行 `validate_sources.py` |
+| Golden Set扩充 | P2 | 当前100条，目标≥200条 |
+| opencode.json MiniMax认证 | P1 | Final Gate前需 `git diff opencode.json` 确认 |
+
+---
+
+## 5. 下一步行动
+
+1. **[Final Gate]** 全量混合负载测试：Coding + Quant 双 Worker 同时压测
+2. **[worker-quant]** 运行 `validate_sources.py` 验证TDnet/J-Quants真实网络解析
+3. **[Release]** 编写 M12 Internal Beta Release Note，正式宣告上线
+4. **[长期]** D-05 信号加权合成（4周后）、C-03 cron调度配置

@@ -27,6 +27,48 @@ test("brain router returns direct_reply for chat input", () => {
   assert.equal(routed.task_envelope.requires_orchestration, false);
 });
 
+test("brain router respects high-confidence analyzer chat intent without tools", () => {
+  const routed = routeTaskRequest({
+    source: "discord",
+    raw_input: "who are you exactly",
+    normalized_input: { text: "who are you exactly" },
+    context: { channel_id: "chat-llm-1" },
+    analyzerResult: {
+      intent: "chat",
+      mode_suggested: "chat",
+      requires_tools: false,
+      confidence: 0.95,
+      tool_name: null,
+    },
+    registry,
+  });
+
+  assert.equal(routed.decision, "direct_reply");
+  assert.equal(routed.task_envelope.intent, "chat");
+  assert.equal(routed.task_envelope.target_team, "brain");
+});
+
+test("brain router maps legacy qa analyzer intent into chat direct reply", () => {
+  const routed = routeTaskRequest({
+    source: "discord",
+    raw_input: "please explain who you are",
+    normalized_input: { text: "please explain who you are" },
+    context: { channel_id: "chat-llm-2" },
+    analyzerResult: {
+      intent: "qa",
+      mode_suggested: "chat",
+      requires_tools: false,
+      confidence: 0.92,
+      tool_name: null,
+    },
+    registry,
+  });
+
+  assert.equal(routed.decision, "direct_reply");
+  assert.equal(routed.task_envelope.intent, "chat");
+  assert.equal(routed.task_envelope.target_team, "brain");
+});
+
 test("brain router returns orchestrated workflow for complex coding input", () => {
   const routed = routeTaskRequest({
     source: "discord",

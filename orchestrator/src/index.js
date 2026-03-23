@@ -348,6 +348,7 @@ const { handleDiscordMessage, handleDiscordReaction } = createDiscordMessageHand
   getToolSpec, executeVNextDispatch, appState,
   currentQwenModel: () => CURRENT_QWEN_MODEL, setQwenModel,
   translate, safeTranslate, replyChunked, runToContext, workflowRunToContext,
+  registry: REGISTRY,
 });
 registerDiscordHandlers({ onMessage: handleDiscordMessage, onReaction: handleDiscordReaction });
 loginDiscordGateway(DISCORD_TOKEN);

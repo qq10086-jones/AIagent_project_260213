@@ -32,6 +32,13 @@ export function pathForRunArtifacts(run_id) {
   return `artifacts/release/${run_id || "unknown-run"}`;
 }
 
+function defaultCodingTargetPaths(projectType) {
+  if (String(projectType || "") === "webapp_crm") return ["sandbox/crm_site/"];
+  if (String(projectType || "") === "single_file_html") return ["sandbox/html_site/"];
+  if (String(projectType || "") === "generic_app") return ["sandbox/app/"];
+  return ["sandbox/project/"];
+}
+
 function listTargetFilesWithContent({ workspaceRoot, targetPaths, maxFiles = 3, maxCharsPerFile = 4000 }) {
   const out = [];
   const workspaceAbs = path.resolve(workspaceRoot);
@@ -131,7 +138,7 @@ function chooseImplementationMode({
     };
   }
   const diffFirstEnabled = runtimeConfig?.execution?.diff_first_enabled !== false;
-  const targetPaths = Array.isArray(payload?.target_paths) ? payload.target_paths : ["sandbox/crm_site/"];
+  const targetPaths = Array.isArray(payload?.target_paths) ? payload.target_paths : defaultCodingTargetPaths(payload?.project_type);
   const targetFileContext = diffFirstEnabled
     ? listTargetFilesWithContent({ workspaceRoot, targetPaths })
     : [];
@@ -516,7 +523,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       }
       const runtimeWorkerCoder = runtimeConfig?.worker_coder || {};
       if ((stepDef.id === "impl_fe" || stepDef.id === "impl_be") && !Array.isArray(payload.target_paths)) {
-        payload.target_paths = ["sandbox/crm_site/"];
+        payload.target_paths = defaultCodingTargetPaths(payload.project_type);
       }
       if ((stepDef.id === "impl_be" || stepDef.id === "impl_fe") && payload.execution_adapter_packet) {
         payload.target_paths = payload.execution_adapter_packet.target_paths;
@@ -622,7 +629,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     if (String(stepDef.tool || "") === "ops.deploy_preview") {
       const defaultTargetPaths = Array.isArray(payload.target_paths) && payload.target_paths.length > 0
         ? payload.target_paths
-        : ["sandbox/crm_site/"];
+        : defaultCodingTargetPaths(payload.project_type);
       payload.target_paths = defaultTargetPaths;
       payload.project_root_candidates = defaultTargetPaths;
       payload.release_manifest_path = `${artifactRoot}/meta/run_manifest.json`;

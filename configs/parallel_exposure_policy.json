@@ -8,7 +8,10 @@
   ],
   "allowed_project_types": [
     "crm",
-    "webapp_crm"
+    "webapp_crm",
+    "generic_coding_task",
+    "generic_app",
+    "single_file_html"
   ],
   "fe_safe_eligible_input_classes": [
     "fe_led",

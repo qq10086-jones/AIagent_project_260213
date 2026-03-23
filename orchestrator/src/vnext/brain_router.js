@@ -1,6 +1,7 @@
 import { createTaskEnvelope } from "./task_envelope.js";
 import { applyRoutingPolicy } from "./brain_router_policy.js";
 import { classifyTask } from "./brain_router_classifier.js";
+import { resolveCodingProjectType, resolveCodingWorkflowId } from "./coding_project_type.js";
 
 const CODING_RE_EN = /\b(build|implement|feature|fix|bug|patch|refactor|frontend|backend|full[- ]?stack|api|database|repo|code|coding|pm|architect|ui|qa)\b/i;
 const CODING_RE_ZH = /(测试|修复|开发|功能|需求|前端|后端|架构|设计文档|网站|做个|制作|系统|平台|网页|小程序)/;
@@ -54,6 +55,21 @@ function normalizeLegacyIntent(parsed = {}) {
   return null;
 }
 
+function normalizeAnalyzerIntent(parsed = {}) {
+  const intent = String(parsed.intent || "").trim().toLowerCase();
+  const modeSuggested = String(parsed.mode_suggested || "").trim().toLowerCase();
+  const requiresTools = Boolean(parsed.requires_tools);
+
+  if (!requiresTools && modeSuggested === "chat") return "chat";
+  if (intent === "chat" || intent === "qa") return "chat";
+  if (intent === "quant" || intent === "quant_research") return "quant";
+  if (intent === "research" || intent === "web_search") return "research";
+  if (intent === "docs") return "docs";
+  if (intent === "coding") return "coding";
+  if (intent === "ops") return "ops";
+  return null;
+}
+
 function resolveTargetTeam(intent) {
   if (intent === "coding") return "coding_team";
   if (intent === "quant") return "quant_team";
@@ -77,14 +93,14 @@ function resolveExpectedOutputs(intent, decision) {
   return ["direct_reply"];
 }
 
-function resolveExecutionPlan({ intent, complexity, legacyIntent, registry }) {
+function resolveExecutionPlan({ intent, complexity, legacyIntent, rawInput, registry }) {
   if (intent === "chat") {
     return { mode: "direct_reply" };
   }
 
   if (intent === "coding") {
-    const workflowId = registry.project_types?.coding_task?.default_workflow || "coding_team_v0";
-    const workflowProjectType = registry.workflows?.[workflowId]?.project_type || "webapp_crm";
+    const workflowId = resolveCodingWorkflowId(registry);
+    const workflowProjectType = resolveCodingProjectType(rawInput || legacyIntent?.raw_input || "", registry);
     if (complexity === "simple") {
       return {
         mode: "single_agent",
@@ -111,7 +127,7 @@ function resolveExecutionPlan({ intent, complexity, legacyIntent, registry }) {
     return {
       mode: "single_agent",
       tool_name: "coding.delegate",
-      project_type: registry.workflows?.coding_team_v0?.project_type || "webapp_crm",
+      project_type: resolveCodingProjectType("", registry),
     };
   }
 
@@ -144,21 +160,34 @@ export function routeTaskRequest({
 }) {
   const heuristicIntent = inferIntentFromText(raw_input);
   const legacyIntent = normalizeLegacyIntent(analyzerResult || {});
-  const intent = legacyIntent?.intent || heuristicIntent;
+  if (legacyIntent) legacyIntent.raw_input = raw_input;
+  const analyzerIntent = normalizeAnalyzerIntent(analyzerResult || {});
+  const intent = legacyIntent?.intent || analyzerIntent || heuristicIntent;
   const complexity = inferComplexity(raw_input);
-  let executionPlan = resolveExecutionPlan({ intent, complexity, legacyIntent, registry });
+  let executionPlan = resolveExecutionPlan({ intent, complexity, legacyIntent, rawInput: raw_input, registry });
   let decision = decisionFromPlan(executionPlan);
   let finalIntent = intent;
+
+  const normalizedAnalyzerResult = analyzerResult
+    ? {
+        ...analyzerResult,
+        intent: analyzerIntent || String(analyzerResult.intent || "").trim().toLowerCase() || "unknown",
+      }
+    : analyzerResult;
 
   // Apply deterministic policy override layer (WS-13)
   // analyzerResult=undefined → heuristic-only (no LLM called), skip LLM-dependent rules
   // analyzerResult=null → LLM was called and failed (P-05 applies)
-  const policyResult = applyRoutingPolicy(raw_input, analyzerResult, intent);
+  const policyResult = applyRoutingPolicy(raw_input, normalizedAnalyzerResult, intent);
   if (policyResult.override) {
     finalIntent = policyResult.intent;
     if (policyResult.decision === "orchestrated_workflow") {
-      const wfId = registry.project_types?.coding_task?.default_workflow || "coding_team_v0";
-      executionPlan = { mode: "orchestrated_workflow", workflow_id: wfId, project_type: registry.workflows?.[wfId]?.project_type || "webapp_crm" };
+      const wfId = resolveCodingWorkflowId(registry);
+      executionPlan = {
+        mode: "orchestrated_workflow",
+        workflow_id: wfId,
+        project_type: resolveCodingProjectType(raw_input, registry),
+      };
     } else if (policyResult.decision === "direct_reply") {
       executionPlan = { mode: "direct_reply" };
     } else if (policyResult.decision === "clarification_required") {

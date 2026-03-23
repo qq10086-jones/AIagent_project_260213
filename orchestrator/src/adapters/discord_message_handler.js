@@ -9,6 +9,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { parseCoderDirectiveOptions } from "../vnext/coder_directive.js";
 import { detectLanguageQuick, buildVNextDispatchInput } from "../vnext/composite_planner.js";
+import { resolveCodingProjectType, resolveCodingWorkflowId } from "../vnext/coding_project_type.js";
 
 /**
  * @param {{ redis, discord, approvalToken, coderProviderDefault, coderModelDefault,
@@ -16,7 +17,7 @@ import { detectLanguageQuick, buildVNextDispatchInput } from "../vnext/composite
  *           makeIdempotencyKey, getToolSpec, executeVNextDispatch,
  *           appState, currentQwenModel, setQwenModel,
  *           translate, safeTranslate, replyChunked,
- *           runToContext, workflowRunToContext }} deps
+ *           runToContext, workflowRunToContext, registry }} deps
  */
 export function createDiscordMessageHandler({
   redis,
@@ -39,6 +40,7 @@ export function createDiscordMessageHandler({
   replyChunked,
   runToContext,
   workflowRunToContext,
+  registry,
 }) {
   const extractCommandArg = (input, command) => {
     const m = String(input || "").match(new RegExp(`^${command}(?::|\\uff1a|\\s+)(.+)$`, "i"));
@@ -186,13 +188,15 @@ export function createDiscordMessageHandler({
       await msg.channel.sendTyping();
       await ensureRun(run_id, { client_msg_id, user_id: msg.author.id, status: "starting", input_text: userInput });
 
+      const workflowId = resolveCodingWorkflowId(registry);
+      const projectType = resolveCodingProjectType(userInput, registry);
       const routeOverride = isCoderDirective ? {
         decision: "orchestrated_workflow",
         route: {
           intent: "coding", complexity: "complex", target_team: "coding_team",
           requires_orchestration: true,
           expected_outputs: ["design_doc", "task_breakdown", "repo_changes", "tests", "qa_summary"],
-          execution_plan: { mode: "orchestrated_workflow", workflow_id: "coding_team_v0", project_type: "webapp_crm" },
+          execution_plan: { mode: "orchestrated_workflow", workflow_id: workflowId, project_type: projectType },
         },
         task_envelope: {
           task_id: uuidv4(), source: "discord", raw_input: userInput,
@@ -202,7 +206,7 @@ export function createDiscordMessageHandler({
           constraints: { local_only: true, approval_mode: "manual", risk_level: "medium", complexity: "complex" },
           context: { channel_id: String(msg.channel?.id || ""), thread_id: String(msg.id || ""), user_id: String(msg.author?.id || ""), attachments: [], raw_event: null },
           decision: "orchestrated_workflow",
-          execution_plan: { mode: "orchestrated_workflow", workflow_id: "coding_team_v0", project_type: "webapp_crm" },
+          execution_plan: { mode: "orchestrated_workflow", workflow_id: workflowId, project_type: projectType },
         },
       } : null;
 

@@ -1,6 +1,6 @@
 {
   "workflow_id": "coding_team_v0",
-  "project_type": "webapp_crm",
+  "project_type": "generic_coding_task",
   "steps": [
     {
       "id": "pm_spec",
@@ -51,7 +51,9 @@
       "role": "release",
       "tool": "ops.deploy_preview",
       "gate": "finalize",
-      "depends_on": ["release_pack"]
+      "depends_on": [
+        "release_pack"
+      ]
     }
   ]
 }

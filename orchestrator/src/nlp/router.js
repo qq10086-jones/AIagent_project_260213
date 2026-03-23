@@ -5,6 +5,18 @@ export function setQwenModel(modelName) {
   CURRENT_QWEN_MODEL = modelName;
 }
 
+const NORMALIZED_INTENT_MAP = {
+  qa: "chat",
+  chat: "chat",
+  quant_research: "quant",
+  quant: "quant",
+  ops: "ops",
+  web_search: "research",
+  research: "research",
+  docs: "docs",
+  coding: "coding",
+};
+
 // Define the available tools (Agents) and their capabilities for the LLM Dispatcher
 const AGENT_TOOLS_SCHEMA = [
   {
@@ -117,7 +129,7 @@ Instructions:
 
 Output STRICTLY in valid JSON format representing a TaskSpec:
 {
-  "intent": "qa | quant_research | ops | web_search",
+  "intent": "chat | coding | quant | research | docs | ops | unknown",
   "mode_suggested": "chat | run",
   "requires_tools": true,
   "tool_name": "selected_tool_name_or_null",
@@ -134,6 +146,20 @@ function detectLanguageFallback(text) {
   if (/[\u4e00-\u9fff]/.test(text)) return "zh";
   if (/[\u3040-\u30ff]/.test(text)) return "ja";
   return "en";
+}
+
+function normalizeIntent(rawIntent, { modeSuggested = "chat", requiresTools = false } = {}) {
+  const normalized = NORMALIZED_INTENT_MAP[String(rawIntent || "").trim().toLowerCase()];
+  if (normalized) return normalized;
+  if (!requiresTools && modeSuggested === "chat") return "chat";
+  return "unknown";
+}
+
+function normalizeModeSuggested(value, { requiresTools = false } = {}) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "chat") return "chat";
+  if (normalized === "run" || normalized === "tool") return "run";
+  return requiresTools ? "run" : "chat";
 }
 
 export async function qwenChat(messages, timeoutMs = 60000) {
@@ -209,10 +235,13 @@ export async function parseIntent(userInput, context = {}) {
       parsed.payload.symbol = String(parsed.payload.symbol).toUpperCase();
     }
 
+    const requiresTools = !!parsed.requires_tools;
+    const modeSuggested = normalizeModeSuggested(parsed.mode_suggested, { requiresTools });
+
     return {
-      intent: parsed.intent || "qa",
-      mode_suggested: parsed.mode_suggested || "chat",
-      requires_tools: !!parsed.requires_tools,
+      intent: normalizeIntent(parsed.intent, { modeSuggested, requiresTools }),
+      mode_suggested: modeSuggested,
+      requires_tools: requiresTools,
       tool_name: parsed.tool_name || null,
       payload: parsed.payload || {},
       confidence: Number(parsed.confidence || 0.8),

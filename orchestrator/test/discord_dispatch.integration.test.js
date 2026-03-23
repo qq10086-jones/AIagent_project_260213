@@ -63,4 +63,22 @@ test("normalized discord coding request routes into coding workflow", () => {
 
   assert.equal(routed.task_envelope.target_team, "coding_team");
   assert.equal(routed.decision, "orchestrated_workflow");
+  assert.equal(routed.task_envelope.execution_plan.project_type, "webapp_crm");
+});
+
+test("coder html request resolves to single_file_html instead of crm", () => {
+  const normalized = normalizeInputRequest({
+    source: "discord",
+    raw_input: "/coder 帮我写一个 html，内容就写：hello, world",
+    channel_id: "chan-3",
+    user_id: "user-3",
+  });
+
+  const routed = routeTaskRequest({
+    ...normalized,
+    registry,
+  });
+
+  assert.equal(routed.decision, "orchestrated_workflow");
+  assert.equal(routed.task_envelope.execution_plan.project_type, "single_file_html");
 });

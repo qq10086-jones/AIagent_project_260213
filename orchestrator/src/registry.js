@@ -167,9 +167,11 @@ export function validateTaskInputAgainstRegistry({ registry, tool_name, payload 
     if (!wf) {
       errors.push(`workflow '${workflowId}' not found`);
     } else {
-      if (projectType && wf.project_type && wf.project_type !== projectType) {
-        errors.push(`workflow '${workflowId}' project_type mismatch: expected '${wf.project_type}'`);
-      }
+        const workflowOwnsProjectType = projectType
+          && registry.project_types?.[projectType]?.default_workflow === workflowId;
+        if (projectType && wf.project_type && wf.project_type !== projectType && !workflowOwnsProjectType) {
+          errors.push(`workflow '${workflowId}' project_type mismatch: expected '${wf.project_type}'`);
+        }
       if (role && !wf.steps.some((s) => s.role === role && s.tool === tool_name)) {
         errors.push(`workflow '${workflowId}' has no step for role '${role}' with tool '${tool_name}'`);
       }

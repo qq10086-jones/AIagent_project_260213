@@ -102,6 +102,10 @@ def main(cfg_path: str):
     env["SS6_H"] = str(int(model.get("H", 20)))
     env["SS6_TRAIN_WINDOW"] = str(int(model.get("train_window", 252)))
     env["SS6_REBALANCE_EVERY"] = str(int(model.get("rebalance_every", 20)))
+    env["SS6_BENCHMARK_FAST_MA_WINDOW"] = str(int(model.get("benchmark_fast_ma_window", 20)))
+    env["SS6_BENCHMARK_SLOW_MA_WINDOW"] = str(int(model.get("benchmark_slow_ma_window", model.get("ma_window", 60))))
+    env["SS6_BENCHMARK_HYSTERESIS_ENTER_PCT"] = str(float(model.get("benchmark_hysteresis_enter_pct", 0.01)))
+    env["SS6_BENCHMARK_HYSTERESIS_EXIT_PCT"] = str(float(model.get("benchmark_hysteresis_exit_pct", 0.01)))
     env["SS6_SAFE_PLOT"] = "1" if bool(model.get("safe_plot", True)) else "0"
     env["SS6_OUTPUT_DIR"] = str(output_dir)
 
@@ -114,8 +118,14 @@ def main(cfg_path: str):
     env["SS6_MAX_ADV_FRAC"] = str(float(exec_cfg.get("max_adv_frac", 1.0)))
     env["SS6_CASH_RATE_DAILY"] = str(float(exec_cfg.get("cash_rate_daily", 0.0)))
     env["SS6_STOP_LOSS_PCT"] = str(float(exec_cfg.get("stop_loss_pct", 0.08)))
+    env["SS6_STOP_LOSS_MODE"] = str(exec_cfg.get("stop_loss_mode", "volatility"))
+    env["SS6_ATR_WINDOW"] = str(int(exec_cfg.get("atr_window", 20)))
+    env["SS6_STOP_LOSS_VOL_MULT"] = str(float(exec_cfg.get("stop_loss_vol_mult", 2.5)))
+    env["SS6_STOP_LOSS_MIN_PCT"] = str(float(exec_cfg.get("stop_loss_min_pct", 0.03)))
+    env["SS6_STOP_LOSS_MAX_PCT"] = str(float(exec_cfg.get("stop_loss_max_pct", 0.12)))
     env["SS6_MAX_DD_HALF"] = str(float(exec_cfg.get("max_dd_half", 0.12)))
     env["SS6_MAX_DD_FULL"] = str(float(exec_cfg.get("max_dd_full", 0.18)))
+    env["SS6_MAX_DD_REENTRY_COOLDOWN_DAYS"] = str(int(exec_cfg.get("max_dd_reentry_cooldown_days", 20)))
 
     # news overlay (optional)
     news_cfg = model.get("news", {})

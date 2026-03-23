@@ -11,27 +11,37 @@ screener:
   max_cost_per_lot: 250000
 
 model:
-  signal_mode: "shadow_ic"
-  compare_signal_modes: ["ridge", "shadow_eq"]
+  signal_mode: "ridge"
+  compare_signal_modes: ["shadow_eq", "shadow_ic"]
   start: "2020-01-01"
   end: null
   H: 20
   train_window: 252
   rebalance_every: 20
   benchmark_ticker: "1321.T"
+  benchmark_fast_ma_window: 20
+  benchmark_slow_ma_window: 60
+  benchmark_hysteresis_enter_pct: 0.01
+  benchmark_hysteresis_exit_pct: 0.01
   safe_plot: true
   output_dir: "reports"
   exec:
     initial_capital: 1000000   # 100万日元实际本金
     lot_size_default: 100      # 日本股票标准手数（1手=100股）
-    fee_bps: 5.0               # SBI证券零售端约4-5bps
+    fee_bps: 10.0              # 手续费按千分之一(10bps)试跑
     slippage_bps: 5.0          # 开收盘价差约3-8bps（必须设置）
     impact_k: 0.5              # 市场冲击模型系数
     max_adv_frac: 1.0
     cash_rate_daily: 0.0
-    stop_loss_pct: 0.08      # 单只止损阈值
+    stop_loss_pct: 0.08      # legacy fixed stop-loss fallback
+    stop_loss_mode: "atr"
+    atr_window: 20
+    stop_loss_vol_mult: 6.0
+    stop_loss_min_pct: 0.06
+    stop_loss_max_pct: 0.20
     max_dd_half: 0.12        # 组合12%回撤降半仓
     max_dd_full: 0.18        # 组合18%回撤全平
+    max_dd_reentry_cooldown_days: 20
 
   # News overlay (optional — enable after running gen_synthetic_news.py)
   news:

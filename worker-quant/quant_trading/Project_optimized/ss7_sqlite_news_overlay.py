@@ -19,6 +19,7 @@ import math
 import os
 import sys
 import warnings
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -104,6 +105,41 @@ def slope_log_price(close: pd.Series, window: int = 60) -> pd.Series:
     out[w - 1:] = numer / denom
     out[~np.isfinite(out)] = np.nan
     return pd.Series(out, index=close.index)
+
+
+def atr(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 20) -> pd.Series:
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [
+            (high - low).abs(),
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    return tr.rolling(int(window)).mean()
+
+
+def dynamic_stop_loss_pct(
+    risk_unit_pct: float,
+    benchmark_state: str,
+    base_mult: float,
+    min_pct: float,
+    max_pct: float,
+) -> float:
+    """Volatility-scaled stop loss.
+
+    Uses a local noise scale such as ATR/price or daily volatility, then clips
+    to a practical band so low-vol names do not become too tight and high-vol
+    names do not become untradeably loose.
+    """
+    risk_unit_pct = float(risk_unit_pct) if np.isfinite(risk_unit_pct) else 0.0
+    stop_pct = float(base_mult) * max(risk_unit_pct, 1e-4)
+    if str(benchmark_state).lower() == "caution":
+        stop_pct *= 0.85
+    elif str(benchmark_state).lower() == "off":
+        stop_pct *= 0.70
+    return float(np.clip(stop_pct, float(min_pct), float(max_pct)))
 
 def make_features(prices: pd.DataFrame, volumes: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     feats = {}
@@ -646,28 +682,45 @@ def apply_news_overlay_to_weights(
 # 5) Data download
 # =========================================================
 
-def load_ohlcv_from_sqlite(db_path: str, tickers: List[str], start: str, end: Optional[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Load close/volume from SQLite via MarketDB.
+def load_ohlcv_from_sqlite(
+    db_path: str, tickers: List[str], start: str, end: Optional[str]
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load high/low/close/volume from SQLite via MarketDB.
 
     Notes:
       - Assumes DB already stored prices (ideally auto_adjust=True when downloading).
       - Aligns all symbols on a common date index.
     """
     db = MarketDB(db_path)
-    close, vol = db.get_close_vol_multi(tickers, start=start, end=end)
+    frames = db.get_ohlcv_multi(tickers, start=start, end=end)
     db.close()
 
-    # Ensure DataFrames
-    if isinstance(close, pd.Series):
-        close = close.to_frame()
-    if isinstance(vol, pd.Series):
-        vol = vol.to_frame()
+    high = {}
+    low = {}
+    close = {}
+    vol = {}
+    for symbol, df in frames.items():
+        if df is None or df.empty:
+            continue
+        if "high" in df.columns:
+            high[symbol] = df["high"]
+        if "low" in df.columns:
+            low[symbol] = df["low"]
+        if "close" in df.columns:
+            close[symbol] = df["close"]
+        if "volume" in df.columns:
+            vol[symbol] = df["volume"]
 
-    close = close.sort_index()
-    vol = vol.reindex(close.index).sort_index()
-    return close, vol
+    close_df = pd.DataFrame(close).sort_index()
+    high_df = pd.DataFrame(high).reindex(close_df.index).sort_index()
+    low_df = pd.DataFrame(low).reindex(close_df.index).sort_index()
+    vol_df = pd.DataFrame(vol).reindex(close_df.index).sort_index()
+    return high_df, low_df, close_df, vol_df
 
-def download_ohlcv(tickers: List[str], start: str, end: Optional[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+
+def download_ohlcv(
+    tickers: List[str], start: str, end: Optional[str]
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     raw = yf.download(
         tickers,
         start=start,
@@ -677,15 +730,25 @@ def download_ohlcv(tickers: List[str], start: str, end: Optional[str]) -> Tuple[
         group_by="column",
     )
     if isinstance(raw, pd.DataFrame) and "Close" in raw.columns:
+        high = raw["High"].copy() if "High" in raw.columns else None
+        low = raw["Low"].copy() if "Low" in raw.columns else None
         close = raw["Close"].copy()
         vol = raw["Volume"].copy() if "Volume" in raw.columns else None
     else:
         # fallback: try columns directly
+        high = raw.copy()
+        low = raw.copy()
         close = raw.copy()
         vol = None
 
+    if isinstance(high, pd.Series):
+        high = high.to_frame()
+    if isinstance(low, pd.Series):
+        low = low.to_frame()
     if isinstance(close, pd.Series):
         close = close.to_frame()
+    high = high.sort_index() if high is not None else pd.DataFrame(index=close.index, columns=close.columns, data=np.nan)
+    low = low.sort_index() if low is not None else pd.DataFrame(index=close.index, columns=close.columns, data=np.nan)
     close = close.sort_index()
 
     if vol is None:
@@ -695,7 +758,9 @@ def download_ohlcv(tickers: List[str], start: str, end: Optional[str]) -> Tuple[
             vol = vol.to_frame()
         vol = vol.sort_index()
 
-    return close, vol
+    high = high.reindex(close.index).sort_index()
+    low = low.reindex(close.index).sort_index()
+    return high, low, close, vol
 
 # =========================================================
 # 6) Backtest
@@ -725,6 +790,10 @@ class BTConfig:
 
     ffill_limit: int = 3
     ma_window: int = 60
+    benchmark_fast_ma_window: int = 20
+    benchmark_slow_ma_window: int = 60
+    benchmark_hysteresis_enter_pct: float = 0.01
+    benchmark_hysteresis_exit_pct: float = 0.01
     min_valid_ratio: float = 0.98
     min_cov_obs: int = 10
 
@@ -737,9 +806,15 @@ class BTConfig:
     bar_max_points: int = 600                # downsample bars if too many points
 
     # 风险管理参数
-    stop_loss_pct: float = 0.08      # 单只股票止损：持仓亏损超过8%强制平仓
+    stop_loss_pct: float = 0.08      # legacy fixed stop-loss; kept as fallback
+    stop_loss_mode: str = "atr"
+    atr_window: int = 20
+    stop_loss_vol_mult: float = 2.5
+    stop_loss_min_pct: float = 0.03
+    stop_loss_max_pct: float = 0.12
     max_dd_half: float = 0.12        # 组合回撤超过12%：降至半仓
     max_dd_full: float = 0.18        # 组合回撤超过18%：全部平仓退场
+    max_dd_reentry_cooldown_days: int = 20
 
     # 行业集中度约束
     max_sector_weight: float = 0.35  # 单一行业最大权重
@@ -764,6 +839,92 @@ SHADOW_IC_WEIGHTS: Dict[str, float] = {
     "ret20": 1.912044,
     "slope60": 1.772308,
 }
+
+
+def benchmark_regime_state(
+    px_b: float,
+    fast_ma_b: float,
+    slow_ma_b: float,
+    prev_risk_off: bool,
+    enter_pct: float,
+    exit_pct: float,
+) -> bool:
+    """Hysteresis regime filter for benchmark risk state.
+
+    Enter risk-off only when price is sufficiently below the slow MA and fast MA
+    confirms weakness. Exit only when price is sufficiently above the fast MA and
+    fast MA confirms strength over the slow MA. Otherwise hold previous state.
+    """
+    if not np.isfinite(px_b) or not np.isfinite(fast_ma_b) or not np.isfinite(slow_ma_b):
+        return True
+
+    enter_line = slow_ma_b * (1.0 - float(enter_pct))
+    exit_line = fast_ma_b * (1.0 + float(exit_pct))
+    fast_below_slow = fast_ma_b < slow_ma_b
+    fast_above_slow = fast_ma_b > slow_ma_b
+
+    if prev_risk_off:
+        if fast_above_slow and px_b > exit_line:
+            return False
+        return True
+
+    if fast_below_slow and px_b < enter_line:
+        return True
+    return False
+
+
+def benchmark_regime_scale(
+    px_b: float,
+    fast_ma_b: float,
+    slow_ma_b: float,
+    prev_state: str,
+    enter_pct: float,
+    exit_pct: float,
+) -> tuple[str, float]:
+    """Three-state benchmark regime with hysteresis.
+
+    States:
+      - on      : full risk budget
+      - caution : half risk budget
+      - off     : no benchmark-driven risk budget
+    """
+    if not np.isfinite(px_b) or not np.isfinite(fast_ma_b) or not np.isfinite(slow_ma_b):
+        return "off", 0.0
+
+    enter_line = slow_ma_b * (1.0 - float(enter_pct))
+    exit_line = fast_ma_b * (1.0 + float(exit_pct))
+    fast_below_slow = fast_ma_b < slow_ma_b
+    fast_above_slow = fast_ma_b > slow_ma_b
+    weak = fast_below_slow and px_b < enter_line
+    strong = fast_above_slow and px_b > exit_line
+    mixed = (px_b < slow_ma_b) or fast_below_slow
+
+    state = str(prev_state or "off").lower()
+    if state not in {"on", "caution", "off"}:
+        state = "off"
+
+    if state == "off":
+        if strong:
+            state = "on"
+        else:
+            state = "caution" if not weak and px_b >= slow_ma_b else "off"
+    elif state == "on":
+        if weak:
+            state = "off"
+        elif mixed:
+            state = "caution"
+        else:
+            state = "on"
+    else:
+        if strong:
+            state = "on"
+        elif weak:
+            state = "off"
+        else:
+            state = "caution"
+
+    scale_map = {"off": 0.0, "caution": 0.5, "on": 1.0}
+    return state, scale_map[state]
 
 # ── sector cap helper ─────────────────────────────────────────────────────────
 def apply_sector_cap(
@@ -868,15 +1029,21 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     mode = str(bt.signal_mode or "ridge").lower()
     print(f"1) Download data (incl. benchmark {bt.benchmark_ticker}) ...")
     all_tickers = list(dict.fromkeys(list(bt.tickers) + [bt.benchmark_ticker]))
-    close, vol = (load_ohlcv_from_sqlite(bt.db_path, all_tickers, start=bt.start, end=bt.end)
-                 if bt.db_path else download_ohlcv(all_tickers, start=bt.start, end=bt.end))
+    high, low, close, vol = (
+        load_ohlcv_from_sqlite(bt.db_path, all_tickers, start=bt.start, end=bt.end)
+        if bt.db_path else download_ohlcv(all_tickers, start=bt.start, end=bt.end)
+    )
 
     close = close.dropna(how="all").ffill(limit=int(bt.ffill_limit))
+    high = high.reindex(close.index).ffill(limit=int(bt.ffill_limit))
+    low = low.reindex(close.index).ffill(limit=int(bt.ffill_limit))
     vol = vol.reindex(close.index).ffill(limit=int(bt.ffill_limit))
 
     valid_ratio = close.notna().mean(axis=0)
     keep = valid_ratio[valid_ratio >= float(bt.min_valid_ratio)].index.tolist()
     close = close[keep].copy()
+    high = high.reindex(columns=close.columns)
+    low = low.reindex(columns=close.columns)
     vol = vol.reindex(columns=close.columns)
 
     trade_tickers = [t for t in bt.tickers if t in close.columns]
@@ -886,6 +1053,8 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         raise RuntimeError("No tradable tickers left after cleaning.")
 
     trade_px = close[trade_tickers]
+    trade_high = high[trade_tickers].reindex(trade_px.index)
+    trade_low = low[trade_tickers].reindex(trade_px.index)
     bench_px = close[bt.benchmark_ticker]
 
     # ── load sector map from DB (for concentration constraint) ────────────────
@@ -902,20 +1071,27 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     print(f"2) Build features/targets (n={len(trade_tickers)}) ...")
     trade_vol = vol.reindex(columns=trade_tickers)
     feats = make_features(trade_px, volumes=trade_vol)
+    atr_df = pd.DataFrame(
+        {tkr: atr(trade_high[tkr], trade_low[tkr], trade_px[tkr], window=bt.atr_window) for tkr in trade_tickers},
+        index=trade_px.index,
+    )
     y = make_target(trade_px, H=bt.H)
     ret1 = trade_px.pct_change()
     ret_next = ret1.shift(-1)
 
-    bench_ma = bench_px.rolling(window=int(bt.ma_window)).mean()
+    bench_fast_ma = bench_px.rolling(window=int(bt.benchmark_fast_ma_window)).mean()
+    bench_slow_ma = bench_px.rolling(window=int(bt.benchmark_slow_ma_window)).mean()
 
     # align
     idx = feats.index.intersection(y.index).intersection(trade_px.index).intersection(bench_px.index)
     feats = feats.loc[idx]
+    atr_df = atr_df.loc[idx]
     y = y.loc[idx]
     ret1 = ret1.loc[idx]
     ret_next = ret_next.loc[idx]
     bench_px = bench_px.loc[idx]
-    bench_ma = bench_ma.loc[idx]
+    bench_fast_ma = bench_fast_ma.loc[idx]
+    bench_slow_ma = bench_slow_ma.loc[idx]
     vol = vol.reindex(idx)
 
     dates = idx
@@ -981,6 +1157,8 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     # 风险管理状态
     entry_px: Dict[str, float] = {}          # 各持仓成本价（止损用）
     peak_equity_abs: float = float(ex.initial_capital)  # 历史最高NAV（回撤控制用）
+    dd_state: str = "on"
+    dd_cooldown_left: int = 0
     stop_loss_log = []   # 记录每日止损触发的ticker
 
     equity_idx = []
@@ -1004,15 +1182,27 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     start_i = max(int(bt.train_window) + int(bt.H) + int(bt.feature_burnin), 1)
     end_i = len(dates) - 1  # we need next day for PnL
 
+    prev_benchmark_state = "off"
+
     print(f"3) Walk-forward backtest [{mode}] ...")
     for i in range(start_i, end_i):
         dt = dates[i]
         next_dt = dates[i + 1]
 
-        # risk-off rule
+        # benchmark regime filter with hysteresis
         px_b = float(bench_px.loc[dt])
-        ma_b = float(bench_ma.loc[dt]) if np.isfinite(bench_ma.loc[dt]) else np.nan
-        risk_off = (not np.isfinite(ma_b)) or (px_b < ma_b)
+        fast_ma_b = float(bench_fast_ma.loc[dt]) if np.isfinite(bench_fast_ma.loc[dt]) else np.nan
+        slow_ma_b = float(bench_slow_ma.loc[dt]) if np.isfinite(bench_slow_ma.loc[dt]) else np.nan
+        benchmark_state, benchmark_scale = benchmark_regime_scale(
+            px_b=px_b,
+            fast_ma_b=fast_ma_b,
+            slow_ma_b=slow_ma_b,
+            prev_state=prev_benchmark_state,
+            enter_pct=bt.benchmark_hysteresis_enter_pct,
+            exit_pct=bt.benchmark_hysteresis_exit_pct,
+        )
+        prev_benchmark_state = benchmark_state
+        risk_off = benchmark_scale <= 1e-12
 
         # ── 最大回撤控制 ──────────────────────────────────────────────
         px_t_cur = trade_px.loc[dt].astype(float).clip(lower=1e-6)
@@ -1020,14 +1210,34 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         peak_equity_abs = max(peak_equity_abs, cur_equity_abs)
         dd_ratio = (cur_equity_abs - peak_equity_abs) / peak_equity_abs if peak_equity_abs > 0 else 0.0
         if dd_ratio < -bt.max_dd_full:
-            dd_scale = 0.0   # 全平仓
+            if dd_state != "off":
+                dd_state = "off"
+                dd_cooldown_left = int(bt.max_dd_reentry_cooldown_days)
         elif dd_ratio < -bt.max_dd_half:
-            dd_scale = 0.5   # 降至半仓
-        else:
+            if dd_state != "off":
+                dd_state = "half"
+        elif dd_state != "off":
+            dd_state = "on"
+
+        if dd_state == "off":
+            if dd_cooldown_left > 0:
+                dd_cooldown_left -= 1
+            elif benchmark_scale > 0.0:
+                dd_state = "half"
+                peak_equity_abs = cur_equity_abs
+                dd_ratio = 0.0
+
+        if dd_state == "on":
             dd_scale = 1.0
+        elif dd_state == "half":
+            dd_scale = 0.5
+        else:
+            dd_scale = 0.0
 
         # ── 单只股票止损检查 ──────────────────────────────────────────
         stop_loss_tickers = set()
+        vol20_row = feats.loc[dt].xs("vol20", level=1).reindex(trade_tickers)
+        atr_row = atr_df.loc[dt].reindex(trade_tickers)
         for tkr in trade_tickers:
             qty = int(holdings.get(tkr, 0))
             if qty <= 0:
@@ -1036,7 +1246,28 @@ def backtest(bt: BTConfig, ex: ExecConfig):
             if ep is None or ep <= 0:
                 continue
             cur_price = float(px_t_cur.get(tkr, ep))
-            if (cur_price - ep) / ep < -bt.stop_loss_pct:
+            stop_mode = str(bt.stop_loss_mode).lower()
+            if stop_mode == "atr":
+                atr_value = float(atr_row.get(tkr, np.nan))
+                risk_unit_pct = atr_value / max(ep, 1e-6) if np.isfinite(atr_value) else np.nan
+                stop_pct = dynamic_stop_loss_pct(
+                    risk_unit_pct=risk_unit_pct,
+                    benchmark_state=benchmark_state,
+                    base_mult=bt.stop_loss_vol_mult,
+                    min_pct=bt.stop_loss_min_pct,
+                    max_pct=bt.stop_loss_max_pct,
+                )
+            elif stop_mode == "volatility":
+                stop_pct = dynamic_stop_loss_pct(
+                    risk_unit_pct=float(vol20_row.get(tkr, np.nan)),
+                    benchmark_state=benchmark_state,
+                    base_mult=bt.stop_loss_vol_mult,
+                    min_pct=bt.stop_loss_min_pct,
+                    max_pct=bt.stop_loss_max_pct,
+                )
+            else:
+                stop_pct = float(bt.stop_loss_pct)
+            if (cur_price - ep) / ep < -stop_pct:
                 stop_loss_tickers.add(tkr)
 
         # compute target weights
@@ -1204,9 +1435,185 @@ def backtest(bt: BTConfig, ex: ExecConfig):
 
         holdings, cash = holdings_new, cash_new
 
+    # Compute the final actionable target on the latest available date.
+    if len(dates) > 0 and end_i < len(dates):
+        dt = dates[end_i]
+        px_b = float(bench_px.loc[dt])
+        fast_ma_b = float(bench_fast_ma.loc[dt]) if np.isfinite(bench_fast_ma.loc[dt]) else np.nan
+        slow_ma_b = float(bench_slow_ma.loc[dt]) if np.isfinite(bench_slow_ma.loc[dt]) else np.nan
+        benchmark_state, benchmark_scale = benchmark_regime_scale(
+            px_b=px_b,
+            fast_ma_b=fast_ma_b,
+            slow_ma_b=slow_ma_b,
+            prev_state=prev_benchmark_state,
+            enter_pct=bt.benchmark_hysteresis_enter_pct,
+            exit_pct=bt.benchmark_hysteresis_exit_pct,
+        )
+        risk_off = benchmark_scale <= 1e-12
+
+        px_t_cur = trade_px.loc[dt].astype(float).clip(lower=1e-6)
+        cur_equity_abs = float((holdings.astype(float) * px_t_cur).sum() + cash)
+        peak_equity_abs = max(peak_equity_abs, cur_equity_abs)
+        dd_ratio = (cur_equity_abs - peak_equity_abs) / peak_equity_abs if peak_equity_abs > 0 else 0.0
+        if dd_ratio < -bt.max_dd_full:
+            if dd_state != "off":
+                dd_state = "off"
+                dd_cooldown_left = int(bt.max_dd_reentry_cooldown_days)
+        elif dd_ratio < -bt.max_dd_half:
+            if dd_state != "off":
+                dd_state = "half"
+        elif dd_state != "off":
+            dd_state = "on"
+
+        if dd_state == "off":
+            if dd_cooldown_left <= 0 and benchmark_scale > 0.0:
+                dd_state = "half"
+                peak_equity_abs = cur_equity_abs
+                dd_ratio = 0.0
+
+        if dd_state == "on":
+            dd_scale = 1.0
+        elif dd_state == "half":
+            dd_scale = 0.5
+        else:
+            dd_scale = 0.0
+
+        stop_loss_tickers = set()
+        vol20_row = feats.loc[dt].xs("vol20", level=1).reindex(trade_tickers)
+        atr_row = atr_df.loc[dt].reindex(trade_tickers)
+        for tkr in trade_tickers:
+            qty = int(holdings.get(tkr, 0))
+            if qty <= 0:
+                continue
+            ep = entry_px.get(tkr)
+            if ep is None or ep <= 0:
+                continue
+            cur_price = float(px_t_cur.get(tkr, ep))
+            stop_mode = str(bt.stop_loss_mode).lower()
+            if stop_mode == "atr":
+                atr_value = float(atr_row.get(tkr, np.nan))
+                risk_unit_pct = atr_value / max(ep, 1e-6) if np.isfinite(atr_value) else np.nan
+                stop_pct = dynamic_stop_loss_pct(
+                    risk_unit_pct=risk_unit_pct,
+                    benchmark_state=benchmark_state,
+                    base_mult=bt.stop_loss_vol_mult,
+                    min_pct=bt.stop_loss_min_pct,
+                    max_pct=bt.stop_loss_max_pct,
+                )
+            elif stop_mode == "volatility":
+                stop_pct = dynamic_stop_loss_pct(
+                    risk_unit_pct=float(vol20_row.get(tkr, np.nan)),
+                    benchmark_state=benchmark_state,
+                    base_mult=bt.stop_loss_vol_mult,
+                    min_pct=bt.stop_loss_min_pct,
+                    max_pct=bt.stop_loss_max_pct,
+                )
+            else:
+                stop_pct = float(bt.stop_loss_pct)
+            if (cur_price - ep) / ep < -stop_pct:
+                stop_loss_tickers.add(tkr)
+
+        regime_scale = min(float(benchmark_scale), float(dd_scale))
+
+        if regime_scale == 0.0:
+            w_target = pd.Series(0.0, index=trade_tickers)
+        else:
+            # Use the same rebalance cadence logic as the main loop.
+            if (end_i - start_i) % int(bt.rebalance_every) == 0:
+                train_end = end_i - int(bt.H)
+                train_start = max(train_end - int(bt.train_window), 0)
+                train_dates = dates[train_start:train_end]
+                stacked = panel_stack(train_dates)
+                if stacked is not None:
+                    Xtr, ytr = stacked
+                    model.fit(Xtr, ytr)
+
+                row = feats.loc[dt]
+                mu_ra = np.zeros(n, dtype=float)
+                for k, tkr in enumerate(trade_tickers):
+                    x = row[tkr].to_numpy(dtype=float).reshape(1, -1)
+                    mu_ra[k] = 0.0 if np.any(~np.isfinite(x)) else float(model.predict(x)[0])
+
+                vol20 = feats.loc[dt].xs("vol20", level=1).reindex(trade_tickers).to_numpy(dtype=float)
+                vol20 = np.nan_to_num(vol20, nan=0.01, posinf=0.01, neginf=0.01)
+                if mode == "ridge":
+                    mu = mu_ra * vol20
+                elif mode == "shadow_eq":
+                    mu = composite_signal_from_row(
+                        feature_row=row,
+                        tickers=trade_tickers,
+                        factor_names=SHADOW_SIGNAL_FACTORS,
+                    )
+                elif mode == "shadow_ic":
+                    mu = composite_signal_from_row(
+                        feature_row=row,
+                        tickers=trade_tickers,
+                        factor_names=SHADOW_SIGNAL_FACTORS,
+                        weight_map=SHADOW_IC_WEIGHTS,
+                    )
+                else:
+                    raise ValueError(f"Unknown signal_mode: {bt.signal_mode}")
+
+                rwin = ret1.iloc[max(end_i - int(bt.cov_lookback), 0): end_i][trade_tickers].dropna()
+                if len(rwin) >= int(bt.min_cov_obs):
+                    S = np.atleast_2d(np.cov(rwin.to_numpy().T)) * 252.0
+                    Sigma = shrink_cov(S, delta=bt.shrink_delta)
+                else:
+                    Sigma = np.eye(n, dtype=float)
+
+                cur_val_vec = holdings.astype(float) * px_t_cur
+                cur_total = float(cur_val_vec.sum() + cash)
+                if cur_total > 1e-9:
+                    w_prev = (cur_val_vec / cur_total).to_numpy(dtype=float)
+                else:
+                    w_prev = np.ones(n, dtype=float) / n
+
+                w_opt = solve_long_only_meanvar(mu, Sigma, w_prev=w_prev, lam=bt.lam, gamma=bt.gamma)
+                if sector_map:
+                    w_opt = apply_sector_cap(w_opt, trade_tickers, sector_map, bt.max_sector_weight)
+                w_target = pd.Series(w_opt, index=trade_tickers)
+                for tkr in stop_loss_tickers:
+                    if tkr in w_target.index:
+                        w_target[tkr] = 0.0
+                wsum_after = float(w_target.sum())
+                if wsum_after > 1e-12:
+                    w_target = w_target / wsum_after
+                w_target = w_target * regime_scale
+            else:
+                cur_val_vec = holdings.astype(float) * px_t_cur
+                cur_total = float(cur_val_vec.sum() + cash)
+                if cur_total > 1e-9:
+                    w_target = (cur_val_vec / cur_total).astype(float)
+                else:
+                    w_target = pd.Series(0.0, index=trade_tickers)
+                for tkr in stop_loss_tickers:
+                    if tkr in w_target.index:
+                        w_target[tkr] = 0.0
+                w_target = w_target * regime_scale
+
+        news_gate = 1.0
+        if bt.news.enabled and (F_news is not None):
+            w_target, news_gate = apply_news_overlay_to_weights(
+                w_target=w_target,
+                dt=dt,
+                F=F_news,
+                A=A_news,
+                U=U_news,
+                cfg=bt.news
+            )
+
+        w_target_hist.append(w_target.reindex(trade_tickers).fillna(0.0).to_numpy(dtype=float))
+        risk_off_hist.append(bool(risk_off))
+        news_gate_hist.append(float(news_gate))
+        turnover_notional.append(float("nan"))
+        costs_paid.append(float("nan"))
+        gross_ret.append(float("nan"))
+        net_ret.append(float("nan"))
+        stop_loss_log.append(list(stop_loss_tickers))
+
     w_df = pd.DataFrame(
         w_target_hist,
-        index=pd.Index(dates[start_i:end_i], name="date"),
+        index=pd.Index(dates[start_i:end_i + 1], name="date"),
         columns=trade_tickers
     )
     equity = pd.Series(equity_val, index=pd.Index(equity_idx, name="date"), name="equity")
@@ -1329,6 +1736,21 @@ def summary_from_equity(equity: pd.Series, initial_capital: float) -> Dict[str, 
         "max_drawdown_pct": max_dd,
     }
 
+
+def latest_actionable_weights(w_df: pd.DataFrame) -> tuple[pd.Series, Optional[pd.Timestamp], bool]:
+    """Return the most recent non-zero target weights row for research reference."""
+    if w_df.empty:
+        return pd.Series(dtype=float), None, False
+
+    latest_row = w_df.iloc[-1].fillna(0.0).astype(float)
+    latest_is_zero = bool(float(latest_row.abs().sum()) <= 1e-9)
+    non_zero_mask = w_df.fillna(0.0).abs().sum(axis=1) > 1e-9
+    if bool(non_zero_mask.any()):
+        export_row = w_df.loc[non_zero_mask].iloc[-1].fillna(0.0).astype(float)
+        export_dt = pd.Timestamp(w_df.loc[non_zero_mask].index[-1])
+        return export_row, export_dt, latest_is_zero
+    return latest_row, pd.Timestamp(w_df.index[-1]), latest_is_zero
+
 # =========================================================
 # 8) Main
 # =========================================================
@@ -1360,12 +1782,23 @@ if __name__ == "__main__":
         start=os.getenv("SS6_START", "2020-01-01"),
         H=int(os.getenv("SS6_H", "20")),
         rebalance_every=int(os.getenv("SS6_REBALANCE_EVERY", "20")),
+        ma_window=int(os.getenv("SS6_BENCHMARK_SLOW_MA_WINDOW", os.getenv("SS6_MA_WINDOW", "60"))),
+        benchmark_fast_ma_window=int(os.getenv("SS6_BENCHMARK_FAST_MA_WINDOW", "20")),
+        benchmark_slow_ma_window=int(os.getenv("SS6_BENCHMARK_SLOW_MA_WINDOW", os.getenv("SS6_MA_WINDOW", "60"))),
+        benchmark_hysteresis_enter_pct=float(os.getenv("SS6_BENCHMARK_HYSTERESIS_ENTER_PCT", "0.01")),
+        benchmark_hysteresis_exit_pct=float(os.getenv("SS6_BENCHMARK_HYSTERESIS_EXIT_PCT", "0.01")),
         safe_plot=(os.getenv("SS6_SAFE_PLOT","1") != "0"),
         output_dir=os.getenv("SS6_OUTPUT_DIR","reports"),
         db_path=os.getenv("SS6_DB_PATH", None),
         stop_loss_pct=float(os.getenv("SS6_STOP_LOSS_PCT", "0.08")),
+        stop_loss_mode=os.getenv("SS6_STOP_LOSS_MODE", "atr"),
+        atr_window=int(os.getenv("SS6_ATR_WINDOW", "20")),
+        stop_loss_vol_mult=float(os.getenv("SS6_STOP_LOSS_VOL_MULT", "2.5")),
+        stop_loss_min_pct=float(os.getenv("SS6_STOP_LOSS_MIN_PCT", "0.03")),
+        stop_loss_max_pct=float(os.getenv("SS6_STOP_LOSS_MAX_PCT", "0.12")),
         max_dd_half=float(os.getenv("SS6_MAX_DD_HALF", "0.12")),
         max_dd_full=float(os.getenv("SS6_MAX_DD_FULL", "0.18")),
+        max_dd_reentry_cooldown_days=int(os.getenv("SS6_MAX_DD_REENTRY_COOLDOWN_DAYS", "20")),
         signal_mode=os.getenv("SS6_SIGNAL_MODE", "ridge"),
         compare_signal_modes=[
             m.strip() for m in os.getenv("SS6_COMPARE_SIGNAL_MODES", "shadow_eq,shadow_ic").split(",")
@@ -1428,11 +1861,34 @@ if __name__ == "__main__":
     out_dir.mkdir(parents=True, exist_ok=True)
 
     primary = next(r for r in run_results if r["mode"] == bt.signal_mode)
-    pd.DataFrame(
-        {"symbol": primary["w_df"].columns, "target_weight": primary["w_df"].iloc[-1].values}
-    ).to_csv(out_dir / "target_weights.csv", index=False)
     primary["w_df"].to_csv(out_dir / "weights_history.csv", index_label="date")
-    print(f"Saved: {out_dir / 'target_weights.csv'}")
+    latest_weights = primary["w_df"].iloc[-1].fillna(0.0).astype(float) if len(primary["w_df"]) else pd.Series(dtype=float)
+    latest_dt = pd.Timestamp(primary["w_df"].index[-1]) if len(primary["w_df"]) else None
+    export_weights, export_dt, latest_is_zero = latest_actionable_weights(primary["w_df"])
+    pd.DataFrame(
+        {"symbol": latest_weights.index, "target_weight": latest_weights.values}
+    ).to_csv(out_dir / "target_weights.csv", index=False)
+    pd.DataFrame(
+        {"symbol": export_weights.index, "target_weight": export_weights.values}
+    ).to_csv(out_dir / "target_weights_last_nonzero.csv", index=False)
+    target_meta = {
+        "primary_mode": bt.signal_mode,
+        "exported_asof": latest_dt.strftime("%Y-%m-%d") if latest_dt is not None else None,
+        "history_last_asof": latest_dt.strftime("%Y-%m-%d") if latest_dt is not None else None,
+        "history_last_row_is_zero": latest_is_zero,
+        "export_row_sum": float(latest_weights.sum()) if len(latest_weights) else 0.0,
+        "last_nonzero_asof": export_dt.strftime("%Y-%m-%d") if export_dt is not None else None,
+        "last_nonzero_row_sum": float(export_weights.sum()) if len(export_weights) else 0.0,
+    }
+    (out_dir / "target_weights_meta.json").write_text(
+        json.dumps(target_meta, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(
+        f"Saved: {out_dir / 'target_weights.csv'} "
+        f"(exported_asof={target_meta['exported_asof']}, last_row_zero={latest_is_zero}, "
+        f"last_nonzero_asof={target_meta['last_nonzero_asof']})"
+    )
 
     compare_df = pd.DataFrame(
         [
@@ -1447,9 +1903,31 @@ if __name__ == "__main__":
     ).sort_values("total_return_pct", ascending=False)
     compare_df.to_csv(out_dir / "signal_mode_compare.csv", index=False)
     for r in run_results:
+        latest_mode_weights = r["w_df"].iloc[-1].fillna(0.0).astype(float) if len(r["w_df"]) else pd.Series(dtype=float)
+        latest_mode_dt = pd.Timestamp(r["w_df"].index[-1]) if len(r["w_df"]) else None
+        mode_export_weights, mode_export_dt, mode_latest_is_zero = latest_actionable_weights(r["w_df"])
         pd.DataFrame(
-            {"symbol": r["w_df"].columns, "target_weight": r["w_df"].iloc[-1].values}
+            {"symbol": latest_mode_weights.index, "target_weight": latest_mode_weights.values}
         ).to_csv(out_dir / f"target_weights_{r['mode']}.csv", index=False)
+        pd.DataFrame(
+            {"symbol": mode_export_weights.index, "target_weight": mode_export_weights.values}
+        ).to_csv(out_dir / f"target_weights_{r['mode']}_last_nonzero.csv", index=False)
+        (out_dir / f"target_weights_{r['mode']}_meta.json").write_text(
+            json.dumps(
+                {
+                    "mode": r["mode"],
+                    "exported_asof": latest_mode_dt.strftime("%Y-%m-%d") if latest_mode_dt is not None else None,
+                    "history_last_asof": latest_mode_dt.strftime("%Y-%m-%d") if latest_mode_dt is not None else None,
+                    "history_last_row_is_zero": mode_latest_is_zero,
+                    "export_row_sum": float(latest_mode_weights.sum()) if len(latest_mode_weights) else 0.0,
+                    "last_nonzero_asof": mode_export_dt.strftime("%Y-%m-%d") if mode_export_dt is not None else None,
+                    "last_nonzero_row_sum": float(mode_export_weights.sum()) if len(mode_export_weights) else 0.0,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     print("\nSummary")
     print(f"Primary mode: {bt.signal_mode}")

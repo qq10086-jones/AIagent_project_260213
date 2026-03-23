@@ -137,7 +137,13 @@ class NexusAdvancedStrategyEngine:
                 "current_price": round(price, 2),
                 "stop_loss": round(stop_loss, 2),
                 "take_profit": round(take_profit, 2)
-            }
+            },
+            "metrics": {
+                "regime": regime,
+                "atr": round(float(atr), 4),
+                "historical_win_rate": round(float(event_impact["historical_win_rate"]), 4),
+                "expected_return_5d": round(float(event_impact["expected_return_5d"]), 4),
+            },
         }
 
 if __name__ == "__main__":

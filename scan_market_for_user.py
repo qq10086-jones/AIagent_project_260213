@@ -17,8 +17,9 @@ SCAN_POOL = [
     ("4901.T", "Fujifilm"), ("7269.T", "Suzuki"), ("9501.T", "TEPCO")
 ]
 
-def scan():
-    remaining_cash = 271300.0
+def scan(remaining_cash=None):
+    if remaining_cash is None:
+        remaining_cash = 271300.0
     results = []
     print(f"🔍 正在扫描市场，剩余预算: {remaining_cash} JPY...")
     

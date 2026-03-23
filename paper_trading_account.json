@@ -1,7 +1,7 @@
 {
     "account_info": {
         "initial_capital": 400000,
-        "current_cash": 109750.0,
+        "current_cash": 109459.75,
         "currency": "JPY",
         "start_date": "2026-03-23"
     },
@@ -21,28 +21,68 @@
     },
     "trade_history": [
         {
-            "date": "2026-03-23 15:26:05",
+            "date": "2026-03-23 15:20:00",
             "action": "BUY",
             "symbol": "5020.T",
             "qty": 100,
             "price": 1287.0,
-            "total": 128700.0
+            "total": 128700.0,
+            "fee": 128.7
         },
         {
-            "date": "2026-03-23 15:29:20",
+            "date": "2026-03-23 15:20:01",
             "action": "BUY",
             "symbol": "7267.T",
             "qty": 100,
             "price": 1284.0,
-            "total": 128400.0
+            "total": 128400.0,
+            "fee": 128.4
         },
         {
-            "date": "2026-03-23 15:29:21",
+            "date": "2026-03-23 15:20:02",
             "action": "BUY",
             "symbol": "7201.T",
             "qty": 100,
             "price": 331.5,
-            "total": 33150.0
+            "total": 33150.0,
+            "fee": 33.15
+        }
+    ],
+    "pending_orders": [
+        {
+            "created_at": "2026-03-23 19:27:46",
+            "symbol": "5020.T",
+            "qty": 100,
+            "action": "SELL",
+            "status": "PENDING_MARKET_OPEN"
+        },
+        {
+            "created_at": "2026-03-23 19:27:46",
+            "symbol": "7267.T",
+            "qty": 100,
+            "action": "SELL",
+            "status": "PENDING_MARKET_OPEN"
+        },
+        {
+            "created_at": "2026-03-23 19:27:46",
+            "symbol": "7201.T",
+            "qty": 100,
+            "action": "SELL",
+            "status": "PENDING_MARKET_OPEN"
+        },
+        {
+            "created_at": "2026-03-23 19:27:46",
+            "symbol": "4005.T",
+            "qty": 1500,
+            "action": "BUY",
+            "status": "PENDING_MARKET_OPEN"
+        },
+        {
+            "created_at": "2026-03-23 19:27:46",
+            "symbol": "9432.T",
+            "qty": 3700,
+            "action": "BUY",
+            "status": "PENDING_MARKET_OPEN"
         }
     ]
 }

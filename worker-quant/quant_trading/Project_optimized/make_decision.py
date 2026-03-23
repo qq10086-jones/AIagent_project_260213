@@ -90,6 +90,35 @@ def _load_target_weights(path: Path) -> pd.DataFrame:
     raise ValueError(f"Unrecognized target weights format: {path}")
 
 
+def _load_target_meta(reports_dir: Path) -> dict:
+    meta_path = reports_dir / "target_weights_meta.json"
+    if not meta_path.exists():
+        return {}
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _validate_target_freshness(reports_dir: Path, asof: str) -> dict:
+    meta = _load_target_meta(reports_dir)
+    if not meta:
+        return {}
+
+    exported_asof = meta.get("exported_asof")
+    history_last_asof = meta.get("history_last_asof")
+    last_row_zero = bool(meta.get("history_last_row_is_zero", False))
+    if history_last_asof and str(history_last_asof) != str(asof):
+        reason = (
+            f"target_weights.csv is stale for decision date {asof}: "
+            f"exported_asof={exported_asof}, history_last_asof={history_last_asof}, "
+            f"history_last_row_is_zero={last_row_zero}. "
+            "The latest model state is not aligned with the requested decision date."
+        )
+        raise RuntimeError(reason)
+    return meta
+
+
 def build_orders(
     conn: sqlite3.Connection,
     asof: str,
@@ -100,12 +129,14 @@ def build_orders(
 ) -> Tuple[List[OrderRow], Dict]:
     # current positions
     pos_date, pos = _latest_positions(conn, asof)
+    target_symbols = [str(sym) for sym in target_weights["symbol"]]
+    order_universe = list(dict.fromkeys(target_symbols + list(pos.keys())))
 
     # prices
     px = {}
     px_date = {}
     missing = []
-    for sym in target_weights["symbol"]:
+    for sym in order_universe:
         d, p = _last_close(conn, sym, asof)
         if p is None:
             missing.append(sym)
@@ -124,15 +155,21 @@ def build_orders(
 
     # normalize weights (avoid sum != 1)
     tw = target_weights.copy()
+    tw["symbol"] = tw["symbol"].astype(str)
     tw = tw[tw["symbol"].isin(px.keys())].copy()
-    wsum = float(tw["target_weight"].sum())
+    target_weight_map = {
+        str(r["symbol"]): max(float(r["target_weight"]), 0.0)
+        for _, r in tw.iterrows()
+    }
+    wsum = float(sum(target_weight_map.values()))
     if wsum > 0:
-        tw["target_weight"] = tw["target_weight"] / wsum
+        target_weight_map = {sym: w / wsum for sym, w in target_weight_map.items()}
 
     orders: List[OrderRow] = []
-    for _, r in tw.iterrows():
-        sym = r["symbol"]
-        w = float(r["target_weight"])
+    for sym in order_universe:
+        if sym not in px:
+            continue
+        w = float(target_weight_map.get(sym, 0.0))
         price = float(px[sym])
 
         cur_qty = float(pos.get(sym, 0.0))
@@ -167,6 +204,7 @@ def build_orders(
         "price_dates_sample": {k: px_date[k] for k in list(px_date)[:5]},
         "weights_sum_before_norm": wsum,
         "lot_size": lot_size,
+        "order_universe_size": len(order_universe),
     }
     return orders, info
 
@@ -224,6 +262,7 @@ def main():
     tw_path = reports_dir / "target_weights.csv"
     if not tw_path.exists():
         raise FileNotFoundError(f"target_weights.csv not found at: {tw_path}. Run ss6_sqlite.py first.")
+    target_meta = _validate_target_freshness(reports_dir, asof)
 
     target_weights = _load_target_weights(tw_path)
 
@@ -319,6 +358,7 @@ def main():
                 "reports_dir": str(reports_dir),
                 "exported": copied,
                 "target_weights_file": str(out_run / "target_weights.csv"),
+                "target_weights_meta": target_meta,
             },
             "portfolio": {
                 "mode": "manual",

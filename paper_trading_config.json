@@ -1,0 +1,21 @@
+{
+  "goals": {
+    "weekly_floor_return_pct": 1.0,
+    "weekly_target_return_pct": 2.0,
+    "annual_target_return_low_pct": 300.0,
+    "annual_target_return_high_pct": 400.0,
+    "rolling_windows_weeks": [2, 4, 8]
+  },
+  "strategy": {
+    "risk_tolerance": "MEDIUM",
+    "max_formal_signal_age_days": 5,
+    "min_cash_buffer_pct": 0.2,
+    "max_new_positions_per_run": 1,
+    "max_total_positions": 4,
+    "take_profit_pct": 0.08,
+    "stop_loss_pct": 0.05,
+    "rebalance_trim_profit_pct": 0.03,
+    "min_candidate_score": 45.0,
+    "prefer_oversold_rsi_below": 35.0
+  }
+}

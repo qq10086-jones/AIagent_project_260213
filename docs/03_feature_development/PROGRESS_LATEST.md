@@ -103,3 +103,21 @@ force_sequential: false
 2. **[worker-quant]** 运行 `validate_sources.py` 验证TDnet/J-Quants真实网络解析
 3. **[Release]** 编写 M12 Internal Beta Release Note，正式宣告上线
 4. **[长期]** D-05 信号加权合成（4周后）、C-03 cron调度配置
+
+## 2. 探索性进展：虚拟交易环境 (Paper Trading) 与进阶量化策略 (Advanced Strategy) (2026-03-23)
+
+### 2a. 虚拟账户系统原型 (`paper_trading_account.json`)
+- 成功建立基于本地 JSON 的虚拟交易环境，初始资金设定为 40w JPY。
+- 开发了 `paper_trader_bridge.py`，实现订单模拟执行与资金扣划。
+- 结合 SBI 证券零佣金政策，将模拟环境交易成本最低化。
+
+### 2b. 全自动化决策链路
+- **市场扫描 (`scan_market_for_user.py`)**：根据剩余可用资金，自动计算预设股票池中个股的 RSI 与 MA20 偏离度。
+- **自主交易 (`autonomous_trader.py`)**：授权 `worker-quant` 依据极度超卖等条件，在预算内自主买入最优标的。
+- **每日核算 (`daily_nexus_report.py`)**：以周目标（如 5%）为基准，收盘后自动计算持仓 PnL，并生成可读的 Markdown 报告。
+
+### 2c. 进阶风控与历史回归引擎 (`nexus_advanced_strategy.py`)
+- 针对初步策略的局限性，引入更严格的**数学与统计学风控**：
+  - **ATR 动态头寸管理**：基于波动率分配资金，摒弃按固定金额梭哈的风险。
+  - **大盘趋势过滤**：屏蔽空头排列下的盲目抄底行为（即防范“接飞刀”风险）。
+  - **NLP 情报提取与历史回归**：规划了 LLM 事件标签提取结合历史相似事件胜率计算的高级模块，向多模态量化迈进。

@@ -1,0 +1,48 @@
+{
+    "account_info": {
+        "initial_capital": 400000,
+        "current_cash": 109750.0,
+        "currency": "JPY",
+        "start_date": "2026-03-23"
+    },
+    "positions": {
+        "5020.T": {
+            "qty": 100,
+            "avg_price": 1287.0
+        },
+        "7267.T": {
+            "qty": 100,
+            "avg_price": 1284.0
+        },
+        "7201.T": {
+            "qty": 100,
+            "avg_price": 331.5
+        }
+    },
+    "trade_history": [
+        {
+            "date": "2026-03-23 15:26:05",
+            "action": "BUY",
+            "symbol": "5020.T",
+            "qty": 100,
+            "price": 1287.0,
+            "total": 128700.0
+        },
+        {
+            "date": "2026-03-23 15:29:20",
+            "action": "BUY",
+            "symbol": "7267.T",
+            "qty": 100,
+            "price": 1284.0,
+            "total": 128400.0
+        },
+        {
+            "date": "2026-03-23 15:29:21",
+            "action": "BUY",
+            "symbol": "7201.T",
+            "qty": 100,
+            "price": 331.5,
+            "total": 33150.0
+        }
+    ]
+}

@@ -12,6 +12,12 @@ The config format is the same as run_pipeline.py. Extra keys (optional):
     lot: 100
     min_trade: 5000
     out_dir: artifacts/decision
+  paper:
+    enabled: true
+    price_mode: latest
+    slippage_bps: 5.0
+    fee_bps: 10.0
+    fill_ratio: 1.0
 
 Outputs:
 - Selected tickers JSON
@@ -178,6 +184,7 @@ def main():
         "--lot", str(dec.get("lot", exec_cfg.get("lot_size_default", 100))),
         "--min_trade", str(dec.get("min_trade", 5000)),
         "--out_dir", str(dec.get("out_dir", "artifacts/decision")),
+        "--refresh_data",
     ]
     print(">>", " ".join(cmd))
     out = run_and_capture(cmd)
@@ -189,7 +196,25 @@ def main():
     else:
         print(f"✅ Daily run complete. asof={asof} (run_id not parsed; see output above)")
 
-    # 5) Learning M1: compute IC and update factor_registry (optional)
+    # 5) Optional paper execution bridge
+    paper = cfg.get("paper", {})
+    if m and paper.get("enabled", False):
+        cmd = [
+            "python", "paper_execute.py",
+            "--db", db_path,
+            "--run_id", run_id,
+            "--asof", asof,
+            "--price_mode", str(paper.get("price_mode", "open")),
+            "--slippage_bps", str(float(paper.get("slippage_bps", exec_cfg.get("slippage_bps", 5.0)))),
+            "--fee_bps", str(float(paper.get("fee_bps", exec_cfg.get("fee_bps", 5.0)))),
+            "--fill_ratio", str(float(paper.get("fill_ratio", 1.0))),
+            "--initial_cash", str(float(paper.get("initial_cash", exec_cfg.get("initial_capital", 1_000_000)))),
+            "--refresh_data",
+        ]
+        print(">>", " ".join(cmd))
+        run_and_capture(cmd)
+
+    # 6) Learning M1: compute IC and update factor_registry (optional)
     learn = cfg.get("learning", {})
     if learn.get("enabled", True):
         H = int(model.get("H", 20))

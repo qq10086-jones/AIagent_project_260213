@@ -15,6 +15,15 @@ def _read_sql(conn, q, params=()):
     return pd.read_sql_query(q, conn, params=params)
 
 
+def _table_text(df: pd.DataFrame) -> str:
+    if len(df) == 0:
+        return "_No data found._"
+    try:
+        return df.to_markdown(index=False)
+    except ImportError:
+        return df.to_csv(index=False)
+
+
 def generate_execution_report(conn, run_id: str, asof: str, artifact_dir: Path) -> tuple[Path, Path]:
     """Generate execution_report.md/csv into artifact_dir."""
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -106,7 +115,7 @@ def generate_execution_report(conn, run_id: str, asof: str, artifact_dir: Path) 
             "symbol","side","qty","fill_qty","qty_diff","vwap","fill_notional","fee","tax","n_fills","order_type","limit_price"
         ]
         show_cols = [c for c in show_cols if c in merged.columns]
-        lines.append(merged[show_cols].to_markdown(index=False))
+        lines.append(_table_text(merged[show_cols]))
         lines.append("")
     else:
         lines.append("## Orders vs Fills")
@@ -116,12 +125,12 @@ def generate_execution_report(conn, run_id: str, asof: str, artifact_dir: Path) 
 
     lines.append("## Fills (raw)")
     lines.append("")
-    lines.append(fills.to_markdown(index=False) if len(fills) else "_No fills found._")
+    lines.append(_table_text(fills) if len(fills) else "_No fills found._")
     lines.append("")
 
     lines.append("## End-of-day Positions")
     lines.append("")
-    lines.append(pos.to_markdown(index=False) if len(pos) else "_No positions found._")
+    lines.append(_table_text(pos) if len(pos) else "_No positions found._")
 
     out_md.write_text("\n".join(lines), encoding="utf-8")
     return out_md, out_csv
@@ -240,7 +249,7 @@ def main():
             lines.append("")
             show_cols = ["symbol","side","qty","fill_qty","qty_diff","vwap","fill_notional","fee","tax","n_fills","order_type","limit_price"]
             show_cols = [c for c in show_cols if c in merged.columns]
-            lines.append(merged[show_cols].to_markdown(index=False))
+            lines.append(_table_text(merged[show_cols]))
             lines.append("")
         else:
             lines.append("## Orders vs Fills")
@@ -251,7 +260,7 @@ def main():
         lines.append("## Fills (raw)")
         lines.append("")
         if len(fills) > 0:
-            lines.append(fills.to_markdown(index=False))
+            lines.append(_table_text(fills))
         else:
             lines.append("_No fills found._")
         lines.append("")
@@ -259,7 +268,7 @@ def main():
         lines.append("## End-of-day Positions")
         lines.append("")
         if len(pos) > 0:
-            lines.append(pos.to_markdown(index=False))
+            lines.append(_table_text(pos))
         else:
             lines.append("_No positions found._")
 

@@ -54,6 +54,13 @@ learning:
   lookback_periods: 60    # number of rebalance periods to evaluate IC over
   min_cross_section_n: 25 # minimum screened names per rebalance date for IC
 
+paper:
+  enabled: true
+  price_mode: "latest"
+  slippage_bps: 5.0
+  fee_bps: 10.0
+  fill_ratio: 1.0
+
 obsidian:
   vault: '/app/quant_trading/quantum investment'
   section: "Quant/Reports"

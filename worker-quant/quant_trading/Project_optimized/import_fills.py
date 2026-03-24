@@ -46,6 +46,51 @@ def read_trade_file(path: str) -> pd.DataFrame:
     return pd.read_csv(path, encoding_errors="replace", on_bad_lines="skip", engine="python")
 
 
+def _sync_order_statuses(conn, run_id: str) -> None:
+    orders = conn.execute(
+        """
+        SELECT order_id, qty
+        FROM orders
+        WHERE run_id=?
+        """,
+        (run_id,),
+    ).fetchall()
+
+    if not orders:
+        return
+
+    all_filled = True
+    any_filled = False
+
+    for order_id, order_qty in orders:
+        row = conn.execute(
+            """
+            SELECT COALESCE(SUM(qty), 0)
+            FROM fills
+            WHERE run_id=? AND order_id=?
+            """,
+            (run_id, order_id),
+        ).fetchone()
+        fill_qty = float(row[0]) if row and row[0] is not None else 0.0
+        order_qty = float(order_qty or 0.0)
+
+        if fill_qty <= 1e-9:
+            status = "proposed"
+            all_filled = False
+        elif fill_qty + 1e-9 < order_qty:
+            status = "partial"
+            any_filled = True
+            all_filled = False
+        else:
+            status = "filled"
+            any_filled = True
+
+        conn.execute("UPDATE orders SET status=? WHERE order_id=?", (status, order_id))
+
+    run_status = "filled" if all_filled else ("partial" if any_filled else "proposed")
+    conn.execute("UPDATE decision_runs SET status=? WHERE run_id=?", (run_status, run_id))
+
+
 def import_fills_df(
     conn,
     run_id: str,
@@ -53,6 +98,7 @@ def import_fills_df(
     df: pd.DataFrame,
     venue: str = "SBI",
     force: bool = False,
+    source: str = "manual_import",
 ) -> int:
     """Import fills into DB. Returns inserted row count."""
     ensure_trade_tables(conn)
@@ -86,6 +132,15 @@ def import_fills_df(
                 "fee": float(r.get("fee", 0.0) or 0.0),
                 "tax": float(r.get("tax", 0.0) or 0.0),
                 "external_ref": str(r.get("external_ref", "") or ""),
+                "price_source": str(r.get("price_source", "") or ""),
+                "price_ts": str(r.get("price_ts", "") or ""),
+                "price_mode": str(r.get("price_mode", "") or ""),
+                "quote_open": r.get("quote_open", None),
+                "quote_high": r.get("quote_high", None),
+                "quote_low": r.get("quote_low", None),
+                "quote_close": r.get("quote_close", None),
+                "price_validated": int(r.get("price_validated", 0) or 0),
+                "validation_note": str(r.get("validation_note", "") or ""),
             }
             order_id = r.get("order_id", None)
             order_id = None if (order_id is None or (isinstance(order_id, float) and pd.isna(order_id)) or str(order_id).strip() == "") else str(order_id).strip()
@@ -94,8 +149,9 @@ def import_fills_df(
             conn.execute(
                 """
                 INSERT OR REPLACE INTO fills(
-                  fill_id, order_id, run_id, asof, ts, symbol, side, qty, price, fee, tax, venue, external_ref
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  fill_id, order_id, run_id, asof, ts, symbol, side, qty, price, fee, tax, venue, external_ref, source,
+                  price_source, price_ts, price_mode, quote_open, quote_high, quote_low, quote_close, price_validated, validation_note
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     fill_id,
@@ -111,12 +167,21 @@ def import_fills_df(
                     row["tax"],
                     venue,
                     row["external_ref"],
+                    source,
+                    row["price_source"],
+                    row["price_ts"],
+                    row["price_mode"],
+                    row["quote_open"],
+                    row["quote_high"],
+                    row["quote_low"],
+                    row["quote_close"],
+                    row["price_validated"],
+                    row["validation_note"],
                 ),
             )
             n += 1
 
-        # Update run status (best-effort)
-        conn.execute("UPDATE decision_runs SET status='filled' WHERE run_id=?", (run_id,))
+        _sync_order_statuses(conn, run_id)
     return n
 
 def read_csv_robust(path: str) -> pd.DataFrame:

@@ -124,7 +124,16 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
           tax      REAL,
           venue    TEXT,
           external_ref TEXT,
-          source TEXT
+          source TEXT,
+          price_source TEXT,
+          price_ts TEXT,
+          price_mode TEXT,
+          quote_open REAL,
+          quote_high REAL,
+          quote_low REAL,
+          quote_close REAL,
+          price_validated INTEGER,
+          validation_note TEXT
         )
         """
     )
@@ -165,6 +174,26 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
         """
     )
 
+    # intraday quotes for paper-trading and same-day simulation
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS intraday_quotes (
+          symbol TEXT NOT NULL,
+          asof TEXT NOT NULL,
+          ts TEXT NOT NULL,
+          price REAL,
+          open REAL,
+          high REAL,
+          low REAL,
+          close REAL,
+          volume REAL,
+          source TEXT,
+          PRIMARY KEY (symbol, ts)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_intraday_quotes_asof_symbol ON intraday_quotes(asof, symbol);")
+
     # Optional cash ledger for deposits/withdrawals/dividends (not required for basic workflow)
     conn.execute(
         """
@@ -190,6 +219,21 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE fills ADD COLUMN source TEXT")
     except Exception:
         pass
+    for ddl in [
+        "ALTER TABLE fills ADD COLUMN price_source TEXT",
+        "ALTER TABLE fills ADD COLUMN price_ts TEXT",
+        "ALTER TABLE fills ADD COLUMN price_mode TEXT",
+        "ALTER TABLE fills ADD COLUMN quote_open REAL",
+        "ALTER TABLE fills ADD COLUMN quote_high REAL",
+        "ALTER TABLE fills ADD COLUMN quote_low REAL",
+        "ALTER TABLE fills ADD COLUMN quote_close REAL",
+        "ALTER TABLE fills ADD COLUMN price_validated INTEGER",
+        "ALTER TABLE fills ADD COLUMN validation_note TEXT",
+    ]:
+        try:
+            conn.execute(ddl)
+        except Exception:
+            pass
 
 
 def ensure_learning_tables(conn: sqlite3.Connection) -> None:

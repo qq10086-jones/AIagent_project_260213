@@ -36,3 +36,9 @@ __write_test*.txt
 *.key
 *credentials*.json
 
+# Quant local runtime artifacts
+/japan_market.db
+worker-quant/quant_trading/Project_optimized/.yf_cache/
+worker-quant/quant_trading/Project_optimized/artifacts/decision/
+worker-quant/quant_trading/Project_optimized/reports/random_subset_2021_03_11/
+

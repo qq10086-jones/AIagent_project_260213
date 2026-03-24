@@ -12,6 +12,7 @@ from typing import Dict, Tuple, List, Optional
 import pandas as pd
 
 from trade_schema import connect, ensure_trade_tables, get_latest_trading_day
+from market_data_utils import refresh_market_data_if_needed, latest_db_date
 
 
 @dataclass
@@ -74,6 +75,22 @@ def _latest_positions(conn: sqlite3.Connection, asof: str) -> Tuple[Optional[str
         (pos_date,),
     ).fetchall()
     return pos_date, {sym: float(q) for sym, q in rows}
+
+
+def _latest_account_snapshot(conn: sqlite3.Connection, asof: str) -> Tuple[Optional[str], Optional[float], Optional[float]]:
+    row = conn.execute(
+        """
+        SELECT asof, cash, nav
+        FROM account_snapshots
+        WHERE asof<=?
+        ORDER BY asof DESC
+        LIMIT 1
+        """,
+        (asof,),
+    ).fetchone()
+    if not row:
+        return None, None, None
+    return str(row[0]), float(row[1]), float(row[2])
 
 
 def _load_target_weights(path: Path) -> pd.DataFrame:
@@ -242,6 +259,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default="japan_market.db")
     ap.add_argument("--asof", default=None, help="YYYY-MM-DD, default=latest trading day in DB")
+    ap.add_argument("--refresh_data", action="store_true", help="refresh market data before building the decision")
+    ap.add_argument("--refresh_lookback", type=int, default=30, help="lookback days used when refresh_data is enabled")
     ap.add_argument("--reports_dir", default="reports")
     ap.add_argument("--cash", type=float, default=1000000.0, help="cash used for sizing (manual mode); default=1M JPY")
     ap.add_argument("--lot", type=int, default=100, help="board lot; ETFs often 1, most JP stocks 100")
@@ -252,10 +271,30 @@ def main():
     ap.add_argument("--out_dir", default="artifacts/decision")
     args = ap.parse_args()
 
+    requested_asof = args.asof
+    if args.refresh_data:
+        _before, refreshed_to, _did_refresh = refresh_market_data_if_needed(
+            args.db,
+            target_date=requested_asof,
+            lookback_days=int(args.refresh_lookback),
+            force=False,
+        )
+        if requested_asof and refreshed_to and str(refreshed_to) < str(requested_asof):
+            raise RuntimeError(
+                f"Market data refresh completed but DB is still behind requested asof={requested_asof}. "
+                f"Latest daily_prices date is {refreshed_to}."
+            )
+
     conn = connect(args.db)
     ensure_trade_tables(conn)
     try:
-        asof = args.asof or get_latest_trading_day(conn) or date.today().strftime("%Y-%m-%d")
+        asof = requested_asof or get_latest_trading_day(conn) or date.today().strftime("%Y-%m-%d")
+        db_latest = latest_db_date(args.db)
+        if db_latest and str(asof) > str(db_latest):
+            raise RuntimeError(
+                f"Requested asof={asof} is newer than latest daily_prices date {db_latest}. "
+                "Refresh data first or choose an earlier asof."
+            )
     finally:
         conn.close()
     reports_dir = Path(args.reports_dir)
@@ -283,6 +322,10 @@ def main():
     ensure_trade_tables(conn)
 
     try:
+        snapshot_asof, snapshot_cash, snapshot_nav = _latest_account_snapshot(conn, asof)
+        effective_cash = float(snapshot_cash) if snapshot_cash is not None else float(args.cash)
+        portfolio_mode = "snapshot" if snapshot_cash is not None else "manual"
+
         # drawdown check: scale orders if portfolio drawdown exceeds thresholds
         dd_scale = 1.0
         dd_status = "OK"
@@ -300,7 +343,7 @@ def main():
         if peak_nav is not None and peak_nav > 0:
             # Estimate current NAV from DB positions + cash
             _, cur_pos = _latest_positions(conn, asof)
-            cur_nav = float(args.cash)
+            cur_nav = float(effective_cash)
             for sym, qty in cur_pos.items():
                 _, px = _last_close(conn, sym, asof)
                 if px is not None:
@@ -317,7 +360,7 @@ def main():
 
         # build orders
         orders, info = build_orders(
-            conn, asof, target_weights, cash_jpy=args.cash,
+            conn, asof, target_weights, cash_jpy=effective_cash,
             lot_size=args.lot, min_trade_notional=args.min_trade
         )
 
@@ -361,10 +404,13 @@ def main():
                 "target_weights_meta": target_meta,
             },
             "portfolio": {
-                "mode": "manual",
-                "cash_input": args.cash,
+                "mode": portfolio_mode,
+                "cash_input": effective_cash,
                 "nav_before": info["nav_before"],
                 "positions_asof": info["positions_asof"],
+                "snapshot_asof": snapshot_asof,
+                "snapshot_nav": snapshot_nav,
+                "manual_cash_arg": args.cash,
             },
             "orders": {
                 "proposal_file": str(orders_csv),

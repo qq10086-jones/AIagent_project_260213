@@ -11,6 +11,13 @@ from typing import Dict, Tuple, List, Optional
 
 import pandas as pd
 
+from compute_ic import (
+    TECHNICAL_FACTOR_NAMES,
+    RISK_ADJUSTED_FACTOR_NAMES,
+    FUNDAMENTAL_FACTOR_NAMES,
+    compute_features,
+    sector_neutral_zscore,
+)
 from trade_schema import connect, ensure_trade_tables, get_latest_trading_day
 from market_data_utils import refresh_market_data_if_needed, latest_db_date
 
@@ -24,6 +31,13 @@ class OrderRow:
     suggested_limit: Optional[float] = None
     est_notional: float = 0.0
     comment: str = "rebalance"
+
+
+FACTOR_FAMILY_MAP = {
+    "price": list(TECHNICAL_FACTOR_NAMES),
+    "risk_adjusted": list(RISK_ADJUSTED_FACTOR_NAMES),
+    "fundamental": list(FUNDAMENTAL_FACTOR_NAMES),
+}
 
 
 def _now_iso() -> str:
@@ -115,6 +129,186 @@ def _load_target_meta(reports_dir: Path) -> dict:
         return json.loads(meta_path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def _infer_target_mode(reports_dir: Path, target_meta: dict) -> str:
+    mode = str(target_meta.get("primary_mode", "") or "").strip()
+    if mode:
+        return mode
+    promo_path = reports_dir / "promotion_decision.json"
+    if promo_path.exists():
+        try:
+            payload = json.loads(promo_path.read_text(encoding="utf-8"))
+            mode = str(payload.get("target_mode", "") or "").strip()
+            if mode:
+                return mode
+        except Exception:
+            pass
+    return "unknown"
+
+
+def _load_sector_map(conn: sqlite3.Connection) -> Dict[str, str]:
+    try:
+        rows = conn.execute("SELECT symbol, sector FROM tickers").fetchall()
+    except Exception:
+        return {}
+    return {str(symbol): str(sector or "Unknown") for symbol, sector in rows}
+
+
+def _load_price_windows(
+    conn: sqlite3.Connection,
+    symbols: List[str],
+    asof: str,
+    lookback_days: int = 420,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if not symbols:
+        return pd.DataFrame(), pd.DataFrame()
+    placeholders = ",".join("?" for _ in symbols)
+    rows = pd.read_sql_query(
+        f"""
+        SELECT date, symbol, close, volume
+        FROM daily_prices
+        WHERE symbol IN ({placeholders})
+          AND date <= ?
+        ORDER BY date, symbol
+        """,
+        conn,
+        params=list(symbols) + [asof],
+    )
+    if rows.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    rows["date"] = pd.to_datetime(rows["date"])
+    close = rows.pivot(index="date", columns="symbol", values="close").sort_index().tail(lookback_days)
+    volume = rows.pivot(index="date", columns="symbol", values="volume").sort_index().reindex(close.index)
+    return close, volume
+
+
+def _load_latest_fundamental_values(
+    conn: sqlite3.Connection,
+    symbols: List[str],
+    asof: str,
+) -> pd.DataFrame:
+    if not symbols:
+        return pd.DataFrame(index=symbols)
+    placeholders_symbol = ",".join("?" for _ in symbols)
+    placeholders_feature = ",".join("?" for _ in FUNDAMENTAL_FACTOR_NAMES)
+    rows = pd.read_sql_query(
+        f"""
+        SELECT asof, symbol, feature_name, value
+        FROM feature_daily
+        WHERE asof <= ?
+          AND symbol IN ({placeholders_symbol})
+          AND feature_name IN ({placeholders_feature})
+        ORDER BY asof DESC
+        """,
+        conn,
+        params=[asof] + list(symbols) + list(FUNDAMENTAL_FACTOR_NAMES),
+    )
+    if rows.empty:
+        return pd.DataFrame(index=symbols)
+    rows = rows.drop_duplicates(subset=["symbol", "feature_name"], keep="first")
+    wide = rows.pivot(index="symbol", columns="feature_name", values="value")
+    return wide.reindex(index=symbols)
+
+
+def build_factor_family_contributions(
+    conn: sqlite3.Connection,
+    asof: str,
+    target_weights: pd.DataFrame,
+    target_mode: str,
+) -> tuple[pd.DataFrame, dict]:
+    weights = target_weights.copy()
+    weights["symbol"] = weights["symbol"].astype(str)
+    weights["target_weight"] = pd.to_numeric(weights["target_weight"], errors="coerce").fillna(0.0)
+    weights = weights.sort_values("target_weight", ascending=False)
+    symbols = weights["symbol"].tolist()
+    active_family_map = {
+        "ridge": {"price"},
+        "shadow_eq": {"price"},
+        "shadow_ic": {"price"},
+        "shadow_hybrid_ic": {"price", "risk_adjusted", "fundamental"},
+    }
+    active_families = active_family_map.get(str(target_mode or "").lower(), {"price"})
+    empty_summary = {
+        "target_mode": target_mode,
+        "families": {
+            family_name: {
+                "configured_factor_count": len(factor_names),
+                "active_factor_count": 0,
+                "is_active_in_mode": family_name in active_families,
+                "portfolio_weighted_score": 0.0,
+                "top_symbol": None,
+            }
+            for family_name, factor_names in FACTOR_FAMILY_MAP.items()
+        },
+    }
+    if not symbols:
+        return pd.DataFrame(), empty_summary
+
+    sector_map = _load_sector_map(conn)
+    close, volume = _load_price_windows(conn, symbols, asof)
+    technical_frames = compute_features(close, volume) if not close.empty else {}
+    fundamental_frame = _load_latest_fundamental_values(conn, symbols, asof)
+
+    family_rows: list[dict] = []
+    family_summary: dict[str, dict] = {}
+
+    for family_name, factor_names in FACTOR_FAMILY_MAP.items():
+        factor_z: dict[str, pd.Series] = {}
+        for factor_name in factor_names:
+            if family_name == "fundamental":
+                if factor_name not in fundamental_frame.columns:
+                    continue
+                raw = fundamental_frame[factor_name].reindex(symbols)
+            else:
+                frame = technical_frames.get(factor_name)
+                if frame is None or pd.Timestamp(asof) not in frame.index:
+                    continue
+                raw = frame.loc[pd.Timestamp(asof)].reindex(symbols)
+            z = sector_neutral_zscore(
+                pd.Series(raw, index=symbols, dtype=float),
+                sector_map={sym: sector_map.get(sym, "Unknown") for sym in symbols},
+            ).reindex(symbols)
+            if z.abs().sum() <= 1e-12 and z.notna().sum() == 0:
+                continue
+            factor_z[factor_name] = z
+
+        if factor_z:
+            family_matrix = pd.DataFrame(factor_z, index=symbols)
+            family_score = family_matrix.mean(axis=1, skipna=True).fillna(0.0)
+            active_factor_count = int(sum(1 for col in family_matrix.columns if family_matrix[col].notna().any()))
+        else:
+            family_matrix = pd.DataFrame(index=symbols)
+            family_score = pd.Series(0.0, index=symbols, dtype=float)
+            active_factor_count = 0
+
+        merged = weights.set_index("symbol").copy()
+        merged[f"{family_name}_score"] = family_score.reindex(merged.index).fillna(0.0)
+        merged[f"{family_name}_contribution"] = merged["target_weight"] * merged[f"{family_name}_score"]
+        for symbol, row in merged.iterrows():
+            family_rows.append(
+                {
+                    "symbol": symbol,
+                    "target_weight": float(row["target_weight"]),
+                    "family": family_name,
+                    "family_score": float(row[f"{family_name}_score"]),
+                    "weighted_contribution": float(row[f"{family_name}_contribution"]),
+                    "factor_count_configured": len(factor_names),
+                    "factor_count_active": active_factor_count,
+                    "is_active_in_mode": family_name in active_families,
+                }
+            )
+
+        family_summary[family_name] = {
+            "configured_factor_count": len(factor_names),
+            "active_factor_count": active_factor_count,
+            "is_active_in_mode": family_name in active_families,
+            "portfolio_weighted_score": float(merged[f"{family_name}_contribution"].sum()),
+            "top_symbol": None if merged.empty else str(merged[f"{family_name}_contribution"].abs().sort_values(ascending=False).index[0]),
+        }
+
+    out_df = pd.DataFrame(family_rows).sort_values(["family", "weighted_contribution"], ascending=[True, False])
+    return out_df, {"target_mode": target_mode, "families": family_summary}
 
 
 def _validate_target_freshness(reports_dir: Path, asof: str) -> dict:
@@ -312,7 +506,27 @@ def main():
 
     # copy key artifacts for audit
     copied = []
-    for fn in ["target_weights.csv", "weights_history.csv", "strategy_report.html", "strategy_report_extras.html", "weights_heatmap.html"]:
+    for fn in [
+        "target_weights.csv",
+        "weights_history.csv",
+        "strategy_report.html",
+        "strategy_report_extras.html",
+        "weights_heatmap.html",
+        "signal_mode_compare.csv",
+        "promotion_decision.json",
+        "promotion_note.txt",
+        "factor_health_report.json",
+        "factor_health_report.md",
+        "factor_health_families.csv",
+        "factor_health_factors.csv",
+        "signal_mode_compare_report.json",
+        "signal_mode_compare_report.md",
+        "earnings_event_study.json",
+        "earnings_event_study.csv",
+        "earnings_event_study.md",
+        "optimizer_objective_evaluation.json",
+        "optimizer_objective_evaluation.md",
+    ]:
         p = reports_dir / fn
         if p.exists():
             (out_run / fn).write_bytes(p.read_bytes())
@@ -322,6 +536,7 @@ def main():
     ensure_trade_tables(conn)
 
     try:
+        target_mode = _infer_target_mode(reports_dir, target_meta)
         snapshot_asof, snapshot_cash, snapshot_nav = _latest_account_snapshot(conn, asof)
         effective_cash = float(snapshot_cash) if snapshot_cash is not None else float(args.cash)
         portfolio_mode = "snapshot" if snapshot_cash is not None else "manual"
@@ -363,6 +578,12 @@ def main():
             conn, asof, target_weights, cash_jpy=effective_cash,
             lot_size=args.lot, min_trade_notional=args.min_trade
         )
+        family_contrib_df, family_contrib_summary = build_factor_family_contributions(
+            conn=conn,
+            asof=asof,
+            target_weights=target_weights,
+            target_mode=target_mode,
+        )
 
         # Apply drawdown scaling: reduce all BUY quantities proportionally
         if dd_scale < 1.0:
@@ -387,6 +608,14 @@ def main():
             for o in orders:
                 w.writerow([o.symbol, o.side, o.qty, o.suggested_type, o.suggested_limit or "", f"{o.est_notional:.2f}", o.comment])
 
+        factor_family_csv = out_run / "factor_family_contributions.csv"
+        family_contrib_df.to_csv(factor_family_csv, index=False)
+        factor_family_json = out_run / "factor_family_summary.json"
+        factor_family_json.write_text(
+            json.dumps(family_contrib_summary, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
         # decision snapshot
         snapshot = {
             "run_id": run_id,
@@ -402,6 +631,9 @@ def main():
                 "exported": copied,
                 "target_weights_file": str(out_run / "target_weights.csv"),
                 "target_weights_meta": target_meta,
+                "factor_family_contributions_file": str(factor_family_csv),
+                "factor_family_summary_file": str(factor_family_json),
+                "factor_family_summary": family_contrib_summary,
             },
             "portfolio": {
                 "mode": portfolio_mode,
@@ -430,6 +662,16 @@ def main():
 
         # write DB
         write_db(conn, run_id, asof, str(snapshot_path), orders)
+        print("=" * 70)
+        print("Decision packaged (manual execution mode)")
+        print(f"run_id: {run_id}")
+        print(f"snapshot: {snapshot_path}")
+        print(f"orders:   {orders_csv}  (count={len(orders)})")
+        print(f"factors:  {factor_family_csv}")
+        if info["missing_symbols"]:
+            print(f"missing prices for: {info['missing_symbols']}")
+        print("=" * 70)
+        return
 
         print("=" * 70)
         print("✅ Decision packaged (manual execution mode)")

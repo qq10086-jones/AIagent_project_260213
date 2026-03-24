@@ -20,6 +20,7 @@ import os
 import sys
 import warnings
 import json
+import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -832,6 +833,46 @@ SHADOW_SIGNAL_FACTORS: List[str] = [
     "slope60",
 ]
 
+HYBRID_SIGNAL_FACTORS: List[str] = [
+    "mom_consist",
+    "rsi14",
+    "vol_adj_mom20",
+    "ret20",
+    "slope60",
+    "sharpe_20",
+    "sharpe_60",
+    "sortino_60",
+    "vol_stability",
+    "value_bp",
+    "quality_roe",
+    "quality_cfo",
+    "margin_op",
+    "growth_rev_yoy",
+    "growth_op_yoy",
+    "guidance_delta",
+    "leverage_safety",
+    "dividend_yield",
+]
+
+HYBRID_RISK_ADJUSTED_FACTORS: List[str] = [
+    "sharpe_20",
+    "sharpe_60",
+    "sortino_60",
+    "vol_stability",
+]
+
+HYBRID_FUNDAMENTAL_FACTORS: List[str] = [
+    "value_bp",
+    "quality_roe",
+    "quality_cfo",
+    "margin_op",
+    "growth_rev_yoy",
+    "growth_op_yoy",
+    "guidance_delta",
+    "leverage_safety",
+    "dividend_yield",
+]
+
 SHADOW_IC_WEIGHTS: Dict[str, float] = {
     "mom_consist": 2.168137,
     "rsi14": 2.104142,
@@ -839,6 +880,99 @@ SHADOW_IC_WEIGHTS: Dict[str, float] = {
     "ret20": 1.912044,
     "slope60": 1.772308,
 }
+
+HYBRID_BASE_WEIGHTS: Dict[str, float] = {
+    **SHADOW_IC_WEIGHTS,
+    "sharpe_20": 1.25,
+    "sharpe_60": 1.40,
+    "sortino_60": 1.20,
+    "vol_stability": 0.90,
+    "value_bp": 1.00,
+    "quality_roe": 1.10,
+    "quality_cfo": 1.10,
+    "margin_op": 0.90,
+    "growth_rev_yoy": 1.00,
+    "growth_op_yoy": 1.10,
+    "guidance_delta": 1.20,
+    "leverage_safety": 0.85,
+    "dividend_yield": 0.80,
+}
+
+FACTOR_WINSOR_LOWER_Q: float = 0.02
+FACTOR_WINSOR_UPPER_Q: float = 0.98
+FACTOR_SECTOR_MIN_GROUP: int = 3
+
+
+def hybrid_factor_setup(use_fundamental_features: bool) -> tuple[List[str], Dict[str, float]]:
+    factor_names = list(SHADOW_SIGNAL_FACTORS) + list(HYBRID_RISK_ADJUSTED_FACTORS)
+    if use_fundamental_features:
+        factor_names.extend(HYBRID_FUNDAMENTAL_FACTORS)
+    weight_map = {name: HYBRID_BASE_WEIGHTS[name] for name in factor_names if name in HYBRID_BASE_WEIGHTS}
+    return factor_names, weight_map
+
+
+def load_feature_daily_panels(
+    db_path: Optional[str],
+    dates: pd.Index,
+    tickers: List[str],
+    factor_names: List[str],
+) -> Dict[str, pd.DataFrame]:
+    if not db_path or not factor_names or len(dates) == 0 or len(tickers) == 0:
+        return {}
+    try:
+        with sqlite3.connect(db_path) as conn:
+            placeholders_factor = ",".join("?" for _ in factor_names)
+            placeholders_ticker = ",".join("?" for _ in tickers)
+            max_asof = pd.Timestamp(dates.max()).strftime("%Y-%m-%d")
+            rows = pd.read_sql_query(
+                f"""
+                SELECT asof, symbol, feature_name, value
+                FROM feature_daily
+                WHERE asof <= ?
+                  AND feature_name IN ({placeholders_factor})
+                  AND symbol IN ({placeholders_ticker})
+                """,
+                conn,
+                params=[max_asof] + list(factor_names) + list(tickers),
+            )
+    except Exception as exc:
+        print(f"   [feature_daily] load failed: {exc}")
+        return {}
+
+    if rows.empty:
+        return {}
+
+    eval_index = pd.to_datetime(pd.Index(dates).strftime("%Y-%m-%d"))
+    out: Dict[str, pd.DataFrame] = {}
+    for factor_name, grp in rows.groupby("feature_name"):
+        panel = grp.pivot(index="asof", columns="symbol", values="value").sort_index()
+        panel.index = pd.to_datetime(panel.index)
+        panel = panel.reindex(panel.index.union(eval_index)).sort_index().ffill().reindex(eval_index)
+        out[str(factor_name)] = panel.reindex(columns=tickers)
+    return out
+
+
+def merge_feature_row(
+    feature_row: pd.Series,
+    tickers: List[str],
+    extra_panels: Optional[Dict[str, pd.DataFrame]],
+    dt: pd.Timestamp,
+) -> pd.Series:
+    if not extra_panels:
+        return feature_row
+
+    row_map: Dict[str, pd.Series] = {}
+    for tkr in tickers:
+        base = feature_row[tkr].copy() if tkr in feature_row.index.get_level_values(0) else pd.Series(dtype=float)
+        extras: Dict[str, float] = {}
+        for factor_name, panel in extra_panels.items():
+            if dt not in panel.index or tkr not in panel.columns:
+                continue
+            val = panel.at[dt, tkr]
+            if pd.notna(val):
+                extras[factor_name] = float(val)
+        row_map[tkr] = pd.concat([base, pd.Series(extras, dtype=float)]) if extras else base
+    return pd.concat(row_map)
 
 
 def benchmark_regime_state(
@@ -970,11 +1104,17 @@ def build_factor_signal_rows(
     tickers: List[str],
     feature_row: pd.Series,
     pred_return: np.ndarray,
+    sector_map: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, float | str | None]]:
     """Build per-factor rows from the exact feature vector seen by the model."""
     feat_today = pd.DataFrame({tkr: feature_row[tkr] for tkr in tickers}).T
     feat_today = feat_today.apply(pd.to_numeric, errors="coerce")
-    z_today = (feat_today - feat_today.mean(axis=0)) / (feat_today.std(axis=0) + 1e-12)
+    z_today = pd.DataFrame(index=feat_today.index, columns=feat_today.columns, dtype=float)
+    for factor_name in feat_today.columns:
+        z_today[factor_name] = normalize_factor_cross_section(
+            feat_today[factor_name],
+            sector_map=sector_map,
+        )
 
     asof = pd.Timestamp(dt).strftime("%Y-%m-%d")
     pred_map = {tkr: float(pred_return[i]) for i, tkr in enumerate(tickers)}
@@ -1003,6 +1143,7 @@ def composite_signal_from_row(
     tickers: List[str],
     factor_names: List[str],
     weight_map: Optional[Dict[str, float]] = None,
+    sector_map: Optional[Dict[str, str]] = None,
 ) -> np.ndarray:
     """Build a cross-sectional composite from selected factors on a single date."""
     scores = pd.Series(0.0, index=tickers, dtype=float)
@@ -1013,16 +1154,62 @@ def composite_signal_from_row(
             index=tickers,
             dtype=float,
         )
-        valid = vals.dropna()
+        z = normalize_factor_cross_section(vals, sector_map=sector_map)
+        valid = z.dropna()
         if len(valid) < 2:
             continue
-        z = (vals - valid.mean()) / (valid.std() + 1e-12)
         w = float(weight_map.get(factor_name, 1.0)) if weight_map else 1.0
         scores = scores.add(z.fillna(0.0) * w, fill_value=0.0)
         total_w += abs(w)
     if total_w > 1e-12:
         scores = scores / total_w
     return scores.reindex(tickers).fillna(0.0).to_numpy(dtype=float)
+
+
+def winsorize_cross_section(
+    series: pd.Series,
+    lower_q: float = FACTOR_WINSOR_LOWER_Q,
+    upper_q: float = FACTOR_WINSOR_UPPER_Q,
+) -> pd.Series:
+    out = series.astype(float).copy()
+    valid = out.dropna()
+    if len(valid) < 5:
+        return out
+    lo = float(valid.quantile(lower_q))
+    hi = float(valid.quantile(upper_q))
+    return out.clip(lower=lo, upper=hi)
+
+
+def normalize_factor_cross_section(
+    series: pd.Series,
+    sector_map: Optional[Dict[str, str]] = None,
+    min_group_size: int = FACTOR_SECTOR_MIN_GROUP,
+) -> pd.Series:
+    base = winsorize_cross_section(series)
+    if not sector_map:
+        valid = base.dropna()
+        if len(valid) < 2:
+            return base * 0.0
+        return (base - valid.mean()) / (valid.std() + 1e-12)
+
+    sectors = pd.Series({idx: sector_map.get(idx, "Unknown") for idx in base.index}, dtype=object)
+    out = pd.Series(index=base.index, dtype=float)
+    fallback_idx: list[str] = []
+
+    for _sector_name, idx in sectors.groupby(sectors).groups.items():
+        sec_vals = base.loc[list(idx)].dropna()
+        if len(sec_vals) < min_group_size:
+            fallback_idx.extend(list(idx))
+            continue
+        out.loc[list(idx)] = (base.loc[list(idx)] - sec_vals.mean()) / (sec_vals.std() + 1e-12)
+
+    if fallback_idx:
+        fb_vals = base.loc[fallback_idx].dropna()
+        if len(fb_vals) >= 2:
+            out.loc[fallback_idx] = (base.loc[fallback_idx] - fb_vals.mean()) / (fb_vals.std() + 1e-12)
+        else:
+            out.loc[fallback_idx] = 0.0
+    return out.fillna(0.0)
 
 
 def backtest(bt: BTConfig, ex: ExecConfig):
@@ -1071,6 +1258,19 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     print(f"2) Build features/targets (n={len(trade_tickers)}) ...")
     trade_vol = vol.reindex(columns=trade_tickers)
     feats = make_features(trade_px, volumes=trade_vol)
+    use_fundamental_features = os.getenv("SS6_USE_FUNDAMENTAL_FEATURES", "1") == "1"
+    if use_fundamental_features:
+        extra_feature_panels = load_feature_daily_panels(
+            db_path=bt.db_path,
+            dates=feats.index,
+            tickers=trade_tickers,
+            factor_names=HYBRID_FUNDAMENTAL_FACTORS,
+        )
+        print("   [fundamental] feature_daily PIT factors enabled for signal construction")
+    else:
+        extra_feature_panels = {}
+        print("   [fundamental] live fundamental factors disabled; hybrid mode uses technical + risk-adjusted factors only")
+    hybrid_factor_names, hybrid_weight_map = hybrid_factor_setup(use_fundamental_features)
     atr_df = pd.DataFrame(
         {tkr: atr(trade_high[tkr], trade_low[tkr], trade_px[tkr], window=bt.atr_window) for tkr in trade_tickers},
         index=trade_px.index,
@@ -1286,12 +1486,13 @@ def backtest(bt: BTConfig, ex: ExecConfig):
 
                 # predict risk-adjusted return
                 row = feats.loc[dt]
+                composite_row = merge_feature_row(row, trade_tickers, extra_feature_panels, dt)
                 mu_ra = np.zeros(n, dtype=float)
                 for k, tkr in enumerate(trade_tickers):
                     x = row[tkr].to_numpy(dtype=float).reshape(1, -1)
                     mu_ra[k] = 0.0 if np.any(~np.isfinite(x)) else float(model.predict(x)[0])
                 if learn_conn is not None and mode == "ridge":
-                    signal_rows.extend(build_factor_signal_rows(dt, trade_tickers, row, mu_ra))
+                    signal_rows.extend(build_factor_signal_rows(dt, trade_tickers, row, mu_ra, sector_map=sector_map))
 
                 vol20 = feats.loc[dt].xs("vol20", level=1).reindex(trade_tickers).to_numpy(dtype=float)
                 vol20 = np.nan_to_num(vol20, nan=0.01, posinf=0.01, neginf=0.01)
@@ -1299,16 +1500,26 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                     mu = mu_ra * vol20
                 elif mode == "shadow_eq":
                     mu = composite_signal_from_row(
-                        feature_row=row,
+                        feature_row=composite_row,
                         tickers=trade_tickers,
                         factor_names=SHADOW_SIGNAL_FACTORS,
+                        sector_map=sector_map,
                     )
                 elif mode == "shadow_ic":
                     mu = composite_signal_from_row(
-                        feature_row=row,
+                        feature_row=composite_row,
                         tickers=trade_tickers,
                         factor_names=SHADOW_SIGNAL_FACTORS,
                         weight_map=SHADOW_IC_WEIGHTS,
+                        sector_map=sector_map,
+                    )
+                elif mode == "shadow_hybrid_ic":
+                    mu = composite_signal_from_row(
+                        feature_row=composite_row,
+                        tickers=trade_tickers,
+                        factor_names=hybrid_factor_names,
+                        weight_map=hybrid_weight_map,
+                        sector_map=sector_map,
                     )
                 else:
                     raise ValueError(f"Unknown signal_mode: {bt.signal_mode}")
@@ -1529,6 +1740,7 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                     model.fit(Xtr, ytr)
 
                 row = feats.loc[dt]
+                composite_row = merge_feature_row(row, trade_tickers, extra_feature_panels, dt)
                 mu_ra = np.zeros(n, dtype=float)
                 for k, tkr in enumerate(trade_tickers):
                     x = row[tkr].to_numpy(dtype=float).reshape(1, -1)
@@ -1540,16 +1752,26 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                     mu = mu_ra * vol20
                 elif mode == "shadow_eq":
                     mu = composite_signal_from_row(
-                        feature_row=row,
+                        feature_row=composite_row,
                         tickers=trade_tickers,
                         factor_names=SHADOW_SIGNAL_FACTORS,
+                        sector_map=sector_map,
                     )
                 elif mode == "shadow_ic":
                     mu = composite_signal_from_row(
-                        feature_row=row,
+                        feature_row=composite_row,
                         tickers=trade_tickers,
                         factor_names=SHADOW_SIGNAL_FACTORS,
                         weight_map=SHADOW_IC_WEIGHTS,
+                        sector_map=sector_map,
+                    )
+                elif mode == "shadow_hybrid_ic":
+                    mu = composite_signal_from_row(
+                        feature_row=composite_row,
+                        tickers=trade_tickers,
+                        factor_names=hybrid_factor_names,
+                        weight_map=hybrid_weight_map,
+                        sector_map=sector_map,
                     )
                 else:
                     raise ValueError(f"Unknown signal_mode: {bt.signal_mode}")
@@ -1660,6 +1882,60 @@ def make_reports(
     bt: BTConfig,
     ex: ExecConfig
 ) -> None:
+    out_dir = Path(bt.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if equity is None or len(equity) == 0:
+        placeholder_idx = stats.index if len(stats) else pd.Index([], dtype="datetime64[ns]")
+        empty_equity = pd.Series(index=placeholder_idx, dtype=float, name="equity")
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.05,
+            subplot_titles=("Strategy Equity Curve (Relative)", "Risk-Off (1=Cash, 0=Invested)"),
+            row_heights=[0.7, 0.3]
+        )
+        fig.add_trace(go.Scatter(x=empty_equity.index, y=empty_equity.values, mode="lines", name="Equity"), row=1, col=1)
+        if len(stats) and "risk_off" in stats.columns:
+            fig.add_trace(go.Scatter(x=stats.index, y=stats["risk_off"].astype(int), mode="lines", name="Risk-Off", fill="tozeroy"), row=2, col=1)
+        fig.update_layout(
+            height=800,
+            title_text=f"Backtest | Capital: {int(ex.initial_capital):,} | Return: 0.00% | MaxDD: 0.00% | No executable trades",
+            template="plotly_dark",
+            showlegend=False
+        )
+        fig.write_html(str(out_dir / "strategy_report.html"))
+
+        extras = make_subplots(
+            rows=4, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.05,
+            subplot_titles=("Equity (Strategy vs Benchmark)", "Drawdown", "Turnover (notional)", "Costs paid"),
+            row_heights=[0.35, 0.25, 0.20, 0.20]
+        )
+        if benchmark in close.columns and len(close.index):
+            bench_px = close[benchmark].astype(float).dropna()
+            if len(bench_px):
+                bench_eq = bench_px / float(bench_px.iloc[0])
+                extras.add_trace(go.Scatter(x=bench_eq.index, y=bench_eq.values, mode="lines", name="Benchmark"), row=1, col=1)
+                bench_dd = bench_eq / bench_eq.cummax() - 1.0
+                extras.add_trace(go.Scatter(x=bench_dd.index, y=bench_dd.values * 100.0, mode="lines", name="Benchmark DD"), row=2, col=1)
+        if len(stats):
+            bar_idx = _downsample_index(stats.index, bt.bar_max_points if bt.safe_plot else len(stats.index))
+            if "turnover_notional" in stats.columns:
+                extras.add_trace(go.Bar(x=bar_idx, y=stats.loc[bar_idx, "turnover_notional"].values, name="Turnover"), row=3, col=1)
+            if "cost_paid" in stats.columns:
+                extras.add_trace(go.Bar(x=bar_idx, y=stats.loc[bar_idx, "cost_paid"].values, name="Costs"), row=4, col=1)
+        extras.update_layout(height=1100, title_text="Extra Diagnostics | No executable trades", template="plotly_dark", showlegend=True)
+        extras.write_html(str(out_dir / "strategy_report_extras.html"))
+
+        w_heat = go.Figure(
+            data=go.Heatmap(z=w_df.values.T, x=w_df.index, y=w_df.columns, colorbar=dict(title="weight"))
+        ) if len(w_df) and len(w_df.columns) else go.Figure()
+        w_heat.update_layout(height=500, title_text="Weights Heatmap", template="plotly_dark")
+        w_heat.write_html(str(out_dir / "weights_heatmap.html"))
+        return
+
     final_equity = float(equity.iloc[-1]) * float(ex.initial_capital)
     ret_pct = (final_equity - float(ex.initial_capital)) / float(ex.initial_capital) * 100.0
     max_dd = max_drawdown(equity) * 100.0
@@ -1680,8 +1956,6 @@ def make_reports(
         template="plotly_dark",
         showlegend=False
     )
-    out_dir = Path(bt.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
     fig.write_html(str(out_dir / "strategy_report.html"))
 
     # Extras (with downsampling)
@@ -1727,13 +2001,63 @@ def make_reports(
 
 
 def summary_from_equity(equity: pd.Series, initial_capital: float) -> Dict[str, float]:
+    if equity is None or len(equity) == 0:
+        return {
+            "final_equity": float(initial_capital),
+            "total_return_pct": 0.0,
+            "max_drawdown_pct": 0.0,
+            "annual_vol_pct": 0.0,
+            "sharpe": 0.0,
+            "sortino": 0.0,
+        }
+    daily_ret = equity.astype(float).pct_change().dropna()
     final_equity = float(equity.iloc[-1]) * float(initial_capital)
     ret_pct = (final_equity - float(initial_capital)) / float(initial_capital) * 100.0
     max_dd = max_drawdown(equity) * 100.0
+    if len(daily_ret) > 1:
+        mean_ret = float(daily_ret.mean())
+        std_ret = float(daily_ret.std())
+        ann_vol_pct = annualize_vol(std_ret) * 100.0
+        sharpe = 0.0 if std_ret <= 1e-12 else (mean_ret / std_ret) * math.sqrt(252.0)
+        downside = daily_ret.where(daily_ret < 0.0, 0.0)
+        downside_std = float(downside.std())
+        sortino = 0.0 if downside_std <= 1e-12 else (mean_ret / downside_std) * math.sqrt(252.0)
+    else:
+        ann_vol_pct = 0.0
+        sharpe = 0.0
+        sortino = 0.0
     return {
         "final_equity": final_equity,
         "total_return_pct": ret_pct,
         "max_drawdown_pct": max_dd,
+        "annual_vol_pct": ann_vol_pct,
+        "sharpe": float(sharpe),
+        "sortino": float(sortino),
+    }
+
+
+def summary_from_stats(stats: pd.DataFrame, initial_capital: float) -> Dict[str, float]:
+    if stats is None or len(stats) == 0:
+        return {
+            "avg_turnover_notional": 0.0,
+            "avg_turnover_pct": 0.0,
+            "turnover_cv": 0.0,
+            "avg_cost_paid": 0.0,
+        }
+    turnover = stats.get("turnover_notional", pd.Series(index=stats.index, dtype=float)).fillna(0.0).astype(float)
+    costs = stats.get("cost_paid", pd.Series(index=stats.index, dtype=float)).fillna(0.0).astype(float)
+    avg_turnover_notional = float(turnover.mean()) if len(turnover) else 0.0
+    avg_turnover_pct = 0.0 if float(initial_capital) <= 1e-12 else (avg_turnover_notional / float(initial_capital)) * 100.0
+    positive_turnover = turnover[turnover > 0.0]
+    if len(positive_turnover) >= 2 and float(positive_turnover.mean()) > 1e-12:
+        turnover_cv = float(positive_turnover.std() / positive_turnover.mean())
+    else:
+        turnover_cv = 0.0
+    return {
+        "avg_turnover_notional": avg_turnover_notional,
+        "avg_turnover_pct": avg_turnover_pct,
+        "turnover_cv": turnover_cv,
+        "avg_cost_paid": float(costs.mean()) if len(costs) else 0.0,
     }
 
 
@@ -1801,7 +2125,7 @@ if __name__ == "__main__":
         max_dd_reentry_cooldown_days=int(os.getenv("SS6_MAX_DD_REENTRY_COOLDOWN_DAYS", "20")),
         signal_mode=os.getenv("SS6_SIGNAL_MODE", "ridge"),
         compare_signal_modes=[
-            m.strip() for m in os.getenv("SS6_COMPARE_SIGNAL_MODES", "shadow_eq,shadow_ic").split(",")
+            m.strip() for m in os.getenv("SS6_COMPARE_SIGNAL_MODES", "shadow_eq,shadow_ic,shadow_hybrid_ic").split(",")
             if m.strip()
         ],
     )
@@ -1855,6 +2179,7 @@ if __name__ == "__main__":
             "stats": stats,
         }
         result.update(summary_from_equity(equity, ex.initial_capital))
+        result.update(summary_from_stats(stats, ex.initial_capital))
         run_results.append(result)
 
     out_dir = Path(bt.output_dir)
@@ -1897,6 +2222,13 @@ if __name__ == "__main__":
                 "final_equity": r["final_equity"],
                 "total_return_pct": r["total_return_pct"],
                 "max_drawdown_pct": r["max_drawdown_pct"],
+                "annual_vol_pct": r["annual_vol_pct"],
+                "sharpe": r["sharpe"],
+                "sortino": r["sortino"],
+                "avg_turnover_notional": r["avg_turnover_notional"],
+                "avg_turnover_pct": r["avg_turnover_pct"],
+                "turnover_cv": r["turnover_cv"],
+                "avg_cost_paid": r["avg_cost_paid"],
             }
             for r in run_results
         ]

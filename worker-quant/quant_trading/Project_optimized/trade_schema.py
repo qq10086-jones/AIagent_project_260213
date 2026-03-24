@@ -49,6 +49,67 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_feature_daily_asof ON feature_daily(asof);")
 
+    # Point-in-time financial statements
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fundamental_snapshots (
+          symbol TEXT NOT NULL,
+          fiscal_period_end TEXT NOT NULL,
+          published_ts TEXT NOT NULL,
+          available_ts TEXT,
+          source TEXT NOT NULL,
+          currency TEXT,
+          revenue REAL,
+          operating_income REAL,
+          net_income REAL,
+          eps REAL,
+          book_value_per_share REAL,
+          dividend_per_share REAL,
+          operating_cf REAL,
+          free_cf REAL,
+          total_assets REAL,
+          total_equity REAL,
+          total_debt REAL,
+          shares_outstanding REAL,
+          guidance_revenue REAL,
+          guidance_operating_income REAL,
+          guidance_eps REAL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (symbol, fiscal_period_end, published_ts, source)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_fundamental_snapshots_symbol_available "
+        "ON fundamental_snapshots(symbol, available_ts);"
+    )
+
+    # Earnings and guidance deltas captured as point-in-time events
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS earnings_events (
+          symbol TEXT NOT NULL,
+          published_ts TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          headline TEXT,
+          revenue_yoy REAL,
+          operating_income_yoy REAL,
+          eps_yoy REAL,
+          guidance_delta_revenue REAL,
+          guidance_delta_op REAL,
+          guidance_delta_eps REAL,
+          surprise_score REAL,
+          source TEXT NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (symbol, published_ts, event_type, source)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_earnings_events_symbol_ts "
+        "ON earnings_events(symbol, published_ts);"
+    )
+
     # account_state (from Quant Design v1.3)
     conn.execute(
         """

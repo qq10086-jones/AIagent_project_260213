@@ -87,6 +87,23 @@ def main():
 
     asof = latest_trading_day(db_path)
 
+    # 1.5) Optional fundamentals update
+    fund = cfg.get("fundamental", {})
+    if fund.get("enabled", False):
+        cmd = [
+            "python", "update_fundamentals.py",
+            "--db", db_path,
+            "--source", str(fund.get("source", "jquants")),
+        ]
+        if fund.get("csv_path"):
+            cmd += ["--csv_path", str(fund.get("csv_path"))]
+        if bool(fund.get("fail_closed", True)):
+            cmd += ["--fail_closed"]
+        if bool(fund.get("require_available_ts", True)):
+            cmd += ["--require_available_ts"]
+        print(">>", " ".join(cmd))
+        run_and_capture(cmd)
+
     # 2) Screener
     scr = cfg.get("screener", {})
     top_k = int(scr.get("top_k", 50))
@@ -163,6 +180,7 @@ def main():
     news_csv = str(news_cfg.get("csv_path", ""))
     env["SS6_NEWS_ON"] = "1" if (news_cfg.get("enabled", False) and news_csv) else "0"
     env["SS6_NEWS_CSV"] = news_csv
+    env["SS6_USE_FUNDAMENTAL_FEATURES"] = "1" if bool(fund.get("use_in_live_scoring", False)) else "0"
 
     cmd = ["python", "ss7_sqlite_news_overlay.py"]
     print(">> python ss7_sqlite_news_overlay.py (env-driven)")
@@ -235,6 +253,62 @@ def main():
             run_and_capture(cmd)
         except RuntimeError as e:
             print(f"⚠️  compute_ic.py failed (non-fatal): {e}")
+ 
+    # 7) Promotion audit (final pass after learning updates)
+    promotion = cfg.get("promotion", {})
+    cmd = [
+        "python", "evaluate_promotion.py",
+        "--db", db_path,
+        "--reports_dir", out_dir,
+        "--target_mode", str(model.get("signal_mode", "shadow_ic")),
+        "--baseline_mode", str(promotion.get("baseline_mode", "ridge")),
+        "--min_backtest_sharpe", str(float(promotion.get("min_backtest_sharpe", 1.0))),
+        "--min_production_ic", str(float(promotion.get("min_production_ic", 0.0))),
+        "--min_t_stat", str(float(promotion.get("min_t_stat", 1.5))),
+        "--max_drawdown_pct", str(float(promotion.get("max_drawdown_pct", 20.0))),
+        "--paper_days_required", str(int(promotion.get("paper_days_required", 20))),
+        "--min_sharpe_improvement", str(float(promotion.get("min_sharpe_improvement", 0.0))),
+    ]
+    if promotion.get("max_turnover_cv") is not None:
+        cmd += ["--max_turnover_cv", str(float(promotion.get("max_turnover_cv")))]
+    print(">>", " ".join(cmd))
+    run_and_capture(cmd)
+
+    # 8) Factor health report
+    cmd = [
+        "python", "factor_health_report.py",
+        "--db", db_path,
+        "--reports_dir", out_dir,
+        "--target_mode", str(model.get("signal_mode", "shadow_ic")),
+    ]
+    print(">>", " ".join(cmd))
+    run_and_capture(cmd)
+
+    # 9) Mode comparison report
+    cmd = [
+        "python", "compare_signal_modes_report.py",
+        "--reports_dir", out_dir,
+    ]
+    print(">>", " ".join(cmd))
+    run_and_capture(cmd)
+
+    # 10) Earnings event study
+    cmd = [
+        "python", "earnings_event_study.py",
+        "--db", db_path,
+        "--out_dir", out_dir,
+    ]
+    print(">>", " ".join(cmd))
+    run_and_capture(cmd)
+
+    # 11) Optimizer objective evaluation
+    cmd = [
+        "python", "evaluate_optimizer_objective.py",
+        "--reports_dir", out_dir,
+        "--target_mode", str(model.get("signal_mode", "shadow_ic")),
+    ]
+    print(">>", " ".join(cmd))
+    run_and_capture(cmd)
 
 
 if __name__ == "__main__":

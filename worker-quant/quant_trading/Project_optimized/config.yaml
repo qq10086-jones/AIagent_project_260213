@@ -4,6 +4,15 @@ update:
   lookback_days: 730
   universe_file: null
 
+fundamental:
+  enabled: false
+  source: "jquants"       # jquants | csv | noop
+  csv_path: null
+  fail_closed: true
+  require_available_ts: true
+  use_in_live_scoring: false
+  use_in_learning: true
+
 screener:
   asof: null
   top_k: 30
@@ -12,7 +21,7 @@ screener:
 
 model:
   signal_mode: "ridge"
-  compare_signal_modes: ["shadow_eq", "shadow_ic"]
+  compare_signal_modes: ["ridge", "shadow_eq", "shadow_ic", "shadow_hybrid_ic"]
   start: "2020-01-01"
   end: null
   H: 20
@@ -53,6 +62,20 @@ learning:
   shadow: false           # shadow=true: compute IC but don't update weights
   lookback_periods: 60    # number of rebalance periods to evaluate IC over
   min_cross_section_n: 25 # minimum screened names per rebalance date for IC
+
+risk_adjusted:
+  enabled: true
+  factors: ["sharpe_20", "sharpe_60", "sortino_60", "vol_stability"]
+
+promotion:
+  min_backtest_sharpe: 1.0
+  min_production_ic: 0.0
+  min_t_stat: 1.5
+  max_drawdown_pct: 20.0
+  paper_days_required: 20
+  min_sharpe_improvement: 0.0
+  baseline_mode: "ridge"
+  max_turnover_cv: 2.5
 
 paper:
   enabled: true

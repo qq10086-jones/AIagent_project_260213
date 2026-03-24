@@ -28,16 +28,44 @@ from screener import ScreenConfig, screen
 from trade_schema import connect, ensure_learning_tables, ensure_trade_tables, save_screening_history
 
 
-FACTOR_NAMES: List[str] = [
+TECHNICAL_FACTOR_NAMES: List[str] = [
     "ret1", "ret5", "ret20", "ret60",
     "vol20", "vol60",
     "ma_gap", "z_20", "rsi14", "slope60",
     "mom_12_1", "high52w", "vol_adj_mom20", "mom_consist", "vol_z",
 ]
 
+RISK_ADJUSTED_FACTOR_NAMES: List[str] = [
+    "sharpe_20",
+    "sharpe_60",
+    "sortino_60",
+    "vol_stability",
+]
+
+FUNDAMENTAL_FACTOR_NAMES: List[str] = [
+    "value_bp",
+    "quality_roe",
+    "quality_cfo",
+    "margin_op",
+    "growth_rev_yoy",
+    "growth_op_yoy",
+    "guidance_delta",
+    "leverage_safety",
+    "dividend_yield",
+]
+
+FACTOR_NAMES: List[str] = (
+    TECHNICAL_FACTOR_NAMES
+    + RISK_ADJUSTED_FACTOR_NAMES
+    + FUNDAMENTAL_FACTOR_NAMES
+)
+
 HALF_LIFE_DAYS: int = 60
 TSTAT_GUARD: float = 1.5
 MIN_CROSS_SECTION_N: int = 25
+WINSOR_LOWER_Q: float = 0.02
+WINSOR_UPPER_Q: float = 0.98
+SECTOR_MIN_GROUP: int = 3
 
 
 def _rsi(series: pd.Series, n: int = 14) -> pd.Series:
@@ -90,6 +118,17 @@ def compute_features(px: pd.DataFrame, vol: pd.DataFrame = None) -> Dict[str, pd
         feats["vol_z"] = (log_v - log_v.rolling(60).mean()) / (log_v.rolling(60).std() + 1e-12)
     else:
         feats["vol_z"] = pd.DataFrame(0.0, index=px.index, columns=px.columns)
+
+    mean20 = ret.rolling(20).mean()
+    std20 = feats["vol20"]
+    mean60 = ret.rolling(60).mean()
+    std60 = feats["vol60"]
+    downside = ret.where(ret < 0.0, 0.0)
+    downside_std60 = downside.rolling(60).std()
+    feats["sharpe_20"] = mean20 / (std20 + 1e-9)
+    feats["sharpe_60"] = mean60 / (std60 + 1e-9)
+    feats["sortino_60"] = mean60 / (downside_std60 + 1e-9)
+    feats["vol_stability"] = 1.0 / (std20.rolling(20).std() + 1e-9)
     
     return feats
 
@@ -100,6 +139,56 @@ def ewma_update(old: float, new: float, n_obs: int, half_life: float = HALF_LIFE
     else:
         alpha = 1.0 - math.exp(-math.log(2) / half_life)
     return (1.0 - alpha) * old + alpha * new
+
+
+def load_sector_map(conn) -> dict[str, str]:
+    try:
+        rows = conn.execute("SELECT symbol, sector FROM tickers").fetchall()
+    except Exception:
+        return {}
+    return {str(symbol): str(sector or "Unknown") for symbol, sector in rows}
+
+
+def winsorize_series(series: pd.Series, lower_q: float = WINSOR_LOWER_Q, upper_q: float = WINSOR_UPPER_Q) -> pd.Series:
+    out = series.astype(float).copy()
+    valid = out.dropna()
+    if len(valid) < 5:
+        return out
+    lo = float(valid.quantile(lower_q))
+    hi = float(valid.quantile(upper_q))
+    return out.clip(lower=lo, upper=hi)
+
+
+def sector_neutral_zscore(
+    series: pd.Series,
+    sector_map: dict[str, str],
+    min_group_size: int = SECTOR_MIN_GROUP,
+) -> pd.Series:
+    base = winsorize_series(series)
+    if not sector_map:
+        valid = base.dropna()
+        if len(valid) < 2:
+            return base * 0.0
+        return (base - valid.mean()) / (valid.std() + 1e-9)
+
+    sectors = pd.Series({idx: sector_map.get(idx, "Unknown") for idx in base.index}, dtype=object)
+    out = pd.Series(index=base.index, dtype=float)
+    fallback_idx: list[str] = []
+
+    for sector_name, idx in sectors.groupby(sectors).groups.items():
+        sec_vals = base.loc[list(idx)].dropna()
+        if len(sec_vals) < min_group_size:
+            fallback_idx.extend(list(idx))
+            continue
+        out.loc[list(idx)] = (base.loc[list(idx)] - sec_vals.mean()) / (sec_vals.std() + 1e-9)
+
+    if fallback_idx:
+        fb_vals = base.loc[fallback_idx].dropna()
+        if len(fb_vals) >= 2:
+            out.loc[fallback_idx] = (base.loc[fallback_idx] - fb_vals.mean()) / (fb_vals.std() + 1e-9)
+        else:
+            out.loc[fallback_idx] = 0.0
+    return out.fillna(0.0)
 
 
 def load_screening_universe(conn, lookback_periods: int) -> tuple[dict[str, list[str]], list[str]]:
@@ -199,6 +288,33 @@ def load_logged_factor_scores(conn, asofs: list[str]) -> dict[str, pd.DataFrame]
     return out
 
 
+def load_feature_daily_scores(conn, asofs: list[str], factor_names: list[str]) -> dict[str, pd.DataFrame]:
+    if not asofs or not factor_names:
+        return {}
+    placeholders_factor = ",".join("?" for _ in factor_names)
+    eval_index = pd.to_datetime(sorted(asofs))
+    max_asof = max(asofs)
+    rows = pd.read_sql_query(
+        f"""
+        SELECT asof, symbol, feature_name, value
+        FROM feature_daily
+        WHERE asof <= ?
+          AND feature_name IN ({placeholders_factor})
+        """,
+        conn,
+        params=[max_asof] + factor_names,
+    )
+    if rows.empty:
+        return {}
+
+    out: dict[str, pd.DataFrame] = {}
+    for feature_name, grp in rows.groupby("feature_name"):
+        frame = grp.pivot(index="asof", columns="symbol", values="value").sort_index()
+        frame.index = pd.to_datetime(frame.index)
+        out[str(feature_name)] = frame.reindex(frame.index.union(eval_index)).sort_index().ffill().reindex(eval_index)
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Compute factor IC and update factor_registry")
     ap.add_argument("--db", default="japan_market.db")
@@ -217,6 +333,7 @@ def main() -> None:
     conn = connect(args.db)
     ensure_trade_tables(conn)
     ensure_learning_tables(conn)
+    sector_map = load_sector_map(conn)
 
     print("Loading daily_prices from DB...")
     raw = pd.read_sql_query(
@@ -266,6 +383,11 @@ def main() -> None:
         )
 
     logged_scores = load_logged_factor_scores(conn, [dt.strftime("%Y-%m-%d") for dt in eval_dates])
+    feature_daily_scores = load_feature_daily_scores(
+        conn,
+        [dt.strftime("%Y-%m-%d") for dt in eval_dates],
+        FUNDAMENTAL_FACTOR_NAMES,
+    )
 
     reg_rows = conn.execute(
         "SELECT factor_name, ic_mean, ic_std, icir, weight, n_observations FROM factor_registry"
@@ -297,9 +419,16 @@ def main() -> None:
         for factor in FACTOR_NAMES:
             logged = logged_scores.get(factor)
             if logged is not None and dt in logged.index:
-                f_vals = logged.loc[dt].reindex(available_symbols)
+                f_raw = logged.loc[dt].reindex(available_symbols)
+            elif factor in feats:
+                f_raw = feats[factor].loc[dt, available_symbols]
             else:
-                f_vals = feats[factor].loc[dt, available_symbols]
+                daily_feature = feature_daily_scores.get(factor)
+                if daily_feature is not None and dt in daily_feature.index:
+                    f_raw = daily_feature.loc[dt].reindex(available_symbols)
+                else:
+                    f_raw = pd.Series(index=available_symbols, dtype=float)
+            f_vals = sector_neutral_zscore(f_raw.astype(float), sector_map={s: sector_map.get(s, "Unknown") for s in available_symbols})
             combined = pd.concat([f_vals, fwd], axis=1).dropna()
             cross_n = len(combined)
             if cross_n >= args.min_cross_section_n:
@@ -310,16 +439,10 @@ def main() -> None:
             else:
                 skipped_by_factor[factor] += 1
 
-            valid = f_vals.dropna()
-            if len(valid) > 1:
-                mu = valid.mean()
-                sigma = valid.std()
-                z_vals = (f_vals - mu) / (sigma + 1e-9) if sigma > 1e-9 else f_vals * 0.0
-            else:
-                z_vals = f_vals * 0.0
+            z_vals = f_vals.fillna(0.0)
 
             for symbol in available_symbols:
-                raw_score = float(f_vals.get(symbol, float("nan")))
+                raw_score = float(f_raw.get(symbol, float("nan")))
                 z_score = float(z_vals.get(symbol, float("nan")))
                 if np.isfinite(raw_score) or np.isfinite(z_score):
                     signal_rows.append(
@@ -389,11 +512,18 @@ def main() -> None:
                 "old_value": old["ic_mean"],
                 "new_value": batch_ic_mean,
                 "ic_value": upd_ic_mean,
-                "notes": (
-                    f"t={t_stat:.2f} n={len(ics)} xs_n={avg_cross_n:.1f} "
-                    f"min_xs={args.min_cross_section_n} skipped={skipped_by_factor[factor]} "
-                    f"icir={upd_icir:.3f} guard={'PASS' if passes else 'FAIL'}"
-                    f"{' [SHADOW]' if args.shadow else ''}"
+                "notes": json.dumps(
+                    {
+                        "t_stat": round(float(t_stat), 6),
+                        "n_periods": int(len(ics)),
+                        "avg_cross_section_n": round(float(avg_cross_n), 6),
+                        "min_cross_section_n": int(args.min_cross_section_n),
+                        "skipped_periods": int(skipped_by_factor[factor]),
+                        "icir": round(float(upd_icir), 6),
+                        "guard": "PASS" if passes else "FAIL",
+                        "shadow": bool(args.shadow),
+                    },
+                    ensure_ascii=False,
                 ),
             }
         )

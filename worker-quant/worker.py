@@ -1555,13 +1555,21 @@ def run_optimized_pipeline(payload: dict):
             try: f.unlink()
             except: pass
             
-    # --- News Overlay: pass DB path directly, no CSV intermediate ---
+    # --- 透传 orchestrator payload 中的模型参数，run_pipeline.py 会以 os.environ 为优先级覆盖 config ---
     db_path = base_dir / "japan_market.db"
     my_env = os.environ.copy()
     my_env["PYTHONPATH"] = str(base_dir) + ":" + my_env.get("PYTHONPATH", "")
     if db_path.exists():
         my_env["SS6_NEWS_DB"] = str(db_path)
-        
+    # 允许 orchestrator 通过 payload 动态指定 signal_mode 和 compare_signal_modes
+    if payload.get("signal_mode"):
+        my_env["SS6_SIGNAL_MODE"] = str(payload["signal_mode"])
+    if payload.get("compare_signal_modes"):
+        v = payload["compare_signal_modes"]
+        my_env["SS6_COMPARE_SIGNAL_MODES"] = ",".join(v) if isinstance(v, list) else str(v)
+    if payload.get("db_path"):
+        my_env["SS6_DB_PATH"] = str(payload["db_path"])
+
     res = subprocess.run(["python", "run_pipeline.py", "--config", "config.yaml"], cwd=str(base_dir), capture_output=True, text=True, timeout=600, env=my_env)
     
     artifacts = []

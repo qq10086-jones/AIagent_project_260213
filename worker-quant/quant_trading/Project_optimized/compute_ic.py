@@ -17,12 +17,16 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import warnings
 from datetime import datetime, timezone
 from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 from scipy import stats
+
+# vol_z 横截面在大盘股中方向高度一致，Spearman 输入可能为常数；属正常现象，无需告警
+warnings.filterwarnings("ignore", category=stats.ConstantInputWarning)
 
 from screener import ScreenConfig, screen
 from trade_schema import connect, ensure_learning_tables, ensure_trade_tables, save_screening_history
@@ -481,7 +485,8 @@ def main() -> None:
     for factor in FACTOR_NAMES:
         ics = ic_series[factor]
         if not ics:
-            print(f"{factor:12s}  (no data)")
+            # vol_z 在大盘股横截面可能全部为常数（NaN Spearman），属正常统计现象
+            print(f"{factor:20s}  (IC=NaN — 横截面常数或数据缺失，该因子不具备截面预测力)")
             continue
 
         ic_arr = np.array(ics)

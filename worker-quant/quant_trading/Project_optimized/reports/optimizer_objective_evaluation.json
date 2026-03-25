@@ -1,0 +1,16 @@
+{
+  "target_mode": "ridge",
+  "recommendation": "defer_optimizer_sharpe_objective",
+  "rationale": {
+    "sharpe": -0.1001405833143847,
+    "mean_ic": 0.02339248520219995,
+    "mean_t_stat": 0.43042420000000003,
+    "turnover_cv": 0.5953800826127464
+  },
+  "decision_rule": {
+    "required_sharpe": 1.0,
+    "required_mean_ic": 0.02,
+    "required_mean_t_stat": 1.5,
+    "max_turnover_cv": 1.5
+  }
+}

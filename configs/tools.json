@@ -34,6 +34,62 @@
     "timeout_s": 600
   },
 
+  "quant.deep_analysis": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 180
+  },
+
+  "quant.discovery_workflow": {
+    "kind": "builtin",
+    "default_risk": "medium",
+    "requires_approval": false,
+    "timeout_s": 300
+  },
+
+  "quant.signal_backfill": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 120
+  },
+
+  "quant.portfolio_risk": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 60
+  },
+
+  "quant.event_alert": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 60
+  },
+
+  "quant.watchlist": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 30
+  },
+
+  "quant.calc_limit_price": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 30
+  },
+
+  "news.tdnet_announcements": {
+    "kind": "builtin",
+    "default_risk": "low",
+    "requires_approval": false,
+    "timeout_s": 60
+  },
+
   "ai.analyze": {
     "kind": "builtin",
     "default_risk": "low",

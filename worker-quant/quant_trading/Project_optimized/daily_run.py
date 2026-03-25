@@ -68,7 +68,7 @@ def run_and_capture(cmd: list[str]) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="config.json")
+    ap.add_argument("--config", default="config.yaml")
     args = ap.parse_args()
 
     cfg = load_cfg(args.config)
@@ -138,14 +138,31 @@ def main():
         saved = save_screening_history(conn, sel)
     print(f"Saved screening_history: {saved} rows for {sel.get('asof')}")
 
+    # 2.5) News ingestion (optional — 免费源 Kabutan/Google/GDELT → news_feed/news_sentiment)
+    news_cfg = cfg.get("model", {}).get("news", {})
+    if news_cfg.get("enabled", False):
+        lookback_h = float(news_cfg.get("lookback_hours", 26.0))
+        sources    = str(news_cfg.get("sources", "kabutan,google,gdelt"))
+        cmd = [
+            "python", "news_to_db.py",
+            "--db", db_path,
+            "--lookback_hours", str(lookback_h),
+            "--sources", sources,
+        ]
+        print(">>", " ".join(cmd))
+        try:
+            run_and_capture(cmd)
+        except RuntimeError as e:
+            print(f"⚠️  news_to_db.py failed (non-fatal, overlay disabled): {e}")
+
     env = os.environ.copy()
     env["SS6_DB_PATH"] = db_path
     env["SS6_TICKERS"] = ",".join(symbols)
     env["SS6_BENCHMARK"] = str(model.get("benchmark_ticker", "1321.T"))
     env["SS6_START"] = str(model.get("start", "2020-01-01"))
     env["SS6_END"] = "" if model.get("end") is None else str(model["end"])
-    env["SS6_SIGNAL_MODE"] = str(model.get("signal_mode", "shadow_ic"))
-    comp_modes = model.get("compare_signal_modes", ["ridge", "shadow_eq"])
+    env["SS6_SIGNAL_MODE"] = os.environ.get("SS6_SIGNAL_MODE") or str(model.get("signal_mode", "shadow_ic"))
+    comp_modes = os.environ.get("SS6_COMPARE_SIGNAL_MODES") or model.get("compare_signal_modes", ["ridge", "shadow_eq"])
     if isinstance(comp_modes, list):
         comp_modes = ",".join(comp_modes)
     env["SS6_COMPARE_SIGNAL_MODES"] = str(comp_modes)
@@ -175,11 +192,17 @@ def main():
     env["SS6_MAX_DD_FULL"] = str(float(exec_cfg.get("max_dd_full", 0.18)))
     env["SS6_MAX_DD_REENTRY_COOLDOWN_DAYS"] = str(int(exec_cfg.get("max_dd_reentry_cooldown_days", 20)))
 
-    # news overlay (optional)
+    # news overlay — DB 模式优先；CSV 作为旧式兼容
     news_cfg = model.get("news", {})
+    news_enabled = bool(news_cfg.get("enabled", False))
     news_csv = str(news_cfg.get("csv_path", ""))
-    env["SS6_NEWS_ON"] = "1" if (news_cfg.get("enabled", False) and news_csv) else "0"
-    env["SS6_NEWS_CSV"] = news_csv
+    if news_enabled:
+        env["SS6_NEWS_ON"]  = "1"
+        env["SS6_NEWS_DB"]  = db_path
+        env["SS6_NEWS_CSV"] = news_csv
+    else:
+        env["SS6_NEWS_ON"]  = "0"
+        env["SS6_NEWS_CSV"] = ""
     env["SS6_USE_FUNDAMENTAL_FEATURES"] = "1" if bool(fund.get("use_in_live_scoring", False)) else "0"
 
     cmd = ["python", "ss7_sqlite_news_overlay.py"]

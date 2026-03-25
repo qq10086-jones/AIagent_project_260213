@@ -256,6 +256,10 @@ def _jquants_env_credentials() -> tuple[str | None, str | None]:
     return mail, password
 
 
+def _jquants_api_key() -> str | None:
+    return os.getenv("JQUANTS_API_KEY")
+
+
 def _normalize_jquants_frame(df: pd.DataFrame) -> pd.DataFrame:
     frame = df.copy()
     rename_map = {
@@ -303,14 +307,65 @@ def _normalize_jquants_frame(df: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+_V2_RENAME: dict[str, str] = {
+    "Code":    "symbol",
+    "DiscDate": "published_ts",
+    "CurPerEn": "fiscal_period_end",
+    "Sales":   "revenue",
+    "OP":      "operating_income",
+    "NP":      "net_income",
+    "EPS":     "eps",
+    "BPS":     "book_value_per_share",
+    "DivAnn":  "dividend_per_share",
+    "CFO":     "operating_cf",
+    "CFI":     "free_cf",
+    "TA":      "total_assets",
+    "Eq":      "total_equity",
+    "ShOutFY": "shares_outstanding",
+    "FSales":  "guidance_revenue",
+    "FOP":     "guidance_operating_income",
+    "FEPS":    "guidance_eps",
+}
+
+
+def _fetch_v2(db_path: str, api_key: str) -> pd.DataFrame:
+    """Fetch latest financial summary for screened tickers via J-Quants ClientV2."""
+    import jquantsapi  # type: ignore
+    import sqlite3 as _sq
+    import warnings
+
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    client = jquantsapi.ClientV2(api_key=api_key)
+
+    # Load screened tickers from DB
+    with _sq.connect(db_path) as _conn:
+        rows = _conn.execute("SELECT DISTINCT symbol FROM tickers").fetchall()
+    symbols = [r[0] for r in rows if r[0]]
+
+    frames = []
+    for sym in symbols:
+        # Strip .T suffix for J-Quants code (5-digit numeric)
+        code = sym.replace(".T", "")
+        try:
+            df = client.get_fin_summary(code=code)
+            if df is not None and not df.empty:
+                frames.append(df)
+        except Exception:
+            continue
+
+    if not frames:
+        return pd.DataFrame()
+
+    combined = pd.concat(frames, ignore_index=True)
+    # Rename V2 columns to our schema
+    for src, dst in _V2_RENAME.items():
+        if src in combined.columns and dst not in combined.columns:
+            combined[dst] = combined[src]
+    print(f"[fundamentals] J-Quants V2: fetched {len(combined)} rows for {len(symbols)} tickers")
+    return combined
+
+
 def import_jquants(db_path: str, fail_closed: bool, require_available_ts: bool) -> None:
-    mail, password = _jquants_env_credentials()
-    if not mail or not password:
-        message = "J-Quants credentials are not set. Expected JQUANTS_MAIL/JQUANTS_PASSWORD."
-        if fail_closed:
-            raise RuntimeError(message)
-        print(f"[fundamentals] {message}")
-        return
     try:
         import jquantsapi  # type: ignore
     except Exception as exc:
@@ -320,6 +375,43 @@ def import_jquants(db_path: str, fail_closed: bool, require_available_ts: bool) 
         print(f"[fundamentals] {message}")
         return
 
+    # --- ClientV2 path (JQUANTS_API_KEY — Google OAuth / direct key) ---
+    api_key = _jquants_api_key()
+    if api_key:
+        try:
+            raw = _fetch_v2(db_path, api_key)
+        except Exception as exc:
+            message = f"J-Quants V2 fetch failed: {exc}"
+            if fail_closed:
+                raise RuntimeError(message) from exc
+            print(f"[fundamentals] {message}")
+            return
+        if raw.empty:
+            print("[fundamentals] J-Quants V2 returned no data.")
+            return
+        normalized = _normalize_jquants_frame(raw)
+        temp_csv = Path(db_path).with_name("_tmp_jquants_fundamentals.csv")
+        normalized.to_csv(temp_csv, index=False)
+        try:
+            import_csv(db_path, temp_csv, fail_closed=fail_closed, require_available_ts=require_available_ts)
+        finally:
+            try:
+                temp_csv.unlink()
+            except Exception:
+                pass
+        return
+
+    # --- ClientV1 path (JQUANTS_MAIL + JQUANTS_PASSWORD — legacy) ---
+    mail, password = _jquants_env_credentials()
+    if not mail or not password:
+        message = "J-Quants credentials are not set. Set JQUANTS_API_KEY (recommended) or JQUANTS_MAIL+JQUANTS_PASSWORD."
+        if fail_closed:
+            raise RuntimeError(message)
+        print(f"[fundamentals] {message}")
+        return
+
+    import warnings
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
     client = jquantsapi.Client(mail_address=mail, password=password)
     statements = None
     for candidate in ["get_statements", "get_fins_statements", "get_fin_statements"]:
@@ -339,7 +431,7 @@ def import_jquants(db_path: str, fail_closed: bool, require_available_ts: bool) 
             if fail_closed:
                 raise RuntimeError(f"J-Quants statements fetch failed via {candidate}: {exc}") from exc
     if statements is None:
-        message = "Unable to fetch statements from J-Quants client."
+        message = "Unable to fetch statements from J-Quants client (V1)."
         if fail_closed:
             raise RuntimeError(message)
         print(f"[fundamentals] {message}")

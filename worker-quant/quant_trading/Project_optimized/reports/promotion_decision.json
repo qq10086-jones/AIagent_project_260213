@@ -1,0 +1,164 @@
+{
+  "target_mode": "ridge",
+  "baseline_mode": "ridge",
+  "recommendation": "hold",
+  "patch_note": "Sharpe is treated as a governance metric and promotion gate in this patch. It is not used here as a standalone regression target.",
+  "target_metrics": {
+    "sharpe": -0.1001405833143847,
+    "sortino": -0.1525072306876509,
+    "max_drawdown_pct": -28.29021942488169,
+    "avg_turnover_notional": 21246.68084484036,
+    "turnover_cv": 0.5953800826127464,
+    "total_return_pct": -5.195181765771325,
+    "annual_vol_pct": 11.887247674487966
+  },
+  "paper_stats": {
+    "mode": "ridge",
+    "decision_run_count": 7,
+    "paper_days": 2,
+    "paper_asofs": [
+      "2026-03-23",
+      "2026-03-25"
+    ],
+    "recent_runs": [
+      {
+        "run_id": "2026-03-23__1fd3dd03cb",
+        "asof": "2026-03-23",
+        "status": "proposed",
+        "paper_executed": false
+      },
+      {
+        "run_id": "2026-03-23__4c5a8c0a43",
+        "asof": "2026-03-23",
+        "status": "proposed",
+        "paper_executed": false
+      },
+      {
+        "run_id": "2026-03-23__2244abd7ee",
+        "asof": "2026-03-23",
+        "status": "proposed",
+        "paper_executed": false
+      },
+      {
+        "run_id": "2026-03-23__57f1b2802a",
+        "asof": "2026-03-23",
+        "status": "filled",
+        "paper_executed": true
+      },
+      {
+        "run_id": "2026-03-23__fb8ad53ecf",
+        "asof": "2026-03-23",
+        "status": "filled",
+        "paper_executed": true
+      },
+      {
+        "run_id": "2026-03-25__b7e67cd3e2",
+        "asof": "2026-03-25",
+        "status": "filled",
+        "paper_executed": true
+      },
+      {
+        "run_id": "2026-03-25__e98172ab2c",
+        "asof": "2026-03-25",
+        "status": "filled",
+        "paper_executed": true
+      }
+    ]
+  },
+  "learning_stats": {
+    "mode": "ridge",
+    "factor_count": 5,
+    "family_metrics": {
+      "technical": {
+        "factor_count": 5,
+        "observed_factor_count": 5,
+        "mean_ic": 0.02339248520219995,
+        "mean_t_stat": 0.43042420000000003,
+        "positive_ic_ratio": 1.0,
+        "factors": [
+          {
+            "factor_name": "mom_consist",
+            "ic_mean": 0.009179890116710332,
+            "t_stat": 1.743865,
+            "guard": "PASS",
+            "n_observations": 101
+          },
+          {
+            "factor_name": "rsi14",
+            "ic_mean": 0.02694153013332967,
+            "t_stat": 0.135923,
+            "guard": "FAIL",
+            "n_observations": 50
+          },
+          {
+            "factor_name": "vol_adj_mom20",
+            "ic_mean": 0.03311356044042312,
+            "t_stat": 0.14887,
+            "guard": "FAIL",
+            "n_observations": 50
+          },
+          {
+            "factor_name": "ret20",
+            "ic_mean": 0.030052345788930374,
+            "t_stat": 0.023288,
+            "guard": "FAIL",
+            "n_observations": 50
+          },
+          {
+            "factor_name": "slope60",
+            "ic_mean": 0.017675099531606245,
+            "t_stat": 0.100175,
+            "guard": "FAIL",
+            "n_observations": 50
+          }
+        ]
+      }
+    },
+    "aggregate": {
+      "mean_ic": 0.02339248520219995,
+      "mean_t_stat": 0.43042420000000003,
+      "positive_ic_ratio": 1.0,
+      "min_family_t_stat": 0.43042420000000003
+    }
+  },
+  "gates": {
+    "production_ic": {
+      "passed": true,
+      "actual": 0.02339248520219995,
+      "threshold": 0.0
+    },
+    "t_stat": {
+      "passed": false,
+      "actual": 0.43042420000000003,
+      "threshold": 1.5
+    },
+    "backtest_sharpe": {
+      "passed": false,
+      "actual": -0.1001405833143847,
+      "threshold": 1.0
+    },
+    "max_drawdown": {
+      "passed": true,
+      "actual": -28.29021942488169,
+      "threshold": 20.0
+    },
+    "sharpe_vs_baseline": {
+      "passed": true,
+      "actual": 0.0,
+      "threshold": 0.0,
+      "baseline_mode": "ridge",
+      "baseline_sharpe": -0.1001405833143847
+    },
+    "paper_days": {
+      "passed": false,
+      "actual": 2,
+      "threshold": 20
+    },
+    "turnover_stability": {
+      "passed": true,
+      "actual": 0.5953800826127464,
+      "threshold": 2.5,
+      "avg_turnover_notional": 21246.68084484036
+    }
+  }
+}

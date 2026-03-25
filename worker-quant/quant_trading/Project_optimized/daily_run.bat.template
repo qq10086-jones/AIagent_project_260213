@@ -1,0 +1,19 @@
+@echo off
+REM ============================================================
+REM  Japan Quant Daily Run — Windows Task Scheduler entry point
+REM  Copy this file to daily_run.bat and fill in credentials.
+REM  Register via: scripts\register_daily_task.bat
+REM ============================================================
+
+set SCRIPT_DIR=%~dp0
+cd /d "%SCRIPT_DIR%"
+
+REM ---- J-Quants API Key (Google OAuth or direct key) --------
+set JQUANTS_API_KEY=YOUR_JQUANTS_API_KEY_HERE
+
+REM ---- Optional: override signal mode for this run -----------
+REM set SS6_SIGNAL_MODE=ridge
+
+echo [%DATE% %TIME%] Starting daily_run.py >> logs\daily_run.log 2>&1
+C:\Python313\python.exe daily_run.py --config config.yaml >> logs\daily_run.log 2>&1
+echo [%DATE% %TIME%] Finished (exit %ERRORLEVEL%) >> logs\daily_run.log 2>&1

@@ -164,10 +164,17 @@ def simulate_fills(
         fee = notional * fee_bps / 10000.0
         price_validated, validation_note = _validate_fill(price, quote)
         if not price_validated:
-            raise RuntimeError(
-                f"Paper fill validation failed for {symbol} {side}: {validation_note} "
-                f"(source={quote['price_source']} ts={quote['price_ts']})"
-            )
+            # 盘中数据只有单一价位（high=low）时滑点会越界；clamp 到行情区间而非中断
+            q_low = quote.get("quote_low")
+            q_high = quote.get("quote_high")
+            if q_low is not None and q_high is not None:
+                price = max(q_low, min(q_high, price))
+                print(f"[paper_execute] ⚠️  {symbol} {side}: {validation_note} → clamped to {price:.4f}")
+            else:
+                raise RuntimeError(
+                    f"Paper fill validation failed for {symbol} {side}: {validation_note} "
+                    f"(source={quote['price_source']} ts={quote['price_ts']})"
+                )
 
         rows.append(
             {

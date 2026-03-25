@@ -364,7 +364,8 @@ def build_orders(
         nav_positions += float(q) * float(p)
     nav_before = float(cash_jpy) + float(nav_positions)
 
-    # normalize weights (avoid sum != 1)
+    # Preserve cash buffer when target weights sum to less than 1.
+    # Only renormalize if the requested gross exposure exceeds 100%.
     tw = target_weights.copy()
     tw["symbol"] = tw["symbol"].astype(str)
     tw = tw[tw["symbol"].isin(px.keys())].copy()
@@ -373,7 +374,7 @@ def build_orders(
         for _, r in tw.iterrows()
     }
     wsum = float(sum(target_weight_map.values()))
-    if wsum > 0:
+    if wsum > 1.0 + 1e-12:
         target_weight_map = {sym: w / wsum for sym, w in target_weight_map.items()}
 
     orders: List[OrderRow] = []

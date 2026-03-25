@@ -54,6 +54,40 @@ Reference design:
 - [x] Add event-study diagnostics for earnings surprises and guidance revisions.
 - [x] Evaluate whether optimizer-level ex-ante Sharpe objective is worth adding after hybrid factor evidence is stable.
 
+## [R1] 2026-03-25 PM/Quant Recalibration
+
+- [x] Tighten default liquidity posture in config and pipeline:
+  - raise screener liquidity floor
+  - reduce default ADV participation cap
+- [x] Preserve cash buffers end to end instead of normalizing every target-weight vector to 100% gross exposure.
+- [x] Add portfolio volatility-target controls to the backtest / target-weight generation path.
+- [ ] Add the same cash-buffer / volatility-target semantics to every downstream sizing and execution audit report that still assumes weights sum to exactly 1.
+- [ ] Surface operator-facing diagnostics for:
+  - target weight sum
+  - forecast portfolio volatility
+  - volatility-target scale applied
+
+## [R2] Evidence and Model Hardening
+
+- [ ] Add factor collinearity diagnostics:
+  - rolling factor correlation matrix
+  - effective rank / redundancy flags
+  - warning when `shadow_eq` and `shadow_ic` rankings are materially identical
+- [ ] Add one de-correlated composite candidate:
+  - residualized momentum
+  - PCA-neutralized family score
+  - or Gram-Schmidt orthogonalized shadow composite
+- [ ] Validate J-Quants PIT ingestion end to end with live credentials and real `available_ts`.
+- [ ] Keep news sentiment as overlay by default; require incremental IC evidence before promoting it to a standalone alpha factor.
+- [ ] Require promotion evidence across at least one earnings season before switching the default mode to a hybrid or news-sensitive stack.
+
+## [R3] Test Coverage and Execution Safety
+
+- [ ] Add tests for `run_pipeline.py` error handling and config propagation.
+- [ ] Add tests for `make_decision.py` so sub-100% target weights preserve cash instead of being renormalized.
+- [ ] Add tests for `ss7_sqlite_news_overlay.py` volatility-target scaling and weight-sum behavior.
+- [ ] Add tests for `paper_execute.py` quote validation and latest-price fail-closed behavior.
+
 ## Explicit Non-Tasks
 
 - [ ] Do not ship a standalone `sharpe_regression` mode in this patch.

@@ -20,7 +20,7 @@ def main():
         run_id, asof = latest_run(conn)
         print(f"[INFO] Using latest run_id={run_id} asof={asof}")
         print("Enter fills. Type 'q' at symbol to finish.")
-        print("Required: symbol, side(BUY/SELL), qty, price. Optional: fee, tax, venue, external_ref")
+        print("Required: symbol, side(BUY/SELL), qty, price. Optional: fee, tax, venue, external_ref/memo")
 
         while True:
             symbol = input("symbol (q to quit): ").strip()
@@ -33,7 +33,7 @@ def main():
             fee_s = input("fee (enter for 0): ").strip()
             tax_s = input("tax (enter for 0): ").strip()
             venue = input("venue (enter for SBI): ").strip() or "SBI"
-            external_ref = input("external_ref (enter blank): ").strip() or None
+            external_ref = input("external_ref / memo (enter blank): ").strip() or None
             ts = input("ts (enter for now, ISO like 2026-02-05T15:01:00): ").strip() or now_iso()
 
             fee = float(fee_s) if fee_s else 0.0

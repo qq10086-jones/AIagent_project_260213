@@ -281,6 +281,10 @@ class ExecConfig:
     adv_lookback: int = 20                    # average daily volume lookback (days)
     max_adv_frac: float = 1.0                 # <=1: cap daily traded shares to frac * ADV; set e.g. 0.05 for 5%
     cash_rate_daily: float = 0.0              # cash yield per day (set if you want)
+    target_vol_annual_pct: float = 0.0        # 0 disables vol targeting; 0.16 means 16% annual vol budget
+    vol_target_lookback: int = 20
+    vol_target_min_scale: float = 0.35
+    vol_target_max_scale: float = 1.0
 
 def lot_size(ticker: str, cfg: ExecConfig) -> int:
     if cfg.lot_size_by_ticker and ticker in cfg.lot_size_by_ticker:
@@ -314,12 +318,12 @@ def execute_rebalance(
     if not np.isfinite(cur_val) or cur_val <= 0:
         cur_val = max(float(cash), 1e-6)
 
-    # Desired dollar allocation
+    # Desired dollar allocation. Preserve cash buffer when target weights sum to < 1.
     target_w = target_w.fillna(0.0).clip(lower=0.0)
     sw = float(target_w.sum())
     if sw <= 1e-12:
         target_w = target_w * 0.0
-    else:
+    elif sw > 1.0 + 1e-12:
         target_w = target_w / sw
     target_val = target_w * cur_val
 
@@ -674,7 +678,6 @@ def apply_news_overlay_to_weights(
     s = float(w_new.sum())
     if s <= 1e-12:
         return w_target * 0.0, 0.0
-    w_new = w_new / s
 
     g_port = float((w_target.fillna(0.0).clip(lower=0.0) * g).sum() / (float(w_target.sum()) + 1e-12))
     return w_new, g_port
@@ -822,6 +825,10 @@ class BTConfig:
 
     # 特征 burn-in 期（新增长回溯因子如 mom_12_1=252d 的预热时间）
     # start_i = train_window + H + feature_burnin，保证训练窗口全有效
+    target_vol_annual_pct: float = 0.0
+    vol_target_lookback: int = 20
+    vol_target_min_scale: float = 0.35
+    vol_target_max_scale: float = 1.0
     feature_burnin: int = 252
 
 
@@ -1099,6 +1106,38 @@ def apply_sector_cap(
     return w
 
 
+def apply_portfolio_vol_target(
+    w_target: pd.Series,
+    returns_window: pd.DataFrame,
+    target_vol_annual_pct: float,
+    min_scale: float,
+    max_scale: float,
+) -> tuple[pd.Series, float, float]:
+    """Scale target weights down to a cash-buffered portfolio vol budget."""
+    target_vol = float(target_vol_annual_pct)
+    if target_vol <= 0.0 or w_target.empty:
+        return w_target, 1.0, float("nan")
+
+    cols = list(w_target.index)
+    clean = returns_window.reindex(columns=cols)
+    if clean.empty:
+        return w_target, 1.0, float("nan")
+
+    cov = clean.astype(float).cov()
+    if cov.empty:
+        return w_target, 1.0, float("nan")
+    cov = cov.reindex(index=cols, columns=cols).fillna(0.0)
+    sigma = cov.to_numpy(dtype=float) * 252.0
+    w = w_target.fillna(0.0).clip(lower=0.0).reindex(cols).to_numpy(dtype=float)
+    forecast_vol = float(np.sqrt(max(w @ sigma @ w, 0.0)))
+    if not np.isfinite(forecast_vol) or forecast_vol <= 1e-9:
+        return w_target, 1.0, float("nan")
+
+    scale = target_vol / forecast_vol
+    scale = float(np.clip(scale, float(min_scale), float(max_scale)))
+    return w_target.clip(lower=0.0) * scale, scale, forecast_vol
+
+
 def build_factor_signal_rows(
     dt: pd.Timestamp,
     tickers: List[str],
@@ -1368,6 +1407,9 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     w_target_hist = []
     risk_off_hist = []
     news_gate_hist = []
+    vol_target_scale_hist = []
+    forecast_vol_hist = []
+    target_weight_sum_hist = []
     turnover_notional = []
     costs_paid = []
     gross_ret = []
@@ -1550,9 +1592,6 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 for tkr in stop_loss_tickers:
                     if tkr in w_target.index:
                         w_target[tkr] = 0.0
-                wsum_after = float(w_target.sum())
-                if wsum_after > 1e-12:
-                    w_target = w_target / wsum_after
 
                 # 应用最大回撤缩减（多余部分保留为现金）
                 w_target = w_target * dd_scale
@@ -1582,6 +1621,18 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 A=A_news,
                 U=U_news,
                 cfg=bt.news
+            )
+
+        vol_target_scale = 1.0
+        forecast_vol = float("nan")
+        if float(ex.target_vol_annual_pct) > 0.0:
+            returns_window = ret1.iloc[max(i - int(ex.vol_target_lookback), 0): i][trade_tickers]
+            w_target, vol_target_scale, forecast_vol = apply_portfolio_vol_target(
+                w_target=w_target,
+                returns_window=returns_window,
+                target_vol_annual_pct=ex.target_vol_annual_pct,
+                min_scale=ex.vol_target_min_scale,
+                max_scale=ex.vol_target_max_scale,
             )
 
         # execute at close
@@ -1622,6 +1673,9 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         w_target_hist.append(w_target.reindex(trade_tickers).fillna(0.0).to_numpy(dtype=float))
         risk_off_hist.append(bool(risk_off))
         news_gate_hist.append(float(news_gate))
+        vol_target_scale_hist.append(float(vol_target_scale))
+        forecast_vol_hist.append(float(forecast_vol) if np.isfinite(forecast_vol) else float("nan"))
+        target_weight_sum_hist.append(float(w_target.sum()))
         turnover_notional.append(traded_notional)
         costs_paid.append(total_cost)
         gross_ret.append(g_ret)
@@ -1797,9 +1851,6 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 for tkr in stop_loss_tickers:
                     if tkr in w_target.index:
                         w_target[tkr] = 0.0
-                wsum_after = float(w_target.sum())
-                if wsum_after > 1e-12:
-                    w_target = w_target / wsum_after
                 w_target = w_target * regime_scale
             else:
                 cur_val_vec = holdings.astype(float) * px_t_cur
@@ -1824,9 +1875,24 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 cfg=bt.news
             )
 
+        vol_target_scale = 1.0
+        forecast_vol = float("nan")
+        if float(ex.target_vol_annual_pct) > 0.0:
+            returns_window = ret1.iloc[max(end_i - int(ex.vol_target_lookback), 0): end_i][trade_tickers]
+            w_target, vol_target_scale, forecast_vol = apply_portfolio_vol_target(
+                w_target=w_target,
+                returns_window=returns_window,
+                target_vol_annual_pct=ex.target_vol_annual_pct,
+                min_scale=ex.vol_target_min_scale,
+                max_scale=ex.vol_target_max_scale,
+            )
+
         w_target_hist.append(w_target.reindex(trade_tickers).fillna(0.0).to_numpy(dtype=float))
         risk_off_hist.append(bool(risk_off))
         news_gate_hist.append(float(news_gate))
+        vol_target_scale_hist.append(float(vol_target_scale))
+        forecast_vol_hist.append(float(forecast_vol) if np.isfinite(forecast_vol) else float("nan"))
+        target_weight_sum_hist.append(float(w_target.sum()))
         turnover_notional.append(float("nan"))
         costs_paid.append(float("nan"))
         gross_ret.append(float("nan"))
@@ -1847,6 +1913,9 @@ def backtest(bt: BTConfig, ex: ExecConfig):
             "cost_paid": costs_paid,
             "risk_off": risk_off_hist,
             "news_gate": news_gate_hist,
+            "vol_target_scale": vol_target_scale_hist,
+            "forecast_vol_annual": forecast_vol_hist,
+            "target_weight_sum": target_weight_sum_hist,
             "stop_loss_count": [len(s) for s in stop_loss_log],
         },
         index=w_df.index
@@ -2097,6 +2166,10 @@ if __name__ == "__main__":
         impact_k=float(os.getenv("SS6_IMPACT_K", "0.5")),              # e.g. 5.0 penalize large trades
         max_adv_frac=float(os.getenv("SS6_MAX_ADV_FRAC", "1.0")),          # e.g. 0.05 limit to 5% ADV
         cash_rate_daily=float(os.getenv("SS6_CASH_RATE_DAILY", "0.0")),
+        target_vol_annual_pct=float(os.getenv("SS6_TARGET_VOL_ANNUAL_PCT", "0.0")),
+        vol_target_lookback=int(os.getenv("SS6_VOL_TARGET_LOOKBACK", "20")),
+        vol_target_min_scale=float(os.getenv("SS6_VOL_TARGET_MIN_SCALE", "0.35")),
+        vol_target_max_scale=float(os.getenv("SS6_VOL_TARGET_MAX_SCALE", "1.0")),
     )
 
     bt = BTConfig(
@@ -2123,6 +2196,10 @@ if __name__ == "__main__":
         max_dd_half=float(os.getenv("SS6_MAX_DD_HALF", "0.12")),
         max_dd_full=float(os.getenv("SS6_MAX_DD_FULL", "0.18")),
         max_dd_reentry_cooldown_days=int(os.getenv("SS6_MAX_DD_REENTRY_COOLDOWN_DAYS", "20")),
+        target_vol_annual_pct=float(os.getenv("SS6_TARGET_VOL_ANNUAL_PCT", "0.0")),
+        vol_target_lookback=int(os.getenv("SS6_VOL_TARGET_LOOKBACK", "20")),
+        vol_target_min_scale=float(os.getenv("SS6_VOL_TARGET_MIN_SCALE", "0.35")),
+        vol_target_max_scale=float(os.getenv("SS6_VOL_TARGET_MAX_SCALE", "1.0")),
         signal_mode=os.getenv("SS6_SIGNAL_MODE", "ridge"),
         compare_signal_modes=[
             m.strip() for m in os.getenv("SS6_COMPARE_SIGNAL_MODES", "shadow_eq,shadow_ic,shadow_hybrid_ic").split(",")

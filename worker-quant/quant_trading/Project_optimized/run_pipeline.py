@@ -27,6 +27,64 @@ def load_cfg(path: str) -> dict:
         return yaml.safe_load(p.read_text(encoding="utf-8"))
     return json.loads(p.read_text(encoding="utf-8"))
 
+
+def resolve_screener_min_adv(cfg: dict) -> float:
+    scr = cfg.get("screener", {})
+    model = cfg.get("model", {})
+    exec_cfg = model.get("exec", {}) or {}
+
+    manual = scr.get("min_adv", None)
+    if manual is not None and not bool(scr.get("auto_min_adv_from_capital", False)):
+        return float(manual)
+
+    initial_capital = float(exec_cfg.get("initial_capital", cfg.get("decision", {}).get("cash", 1_000_000)))
+    max_single_position_pct = float(scr.get("max_single_position_pct", 0.25))
+    target_adv_participation = float(scr.get("target_adv_participation", 0.05))
+    min_adv_floor = float(scr.get("min_adv_floor", 0.0))
+
+    derived = 0.0
+    if target_adv_participation > 0.0:
+        derived = initial_capital * max_single_position_pct / target_adv_participation
+
+    if manual is None:
+        return float(max(min_adv_floor, derived))
+    return float(max(float(manual), min_adv_floor, derived))
+
+
+def resolve_exec_max_adv_frac(cfg: dict) -> float:
+    model = cfg.get("model", {})
+    exec_cfg = model.get("exec", {}) or {}
+    scr = cfg.get("screener", {})
+
+    manual = exec_cfg.get("max_adv_frac", None)
+    if manual is not None and not bool(exec_cfg.get("auto_max_adv_frac_from_capital", False)):
+        return float(manual)
+
+    derived = float(scr.get("target_adv_participation", 0.05))
+    if manual is None:
+        return derived
+    return min(float(manual), derived)
+
+
+def resolve_screener_max_cost_per_lot(cfg: dict) -> float:
+    scr = cfg.get("screener", {})
+    model = cfg.get("model", {})
+    exec_cfg = model.get("exec", {}) or {}
+
+    manual = scr.get("max_cost_per_lot", None)
+    if manual is not None and not bool(scr.get("auto_max_cost_per_lot_from_capital", False)):
+        return float(manual)
+
+    initial_capital = float(exec_cfg.get("initial_capital", cfg.get("decision", {}).get("cash", 1_000_000)))
+    max_single_position_pct = float(scr.get("max_single_position_pct", 0.25))
+    lot_cost_position_budget_frac = float(scr.get("lot_cost_position_budget_frac", 1.0))
+    max_cost_per_lot_floor = float(scr.get("max_cost_per_lot_floor", 0.0))
+
+    derived = initial_capital * max_single_position_pct * lot_cost_position_budget_frac
+    if manual is None:
+        return float(max(max_cost_per_lot_floor, derived))
+    return float(min(float(manual), max(max_cost_per_lot_floor, derived)))
+
 def main(cfg_path: str):
     cfg = load_cfg(cfg_path)
 
@@ -68,8 +126,8 @@ def main(cfg_path: str):
     scr = cfg.get("screener", {})
     asof = scr.get("asof", None) or db_latest
     top_k = int(scr.get("top_k", 50))
-    min_adv = float(scr.get("min_adv", 20_000_000))
-    max_cost_per_lot = float(scr.get("max_cost_per_lot", 150_000))
+    min_adv = resolve_screener_min_adv(cfg)
+    max_cost_per_lot = resolve_screener_max_cost_per_lot(cfg)
     out_json = "selected_tickers.json"
     cmd = [
         "python", "screener.py",
@@ -81,6 +139,8 @@ def main(cfg_path: str):
     ]
     if asof:
         cmd += ["--asof", str(asof)]
+    print(f">> screener min_adv={min_adv:,.0f} JPY")
+    print(f">> screener max_cost_per_lot={max_cost_per_lot:,.0f} JPY")
     print(">>", " ".join(cmd))
     subprocess.check_call(cmd)
 
@@ -95,7 +155,7 @@ def main(cfg_path: str):
         saved = save_screening_history(conn, sel)
 
     # 2.5) News ingestion (optional — 免费源 Kabutan/Google/GDELT → news_feed/news_sentiment)
-    news_cfg = model.get("news", {})
+    news_cfg = cfg.get("model", {}).get("news", {})
     if news_cfg.get("enabled", False):
         lookback_h = float(news_cfg.get("lookback_hours", 26.0))
         sources    = str(news_cfg.get("sources", "kabutan,google,gdelt"))
@@ -116,6 +176,7 @@ def main(cfg_path: str):
     model = cfg.get("model", {})
     exec_cfg = (model.get("exec") or {})
     output_dir = model.get("output_dir", "reports")
+    max_adv_frac = resolve_exec_max_adv_frac(cfg)
 
     cmd = ["python", "ss7_sqlite_news_overlay.py"]
     # We pass parameters via env to avoid rewriting ss6 internals too much
@@ -150,8 +211,12 @@ def main(cfg_path: str):
     env["SS6_FEE_BPS"] = str(float(exec_cfg.get("fee_bps", 5.0)))
     env["SS6_SLIPPAGE_BPS"] = str(float(exec_cfg.get("slippage_bps", 5.0)))
     env["SS6_IMPACT_K"] = str(float(exec_cfg.get("impact_k", 0.5)))
-    env["SS6_MAX_ADV_FRAC"] = str(float(exec_cfg.get("max_adv_frac", 1.0)))
+    env["SS6_MAX_ADV_FRAC"] = str(float(max_adv_frac))
     env["SS6_CASH_RATE_DAILY"] = str(float(exec_cfg.get("cash_rate_daily", 0.0)))
+    env["SS6_TARGET_VOL_ANNUAL_PCT"] = str(float(exec_cfg.get("target_vol_annual_pct", 0.0)))
+    env["SS6_VOL_TARGET_LOOKBACK"] = str(int(exec_cfg.get("vol_target_lookback", 20)))
+    env["SS6_VOL_TARGET_MIN_SCALE"] = str(float(exec_cfg.get("vol_target_min_scale", 0.35)))
+    env["SS6_VOL_TARGET_MAX_SCALE"] = str(float(exec_cfg.get("vol_target_max_scale", 1.0)))
     env["SS6_STOP_LOSS_PCT"] = str(float(exec_cfg.get("stop_loss_pct", 0.08)))
     env["SS6_STOP_LOSS_MODE"] = str(exec_cfg.get("stop_loss_mode", "volatility"))
     env["SS6_ATR_WINDOW"] = str(int(exec_cfg.get("atr_window", 20)))
@@ -175,6 +240,7 @@ def main(cfg_path: str):
         env["SS6_NEWS_CSV"] = ""
     env["SS6_USE_FUNDAMENTAL_FEATURES"] = "1" if bool(fund.get("use_in_live_scoring", False)) else "0"
 
+    print(f">> execution max_adv_frac={max_adv_frac:.4f}")
     print(">> python ss7_sqlite_news_overlay.py (env-driven)")
     subprocess.check_call(cmd, env=env)
 

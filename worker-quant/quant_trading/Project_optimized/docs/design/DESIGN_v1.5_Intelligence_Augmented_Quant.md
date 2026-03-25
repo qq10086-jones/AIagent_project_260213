@@ -4,6 +4,50 @@ Status: Draft
 Date: 2026-03-24
 Owner: PM + Quant Architect
 
+## 0. Calibration Update (2026-03-25)
+
+This document remains directionally correct, but the project state needs a PM/quant calibration update after the latest paper-trading and factor-health review.
+
+### 0.1 Current truth, not aspiration
+
+- The strongest part of the system is now the research-and-operations loop:
+  - shadow mode comparison
+  - promotion governance
+  - closed-loop paper execution
+  - execution provenance and fail-closed pricing checks
+- The weakest part is still not compute speed. It is evidence quality:
+  - PIT fundamentals are implemented but not yet validated end to end with live J-Quants credentials
+  - the current production mode remains `ridge`
+  - `shadow_eq` / `shadow_ic` look better in backtest, but formal promotion is still `hold`
+- The quant slice should therefore be described as a strong research-and-ops platform, not yet a fully proven institutional production strategy stack.
+
+### 0.2 Strategy calibration
+
+- The current live family is still dominated by technical / momentum-adjacent signals.
+- The more important issue is not only style concentration. It is that only a small subset of factors currently clear the t-stat guard consistently.
+- Equal-weight and IC-weight shadow composites can produce nearly identical backtest results.
+  - Working interpretation: the active factor set is still too collinear.
+  - Consequence: factor de-correlation is now a higher priority than adding another similar technical factor.
+
+### 0.3 Risk calibration
+
+- Liquidity assumptions were too loose in the default config.
+  - `min_adv=5,000,000 JPY` and `max_adv_frac=1.0` are too permissive for a realistic small-/mid-cap Japan workflow.
+- Drawdown scaling exists, but ex-ante volatility targeting did not.
+  - That means the system could de-risk after pain, but not target a steadier risk budget before the drawdown happened.
+- News sentiment should remain an overlay / gating layer until it proves incremental IC over the technical and PIT-fundamental baseline.
+
+### 0.4 Updated design rule
+
+The near-term optimization priority is now:
+
+1. tighten liquidity and participation assumptions
+2. preserve cash buffers end to end
+3. add portfolio volatility targeting
+4. add factor de-correlation diagnostics / residualized composites
+5. validate PIT fundamentals live
+6. require longer paper evidence before mode promotion
+
 ## 1. Decision Summary
 
 - Sharpe should be added to the current system, but not as a standalone primary regression target in P0.
@@ -258,6 +302,9 @@ Expected code touch set for the future implementation patch:
 - Document design and promotion rules
 - Add schema and config stubs
 - Make Sharpe an explicit reporting metric in decision and backtest outputs
+- Tighten default liquidity assumptions so paper/backtest does not rely on 100% ADV participation
+- Preserve sub-100% target weights as real cash buffers instead of renormalizing them away
+- Add portfolio volatility targeting as a de-risking layer without introducing leverage
 
 ### P1
 
@@ -265,17 +312,22 @@ Expected code touch set for the future implementation patch:
 - Add first batch of fundamental factors
 - Add first batch of Sharpe-aware factors
 - Extend `compute_ic.py` and diagnostics
+- Validate J-Quants ingestion end to end with real credentials and `available_ts` discipline
+- Add factor correlation diagnostics and at least one residualized or de-correlated composite candidate
 
 ### P2
 
 - Add `shadow_hybrid_ic`
 - compare against `ridge`, `shadow_eq`, `shadow_ic`
 - add operator-facing report fields for factor-family contribution
+- keep news sentiment as overlay by default; only promote toward standalone alpha if incremental IC is demonstrated
+- require evidence across at least one earnings season before promoting hybrid or news-sensitive modes
 
 ### P3
 
 - Evaluate whether optimizer-level ex-ante Sharpe objective is worth adding
 - only after P1/P2 proves the factor layer is real and stable
+- expand test coverage from utility-only tests to pipeline, decision, and paper-execution hardening
 
 ## 11. Final Judgment
 

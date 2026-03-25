@@ -7,6 +7,8 @@ from import_fills import read_trade_file, import_fills_df
 from build_positions import build_positions
 from build_account_snapshot import build_account_snapshot
 from execution_report import generate_execution_report
+from live_trade_advisor import build_live_trade_advice
+from monitor_live_orders import build_order_monitor
 from report_utils import build_human_report, load_target_weights, load_weights_history
 
 DB = "japan_market.db"
@@ -154,8 +156,8 @@ m8.metric("tax", f"{tax:,.0f}")
 
 st.divider()
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(
-    ["Runs", "Orders", "Fills", "Positions", "Reconciliation", "Execution Report", "Human Report", "Account", "Trading Ops"]
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs(
+    ["Runs", "Orders", "Fills", "Positions", "Reconciliation", "Execution Report", "Human Report", "Account", "Live Advice", "Order Monitor", "Trading Ops"]
 )
 
 
@@ -319,6 +321,153 @@ with tab8:
 
 
 with tab9:
+    st.subheader("Live Trade Advice")
+    st.caption("Decision-support only. Use this to compare the latest live portfolio against the latest model target weights.")
+
+    reports_dir = Path("reports")
+    target_weights_path = reports_dir / "target_weights.csv"
+    target_meta_path = reports_dir / "target_weights_meta.json"
+    promotion_path = reports_dir / "promotion_decision.json"
+
+    advice_report, advice_df = build_live_trade_advice(
+        conn,
+        reports_dir=reports_dir,
+        asof=None,
+        target_weights_path=target_weights_path if target_weights_path.exists() else None,
+        target_meta_path=target_meta_path if target_meta_path.exists() else None,
+        promotion_path=promotion_path if promotion_path.exists() else None,
+        lot_size=100,
+        min_trade_value=5000.0,
+    )
+
+    s1, s2, s3, s4 = st.columns(4)
+    summary = advice_report.get("summary", {})
+    s1.metric("advice asof", advice_report.get("asof") or "-")
+    s2.metric("actionable rows", int(summary.get("actionable_count", 0)))
+    s3.metric("cash", f"{float(summary.get('cash', 0.0)):,.0f}")
+    s4.metric("NAV", f"{float(summary.get('nav', 0.0)):,.0f}")
+
+    st.markdown(f"### {advice_report.get('headline', 'Live advice')}")
+    if advice_report.get("warnings"):
+        for item in advice_report["warnings"]:
+            st.warning(item)
+    else:
+        st.success("No structural warning flags in the current advice snapshot.")
+
+    st.markdown("**Recommended Actions**")
+    for item in advice_report.get("actions", []):
+        st.write(f"- {item}")
+
+    actionable_df = advice_df[advice_df["side"].isin(["BUY", "SELL"])].copy() if not advice_df.empty else advice_df
+    st.markdown("**Suggested Orders**")
+    if actionable_df.empty:
+        st.info("No actionable buy/sell rows after lot-size and min-trade filters.")
+    else:
+        st.dataframe(actionable_df, use_container_width=True)
+        st.download_button(
+            "Download live_trade_advice.csv",
+            actionable_df.to_csv(index=False).encode("utf-8-sig"),
+            file_name="live_trade_advice.csv",
+            mime="text/csv",
+        )
+
+    with st.expander("Show all advice rows"):
+        st.dataframe(advice_df, use_container_width=True)
+
+
+with tab10:
+    st.subheader("Order Monitor")
+    st.caption("This panel infers whether a limit order may have traded through in market data. It does not broker-confirm execution.")
+
+    monitor_report, monitor_df = build_order_monitor(conn, run_id, str(asof))
+    om1, om2, om3 = st.columns(3)
+    om1.metric("orders", int(monitor_report.get("summary", {}).get("order_count", 0)))
+    om2.metric("suspected fills", int(monitor_report.get("summary", {}).get("suspected_filled", 0)))
+    om3.metric("pending/near", int(monitor_report.get("summary", {}).get("pending", 0)))
+
+    st.markdown(f"### {monitor_report.get('headline', 'Order monitor')}")
+    if monitor_report.get("warnings"):
+        for item in monitor_report["warnings"]:
+            st.warning(item)
+
+    if monitor_df.empty:
+        st.info("No orders found for this run.")
+    else:
+        st.dataframe(monitor_df, use_container_width=True)
+        st.download_button(
+            "Download order_monitor.csv",
+            monitor_df.to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"order_monitor_{asof}_{run_id}.csv",
+            mime="text/csv",
+        )
+
+    st.divider()
+    st.subheader("Confirm Fill")
+    st.caption("Use this only after you confirm the actual execution. This writes to fills, rebuilds positions, refreshes NAV, and regenerates the execution report.")
+
+    if len(orders) == 0:
+        st.info("No proposed orders available to confirm.")
+    else:
+        order_labels = [
+            f"{r.order_id} | {r.symbol} {r.side} qty={float(r.qty):,.0f} limit={float(r.limit_price) if pd.notna(r.limit_price) else 0.0:,.3f}"
+            for r in orders.itertuples(index=False)
+        ]
+        label_to_order = {label: row for label, (_, row) in zip(order_labels, orders.iterrows())}
+        selected_label = st.selectbox("Order to confirm", order_labels, key="confirm_fill_order")
+        selected_order = label_to_order[selected_label]
+
+        with st.form("confirm_fill_form"):
+            cf1, cf2, cf3, cf4 = st.columns(4)
+            fill_qty = cf1.number_input("Fill Qty", value=float(selected_order["qty"]), step=1.0)
+            fill_price = cf2.number_input(
+                "Fill Price",
+                value=float(selected_order["limit_price"]) if pd.notna(selected_order["limit_price"]) else 0.0,
+                step=0.1,
+            )
+            fill_fee = cf3.number_input("Fee", value=0.0, step=1.0)
+            fill_tax = cf4.number_input("Tax", value=0.0, step=1.0)
+            cf5, cf6 = st.columns(2)
+            fill_ts = cf5.text_input("Fill TS", value="")
+            fill_ref = cf6.text_input("External Ref / Memo", value="manual_confirm")
+            initial_cash_cf = st.number_input(
+                "Initial cash if first snapshot",
+                value=400000.0,
+                step=10000.0,
+                key="confirm_fill_initial_cash",
+            )
+            confirm_submitted = st.form_submit_button("Confirm and Write Fill")
+
+        if confirm_submitted:
+            try:
+                fill_df = pd.DataFrame(
+                    [
+                        {
+                            "ts": fill_ts or pd.Timestamp.now().isoformat(timespec="seconds"),
+                            "symbol": str(selected_order["symbol"]),
+                            "side": str(selected_order["side"]),
+                            "qty": float(fill_qty),
+                            "price": float(fill_price),
+                            "fee": float(fill_fee),
+                            "tax": float(fill_tax),
+                            "external_ref": fill_ref,
+                            "order_id": str(selected_order["order_id"]),
+                        }
+                    ]
+                )
+                n = import_fills_df(conn, run_id, str(asof), fill_df, venue="SBI", force=False, source="manual_confirm")
+                _prev, _rows, missing = build_positions(conn, run_id, str(asof))
+                snap = build_account_snapshot(conn, run_id, str(asof), initial_cash=float(initial_cash_cf))
+                md, _csvp = generate_execution_report(conn, run_id, str(asof), artifact_dir)
+                msg = f"Imported {n} fill. NAV={snap['nav']:,.0f}. report={md.name}"
+                if missing:
+                    msg += f" (missing prices: {missing})"
+                st.success(msg)
+                rerun()
+            except Exception as e:
+                st.error(str(e))
+
+
+with tab11:
     st.subheader("Import fills & refresh reports")
     st.caption("This tab writes to SQLite: fills / positions / account_snapshots / execution_report")
 
@@ -372,10 +521,11 @@ with tab9:
         side = c2.selectbox("Side", ["BUY", "SELL"])
         qty = c3.number_input("Qty", value=0.0, step=1.0)
         price = c4.number_input("Price", value=0.0, step=0.01)
-        c5, c6, c7 = st.columns(3)
+        c5, c6, c7, c8 = st.columns(4)
         fee = c5.number_input("Fee", value=0.0, step=1.0)
         tax = c6.number_input("Tax", value=0.0, step=1.0)
         ts = c7.text_input("TS", value="")
+        memo = c8.text_input("Memo / Ref", value="")
         submitted = st.form_submit_button("Add to staged trades")
         if submitted:
             if "staged" not in st.session_state:
@@ -388,7 +538,7 @@ with tab9:
                 "price": float(price),
                 "fee": float(fee),
                 "tax": float(tax),
-                "external_ref": "manual",
+                "external_ref": memo or "manual",
             })
             st.success("Added.")
 

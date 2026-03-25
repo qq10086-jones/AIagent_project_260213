@@ -5,7 +5,7 @@ update:
   universe_file: null
 
 fundamental:
-  enabled: true
+  enabled: false
   source: "jquants"       # jquants | csv | noop
   csv_path: null
   fail_closed: true
@@ -16,8 +16,15 @@ fundamental:
 screener:
   asof: null
   top_k: 30
-  min_adv: 5000000
-  max_cost_per_lot: 250000
+  min_adv: null
+  auto_min_adv_from_capital: true
+  max_single_position_pct: 0.25
+  target_adv_participation: 0.05
+  min_adv_floor: 2000000
+  max_cost_per_lot: null
+  auto_max_cost_per_lot_from_capital: true
+  lot_cost_position_budget_frac: 1.0
+  max_cost_per_lot_floor: 50000
 
 model:
   # IC 实测结论 (2026-03-25, n=47 periods, xs_n=30):
@@ -44,8 +51,13 @@ model:
     fee_bps: 10.0              # 手续费按千分之一(10bps)试跑
     slippage_bps: 5.0          # 开收盘价差约3-8bps（必须设置）
     impact_k: 0.5              # 市场冲击模型系数
-    max_adv_frac: 1.0
+    max_adv_frac: null
+    auto_max_adv_frac_from_capital: true
     cash_rate_daily: 0.0
+    target_vol_annual_pct: 0.16
+    vol_target_lookback: 20
+    vol_target_min_scale: 0.35
+    vol_target_max_scale: 1.0
     stop_loss_pct: 0.08      # legacy fixed stop-loss fallback
     stop_loss_mode: "atr"
     atr_window: 20

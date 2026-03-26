@@ -104,13 +104,51 @@ def _build_feature_daily_rows(conn, raw: pd.DataFrame, require_available_ts: boo
         asof = available_ts[:10]
         symbol = str(rec["symbol"])
         price = _latest_close(conn, symbol, asof)
+
+        # ── Sloan应计比率（反转存储）: (OCF - 净利润) / 总资产 ──────────────
+        # 越高越好：OCF >> NI 表示利润由真实现金流支撑（盈利质量高）
+        # 越低越差：NI >> OCF 表示利润由会计应计虚增，Sloan(1996)证明预示未来盈利下修
+        # 注意：不能用 _safe_div 因为分子需要两项相减
+        _ocf = rec.get("operating_cf")
+        _ni  = rec.get("net_income")
+        _ta  = rec.get("total_assets")
+        accruals_inv_val: float | None = None
+        if _ocf is not None and _ni is not None and _ta is not None:
+            try:
+                _ta_f = float(_ta)
+                if abs(_ta_f) > 1e-12:
+                    accruals_inv_val = (float(_ocf) - float(_ni)) / _ta_f
+            except Exception:
+                pass
+
         features = {
-            "value_bp": _safe_div(rec.get("book_value_per_share"), price),
-            "quality_roe": _safe_div(rec.get("net_income"), rec.get("total_equity")),
-            "quality_cfo": _safe_div(rec.get("operating_cf"), rec.get("net_income")),
-            "margin_op": _safe_div(rec.get("operating_income"), rec.get("revenue")),
+            # 账面市值比（价值因子）
+            "value_bp":        _safe_div(rec.get("book_value_per_share"), price),
+
+            # 经营性ROA = 营业利润 / 总资产
+            # 替代原 quality_roe(净利润/净资产)：
+            #   ① 营业利润剔除了并购摊销/重组/非经常损益等一次性扰动
+            #   ② 除以总资产而非净资产，消除杠杆倍增效应，行业间可比性更强
+            "roa_op":          _safe_div(rec.get("operating_income"), rec.get("total_assets")),
+
+            # 经营现金流资产回报率 = OCF / 总资产
+            # 替代原 quality_cfo(OCF/净利润)：
+            #   原因子在净利润为负时符号完全反转（OCF正、NI负 → 比率负 → z-score极低），
+            #   误将"利润因摊销为负但现金流健康"的公司打为最差；
+            #   OCF/总资产始终方向正确，与其他因子尺度一致
+            "cfo_assets":      _safe_div(rec.get("operating_cf"), rec.get("total_assets")),
+
+            # Sloan应计比率（反转）= (OCF - 净利润) / 总资产（见上方计算）
+            "accruals_inv":    accruals_inv_val,
+
+            # 营业利润率（已有，保持）
+            "margin_op":       _safe_div(rec.get("operating_income"), rec.get("revenue")),
+
+            # 财务安全系数 = 净资产 / 有息负债（已有，保持）
             "leverage_safety": _safe_div(rec.get("total_equity"), rec.get("total_debt")),
-            "dividend_yield": _safe_div(rec.get("dividend_per_share"), price),
+
+            # 股息率（已有，保持）
+            "dividend_yield":  _safe_div(rec.get("dividend_per_share"), price),
         }
         for feature_name, value in features.items():
             if value is None:

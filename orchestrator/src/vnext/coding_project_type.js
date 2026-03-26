@@ -18,10 +18,12 @@ export function inferCodingProjectType(rawInput) {
   if (!input) return "generic_coding_task";
 
   if (CRM_RE.test(input) || ZH_CRM_RE.test(input)) return "webapp_crm";
-  if (SINGLE_FILE_HTML_RE.test(input) || ZH_SINGLE_FILE_HTML_RE.test(input)) return "single_file_html";
-  if (/\bhtml\b/i.test(input) && !APP_RE.test(input) && !ZH_APP_RE.test(input)) return "single_file_html";
-  if (lower.includes("index.html") && !APP_RE.test(input) && !ZH_APP_RE.test(input)) return "single_file_html";
-  if (APP_RE.test(input) || ZH_APP_RE.test(input)) return "generic_app";
+  // Only classify as single_file_html if there's no app/system signal overriding it
+  const hasAppSignal = APP_RE.test(input) || ZH_APP_RE.test(input);
+  if (!hasAppSignal && (SINGLE_FILE_HTML_RE.test(input) || ZH_SINGLE_FILE_HTML_RE.test(input))) return "single_file_html";
+  if (!hasAppSignal && /\bhtml\b/i.test(input)) return "single_file_html";
+  if (!hasAppSignal && lower.includes("index.html")) return "single_file_html";
+  if (hasAppSignal) return "generic_app";
   return "generic_coding_task";
 }
 

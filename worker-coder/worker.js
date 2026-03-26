@@ -7,6 +7,7 @@ import { createTaskLifecycle } from "./task_lifecycle.js";
 import { validateSafeCommand } from "./verification_runner.js";
 import { loadRuntimeConfig } from "./runtime_config.js";
 import { validateRuntimePreflight } from "./provider_preflight.js";
+import { pushBranchToGitHub } from "./git_side_effects.js";
 
 const {
   REDIS_URL = "redis://localhost:6379",
@@ -165,7 +166,8 @@ async function writeFact(run_id, agent_name, payload) {
 async function processTask(msgId, task, lifecycle) {
   const { task_id, tool_name, run_id, payload: rawPayload } = task;
 
-  if (!tool_name.startsWith("coding.")) {
+  const HANDLED_TOOLS = new Set(["ops.deploy_preview"]);
+  if (!tool_name.startsWith("coding.") && !HANDLED_TOOLS.has(tool_name)) {
     return false;
   }
 
@@ -248,6 +250,18 @@ async function processTask(msgId, task, lifecycle) {
       output = result;
       isSuccess = !!result.ok;
       if (!isSuccess) error = result.error || "coding.delegate failed";
+    } else if (tool_name === "ops.deploy_preview") {
+      const result = await pushBranchToGitHub({
+        workspaceRoot: WORKSPACE_ROOT,
+        runId: run_id,
+        goal: payload.goal || payload.task_prompt || "",
+        githubRepo: payload.github_repo || process.env.GITHUB_REPO,
+        githubToken: payload.github_token || process.env.GITHUB_TOKEN,
+        branchPrefix: payload.branch_prefix || "nexus/",
+      });
+      output = result;
+      isSuccess = result.ok;
+      if (!isSuccess) error = result.message || result.reason || "GitHub 交付失败";
     } else {
       throw new Error(`Unknown tool: ${tool_name}`);
     }
@@ -281,7 +295,10 @@ export async function main() {
         task[fieldValues[i]] = fieldValues[i + 1];
       }
       
-      if (task.tool_name && task.tool_name.startsWith("coding.")) {
+      const WORKER_HANDLED = task.tool_name && (
+        task.tool_name.startsWith("coding.") || task.tool_name === "ops.deploy_preview"
+      );
+      if (WORKER_HANDLED) {
         console.log(`[worker] Processing task ${task.task_id} (${task.tool_name})...`);
         const lifecycle = createTaskLifecycle({
           taskId: task.task_id,

@@ -47,15 +47,16 @@ RISK_ADJUSTED_FACTOR_NAMES: List[str] = [
 ]
 
 FUNDAMENTAL_FACTOR_NAMES: List[str] = [
-    "value_bp",
-    "quality_roe",
-    "quality_cfo",
-    "margin_op",
-    "growth_rev_yoy",
-    "growth_op_yoy",
-    "guidance_delta",
-    "leverage_safety",
-    "dividend_yield",
+    "value_bp",          # 账面市值比（价值因子）
+    "roa_op",            # 经营性ROA = 营业利润/总资产（替代 quality_roe，抗一次性扰动）
+    "cfo_assets",        # OCF资产回报率 = OCF/总资产（替代 quality_cfo，消除净利润符号陷阱）
+    "accruals_inv",      # Sloan应计比率反转 = (OCF-净利润)/总资产（越高=盈利质量越好）
+    "margin_op",         # 营业利润率
+    "growth_rev_yoy",    # 营收同比增长（来自earnings_events）
+    "growth_op_yoy",     # 营业利润同比增长（来自earnings_events）
+    "guidance_delta",    # 盈利指引变化（来自earnings_events）
+    "leverage_safety",   # 财务安全系数 = 净资产/有息负债
+    "dividend_yield",    # 股息率
 ]
 
 FACTOR_NAMES: List[str] = (

@@ -18,7 +18,7 @@ export const STEP_CONTRACTS = {
     title: "PM Specification",
     required_artifacts: ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"],
     instructions: [
-      "Define user stories, scope boundaries, and non-goals for a minimal CRM web app.",
+      "Define user stories, scope boundaries, and non-goals based on the Goal field above.",
       "Write measurable acceptance criteria in plan/acceptance.json.",
       "Create phased milestones in plan/milestones.md.",
     ],
@@ -30,7 +30,7 @@ export const STEP_CONTRACTS = {
       "Provide architecture decisions with tradeoffs and module boundaries.",
       "Publish top risks and mitigations in risk/risk_report.json.",
       "Split implementation work for FE/BE/QA in plan/workplan.md.",
-      "Define all API endpoints or internal interfaces in plan/interfaces.md as concrete markdown headings like '## GET /api/customers' or '## Event: customer.created'.",
+      "Define all API endpoints or internal interfaces in plan/interfaces.md as concrete markdown headings like '## GET /api/books' or '## Event: record.created' (adapt names to the actual domain).",
       "Under each plan/interfaces.md heading, include request shape, response shape or payload shape, and auth requirement.",
       "Keep the Interfaces section in plan/arch.md brief and point it to plan/interfaces.md for the concrete contract list.",
       "Document the application boot strategy so preview deployment can infer an entrypoint or manifest.",
@@ -85,7 +85,7 @@ export const STEP_CONTRACTS = {
 
 export function buildStepPrompt({ run, stepDef, input, payload, promptScript = null }) {
   const c = STEP_CONTRACTS[stepDef.id] || null;
-  const goal = String(input.goal || input.task_prompt || input.prompt || "Build a minimal CRM web app").trim();
+  const goal = String(input.goal || input.task_prompt || input.prompt || "Build a minimal web app").trim();
   const title = c?.title || stepDef.id;
   const required = Array.isArray(c?.required_artifacts) ? c.required_artifacts : [];
   const lines = Array.isArray(c?.instructions) ? c.instructions : [];
@@ -104,8 +104,12 @@ export function buildStepPrompt({ run, stepDef, input, payload, promptScript = n
           : "",
       ].filter(Boolean).join("\n")
     : "";
-  const guidance = lines.length > 0
-    ? `Execution requirements:\n- ${lines.join("\n- ")}`
+  // For pm_spec: inject goal into the first instruction so the model cannot ignore it
+  const effectiveLines = (String(stepDef?.id || "") === "pm_spec" && lines.length > 0)
+    ? [`Write ALL scope, user stories, and acceptance criteria SPECIFICALLY for this system: "${goal.slice(0, 200)}". Do NOT use a generic CRM template.`, ...lines]
+    : lines;
+  const guidance = effectiveLines.length > 0
+    ? `Execution requirements:\n- ${effectiveLines.join("\n- ")}`
     : "Execution requirements: complete this step with verifiable outputs.";
   const promptScriptNote = promptScript
     ? [

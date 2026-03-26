@@ -364,7 +364,9 @@ export function createWorkflowEngine({
     if (!registry.project_types?.[resolvedProjectType]) {
       const err = new Error(`project_type '${resolvedProjectType}' not found`); err.code = "PROJECT_TYPE_NOT_FOUND"; throw err;
     }
-    if (wf.project_type && wf.project_type !== resolvedProjectType) {
+    // Allow if: workflow declares no project_type, types match, or the resolved type maps back to this workflow
+    const workflowOwnsType = registry.project_types?.[resolvedProjectType]?.default_workflow === workflow_id;
+    if (wf.project_type && wf.project_type !== resolvedProjectType && !workflowOwnsType) {
       const err = new Error(`workflow '${workflow_id}' project_type mismatch: expected '${wf.project_type}', got '${resolvedProjectType}'`);
       err.code = "WORKFLOW_PROJECT_TYPE_MISMATCH"; throw err;
     }

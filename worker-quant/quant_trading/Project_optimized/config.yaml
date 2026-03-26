@@ -5,34 +5,33 @@ update:
   universe_file: null
 
 fundamental:
-  enabled: false
+  enabled: true
   source: "jquants"       # jquants | csv | noop
   csv_path: null
   fail_closed: true
   require_available_ts: true
-  use_in_live_scoring: false
+  use_in_live_scoring: true   # 基本面因子进入 ss7 模型评分（P0修复 2026-03-26）
   use_in_learning: true
 
 screener:
   asof: null
-  top_k: 30
+  top_k: 50                               # P1修复：扩大候选池，IC t-stat 需要 25+ 只（2026-03-26）
   min_adv: null
-  auto_min_adv_from_capital: true
+  auto_min_adv_from_capital: false        # P1修复：关闭按资本自动推算，避免资本过小导致 universe 收缩
+  min_adv_floor: 2000000                  # 最低流动性要求：日均成交额 200万日元
   max_single_position_pct: 0.25
   target_adv_participation: 0.05
-  min_adv_floor: 2000000
-  max_cost_per_lot: null
-  auto_max_cost_per_lot_from_capital: true
+  max_cost_per_lot: 500000                # P1修复：直接设定1手上限 50万日元（对应最高股价约5000円/股）
+  auto_max_cost_per_lot_from_capital: false  # 关闭自动推算，screener universe 与实际本金解耦
   lot_cost_position_budget_frac: 1.0
   max_cost_per_lot_floor: 50000
 
 model:
-  # IC 实测结论 (2026-03-25, n=47 periods, xs_n=30):
-  #   只有 mom_consist 过 t-stat(1.60)
-  #   sharpe_20/vol_stability 实测负 IC → shadow_hybrid_ic 权重未经 IC 学习，禁止上线
-  #   signal_mode 维持 ridge，等 paper_days≥30 + Sharpe≥1.5 后再评估 shadow_ic promotion
+  # IC 实测结论 (2026-03-26 更新，universe扩展后重新计算):
+  #   P1修复后 universe 60+只，IC 统计功效改善，等本次 compute_ic --shadow 完成后重新评估
+  #   signal_mode 维持 ridge，等 paper_days≥30 + IC t-stat≥1.5 + Sharpe≥1.5 后再切换
   signal_mode: "ridge"
-  compare_signal_modes: ["ridge", "shadow_eq", "shadow_ic"]  # shadow_hybrid_ic 待 IC 验证
+  compare_signal_modes: ["ridge", "shadow_eq", "shadow_ic", "shadow_hybrid_ic"]
   start: "2020-01-01"
   end: null
   H: 20
@@ -79,21 +78,21 @@ model:
 
 learning:
   enabled: true           # run compute_ic.py after each daily_run
-  shadow: false           # shadow=true: compute IC but don't update weights
+  shadow: true            # P2修复：shadow=true 计算真实IC但不覆盖生产权重，等验证后手动晋升（2026-03-26）
   lookback_periods: 60    # number of rebalance periods to evaluate IC over
-  min_cross_section_n: 25 # minimum screened names per rebalance date for IC
+  min_cross_section_n: 20 # P1修复：universe扩展后降低最低截面数要求（25→20，配合实际数据覆盖）
 
 risk_adjusted:
   enabled: true
   factors: ["sharpe_20", "sharpe_60", "sortino_60", "vol_stability"]
 
 promotion:
-  min_backtest_sharpe: 1.0
-  min_production_ic: 0.0
+  min_backtest_sharpe: 1.5    # P2修复：提高晋升门槛（1.0→1.5），防止过早切换信号模式（2026-03-26）
+  min_production_ic: 0.02     # 要求 IC 均值 > 2%（之前0=无门槛，等于没有保护）
   min_t_stat: 1.5
   max_drawdown_pct: 20.0
-  paper_days_required: 20
-  min_sharpe_improvement: 0.0
+  paper_days_required: 30     # P2修复：提高纸交易天数要求（20→30天）
+  min_sharpe_improvement: 0.1 # 要求相对 ridge 至少提升 0.1 Sharpe
   baseline_mode: "ridge"
   max_turnover_cv: 2.5
 

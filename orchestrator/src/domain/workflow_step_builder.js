@@ -455,6 +455,11 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     payload.prompt_script = promptScript;
     payload.llm_role = String(promptScript?.llm_role || effectiveStepDef.role || "");
 
+    // Set target_paths BEFORE building execution packets so they get the correct project-specific paths.
+    if (["impl_be", "impl_fe"].includes(String(stepDef.id || "")) && !Array.isArray(payload.target_paths)) {
+      payload.target_paths = defaultCodingTargetPaths(payload.project_type);
+    }
+
     if (String(stepDef.id || "") === "impl_be") {
       const executionPacket = buildBackendExecutionPacket({
         stepDef: effectiveStepDef,
@@ -522,12 +527,6 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         payload.max_runtime_s = configured > 0 ? configured : (runtimeByStep[stepDef.id] || 240);
       }
       const runtimeWorkerCoder = runtimeConfig?.worker_coder || {};
-      if ((stepDef.id === "impl_fe" || stepDef.id === "impl_be") && !Array.isArray(payload.target_paths)) {
-        payload.target_paths = defaultCodingTargetPaths(payload.project_type);
-      }
-      if ((stepDef.id === "impl_be" || stepDef.id === "impl_fe") && payload.execution_adapter_packet) {
-        payload.target_paths = payload.execution_adapter_packet.target_paths;
-      }
       if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
         if (!Array.isArray(payload.verification_plan) || payload.verification_plan.length === 0) {
           payload.verification_plan = resolveTemplateVerificationPlan({
@@ -641,9 +640,11 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         24,
       );
       payload.preview_provider = String(payload.preview_provider || input.preview_provider || "local");
-      payload.render_service_id = String(payload.render_service_id || input.render_service_id || "");
-      payload.render_api_base = String(payload.render_api_base || input.render_api_base || "");
-      payload.render_deploy_mode = String(payload.render_deploy_mode || input.render_deploy_mode || "");
+      // GitHub 交付参数（从 input 或环境变量透传）
+      payload.github_repo = String(payload.github_repo || input.github_repo || process.env.GITHUB_REPO || "");
+      payload.github_token = String(payload.github_token || input.github_token || process.env.GITHUB_TOKEN || "");
+      payload.branch_prefix = String(payload.branch_prefix || input.branch_prefix || "nexus/");
+      payload.goal = String(input.goal || "");
     }
 
     return payload;

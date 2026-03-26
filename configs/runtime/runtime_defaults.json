@@ -51,6 +51,12 @@
         "provider_class": "opencode-provider",
         "purpose": "stable local recovery lane for high-resource machines"
       },
+      "stable_dashscope_lane": {
+        "provider": "opencode",
+        "model": "dashscope-coder/qwen-plus-2025-04-28",
+        "provider_class": "opencode-provider",
+        "purpose": "stable cloud lane using DashScope Qwen Plus"
+      },
       "primary_qwen_lane": {
         "provider": "opencode",
         "model": "alibaba-coding-plan/qwen3-coder-plus",

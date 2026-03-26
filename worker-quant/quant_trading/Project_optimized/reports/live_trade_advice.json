@@ -1,0 +1,12 @@
+{
+  "status": "warning",
+  "headline": "No live portfolio data available.",
+  "asof": null,
+  "warnings": [
+    "positions/account_snapshots are empty."
+  ],
+  "actions": [
+    "Import real fills and rebuild positions before requesting advice."
+  ],
+  "summary": {}
+}

@@ -869,15 +869,16 @@ HYBRID_RISK_ADJUSTED_FACTORS: List[str] = [
 ]
 
 HYBRID_FUNDAMENTAL_FACTORS: List[str] = [
-    "value_bp",
-    "quality_roe",
-    "quality_cfo",
-    "margin_op",
-    "growth_rev_yoy",
-    "growth_op_yoy",
-    "guidance_delta",
-    "leverage_safety",
-    "dividend_yield",
+    "value_bp",        # 账面市值比
+    "roa_op",          # 经营性ROA（替代 quality_roe）
+    "cfo_assets",      # OCF资产回报率（替代 quality_cfo）
+    "accruals_inv",    # Sloan应计比率反转（新增）
+    "margin_op",       # 营业利润率
+    "growth_rev_yoy",  # 营收同比增长
+    "growth_op_yoy",   # 营业利润同比增长
+    "guidance_delta",  # 盈利指引变化
+    "leverage_safety", # 财务安全系数
+    "dividend_yield",  # 股息率
 ]
 
 SHADOW_IC_WEIGHTS: Dict[str, float] = {
@@ -889,20 +890,49 @@ SHADOW_IC_WEIGHTS: Dict[str, float] = {
 }
 
 HYBRID_BASE_WEIGHTS: Dict[str, float] = {
+    # ── 技术动量因子（来自 SHADOW_IC_WEIGHTS，IC验证权重）──────────────
     **SHADOW_IC_WEIGHTS,
-    "sharpe_20": 1.25,
-    "sharpe_60": 1.40,
-    "sortino_60": 1.20,
-    "vol_stability": 0.90,
-    "value_bp": 1.00,
-    "quality_roe": 1.10,
-    "quality_cfo": 1.10,
-    "margin_op": 0.90,
-    "growth_rev_yoy": 1.00,
-    "growth_op_yoy": 1.10,
-    "guidance_delta": 1.20,
-    "leverage_safety": 0.85,
-    "dividend_yield": 0.80,
+
+    # ── 风险调整因子 ────────────────────────────────────────────────────
+    "sharpe_20":      1.25,   # 短期风险收益比
+    "sharpe_60":      1.40,   # 中期风险收益比（更稳定，权重稍高）
+    "sortino_60":     1.20,   # 下行风险调整收益
+    "vol_stability":  0.90,   # 波动稳定性（辅助因子，权重较低）
+
+    # ── 基本面因子（重新校准）──────────────────────────────────────────
+    # value_bp: 账面市值比，Fama-French经典价值因子，日本市场实证有效
+    "value_bp":       1.05,
+
+    # roa_op: 经营性ROA，Novy-Marx(2013)证明营业层面盈利预测力优于净利润
+    # 权重设为1.30，高于旧 quality_roe(1.10)，因更干净的信号值得更高权重
+    "roa_op":         1.30,
+
+    # cfo_assets: OCF资产回报率，现金不撒谎
+    # 与 roa_op 互补：accounting income + cash income 双重验证
+    "cfo_assets":     1.20,
+
+    # accruals_inv: Sloan(1996)应计因子，最经典的盈利质量异象之一
+    # 高应计=盈利虚增=未来超额收益为负；在日本市场同样有文献支持
+    # 权重1.15，略低于 roa_op/cfo_assets，因该因子与 cfo_assets 存在相关性
+    "accruals_inv":   1.15,
+
+    # margin_op: 营业利润率，反映定价权和成本控制，稳健的质量信号
+    "margin_op":      1.00,
+
+    # growth_rev_yoy/growth_op_yoy: 盈利增长，来自earnings_events（数据稀疏时NaN→自动跳过）
+    # growth_op_yoy 比 growth_rev_yoy 权重高：利润增长比营收增长更直接反映经营改善
+    "growth_rev_yoy": 0.85,
+    "growth_op_yoy":  1.10,
+
+    # guidance_delta: 管理层指引上调=最强的短期盈利信号（PEAD效应前置）
+    # 数据有限时跳过，有数据时给高权重
+    "guidance_delta": 1.25,
+
+    # leverage_safety: 财务安全系数，防御性因子，熊市中保护作用大
+    "leverage_safety": 0.90,
+
+    # dividend_yield: 股息率，日本高股息效应实证显著，但与价值因子相关，权重不宜过高
+    "dividend_yield": 0.85,
 }
 
 FACTOR_WINSOR_LOWER_Q: float = 0.02

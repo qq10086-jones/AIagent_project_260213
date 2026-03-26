@@ -1,0 +1,420 @@
+{
+  "generated_at": "2026-03-26 13:37 JST",
+  "asof": "2026-03-26",
+  "session": {
+    "time_jst": "13:37",
+    "session": "afternoon",
+    "mins_to_close": 113,
+    "trading": true
+  },
+  "mode": "market",
+  "market": {
+    "nikkei_etf": {
+      "open": 48160.0,
+      "cur": 47570.0,
+      "low": 47350.0,
+      "high": 48580.0,
+      "prev_close": 47820.0,
+      "vol_total": 1898226,
+      "last_time": "13:23",
+      "chg_pct": -0.52,
+      "trend_5m": "up",
+      "volume_spike_ratio": 8.4
+    },
+    "market_ret_pct": -0.52,
+    "sentiment": "weak"
+  },
+  "candidates": [
+    {
+      "rank": 1,
+      "symbol": "7267.T",
+      "score_tech": 24.33,
+      "fundamental_score": 1.0,
+      "score_adjusted": 24.33,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1314.0,
+      "price_open": 1314.0,
+      "chg_pct": 0.15,
+      "trend_5m": "flat",
+      "volume_spike": 10.3,
+      "ret_today": 0.0,
+      "ret_20d": -15.14,
+      "excess_vs_market": 0.56,
+      "vol_5d": 1.86
+    },
+    {
+      "rank": 2,
+      "symbol": "9432.T",
+      "score_tech": 23.37,
+      "fundamental_score": 1.0,
+      "score_adjusted": 23.37,
+      "fundamental_note": "基本面正常",
+      "price_cur": 158.0,
+      "price_open": 157.3000030517578,
+      "chg_pct": 0.45,
+      "trend_5m": "up",
+      "volume_spike": 13.8,
+      "ret_today": 0.32,
+      "ret_20d": 4.71,
+      "excess_vs_market": 0.88,
+      "vol_5d": 0.69
+    },
+    {
+      "rank": 3,
+      "symbol": "8604.T",
+      "score_tech": 23.26,
+      "fundamental_score": 1.0,
+      "score_adjusted": 23.26,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1257.0,
+      "price_open": 1273.5,
+      "chg_pct": -1.49,
+      "trend_5m": "up",
+      "volume_spike": 15.2,
+      "ret_today": -1.37,
+      "ret_20d": -10.18,
+      "excess_vs_market": -0.81,
+      "vol_5d": 2.08
+    },
+    {
+      "rank": 4,
+      "symbol": "7733.T",
+      "score_tech": 22.76,
+      "fundamental_score": 1.0,
+      "score_adjusted": 22.76,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1429.5,
+      "price_open": 1439.0,
+      "chg_pct": -0.31,
+      "trend_5m": "up",
+      "volume_spike": 28.5,
+      "ret_today": -0.42,
+      "ret_20d": -1.45,
+      "excess_vs_market": 0.15,
+      "vol_5d": 1.74
+    },
+    {
+      "rank": 5,
+      "symbol": "9434.T",
+      "score_tech": 22.71,
+      "fundamental_score": 1.0,
+      "score_adjusted": 22.71,
+      "fundamental_note": "基本面正常",
+      "price_cur": 219.5,
+      "price_open": 220.0,
+      "chg_pct": -0.14,
+      "trend_5m": "flat",
+      "volume_spike": 16.5,
+      "ret_today": -0.32,
+      "ret_20d": 4.33,
+      "excess_vs_market": 0.25,
+      "vol_5d": 0.82
+    },
+    {
+      "rank": 6,
+      "symbol": "2801.T",
+      "score_tech": 22.34,
+      "fundamental_score": 1.0,
+      "score_adjusted": 22.34,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1399.5,
+      "price_open": 1379.0,
+      "chg_pct": 4.67,
+      "trend_5m": "down",
+      "volume_spike": 25.5,
+      "ret_today": 4.83,
+      "ret_20d": -8.47,
+      "excess_vs_market": 5.4,
+      "vol_5d": 3.28
+    },
+    {
+      "rank": 7,
+      "symbol": "7261.T",
+      "score_tech": 22.33,
+      "fundamental_score": 1.0,
+      "score_adjusted": 22.33,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1112.0,
+      "price_open": 1123.0,
+      "chg_pct": -0.63,
+      "trend_5m": "up",
+      "volume_spike": 12.1,
+      "ret_today": -0.36,
+      "ret_20d": -16.3,
+      "excess_vs_market": 0.21,
+      "vol_5d": 3.31
+    },
+    {
+      "rank": 8,
+      "symbol": "5401.T",
+      "score_tech": 23.93,
+      "fundamental_score": 0.92,
+      "score_adjusted": 22.02,
+      "fundamental_note": "近2季1季EPS亏损(降权-8%)",
+      "price_cur": 593.5,
+      "price_open": 597.7999877929688,
+      "chg_pct": -0.45,
+      "trend_5m": "up",
+      "volume_spike": 156.8,
+      "ret_today": -0.18,
+      "ret_20d": -5.39,
+      "excess_vs_market": 0.38,
+      "vol_5d": 1.41
+    },
+    {
+      "rank": 9,
+      "symbol": "7211.T",
+      "score_tech": 21.96,
+      "fundamental_score": 1.0,
+      "score_adjusted": 21.96,
+      "fundamental_note": "基本面正常",
+      "price_cur": 342.6000061035156,
+      "price_open": 346.0,
+      "chg_pct": -0.84,
+      "trend_5m": "down",
+      "volume_spike": 8.2,
+      "ret_today": -0.49,
+      "ret_20d": -17.34,
+      "excess_vs_market": 0.07,
+      "vol_5d": 2.84
+    },
+    {
+      "rank": 10,
+      "symbol": "9501.T",
+      "score_tech": 23.52,
+      "fundamental_score": 0.92,
+      "score_adjusted": 21.64,
+      "fundamental_note": "近2季1季EPS亏损(降权-8%)",
+      "price_cur": 622.7999877929688,
+      "price_open": 636.9000244140625,
+      "chg_pct": -2.18,
+      "trend_5m": "up",
+      "volume_spike": 8.9,
+      "ret_today": -2.18,
+      "ret_20d": -9.62,
+      "excess_vs_market": -1.62,
+      "vol_5d": 4.39
+    },
+    {
+      "rank": 11,
+      "symbol": "6471.T",
+      "score_tech": 21.3,
+      "fundamental_score": 1.0,
+      "score_adjusted": 21.3,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1170.5,
+      "price_open": 1192.5,
+      "chg_pct": -0.72,
+      "trend_5m": "up",
+      "volume_spike": 156.2,
+      "ret_today": -0.97,
+      "ret_20d": -13.81,
+      "excess_vs_market": -0.41,
+      "vol_5d": 4.14
+    },
+    {
+      "rank": 12,
+      "symbol": "5020.T",
+      "score_tech": 22.76,
+      "fundamental_score": 0.92,
+      "score_adjusted": 20.94,
+      "fundamental_note": "近2季1季EPS亏损(降权-8%)",
+      "price_cur": 1395.5,
+      "price_open": 1403.5,
+      "chg_pct": 1.42,
+      "trend_5m": "up",
+      "volume_spike": 12.0,
+      "ret_today": 1.42,
+      "ret_20d": -3.09,
+      "excess_vs_market": 1.98,
+      "vol_5d": 4.36
+    },
+    {
+      "rank": 13,
+      "symbol": "7201.T",
+      "score_tech": 22.66,
+      "fundamental_score": 0.92,
+      "score_adjusted": 20.85,
+      "fundamental_note": "近2季1季EPS亏损(降权-8%)",
+      "price_cur": 352.6000061035156,
+      "price_open": 351.70001220703125,
+      "chg_pct": 1.32,
+      "trend_5m": "down",
+      "volume_spike": 16.2,
+      "ret_today": 1.18,
+      "ret_20d": -18.19,
+      "excess_vs_market": 1.74,
+      "vol_5d": 3.62
+    },
+    {
+      "rank": 14,
+      "symbol": "4005.T",
+      "score_tech": 22.25,
+      "fundamental_score": 0.92,
+      "score_adjusted": 20.47,
+      "fundamental_note": "近2季1季EPS亏损(降权-8%)",
+      "price_cur": 504.29998779296875,
+      "price_open": 505.1000061035156,
+      "chg_pct": 1.76,
+      "trend_5m": "up",
+      "volume_spike": 14.9,
+      "ret_today": 1.82,
+      "ret_20d": -8.87,
+      "excess_vs_market": 2.38,
+      "vol_5d": 4.42
+    },
+    {
+      "rank": 15,
+      "symbol": "4755.T",
+      "score_tech": 23.17,
+      "fundamental_score": 0.84,
+      "score_adjusted": 19.47,
+      "fundamental_note": "近2季2季EPS亏损(降权-16%)",
+      "price_cur": 742.7999877929688,
+      "price_open": 745.7999877929688,
+      "chg_pct": -1.12,
+      "trend_5m": "up",
+      "volume_spike": 18.6,
+      "ret_today": -1.13,
+      "ret_20d": -9.1,
+      "excess_vs_market": -0.57,
+      "vol_5d": 2.43
+    }
+  ],
+  "screener_meta": {
+    "count": 15,
+    "hard_vetoed_count": 0,
+    "downweighted_count": 6
+  },
+  "live_state": {
+    "positions": [],
+    "orders": [
+      {
+        "order_id": "live_2026-03-26_preopen__4005_buy_400",
+        "symbol": "4005.T",
+        "side": "BUY",
+        "qty": 400.0,
+        "limit_price": 492.8,
+        "status": "proposed",
+        "created_ts": "2026-03-26T08:00:00"
+      },
+      {
+        "order_id": "live_2026-03-26_preopen__9432_buy_1000",
+        "symbol": "9432.T",
+        "side": "BUY",
+        "qty": 1000.0,
+        "limit_price": 156.7,
+        "status": "proposed",
+        "created_ts": "2026-03-26T08:00:00"
+      }
+    ],
+    "account": {}
+  },
+  "db_signals": [
+    {
+      "asof": "2026-03-26",
+      "symbol": "7267.T",
+      "score": 24.32922336748822,
+      "name": "Honda Motor",
+      "sector": "Auto"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "5401.T",
+      "score": 23.93345022293174,
+      "name": "Nippon Steel",
+      "sector": "Steel"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "9501.T",
+      "score": 23.523981654042448,
+      "name": "Tokyo Electric Power",
+      "sector": "Utility"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "9432.T",
+      "score": 23.37267539092379,
+      "name": "NTT",
+      "sector": "Telecom"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "8604.T",
+      "score": 23.25609282394143,
+      "name": "Nomura Holdings",
+      "sector": "Securities"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "4755.T",
+      "score": 23.17430485454151,
+      "name": "Rakuten Group",
+      "sector": "Internet"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "7733.T",
+      "score": 22.764884954987984,
+      "name": "Olympus",
+      "sector": "Medical Devices"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "5020.T",
+      "score": 22.756685377926956,
+      "name": "ENEOS",
+      "sector": "Energy"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "9434.T",
+      "score": 22.707090826822565,
+      "name": "SoftBank Corp",
+      "sector": "Telecom"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "7201.T",
+      "score": 22.66039199450339,
+      "name": "Nissan Motor",
+      "sector": "Auto"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "2801.T",
+      "score": 22.34099390421312,
+      "name": "Kikkoman",
+      "sector": "Food"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "7261.T",
+      "score": 22.334765924786975,
+      "name": "Mazda Motor",
+      "sector": "Auto"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "4005.T",
+      "score": 22.251903984017414,
+      "name": "Sumitomo Chemical",
+      "sector": "Chemical"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "7211.T",
+      "score": 21.955265295064336,
+      "name": "Mitsubishi Motors",
+      "sector": "Auto"
+    },
+    {
+      "asof": "2026-03-26",
+      "symbol": "6471.T",
+      "score": 21.300404116100637,
+      "name": "NSK",
+      "sector": "Bearings"
+    }
+  ]
+}

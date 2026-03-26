@@ -199,7 +199,6 @@ def main():
             target_date=asof,
             symbols_arg=args.symbols,
             force=False,
-            expiry_minutes=5,
         )
 
     conn = connect(args.db)

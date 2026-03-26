@@ -1,0 +1,161 @@
+{
+  "asof": "2026-03-26",
+  "version": "screener_v1",
+  "count": 9,
+  "symbols": [
+    "7267.T",
+    "9432.T",
+    "8604.T",
+    "7733.T",
+    "9434.T",
+    "2801.T",
+    "7261.T",
+    "7211.T",
+    "6471.T"
+  ],
+  "details": [
+    {
+      "symbol": "7267.T",
+      "score": 24.32922336748822,
+      "hard_fail": false,
+      "reason": "",
+      "adv": 36888868845.0,
+      "vol": 0.019960991736512078,
+      "missing": 0.0,
+      "close": 1314.0,
+      "cost_per_lot": 131400.0
+    },
+    {
+      "symbol": "9432.T",
+      "score": 23.37267539092379,
+      "hard_fail": false,
+      "reason": "",
+      "adv": 38432402684.569855,
+      "vol": 0.007361332067649166,
+      "missing": 0.0,
+      "close": 157.5,
+      "cost_per_lot": 15750.0
+    },
+    {
+      "symbol": "8604.T",
+      "score": 23.25609282394143,
+      "hard_fail": false,
+      "reason": "",
+      "adv": 20103491567.5,
+      "vol": 0.031938072595001255,
+      "missing": 0.0,
+      "close": 1274.5,
+      "cost_per_lot": 127450.0
+    },
+    {
+      "symbol": "7733.T",
+      "score": 22.764884954987984,
+      "hard_fail": false,
+      "reason": "",
+      "adv": 10365587682.5,
+      "vol": 0.026912869671148414,
+      "missing": 0.0,
+      "close": 1435.5,
+      "cost_per_lot": 143550.0
+    },
+    {
+      "symbol": "9434.T",
+      "score": 22.707090826822565,
+      "hard_fail": false,
+      "reason": "",
+      "adv": 17760913651.545715,
+      "vol": 0.00818707820583085,
+      "missing": 0.0,
+      "close": 220.1999969482422,
+      "cost_per_lot": 22019.99969482422
+    },
+    {
+      "symbol": "2801.T",
+      "score": 22.34099390421312,
+      "hard_fail": false,
+      "reason": "",
+      "adv": 5042538065.0,
+      "vol": 0.020003629781027807,
+      "missing": 0.0,
+      "close": 1335.0,
+      "cost_per_lot": 133500.0
+    },
+    {
+      "symbol": "7261.T",
+      "score": 22.334765924786975,
+      "hard_fail": false,
+      "reason": "",
+      "adv": 8292910810.0,
+      "vol": 0.03310330798097639,
+      "missing": 0.0,
+      "close": 1116.0,
+      "cost_per_lot": 111600.0
+    },
+    {
+      "symbol": "7211.T",
+      "score": 21.955265295064336,
+      "hard_fail": false,
+      "reason": "",
+      "adv": 4456912086.149292,
+      "vol": 0.026002403720502505,
+      "missing": 0.0,
+      "close": 344.3999938964844,
+      "cost_per_lot": 34439.99938964844
+    },
+    {
+      "symbol": "6471.T",
+      "score": 21.300404116100637,
+      "hard_fail": false,
+      "reason": "",
+      "adv": 3348573372.5,
+      "vol": 0.03760467549274188,
+      "missing": 0.0,
+      "close": 1182.0,
+      "cost_per_lot": 118200.0
+    }
+  ],
+  "vetoed": [
+    {
+      "symbol": "5401.T",
+      "reason": "veto:连续1季度EPS为负([-37.47])"
+    },
+    {
+      "symbol": "9501.T",
+      "reason": "veto:净利润率-11.5%<-5%; 连续1季度EPS为负([-535.36])"
+    },
+    {
+      "symbol": "4755.T",
+      "reason": "veto:净利润率-7.1%<-5%; 连续1季度EPS为负([-34.09])"
+    },
+    {
+      "symbol": "5020.T",
+      "reason": "veto:连续1季度EPS为负([-5.4])"
+    },
+    {
+      "symbol": "7201.T",
+      "reason": "veto:净利润率-7.7%<-5%; 连续1季度EPS为负([-33.15])"
+    },
+    {
+      "symbol": "4005.T",
+      "reason": "veto:连续1季度EPS为负([-2.76])"
+    }
+  ],
+  "filters": {
+    "lookback_days": 252,
+    "min_adv": 20000000,
+    "max_missing": 0.02,
+    "min_vol": 0.005,
+    "max_vol": 0.06,
+    "top_k": 50,
+    "lot_size_default": 100,
+    "max_cost_per_lot": 150000
+  },
+  "fundamental_veto": {
+    "enabled": true,
+    "vetoed_count": 6,
+    "min_profit_margin": -0.05,
+    "veto_consecutive_loss_quarters": 1,
+    "max_debt_to_equity": 200.0,
+    "no_data_policy": "warn"
+  }
+}

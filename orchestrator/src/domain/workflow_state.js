@@ -18,7 +18,7 @@ export const STEP_CONTRACTS = {
     title: "PM Specification",
     required_artifacts: ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"],
     instructions: [
-      "Define user stories, scope boundaries, and non-goals based on the Goal field above.",
+      "Define user stories, scope boundaries, and non-goals for the actual system described in the Goal field above.",
       "Write measurable acceptance criteria in plan/acceptance.json.",
       "Create phased milestones in plan/milestones.md.",
     ],
@@ -104,9 +104,12 @@ export function buildStepPrompt({ run, stepDef, input, payload, promptScript = n
           : "",
       ].filter(Boolean).join("\n")
     : "";
-  // For pm_spec: inject goal into the first instruction so the model cannot ignore it
+  // For pm_spec: inject goal into the first instruction so the model cannot ignore it.
+  const projectType = String(run?.project_type || "").trim();
   const effectiveLines = (String(stepDef?.id || "") === "pm_spec" && lines.length > 0)
-    ? [`Write ALL scope, user stories, and acceptance criteria SPECIFICALLY for this system: "${goal.slice(0, 200)}". Do NOT use a generic CRM template.`, ...lines]
+    ? (projectType && projectType !== "webapp_crm"
+      ? [`Write ALL scope, user stories, and acceptance criteria SPECIFICALLY for this system: "${goal.slice(0, 200)}". Do NOT use a CRM template or CRM-specific assumptions unless the goal explicitly asks for CRM behavior.`, ...lines]
+      : [`Write ALL scope, user stories, and acceptance criteria SPECIFICALLY for this system: "${goal.slice(0, 200)}".`, ...lines])
     : lines;
   const guidance = effectiveLines.length > 0
     ? `Execution requirements:\n- ${effectiveLines.join("\n- ")}`

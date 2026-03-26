@@ -13,7 +13,7 @@ const __dirname = path.dirname(__filename);
 const registry = loadRegistryOrThrow(path.resolve(__dirname, "..", "..", "configs", "registry", "capability_registry.json"));
 
 test("coding project type infers single_file_html for simple html requests", () => {
-  assert.equal(inferCodingProjectType("帮我写一个 html，内容就写：hello, world"), "single_file_html");
+  assert.equal(inferCodingProjectType("Please create a single HTML page that says hello, world"), "single_file_html");
 });
 
 test("coding project type infers webapp_crm for crm requests", () => {
@@ -21,19 +21,19 @@ test("coding project type infers webapp_crm for crm requests", () => {
 });
 
 test("coding project type falls back to generic_coding_task when request is broad", () => {
-  assert.equal(inferCodingProjectType("帮我做一个 coding team 补丁"), "generic_coding_task");
+  assert.equal(inferCodingProjectType("Help me use the coding team to build something"), "generic_coding_task");
 });
 
-test("coding workflow defaults resolve through generic_coding_task", () => {
+test("coding workflow defaults resolve through shared workflow and generic project types", () => {
   assert.equal(resolveCodingWorkflowId(registry), "coding_team_v0");
-  assert.equal(resolveCodingProjectType("做一个管理后台", registry), "generic_app");
+  assert.equal(resolveCodingProjectType("Build an admin dashboard with user management", registry), "generic_app");
 });
 
 test("brain router assigns single_file_html project type for html workflow requests", () => {
   const routed = routeTaskRequest({
     source: "discord",
-    raw_input: "/coder 帮我写一个 html，内容就写：hello, world",
-    normalized_input: { text: "/coder 帮我写一个 html，内容就写：hello, world" },
+    raw_input: "/coder Please create a single HTML page that says hello, world",
+    normalized_input: { text: "/coder Please create a single HTML page that says hello, world" },
     context: { channel_id: "chan-html" },
     registry,
   });
@@ -69,4 +69,8 @@ test("registry validator allows specialized project type on shared workflow", ()
   });
 
   assert.equal(checked.ok, true);
+});
+
+test("shared coding workflow registry no longer hard-binds a single project type", () => {
+  assert.equal(registry.workflows.coding_team_v0.project_type, null);
 });

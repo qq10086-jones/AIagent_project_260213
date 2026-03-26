@@ -65,7 +65,7 @@ export function loadRegistryOrThrow(registryPath) {
   }
 
   for (const [workflowId, wf] of Object.entries(reg.workflows)) {
-    if (!reg.project_types[wf?.project_type]) {
+    if (wf?.project_type !== null && wf?.project_type !== undefined && !reg.project_types[wf?.project_type]) {
       errors.push(`workflow '${workflowId}' references unknown project_type '${wf?.project_type}'`);
     }
     if (!Array.isArray(wf?.steps) || wf.steps.length === 0) {

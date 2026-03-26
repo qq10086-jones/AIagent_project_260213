@@ -1,0 +1,18 @@
+{
+  "suite_id": "discord_doc_release_hub_suite_v1",
+  "description": "Single-scenario Discord coding validation for a document issuance and release-history management system.",
+  "defaults": {
+    "channel_prefix": "doc-release-chan",
+    "user_prefix": "doc-release-user",
+    "guild_id": "guild-doc-release",
+    "thread_prefix": "doc-release-thread"
+  },
+  "scenarios": [
+    {
+      "id": "document_release_management_system",
+      "class": "long",
+      "weight": 1,
+      "message": "/coder: Build a document issuance management system that starts from Discord intake. The system should let us create different documents from specific Excel templates, assign a unique document number to each one, support one-click document generation, and record full release history. The system should also be designed so it can later expand into complaint tracking and ticket claiming workflows. Please deliver a minimal but usable system with clear assumptions and extension points."
+    }
+  ]
+}

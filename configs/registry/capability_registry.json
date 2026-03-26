@@ -324,7 +324,7 @@
   },
   "workflows": {
     "coding_team_v0": {
-      "project_type": "generic_coding_task",
+      "project_type": null,
       "steps": [
         {
           "id": "pm_spec",

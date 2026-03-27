@@ -43,6 +43,9 @@
         "apiKey": "${MINIMAX_API_KEY}"
       },
       "models": {
+        "MiniMax-M2.7": {
+          "name": "MiniMax-M2.7"
+        },
         "MiniMax-M2.5": {
           "name": "MiniMax-M2.5"
         }

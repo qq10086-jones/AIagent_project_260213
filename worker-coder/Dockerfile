@@ -2,7 +2,7 @@ FROM node:20-bookworm-slim
 
 # Install tools needed for executing code/commands
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git python3 python3-pip bash curl ca-certificates \
+    git python3 python3-pip bash curl ca-certificates gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Codex CLI for coding.delegate provider=codex
@@ -23,5 +23,9 @@ COPY . .
 # Environment variables
 ENV NODE_ENV=production
 
-# Start worker
-CMD ["node", "worker.js"]
+# Copy and register entrypoint (resolves ${VAR} in opencode.json.tpl at startup)
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
+# Start worker via entrypoint so env vars are substituted into opencode.json
+CMD ["/bin/sh", "entrypoint.sh"]

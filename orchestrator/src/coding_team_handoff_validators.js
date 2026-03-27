@@ -103,9 +103,20 @@ export function validateCodingTeamHandoff({ workspaceRoot, artifactRoot, handoff
     .map((file) => readTextFileSafe(file).toLowerCase())
     .join("\n");
   const normalizedCorpus = normalizeSectionToken(corpus);
+  // Also collect top-level keys from JSON artifacts so required_sections can be
+  // satisfied by a JSON handoff file (e.g. be_to_fe.json with api_contracts key).
+  const jsonTopLevelKeys = new Set(
+    (handoff.required_artifacts || [])
+      .filter((item) => /\.json$/i.test(String(item || "")))
+      .flatMap((item) => {
+        const obj = readJsonFileSafe(path.resolve(rootAbs, String(item).replace(/\\/g, "/")));
+        return obj && typeof obj === "object" && !Array.isArray(obj) ? Object.keys(obj) : [];
+      })
+      .map((k) => normalizeSectionToken(k))
+  );
   const missingSections = (handoff.required_sections || []).filter((section) => {
     const token = normalizeSectionToken(section);
-    return token && !normalizedCorpus.includes(token);
+    return token && !normalizedCorpus.includes(token) && !jsonTopLevelKeys.has(token);
   });
   if (missingSections.length > 0) {
     return {

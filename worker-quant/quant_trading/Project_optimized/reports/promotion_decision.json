@@ -1,113 +1,67 @@
 {
-  "target_mode": "ridge",
+  "target_mode": "shadow_ic",
   "baseline_mode": "ridge",
   "recommendation": "hold",
   "patch_note": "Sharpe is treated as a governance metric and promotion gate in this patch. It is not used here as a standalone regression target.",
   "target_metrics": {
-    "sharpe": -0.1001405833143847,
-    "sortino": -0.1525072306876509,
-    "max_drawdown_pct": -28.29021942488169,
-    "avg_turnover_notional": 21246.68084484036,
-    "turnover_cv": 0.5953800826127464,
-    "total_return_pct": -5.195181765771325,
-    "annual_vol_pct": 11.887247674487966
+    "sharpe": 0.7127439899654185,
+    "sortino": 1.305351624276622,
+    "max_drawdown_pct": -15.473070761534668,
+    "avg_turnover_notional": 18330.493830018124,
+    "turnover_cv": 0.8964181205124931,
+    "total_return_pct": 34.756914634493555,
+    "annual_vol_pct": 16.92563879537088
   },
   "paper_stats": {
-    "mode": "ridge",
-    "decision_run_count": 7,
-    "paper_days": 2,
-    "paper_asofs": [
-      "2026-03-23",
-      "2026-03-25"
-    ],
-    "recent_runs": [
-      {
-        "run_id": "2026-03-23__1fd3dd03cb",
-        "asof": "2026-03-23",
-        "status": "proposed",
-        "paper_executed": false
-      },
-      {
-        "run_id": "2026-03-23__4c5a8c0a43",
-        "asof": "2026-03-23",
-        "status": "proposed",
-        "paper_executed": false
-      },
-      {
-        "run_id": "2026-03-23__2244abd7ee",
-        "asof": "2026-03-23",
-        "status": "proposed",
-        "paper_executed": false
-      },
-      {
-        "run_id": "2026-03-23__57f1b2802a",
-        "asof": "2026-03-23",
-        "status": "filled",
-        "paper_executed": true
-      },
-      {
-        "run_id": "2026-03-23__fb8ad53ecf",
-        "asof": "2026-03-23",
-        "status": "filled",
-        "paper_executed": true
-      },
-      {
-        "run_id": "2026-03-25__b7e67cd3e2",
-        "asof": "2026-03-25",
-        "status": "filled",
-        "paper_executed": true
-      },
-      {
-        "run_id": "2026-03-25__e98172ab2c",
-        "asof": "2026-03-25",
-        "status": "filled",
-        "paper_executed": true
-      }
-    ]
+    "mode": "shadow_ic",
+    "decision_run_count": 0,
+    "paper_days": 0,
+    "paper_asofs": [],
+    "recent_runs": []
   },
   "learning_stats": {
-    "mode": "ridge",
+    "mode": "shadow_ic",
     "factor_count": 5,
     "family_metrics": {
       "technical": {
         "factor_count": 5,
         "observed_factor_count": 5,
-        "mean_ic": 0.02339248520219995,
-        "mean_t_stat": 0.43042420000000003,
+        "mean_ic": 0.023567375097683873,
+        "mean_t_stat": 0.8793946,
         "positive_ic_ratio": 1.0,
         "factors": [
           {
             "factor_name": "mom_consist",
-            "ic_mean": 0.009179890116710332,
-            "t_stat": 1.743865,
+            "ic_mean": 0.010054339594129958,
+            "t_stat": 1.922728,
             "guard": "PASS",
-            "n_observations": 101
+            "n_observations": 218
           },
           {
             "factor_name": "rsi14",
             "ic_mean": 0.02694153013332967,
-            "t_stat": 0.135923,
+            "t_stat": 0.546136,
             "guard": "FAIL",
             "n_observations": 50
           },
           {
             "factor_name": "vol_adj_mom20",
             "ic_mean": 0.03311356044042312,
-            "t_stat": 0.14887,
+            "t_stat": 0.419072,
             "guard": "FAIL",
             "n_observations": 50
           },
           {
             "factor_name": "ret20",
             "ic_mean": 0.030052345788930374,
-            "t_stat": 0.023288,
+            "t_stat": 0.528476,
             "guard": "FAIL",
             "n_observations": 50
           },
           {
             "factor_name": "slope60",
             "ic_mean": 0.017675099531606245,
-            "t_stat": 0.100175,
+            "t_stat": 0.980561,
             "guard": "FAIL",
             "n_observations": 50
           }
@@ -115,50 +69,50 @@
       }
     },
     "aggregate": {
-      "mean_ic": 0.02339248520219995,
-      "mean_t_stat": 0.43042420000000003,
+      "mean_ic": 0.023567375097683873,
+      "mean_t_stat": 0.8793946,
       "positive_ic_ratio": 1.0,
-      "min_family_t_stat": 0.43042420000000003
+      "min_family_t_stat": 0.8793946
     }
   },
   "gates": {
     "production_ic": {
       "passed": true,
-      "actual": 0.02339248520219995,
-      "threshold": 0.0
+      "actual": 0.023567375097683873,
+      "threshold": 0.02
     },
     "t_stat": {
       "passed": false,
-      "actual": 0.43042420000000003,
+      "actual": 0.8793946,
       "threshold": 1.5
     },
     "backtest_sharpe": {
       "passed": false,
-      "actual": -0.1001405833143847,
-      "threshold": 1.0
+      "actual": 0.7127439899654185,
+      "threshold": 1.5
     },
     "max_drawdown": {
       "passed": true,
-      "actual": -28.29021942488169,
+      "actual": -15.473070761534668,
       "threshold": 20.0
     },
     "sharpe_vs_baseline": {
       "passed": true,
-      "actual": 0.0,
-      "threshold": 0.0,
+      "actual": 0.8128845732798032,
+      "threshold": 0.1,
       "baseline_mode": "ridge",
       "baseline_sharpe": -0.1001405833143847
     },
     "paper_days": {
       "passed": false,
-      "actual": 2,
-      "threshold": 20
+      "actual": 0,
+      "threshold": 30
     },
     "turnover_stability": {
       "passed": true,
-      "actual": 0.5953800826127464,
-      "threshold": 2.5,
-      "avg_turnover_notional": 21246.68084484036
+      "actual": 0.8964181205124931,
+      "threshold": null,
+      "note": "No max_turnover_cv configured; reported only."
     }
   }
 }

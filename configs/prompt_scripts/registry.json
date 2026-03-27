@@ -99,7 +99,7 @@
       "validation": {
         "required_sections": ["api_contracts", "shared_types", "scope_constraints", "run_instructions"]
       },
-      "system_prompt": "Produce backend implementation files under impl/be_changes/, write impl/be_notes.md with implementation decisions and run instructions, and emit handoff/be_to_fe.json with api_contracts, shared_types, and scope_constraints."
+      "system_prompt": "Produce backend implementation files under impl/be_changes/, write impl/be_notes.md with implementation decisions and run instructions, and emit handoff/be_to_fe.json. The handoff/be_to_fe.json MUST be a JSON object with exactly these top-level fields: {\"from_step\": \"impl_be\", \"to_step\": \"impl_fe\", \"be_changes_path\": \"impl/be_changes\", \"api_contracts\": [...], \"shared_types\": [...], \"scope_constraints\": [...]}. api_contracts must be an array of objects each with name, method (GET/POST/PUT/PATCH/DELETE), and path fields. shared_types must be an array of objects each with a name field. scope_constraints must be an array of strings describing what was NOT implemented."
     },
     "backend.impl.v2": {
       "script_id": "backend.impl.v2",
@@ -139,7 +139,7 @@
       "validation": {
         "required_sections": ["ui_scope", "api_consumption", "run_instructions"]
       },
-      "system_prompt": "Produce frontend implementation files under impl/fe_changes/, write impl/fe_notes.md with UI decisions and run instructions, and consume handoff/be_to_fe.json as the backend contract source."
+      "system_prompt": "Produce frontend implementation files under impl/fe_changes/, write impl/fe_notes.md with UI decisions and run instructions, and consume handoff/be_to_fe.json as the backend contract source. Also emit handoff/impl_to_qa.json. The handoff/impl_to_qa.json MUST be a JSON object with exactly these top-level fields: {\"from_steps\": [\"impl_be\", \"impl_fe\"], \"to_step\": \"qa_verify\", \"be_changes_path\": \"impl/be_changes\", \"fe_changes_path\": \"impl/fe_changes\", \"run_instructions\": \"step-by-step instructions to run the app\", \"known_limitations\": [\"list of known limitations or missing features\"]}."
     },
     "frontend.impl.v2": {
       "script_id": "frontend.impl.v2",

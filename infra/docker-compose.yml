@@ -91,7 +91,7 @@ services:
       - ../worker-coder:/app
       - /app/node_modules
       - ..:/workspace
-      - ../opencode.json:/app/opencode.json:ro
+      - ../opencode.json.tpl:/app/opencode.json.tpl:ro
       - ../configs/runtime:/app/configs/runtime:ro
     depends_on:
       - redis

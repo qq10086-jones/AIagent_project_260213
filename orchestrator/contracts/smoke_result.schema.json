@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "smoke_result.schema.json",
+  "type": "object",
+  "required": ["install_ok", "server_started", "root_check", "api_check", "errors", "verdict", "evidence_level"],
+  "properties": {
+    "install_ok": { "type": "boolean" },
+    "server_started": { "type": "boolean" },
+    "root_check": {
+      "type": "object",
+      "required": ["status", "content_type", "passed"],
+      "properties": {
+        "status": { "type": "integer" },
+        "content_type": { "type": "string" },
+        "passed": { "type": "boolean" }
+      }
+    },
+    "api_check": {
+      "type": "object",
+      "required": ["endpoint", "status", "response_sample", "passed", "skipped"],
+      "properties": {
+        "endpoint": { "type": "string" },
+        "status": { "type": "integer" },
+        "response_sample": { "type": "string" },
+        "passed": { "type": "boolean" },
+        "skipped": { "type": "boolean" }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["pass", "fail"]
+    },
+    "evidence_level": {
+      "type": "string",
+      "enum": ["l1_only", "l1_l2"]
+    }
+  }
+}

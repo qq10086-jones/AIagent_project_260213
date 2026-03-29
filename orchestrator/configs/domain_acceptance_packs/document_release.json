@@ -1,0 +1,63 @@
+{
+  "domain": "document_release",
+  "version": "2026-03-28.v1",
+  "source_design": "docs/03_feature_development/2026-03-27_project_completion_design_v2.md",
+  "selection_rationale": "Directly relevant to the system's own domain; well-defined artifact structure; feasible with prompt/template changes.",
+  "required_journeys": [
+    "create or draft a new document",
+    "assign identifier, version, or release tag",
+    "browse document or release history",
+    "view document detail or release notes"
+  ],
+  "expected_ui_components": [
+    "document list or release history table",
+    "document or release detail view",
+    "create or draft document form",
+    "version or tag assignment control"
+  ],
+  "domain_nouns": [
+    "document",
+    "release",
+    "version",
+    "changelog",
+    "draft",
+    "publish",
+    "artifact",
+    "identifier"
+  ],
+  "forbidden_generic_nouns": [
+    "entity",
+    "item",
+    "record"
+  ],
+  "expected_api_surface": [
+    "GET /documents or /api/documents",
+    "GET /documents/:id or /api/documents/:id",
+    "POST /documents or /api/documents",
+    "GET /releases or /api/releases"
+  ],
+  "expected_backend_behavior": [
+    "document list returns array with id, title, version or date fields",
+    "create document assigns an identifier and persists",
+    "release history endpoint returns ordered list of past releases"
+  ],
+  "preview_expectations": {
+    "must_serve_document_list_or_release_view": true,
+    "must_not_be_unrelated_sandbox": false,
+    "preview_root_pattern": "doc|release|artifact|changelog"
+  },
+  "perceptual_quality_minimum": {
+    "score": "mid",
+    "layout_must_be_intentional": true,
+    "placeholder_text_disqualifies": true,
+    "interactive_affordances_required": ["create document button", "document row or link click"]
+  },
+  "acceptance_criteria": [
+    "Document list renders with domain-specific labels (title, version, date — not 'item')",
+    "Create document form assigns an identifier and appears in the list after submission",
+    "Release history or changelog view renders at least one historical entry",
+    "QA report includes evidence for at least 3 of the 4 required journeys"
+  ],
+  "example_pass": "Document list shows 2+ entries with title/version; create form opens; new doc appears in list with assigned ID.",
+  "example_fail": "Page renders 'Item List' with 'Sample Item 1'; create button appends a hardcoded row client-side only."
+}

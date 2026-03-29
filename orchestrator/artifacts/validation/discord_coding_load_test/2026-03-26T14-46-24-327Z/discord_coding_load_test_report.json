@@ -1,0 +1,76 @@
+{
+  "generated_at": "2026-03-26T14:46:31.370Z",
+  "config": {
+    "base_url": "http://localhost:3000",
+    "suite_file": "E:\\AIagent_project_260213\\orchestrator\\canary_inputs\\discord_doc_release_hub_suite_v1.json",
+    "suite_id": "discord_doc_release_hub_suite_v1",
+    "workspace_root": "E:\\AIagent_project_260213",
+    "run_count": 1,
+    "warmup_count": 0,
+    "concurrency": 1,
+    "stagger_ms": 0,
+    "poll_ms": 5000,
+    "timeout_ms": 1800000,
+    "min_workflow_success_rate": null,
+    "min_go_rate": null,
+    "max_dispatch_p95_ms": null,
+    "max_total_p95_ms": null,
+    "strict": false
+  },
+  "execution_window": {
+    "started_at": "2026-03-26T14:46:24.359Z",
+    "finished_at": "2026-03-26T14:46:31.370Z",
+    "elapsed_ms": 7011
+  },
+  "latency": {
+    "dispatch_p50_ms": 7010,
+    "dispatch_p95_ms": 7010,
+    "total_p50_ms": 0,
+    "total_p95_ms": 0
+  },
+  "summary": {
+    "total_runs": 1,
+    "success_count": 0,
+    "failure_count": 1,
+    "workflow_success_count": 0,
+    "go_pass_count": 0,
+    "dispatch_mode_counts": {
+      "final_completion_reply": 1
+    },
+    "workflow_status_counts": {
+      "unknown": 1
+    },
+    "scenario_counts": {
+      "document_release_management_system": 1
+    },
+    "class_counts": {
+      "long": 1
+    }
+  },
+  "rates": {
+    "workflow_success_rate": 0,
+    "go_rate": 0
+  },
+  "gate_failures": [],
+  "verdict": "FAIL",
+  "results": [
+    {
+      "index": 1,
+      "scenario_id": "document_release_management_system",
+      "class": "long",
+      "discord_message": "/coder: 我需要一个文档发行管理系统。请通过 Discord 链路作为输入段来实现。系统要支持基于特定 Excel 模板制作不同 documents，自动生成文档编号，支持一键制作文档并记录发行历史。后续还要扩展到客诉记录系统和 ticket 认领功能。请先交付一个可运行的初版，并把扩展位预留好。 [DLT 2026-03-26T14-46-24-327Z #1 scenario=document_release_management_system]",
+      "dispatch_ok": false,
+      "dispatch_status": 500,
+      "dispatch_mode": "final_completion_reply",
+      "dispatch_latency_ms": 7010,
+      "run_id": "ef2df92e-eacf-406c-b0de-69e870d363c4",
+      "workflow_run_id": "",
+      "workflow_status": "",
+      "go_no_go_verdict": "",
+      "go_no_go_exists": false,
+      "ok": false,
+      "error_code": "UNKNOWN_ERROR",
+      "error_message": "workflow 'coding_team_v0' project_type mismatch: expected 'generic_coding_task', got 'generic_app'"
+    }
+  ]
+}

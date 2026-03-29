@@ -29,6 +29,7 @@ function main() {
   assert.ok(beHandoff, "impl_be should return a handoff");
   assert.equal(beHandoff.from_step, "impl_be");
   assert.ok(beHandoff.required_artifacts.includes("impl/be_changes/server.js"), "impl_be must require server.js");
+  assert.ok(beHandoff.required_artifacts.includes("impl/be_changes/package.json"), "impl_be must require package.json");
   assert.ok(beHandoff.required_artifacts.includes("handoff/be_to_fe.json"), "impl_be must require be_to_fe.json");
   assert.ok(beHandoff.required_sections.includes("api_contracts"), "impl_be must require api_contracts section");
 
@@ -36,7 +37,7 @@ function main() {
   const feHandoff = getWorkflowStepHandoff("impl_fe");
   assert.ok(feHandoff, "impl_fe should return a handoff");
   assert.equal(feHandoff.from_step, "impl_fe");
-  assert.ok(feHandoff.required_artifacts.includes("impl/fe_changes/app.js"), "impl_fe must require app.js");
+  assert.ok(feHandoff.required_artifacts.includes("impl/fe_changes/public/app.js"), "impl_fe must require public/app.js");
   assert.ok(feHandoff.typed_handoff.required_fields.includes("run_instructions"), "impl_fe handoff must require run_instructions");
 
   // --- release_pack --- (no handoff required)

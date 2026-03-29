@@ -72,6 +72,7 @@ export async function runStaticChecks({ workspaceRoot, filesChanged = [], taskDi
   }
   const records = [];
   for (const rel of changed) {
+    if (/(^|\/)node_modules(\/|$)/.test(rel)) continue;
     const abs = path.resolve(workspaceRoot, rel);
     if (!abs.startsWith(path.resolve(workspaceRoot)) || !fs.existsSync(abs)) continue;
     const ext = path.extname(rel).toLowerCase();

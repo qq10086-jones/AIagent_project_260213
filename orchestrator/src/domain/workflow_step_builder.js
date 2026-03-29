@@ -1,4 +1,4 @@
-/**
+﻿/**
  * workflow_step_builder.js
  *
  * Step payload construction helpers.
@@ -7,6 +7,7 @@
 
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { getProjectContext, getPriorADRs, getTaskHistory } from "./memory_reader.js";
 import {
   buildStepPrompt,
@@ -27,6 +28,8 @@ import {
   applyWorkerCodingTemplateDefaults,
   loadWorkerCodingTemplateRegistryOrThrow,
 } from "../worker_coding_templates.js";
+
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 export function pathForRunArtifacts(run_id) {
   return `artifacts/release/${run_id || "unknown-run"}`;
@@ -79,6 +82,30 @@ function buildTargetFileContextBlock(targetFileContext = []) {
   return lines.join("\n");
 }
 
+function buildArchHandoffBlock(handoff) {
+  if (!handoff || typeof handoff !== "object") return "";
+  const lines = ["", "[Architecture Handoff]"];
+  if (Array.isArray(handoff.modules) && handoff.modules.length > 0) {
+    lines.push(`Modules: ${handoff.modules.map((m) => String(m)).join(", ")}`);
+  }
+  if (Array.isArray(handoff.interfaces) && handoff.interfaces.length > 0) {
+    lines.push("API interfaces to implement:");
+    for (const iface of handoff.interfaces) lines.push(`- ${String(iface)}`);
+  }
+  if (Array.isArray(handoff.decisions) && handoff.decisions.length > 0) {
+    lines.push("Architecture decisions:");
+    for (const dec of handoff.decisions) {
+      const parts = [dec?.adr_id, dec?.title, dec?.status].filter(Boolean).map(String);
+      lines.push(`- ${parts.join(" | ")}`);
+    }
+  }
+  if (Array.isArray(handoff.risks) && handoff.risks.length > 0) {
+    lines.push("Risks:");
+    for (const risk of handoff.risks) lines.push(`- ${String(risk)}`);
+  }
+  return lines.length > 1 ? lines.join("\n") : "";
+}
+
 function buildCodingContextBlock({ contextPacket = null, repoMap = null }) {
   if (!contextPacket || typeof contextPacket !== "object") return "";
   const lines = ["", "[Coding Context Packet]"];
@@ -128,8 +155,9 @@ function chooseImplementationMode({
   const requestedLane = String(payload?.execution_lane || "").trim();
   // stable_local_lane uses a local ollama model with a limited context window.
   // stable_cloud_lane currently shows weak structured-patch reliability on impl steps.
-  // Force full_file_fallback on both lanes to keep prompts smaller and avoid empty patch bundles.
-  if (["impl_be", "impl_fe"].includes(String(stepDef?.id || "")) && ["stable_local_lane", "stable_cloud_lane"].includes(requestedLane)) {
+  // primary_qwen_lane is new — structured-patch reliability unverified, keep full_file_fallback.
+  // Force full_file_fallback on these lanes to keep prompts smaller and avoid empty patch bundles.
+  if (["impl_be", "impl_fe"].includes(String(stepDef?.id || "")) && ["stable_local_lane", "stable_cloud_lane", "primary_qwen_lane"].includes(requestedLane)) {
     return {
       executionModeRequested: "full_file_fallback",
       promptScriptId: String(stepDef?.prompt_script_id || ""),
@@ -166,6 +194,57 @@ function clampInt(value, min, max, fallback) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, Math.trunc(n)));
+}
+
+function readTextSafe(absPath) {
+  try {
+    return fs.readFileSync(absPath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function readJsonSafe(absPath) {
+  try {
+    return JSON.parse(fs.readFileSync(absPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function inferSmokeApiEndpoint({ workspaceRoot, artifactRoot }) {
+  const rootAbs = path.resolve(workspaceRoot, String(artifactRoot || ""));
+  const handoff = readJsonSafe(path.join(rootAbs, "handoff", "be_to_fe.json"));
+  const contracts = Array.isArray(handoff?.api_contracts) ? handoff.api_contracts : [];
+  const preferredGet = contracts.find((item) => String(item?.method || "").toUpperCase() === "GET" && String(item?.path || "").startsWith("/api/"));
+  if (preferredGet) return String(preferredGet.path);
+  const firstApi = contracts.find((item) => String(item?.path || "").startsWith("/api/"));
+  if (firstApi) return String(firstApi.path);
+
+  const interfacesText = readTextSafe(path.join(rootAbs, "plan", "interfaces.md"));
+  const match = interfacesText.match(/^##\s+(GET|POST|PUT|PATCH|DELETE)\s+([^\s#]+)/im);
+  if (match?.[2] && match[2].startsWith("/api/")) return String(match[2]);
+  return "";
+}
+
+function buildSmokeTestCommand({ workspaceRoot, artifactRoot, port = 13099 }) {
+  const workspaceScriptAbs = path.resolve(workspaceRoot, "orchestrator", "scripts", "run_smoke_test.mjs");
+  const fallbackScriptAbs = path.resolve(MODULE_DIR, "..", "..", "scripts", "run_smoke_test.mjs");
+  const scriptAbs = fs.existsSync(workspaceScriptAbs) ? workspaceScriptAbs : fallbackScriptAbs;
+  const scriptRel = path.relative(workspaceRoot, scriptAbs).replace(/\\/g, "/");
+  const apiEndpoint = inferSmokeApiEndpoint({ workspaceRoot, artifactRoot });
+  const args = [
+    "node",
+    JSON.stringify(scriptRel),
+    "--artifact-root",
+    JSON.stringify(String(artifactRoot || "")),
+    "--port",
+    String(port),
+  ];
+  if (apiEndpoint) {
+    args.push("--api-endpoint", JSON.stringify(apiEndpoint));
+  }
+  return args.join(" ");
 }
 
 function shouldEnforceStableCodingLane({ run, stepDef }) {
@@ -216,6 +295,29 @@ function applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeCo
   if (!payload.same_error_repeat_limit && runtimeWorkerCoder.same_error_repeat_limit_default) {
     payload.same_error_repeat_limit = Number(runtimeWorkerCoder.same_error_repeat_limit_default);
   }
+}
+
+function shouldEnforceGenericAppQwenLane({ run, stepDef }) {
+  return String(run?.workflow_id || "") === "coding_team_v0"
+    && ["generic_app", "single_file_html", "generic_coding_task"].includes(String(run?.project_type || ""))
+    && ["impl_be", "impl_fe"].includes(String(stepDef?.id || ""))
+    && String(stepDef?.tool || "") === "coding.delegate";
+}
+
+function applyGenericAppQwenLaneDefaults({ run, stepDef, payload, runtimeConfig }) {
+  if (!shouldEnforceGenericAppQwenLane({ run, stepDef })) return;
+  const runtimeWorkerCoder = runtimeConfig?.worker_coder || {};
+  const laneRegistry = runtimeWorkerCoder.execution_lanes && typeof runtimeWorkerCoder.execution_lanes === "object"
+    ? runtimeWorkerCoder.execution_lanes
+    : {};
+  const targetLane = "primary_qwen_lane";
+  const laneConfig = laneRegistry[targetLane] && typeof laneRegistry[targetLane] === "object"
+    ? laneRegistry[targetLane]
+    : null;
+  if (!laneConfig) return;
+  payload.execution_lane = targetLane;
+  if (laneConfig.provider) payload.provider = String(laneConfig.provider);
+  if (laneConfig.model) payload.model = String(laneConfig.model);
 }
 
 function inferVerificationCommand({ stepId, targetPaths = [], workspaceRoot }) {
@@ -413,6 +515,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       handoff_contract_in: upstreamHandoffs,
     };
     applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeConfig });
+    applyGenericAppQwenLaneDefaults({ run, stepDef, payload, runtimeConfig });
     applyWorkerCodingTemplateDefaults({
       payload,
       templateRegistry: workerCodingTemplateRegistry,
@@ -493,7 +596,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     }
 
     if (stepDef.tool === "coding.delegate") {
-      const runtimeByStep = { pm_spec: 360, arch_design: 480, impl_fe: 360, impl_be: 240, release_pack: 120 };
+      const runtimeByStep = { pm_spec: 360, arch_design: 480, impl_fe: 360, impl_be: 240, smoke_test: 120, qa_verify: 180, release_pack: 120 };
       payload.task_prompt = payload.task_prompt || buildStepPrompt({ run, stepDef: effectiveStepDef, input, payload, promptScript });
       if (Array.isArray(payload.target_file_context) && payload.target_file_context.length > 0) {
         payload.task_prompt = `${payload.task_prompt}${buildTargetFileContextBlock(payload.target_file_context)}`;
@@ -590,6 +693,75 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
           repoMap: payload.repo_map,
         })}`;
       }
+      if (String(stepDef.id || "") === "qa_verify") {
+        const acceptancePath = path.resolve(workspaceRoot, artifactRoot, "plan/acceptance.json");
+        if (fs.existsSync(acceptancePath)) {
+          try {
+            const acceptanceRaw = fs.readFileSync(acceptancePath, "utf8");
+            const acceptanceParsed = JSON.parse(acceptanceRaw);
+            const criteria = Array.isArray(acceptanceParsed?.criteria)
+              ? acceptanceParsed.criteria
+              : Array.isArray(acceptanceParsed)
+              ? acceptanceParsed
+              : [];
+            if (criteria.length > 0) {
+              const criteriaBlock = [
+                "",
+                "[Acceptance Criteria from plan/acceptance.json]",
+                ...criteria.map((c, i) => `${i + 1}. ${typeof c === "string" ? c : String(c?.description || c?.criterion || JSON.stringify(c))}`),
+                "Evaluate each criterion against the impl files. Include a checks entry for each.",
+              ].join("\n");
+              payload.task_prompt = `${payload.task_prompt}${criteriaBlock}`;
+            }
+          } catch { /* ignore parse errors */ }
+        }
+        const implFeDir = path.resolve(workspaceRoot, artifactRoot, "impl/fe_changes");
+        const implBeDir = path.resolve(workspaceRoot, artifactRoot, "impl/be_changes");
+        const implFiles = [];
+        for (const dir of [implFeDir, implBeDir]) {
+          if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              if (entry.isFile()) implFiles.push(path.relative(workspaceRoot, path.join(dir, entry.name)).replace(/\\/g, "/"));
+            }
+          }
+        }
+        if (implFiles.length > 0) {
+          payload.task_prompt = `${payload.task_prompt}\n\n[Impl Files to Verify]\n${implFiles.map((f) => `- ${f}`).join("\n")}\nCheck each file exists and assess whether its content addresses the acceptance criteria.`;
+        }
+        const suiteId = registry.project_types?.[run.project_type]?.acceptance_suite;
+        const suite = suiteId ? registry.acceptance_suites?.[suiteId] : null;
+        const suiteCommands = Array.isArray(suite?.commands) ? suite.commands.filter(Boolean) : [];
+        if (suiteCommands.length > 0) {
+          payload.task_prompt = `${payload.task_prompt}\n\n[Acceptance Suite Commands]\nThe following commands are expected to pass for this project type:\n${suiteCommands.map((c) => `- ${c}`).join("\n")}\nInclude a deterministic check entry for each command result.`;
+        }
+      }
+      if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
+        const archHandoffPath = path.resolve(workspaceRoot, artifactRoot, "handoff/architect_to_impl.json");
+        if (fs.existsSync(archHandoffPath)) {
+          try {
+            const archHandoff = JSON.parse(fs.readFileSync(archHandoffPath, "utf8"));
+            const archBlock = buildArchHandoffBlock(archHandoff);
+            if (archBlock) payload.task_prompt = `${payload.task_prompt}${archBlock}`;
+          } catch { /* ignore read errors */ }
+        }
+      }
+      if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
+        const workplanPath = path.resolve(workspaceRoot, artifactRoot, "plan/workplan.md");
+        if (fs.existsSync(workplanPath)) {
+          try {
+            const workplan = fs.readFileSync(workplanPath, "utf8");
+            const sectionLabel = stepDef.id === "impl_be" ? "BE Tasks" : "FE Tasks";
+            const sectionMatch = workplan.match(new RegExp(`##\\s*${sectionLabel}([\\s\\S]*?)(?=\\n##\\s|$)`));
+            if (sectionMatch) {
+              const taskList = sectionMatch[1].trim();
+              if (taskList) {
+                payload.task_prompt = `${payload.task_prompt}\n\n[Task List from plan/workplan.md — ${sectionLabel}]\n${taskList}\nExecute tasks in order. After completing each task, self-check against its verify condition before proceeding to the next.`;
+              }
+            }
+          } catch { /* graceful fallback — workplan read failure does not block step */ }
+        }
+      }
       if (["impl_be", "impl_fe"].includes(String(stepDef.id || "")) && payload.execution_adapter_packet) {
         const toolAdapterRequest = buildCodingExecutorRequest({
           provider: input.provider || payload.provider || "",
@@ -625,6 +797,15 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       };
     }
 
+    if (String(stepDef.tool || "") === "coding.execute" && String(stepDef.id || "") === "smoke_test") {
+      payload.command = buildSmokeTestCommand({
+        workspaceRoot,
+        artifactRoot,
+        port: 13099,
+      });
+      payload.max_runtime_s = clampInt(payload.max_runtime_s ?? 120, 30, 600, 120);
+    }
+
     if (String(stepDef.tool || "") === "ops.deploy_preview") {
       const defaultTargetPaths = Array.isArray(payload.target_paths) && payload.target_paths.length > 0
         ? payload.target_paths
@@ -640,7 +821,8 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         24,
       );
       payload.preview_provider = String(payload.preview_provider || input.preview_provider || "local");
-      // GitHub 交付参数（从 input 或环境变量透传）
+      payload.render_service_id = String(payload.render_service_id || input.render_service_id || "");
+      // GitHub delivery params (pass-through from input or environment)
       payload.github_repo = String(payload.github_repo || input.github_repo || process.env.GITHUB_REPO || "");
       payload.github_token = String(payload.github_token || input.github_token || process.env.GITHUB_TOKEN || "");
       payload.branch_prefix = String(payload.branch_prefix || input.branch_prefix || "nexus/");
@@ -652,4 +834,5 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
 
   return { buildStepPayload };
 }
+
 

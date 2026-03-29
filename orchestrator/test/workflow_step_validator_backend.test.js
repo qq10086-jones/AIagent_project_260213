@@ -17,6 +17,7 @@ test("impl_be validation passes with non-empty be_changes and required notes/han
   fs.mkdirSync(path.join(releaseRoot, "impl", "be_changes"), { recursive: true });
   fs.mkdirSync(path.join(releaseRoot, "handoff"), { recursive: true });
   fs.writeFileSync(path.join(releaseRoot, "impl", "be_changes", "server.js"), "export const ok = true;\n");
+  fs.writeFileSync(path.join(releaseRoot, "impl", "be_changes", "package.json"), JSON.stringify({ name: "test-app", version: "1.0.0", main: "server.js" }, null, 2));
   fs.writeFileSync(path.join(releaseRoot, "impl", "be_notes.md"), "# Notes\n");
   fs.writeFileSync(
     path.join(releaseRoot, "handoff", "be_to_fe.json"),
@@ -39,7 +40,7 @@ test("impl_be validation passes with non-empty be_changes and required notes/han
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.be_changes_count, 1);
+  assert.equal(result.be_changes_count, 2);
 });
 
 test("impl_be validation fails when be_changes directory is missing", () => {

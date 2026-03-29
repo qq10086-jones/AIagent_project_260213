@@ -22,7 +22,7 @@ export function createExecuteVNextDispatch({
   workflowEngine,
   routeTaskRequest = defaultRouteTaskRequest,
   coderProviderDefault = "opencode",
-  coderModelDefault = "dashscope/qwen-plus-2025-04-28",
+  coderModelDefault = "minimax-coding-plan/MiniMax-M2.7",
   waterfallTraceService = null,
 }) {
   if (typeof ensureRun !== "function") throw new Error("ensureRun is required");

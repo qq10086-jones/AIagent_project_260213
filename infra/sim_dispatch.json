@@ -1,0 +1,10 @@
+{
+  "discord_event": {
+    "content": "/coder: 做一个简单的待办事项网站，支持新增、完成和删除任务，界面清爽有基本样式。[SIM-003]",
+    "channel_id": "sim-test-channel-1",
+    "thread_id": "sim-test-thread-3",
+    "guild_id": "guild-sim-test",
+    "author": { "id": "sim-user-1", "username": "sim-user-1" },
+    "attachments": []
+  }
+}

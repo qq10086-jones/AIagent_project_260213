@@ -36,8 +36,8 @@ services:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       APPROVAL_TOKEN: ${APPROVAL_TOKEN:-dev-approval-token}
-      CODER_PROVIDER_DEFAULT: ${CODER_PROVIDER_DEFAULT:-opencode}
-      CODER_MODEL_DEFAULT: ${CODER_MODEL_DEFAULT:-minimax-coding-plan/MiniMax-M2.5}
+      CODER_PROVIDER_DEFAULT: opencode
+      CODER_MODEL_DEFAULT: minimax-coding-plan/MiniMax-M2.7
       RUNTIME_CONFIG_PATH: /app/configs/runtime/runtime_defaults.json
     ports:
       - "3000:3000"
@@ -55,6 +55,7 @@ services:
       - ../configs/parallel_exposure_policy.json:/app/configs/parallel_exposure_policy.json:ro
       - ../configs/m7_exposure_cohorts.json:/app/configs/m7_exposure_cohorts.json:ro
       - ../orchestrator/contracts:/app/contracts:ro
+      - ../orchestrator/scripts:/app/scripts
       - ../orchestrator/src:/app/src
       - ..:/workspace
     depends_on:
@@ -76,9 +77,9 @@ services:
       - CODEX_BIN=${CODEX_BIN:-codex}
       - CODEX_SANDBOX=${CODEX_SANDBOX:-workspace-write}
       - OPENCODE_BIN=${OPENCODE_BIN:-opencode}
-      - CODER_PROVIDER_DEFAULT=${CODER_PROVIDER_DEFAULT:-opencode}
-      - CODER_MODEL_DEFAULT=${CODER_MODEL_DEFAULT:-minimax-coding-plan/MiniMax-M2.5}
-      - CODER_EXECUTION_LANE_DEFAULT=${CODER_EXECUTION_LANE_DEFAULT:-stable_dashscope_lane}
+      - CODER_PROVIDER_DEFAULT=opencode
+      - CODER_MODEL_DEFAULT=minimax-coding-plan/MiniMax-M2.7
+      - CODER_EXECUTION_LANE_DEFAULT=stable_cloud_lane
       - CODER_ISOLATION_MODE=${CODER_ISOLATION_MODE:-promote}
       - RUNTIME_CONFIG_PATH=/workspace/configs/runtime/runtime_defaults.json
       - PGHOST=db

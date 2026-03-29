@@ -1,0 +1,368 @@
+{
+  "generated_at": "2026-03-28T02:08:40.971Z",
+  "config": {
+    "base_url": "http://localhost:3000",
+    "suite_file": "E:\\AIagent_project_260213\\orchestrator\\canary_inputs\\discord_fidelity_suite_v1.json",
+    "timeout_ms": 1800000,
+    "poll_ms": 5000,
+    "fail_on_warn": false,
+    "fail_on_unexpected": false
+  },
+  "execution_window": {
+    "started_at": "2026-03-28T01:57:38.829Z",
+    "finished_at": "2026-03-28T02:08:40.971Z",
+    "elapsed_ms": 662142
+  },
+  "summary": {
+    "total_scenarios": 5,
+    "workflow_success_count": 4,
+    "fidelity_report_count": 0,
+    "fidelity_warn_count": 0,
+    "fidelity_report_rate_pct": 0,
+    "fidelity_warn_rate_pct": null,
+    "missing_fidelity_on_success": 4,
+    "unexpected_classification_count": 0,
+    "fidelity_classification_counts": {},
+    "perceptual_score_counts": {}
+  },
+  "timing": {
+    "min_total_ms": 17748,
+    "max_total_ms": 579819,
+    "avg_total_ms": 132426
+  },
+  "verdict": "FAIL",
+  "verdict_reasons": [
+    "1 workflow failure(s)",
+    "4 run(s) succeeded but fidelity report missing"
+  ],
+  "results": [
+    {
+      "index": 0,
+      "scenario_id": "ecommerce_product_grid",
+      "risk_profile": "high",
+      "expected_classifications": [
+        "demo_usable",
+        "domain_misaligned",
+        "artifact_complete_but_shallow"
+      ],
+      "dispatch_ok": true,
+      "dispatch_latency_ms": 12690,
+      "workflow_status": "succeeded",
+      "workflow_run_id": "b0a3490c-6469-4054-83db-592ca2f53973",
+      "run_id": "82272c4e-dfdb-4a4d-8be4-a28cfa9aa8cb",
+      "fidelity": {
+        "exists": false,
+        "classification": "",
+        "perceptual_score": "",
+        "should_warn": false,
+        "reasoning_count": 0
+      },
+      "preview": {
+        "exists": false,
+        "classification": "",
+        "preview_source": ""
+      },
+      "go_no_go": {
+        "exists": true,
+        "verdict": "GO",
+        "failed_checks": 0
+      },
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "release_pack",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "succeeded"
+        }
+      ],
+      "classification_expected": null,
+      "total_duration_ms": 22725,
+      "ok": true,
+      "error": null
+    },
+    {
+      "index": 1,
+      "scenario_id": "crm_customer_list",
+      "risk_profile": "medium",
+      "expected_classifications": [
+        "demo_usable",
+        "domain_misaligned",
+        "artifact_complete_but_shallow"
+      ],
+      "dispatch_ok": true,
+      "dispatch_latency_ms": 8321,
+      "workflow_status": "failed",
+      "workflow_run_id": "c1b539a5-54a7-4ab3-8d5a-0139d8f754bb",
+      "run_id": "c52988a5-0bda-467f-9992-36d429818dc3",
+      "fidelity": {
+        "exists": false,
+        "classification": "",
+        "perceptual_score": "",
+        "should_warn": false,
+        "reasoning_count": 0
+      },
+      "preview": {
+        "exists": false,
+        "classification": "",
+        "preview_source": ""
+      },
+      "go_no_go": {
+        "exists": false,
+        "verdict": "",
+        "failed_checks": 0
+      },
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "failed"
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "pending"
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "pending"
+        },
+        {
+          "step_id": "release_pack",
+          "status": "pending"
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "pending"
+        }
+      ],
+      "classification_expected": null,
+      "total_duration_ms": 579819,
+      "ok": false,
+      "error": null
+    },
+    {
+      "index": 2,
+      "scenario_id": "todo_webapp_simple",
+      "risk_profile": "low",
+      "expected_classifications": [
+        "demo_usable",
+        "domain_misaligned"
+      ],
+      "dispatch_ok": true,
+      "dispatch_latency_ms": 14034,
+      "workflow_status": "succeeded",
+      "workflow_run_id": "82e7a212-d21f-4e87-915f-650220a8cd32",
+      "run_id": "58137220-b32b-49fc-97c1-c455ded87033",
+      "fidelity": {
+        "exists": false,
+        "classification": "",
+        "perceptual_score": "",
+        "should_warn": false,
+        "reasoning_count": 0
+      },
+      "preview": {
+        "exists": false,
+        "classification": "",
+        "preview_source": ""
+      },
+      "go_no_go": {
+        "exists": true,
+        "verdict": "GO",
+        "failed_checks": 0
+      },
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "release_pack",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "succeeded"
+        }
+      ],
+      "classification_expected": null,
+      "total_duration_ms": 24075,
+      "ok": true,
+      "error": null
+    },
+    {
+      "index": 3,
+      "scenario_id": "landing_page_static",
+      "risk_profile": "low",
+      "expected_classifications": [
+        "demo_usable",
+        "visually_incomplete"
+      ],
+      "dispatch_ok": true,
+      "dispatch_latency_ms": 7723,
+      "workflow_status": "succeeded",
+      "workflow_run_id": "902e5421-ae1d-42d4-ad0b-d0f38ea4ee57",
+      "run_id": "467cc625-29f6-40ba-9da8-9932729aa8e0",
+      "fidelity": {
+        "exists": false,
+        "classification": "",
+        "perceptual_score": "",
+        "should_warn": false,
+        "reasoning_count": 0
+      },
+      "preview": {
+        "exists": false,
+        "classification": "",
+        "preview_source": ""
+      },
+      "go_no_go": {
+        "exists": true,
+        "verdict": "GO",
+        "failed_checks": 0
+      },
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "release_pack",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "succeeded"
+        }
+      ],
+      "classification_expected": null,
+      "total_duration_ms": 17748,
+      "ok": true,
+      "error": null
+    },
+    {
+      "index": 4,
+      "scenario_id": "utility_script_only",
+      "risk_profile": "medium",
+      "expected_classifications": [
+        "demo_usable",
+        "visually_incomplete",
+        "artifact_complete_but_shallow"
+      ],
+      "dispatch_ok": true,
+      "dispatch_latency_ms": 7726,
+      "workflow_status": "succeeded",
+      "workflow_run_id": "e5298d27-bfb5-4753-8be1-dd204cf0a32a",
+      "run_id": "548c3f5e-2b98-4067-aed2-4159705e782b",
+      "fidelity": {
+        "exists": false,
+        "classification": "",
+        "perceptual_score": "",
+        "should_warn": false,
+        "reasoning_count": 0
+      },
+      "preview": {
+        "exists": false,
+        "classification": "",
+        "preview_source": ""
+      },
+      "go_no_go": {
+        "exists": true,
+        "verdict": "GO",
+        "failed_checks": 0
+      },
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "release_pack",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "succeeded"
+        }
+      ],
+      "classification_expected": null,
+      "total_duration_ms": 17763,
+      "ok": true,
+      "error": null
+    }
+  ]
+}

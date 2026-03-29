@@ -1,4 +1,14 @@
 {
+  "cloud_minimax": {
+    "type": "cloud_api",
+    "endpoint_env": "MINIMAX_BASE_URL",
+    "auth_env": "MINIMAX_API_KEY",
+    "timeout_ms": 30000,
+    "available_models": [
+      "MiniMax-M2.7",
+      "MiniMax-M2.5"
+    ]
+  },
   "cloud_qwen": {
     "type": "cloud_api",
     "endpoint_env": "QWEN_BASE_URL",

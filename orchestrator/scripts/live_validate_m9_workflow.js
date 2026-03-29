@@ -58,7 +58,7 @@ function buildWorkflowPayload() {
     input: {
       goal: "Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts.",
       provider: "opencode",
-      model: "qwen3-coder-next",
+      model: "minimax-coding-plan/MiniMax-M2.7",
       fast_mode: true,
       max_runtime_s: 180,
       step_payloads: {

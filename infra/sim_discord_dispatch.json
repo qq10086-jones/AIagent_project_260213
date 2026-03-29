@@ -1,0 +1,11 @@
+{
+  "message": "/coder: 做一个简单的图书馆管理系统，支持添加书籍、借阅、归还，有基本的列表界面。[SIM-DISCORD-001]",
+  "goal": "做一个简单的图书馆管理系统，支持添加书籍、借阅、归还，有基本的列表界面。[SIM-DISCORD-001]",
+  "project_type": "generic_app",
+  "workflow_id": "coding_team_v0",
+  "source": "discord_sim",
+  "payload": {
+    "provider": "opencode",
+    "fast_mode": false
+  }
+}

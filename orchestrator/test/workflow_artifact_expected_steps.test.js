@@ -12,6 +12,7 @@ test("getExpectedWorkflowStepCount returns registry workflow step length", () =>
           { id: "arch_design" },
           { id: "impl_be" },
           { id: "impl_fe" },
+          { id: "smoke_test" },
           { id: "qa_verify" },
           { id: "release_pack" },
           { id: "deploy_preview" },
@@ -20,7 +21,7 @@ test("getExpectedWorkflowStepCount returns registry workflow step length", () =>
     },
   };
 
-  assert.equal(getExpectedWorkflowStepCount(registry, "coding_team_v0"), 7);
+  assert.equal(getExpectedWorkflowStepCount(registry, "coding_team_v0"), 8);
 });
 
 test("getExpectedWorkflowStepCount returns 0 when workflow is absent", () => {

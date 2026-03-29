@@ -1,7 +1,7 @@
 {
   "run_id": "e2e-happy-run",
   "workflow_id": "coding_team_v0",
-  "completed_at": "2026-03-15T06:58:19.925Z",
+  "completed_at": "2026-03-29T15:25:08.633Z",
   "artifacts": [
     {
       "path": "plan/spec.md",
@@ -19,6 +19,11 @@
       "size_bytes": 90
     },
     {
+      "path": "smoke/smoke_result.json",
+      "type": "json",
+      "size_bytes": 220
+    },
+    {
       "path": "verify/qa_report.json",
       "type": "json",
       "size_bytes": 200
@@ -27,6 +32,16 @@
       "path": "release/release_notes.md",
       "type": "markdown",
       "size_bytes": 180
+    },
+    {
+      "path": "release/README.md",
+      "type": "markdown",
+      "size_bytes": 220
+    },
+    {
+      "path": "release/start.sh",
+      "type": "text/x-shellscript",
+      "size_bytes": 96
     }
   ]
 }

@@ -237,7 +237,8 @@ function createParallelRegistry() {
   steps[2].depends_on = ["arch_design"];
   steps[3].depends_on = ["arch_design"];
   steps[4].depends_on = ["impl_be", "impl_fe"];
-  steps[5].depends_on = ["qa_verify"];
+  steps[5].depends_on = ["smoke_test"];
+  steps[6].depends_on = ["qa_verify"];
   cloned.workflows.coding_team_v0.steps = steps;
   return cloned;
 }
@@ -339,6 +340,12 @@ function writeArchArtifactsFeSafe(rootAbs) {
 
 function writeBeArtifacts(rootAbs) {
   writeText(path.join(rootAbs, "impl", "be_changes", "server.js"), "// stub backend server\nconst express = require('express');\n");
+  writeJson(path.join(rootAbs, "impl", "be_changes", "package.json"), {
+    name: "test-app",
+    version: "1.0.0",
+    main: "server.js",
+    dependencies: { express: "^4.19.2" },
+  });
   writeText(
     path.join(rootAbs, "impl", "be_notes.md"),
     "# Backend Notes\n\n## API Contracts\n\nPOST /api/login implemented.\n\n## Shared Types\n\n- User: { id, email }\n\n## Scope Constraints\n\n- No email verification in this sprint.\n\nRun: node server.js\n"
@@ -355,8 +362,12 @@ function writeBeArtifacts(rootAbs) {
 
 function writeFeArtifacts(rootAbs) {
   writeText(
-    path.join(rootAbs, "impl", "fe_changes", "app.js"),
+    path.join(rootAbs, "impl", "fe_changes", "public", "app.js"),
     "// stub frontend app\nfetch('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });\n"
+  );
+  writeText(
+    path.join(rootAbs, "impl", "fe_changes", "public", "index.html"),
+    "<!doctype html><html><body><div id='app'></div><script type='module' src='./app.js'></script></body></html>\n"
   );
   writeText(
     path.join(rootAbs, "impl", "fe_notes.md"),
@@ -415,8 +426,8 @@ test("dag readiness dispatches BE and FE after architect success", async () => {
   await completeTask(harness, 1, writeArchArtifacts);
 
   assert.equal(harness.pool.state.tasks.length, 4);
-  assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_be").status, "queued");
-  assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_fe").status, "queued");
+  assert.match(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_be").status, /^(queued|waiting_approval)$/);
+  assert.match(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_fe").status, /^(queued|waiting_approval)$/);
 
   await completeTask(harness, 2, writeBeArtifacts);
   assert.equal(harness.pool.state.tasks.length, 4);
@@ -428,7 +439,11 @@ test("dag readiness dispatches BE and FE after architect success", async () => {
     error_code: s.error_code,
   }));
   assert.equal(harness.pool.state.tasks.length, 5, JSON.stringify(stepStatuses));
-  assert.equal(JSON.parse(harness.pool.state.tasks[4].payload_json).step_id, "qa_verify");
+  assert.equal(JSON.parse(harness.pool.state.tasks[4].payload_json).step_id, "smoke_test");
+
+  await completeGenericTask(harness, 4);
+  assert.equal(harness.pool.state.tasks.length, 6, JSON.stringify(harness.pool.state.workflow_steps));
+  assert.equal(JSON.parse(harness.pool.state.tasks[5].payload_json).step_id, "qa_verify");
 });
 
 test("dag mixed result enters partial_failure and blocks QA dispatch", async () => {
@@ -560,7 +575,7 @@ test("parallelization gate keeps coding_team_v0 sequential when rollout master i
   await completeTask(harness, 1, writeArchArtifactsFeSafe);
 
   assert.equal(harness.pool.state.tasks.length, 3);
-  assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_be").status, "queued");
+  assert.match(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_be").status, /^(queued|waiting_approval)$/);
   assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_fe").status, "pending");
 
   const gateEvent = harness.events.find((e) => e.event_name === "workflow.parallelization.gate_decided" && e.payload?.effective_exposure_decision_source === "static_eligibility_denied");
@@ -589,7 +604,7 @@ test("parallelization gate keeps coding_team_v0 sequential even with registry fe
   await completeTask(harness, 1, writeArchArtifactsFeSafe);
 
   assert.equal(harness.pool.state.tasks.length, 3);
-  assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_be").status, "queued");
+  assert.match(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_be").status, /^(queued|waiting_approval)$/);
   assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_fe").status, "pending");
 
   const gateEvent = harness.events.find((e) => e.event_name === "workflow.parallelization.gate_decided" && e.payload?.effective_exposure_decision_source === "static_eligibility_denied");

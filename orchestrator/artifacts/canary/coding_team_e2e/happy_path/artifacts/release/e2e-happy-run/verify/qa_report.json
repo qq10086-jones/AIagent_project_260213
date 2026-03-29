@@ -6,26 +6,52 @@
       "layer": "deterministic",
       "description": "BE artifacts present",
       "status": "pass",
-      "detail": "impl/be_changes/ non-empty"
+      "detail": "impl/be_changes/server.js and package.json present"
     },
     {
       "check_id": "D-02",
       "layer": "deterministic",
       "description": "FE artifacts present",
       "status": "pass",
-      "detail": "impl/fe_changes/ non-empty"
+      "detail": "impl/fe_changes/public/index.html and app.js present"
+    },
+    {
+      "check_id": "D-03",
+      "layer": "deterministic",
+      "description": "Smoke result captured",
+      "status": "pass",
+      "detail": "smoke/smoke_result.json root_check.status=200 api_check.status=200"
     },
     {
       "check_id": "S-01",
       "layer": "semantic",
       "description": "API contracts consistent",
       "status": "pass",
-      "detail": "POST /api/login matches FE consumption"
+      "detail": "GET /api/login matches FE consumption"
+    }
+  ],
+  "journey_checks": [
+    {
+      "journey_id": "J-001",
+      "description": "User can open the app and hit the login endpoint",
+      "status": "pass",
+      "evidence": [
+        "smoke/smoke_result.json root_check.status=200",
+        "smoke/smoke_result.json api_check.endpoint=/api/login status=200"
+      ]
+    }
+  ],
+  "rubric_citations": [
+    {
+      "term": "demo_usable",
+      "criterion": "service boots and main API responds",
+      "evidence": "smoke/smoke_result.json verdict=pass evidence_level=l1_l2",
+      "pass": true
     }
   ],
   "verified_artifacts": [
     "A1"
   ],
-  "generated_at": "2026-03-15T06:58:19.918Z",
+  "generated_at": "2026-03-29T15:25:08.618Z",
   "step_id": "qa_verify"
 }

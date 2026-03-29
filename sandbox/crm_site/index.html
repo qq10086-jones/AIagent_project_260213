@@ -1,82 +1,155 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nova CRM Pro - Transform Your Customer Relationships</title>
+  <title>Document Release Hub</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div class="promo-bg-shape promo-bg-a"></div>
-  <div class="promo-bg-shape promo-bg-b"></div>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <div class="ambient ambient-c"></div>
 
-  <div id="promoRoot">
-    <section class="promo-banner">
-      <div class="promo-banner-content">
-        <h1 class="promo-title hero-title">Nova CRM Pro</h1>
-        <p class="promo-subtitle hero-subtitle">Transform your customer relationships with intelligent automation, real-time analytics, and seamless team collaboration.</p>
-        <button class="promo-cta-btn hero-cta">Start Free Trial</button>
+  <header class="hero-shell">
+    <div class="hero-copy">
+      <span class="eyebrow">Discord Intake · Controlled Docs · Release Ledger</span>
+      <h1>Document Release Hub</h1>
+      <p>
+        面向文控与质量团队的文档发行管理系统。通过 Discord 请求进入 intake，
+        统一选择 Excel 模板、自动生成编号、完成发行并留下完整历史记录。
+      </p>
+      <div id="systemNotice" class="system-notice info"></div>
+    </div>
+    <aside class="hero-note">
+      <div class="hero-note-card">
+        <strong>当前系统边界</strong>
+        <p>先打通请求 intake、模板选型、编号控制、发行台账与修订历史。后续扩展客诉、Ticket 认领和责任闭环。</p>
       </div>
-      <div class="promo-dashboard-preview">
-        <div class="preview-header">
-          <div class="preview-dot"></div>
-          <div class="preview-dot"></div>
-          <div class="preview-dot"></div>
+    </aside>
+  </header>
+
+  <section id="metrics" class="metrics-grid"></section>
+
+  <main class="workspace">
+    <section class="panel panel-inbox">
+      <div class="panel-head">
+        <div>
+          <span class="panel-kicker">Input</span>
+          <h2>Discord Intake Inbox</h2>
         </div>
-        <div class="preview-content">
-          <div class="preview-chart"></div>
-          <div class="preview-stats">
-            <div class="stat-box"></div>
-            <div class="stat-box"></div>
-            <div class="stat-box"></div>
-            <div class="stat-box"></div>
-          </div>
-        </div>
+        <p>把 Discord 消息当成建档入口</p>
       </div>
+      <form id="intakeForm" class="stack-form">
+        <div class="form-row">
+          <label>请求人<input type="text" name="requester" placeholder="例如 QA-Lee"></label>
+          <label>频道<input type="text" name="channel" placeholder="例如 #doc-control"></label>
+        </div>
+        <label>
+          建议模板
+          <select name="suggestedTemplateId">
+            <option value="">系统自动判断</option>
+            <option value="tpl-sop">标准作业指导书</option>
+            <option value="tpl-form">受控记录表单</option>
+            <option value="tpl-spec">客户规格/外来文件</option>
+            <option value="tpl-complaint">客诉与 CAPA 模板</option>
+          </select>
+        </label>
+        <label>
+          Discord 请求内容
+          <textarea name="content" rows="5" placeholder="例如：请按模板发行《IQC 来料检验记录表》，今日生效并分发到 IQC、QA、仓储。"></textarea>
+        </label>
+        <button type="submit" class="btn btn-primary">写入 Intake 队列</button>
+      </form>
+      <div id="selectedRequest" class="selected-request-slot"></div>
+      <div id="intakeInbox" class="card-stack"></div>
     </section>
 
-    <section id="features" class="promo-features">
-      <h2 class="promo-section-title">Why Choose Nova CRM Pro</h2>
-      <div class="promo-features-grid features-grid">
-      </div>
-    </section>
-
-    <section id="pricing" class="promo-pricing">
-      <h2 class="promo-section-title">Choose Your Plan</h2>
-      <p class="promo-pricing-subtitle">Simple, transparent pricing for teams of all sizes</p>
-      <div class="promo-pricing-grid pricing-grid">
-      </div>
-    </section>
-
-    <section id="faq" class="promo-faq">
-      <h2 class="promo-section-title">Frequently Asked Questions</h2>
-      <div class="promo-faq-list faq-list">
-      </div>
-    </section>
-
-    <section id="contact" class="promo-contact">
-      <h2 class="promo-section-title contact-title">Get in Touch</h2>
-      <p class="promo-contact-desc contact-desc">Ready to transform your CRM experience? Contact us today for a personalized demo.</p>
-      <form id="contactForm" class="promo-contact-form">
-        <div class="promo-form-row form-fields">
+    <section class="panel panel-generator">
+      <div class="panel-head">
+        <div>
+          <span class="panel-kicker">Issue</span>
+          <h2>One-Click Document Release</h2>
         </div>
-        <div class="promo-form-actions">
-          <button type="submit" class="promo-submit-btn">Send Message</button>
+        <p>模板、编号、发行、历史一次完成</p>
+      </div>
+      <div id="templateCatalog" class="template-grid"></div>
+      <div id="templateGuidance" class="template-guidance"></div>
+      <form id="generatorForm" class="stack-form">
+        <div class="form-row">
+          <label>模板<select id="templateId" name="templateId"></select></label>
+          <label>生效日期<input type="date" name="effectiveDate"></label>
         </div>
+        <div class="form-row">
+          <label>文件标题<input type="text" name="title" placeholder="例如：来料检验记录表"></label>
+          <label>部门<input type="text" name="department" placeholder="例如：QA"></label>
+        </div>
+        <div class="form-row">
+          <label>责任人<input type="text" name="owner" placeholder="例如：QA-Lee"></label>
+          <label>Excel 模板引用<input type="text" name="excelTemplateRef" placeholder="例如：templates/SOP_master_v3.xlsx"></label>
+        </div>
+        <label>分发范围<input type="text" name="distribution" placeholder="多个部门用逗号分隔"></label>
+        <label>发行摘要<textarea name="payloadSummary" rows="4" placeholder="记录模板用途、关键字段、适用客户或制程。"></textarea></label>
+        <label>变更摘要<textarea name="changeSummary" rows="3" placeholder="说明本次首发或修订原因。"></textarea></label>
+        <button type="submit" class="btn btn-primary">一键生成并发行</button>
+        <div id="releaseFeedback" class="feedback"></div>
       </form>
     </section>
 
-    <footer class="promo-footer">
-      <div class="promo-footer-content">
-        <div class="promo-footer-brand">
-          <div class="promo-logo-dot"></div>
-          <span>Nova CRM Pro</span>
+    <section class="panel panel-ledger">
+      <div class="panel-head">
+        <div>
+          <span class="panel-kicker">Ledger</span>
+          <h2>Document Ledger</h2>
         </div>
-        <p class="promo-footer-text">Contact: info@novacrmpro.com | +86 400-XXX-XXXX</p>
+        <p>当前有效版本与编号总表</p>
       </div>
-    </footer>
-  </div>
+      <div id="documentLedger" class="card-stack"></div>
+    </section>
 
-  <script src="./app.js"></script>
+    <section class="panel panel-revision">
+      <div class="panel-head">
+        <div>
+          <span class="panel-kicker">Revision</span>
+          <h2>Revision Desk</h2>
+        </div>
+        <p id="revisionTarget">先从文档台账中选择一份文件</p>
+      </div>
+      <form id="revisionForm" class="stack-form is-disabled">
+        <input type="hidden" name="documentId">
+        <div class="form-row">
+          <label>修订操作者<input type="text" name="actor" placeholder="例如：Document Control"></label>
+          <label>新版生效日期<input type="date" name="effectiveDate"></label>
+        </div>
+        <label>修订说明<textarea name="changeSummary" rows="4" placeholder="例如：新增条码校验步骤，更新封箱标签图片。"></textarea></label>
+        <button type="submit" class="btn btn-secondary">创建新修订</button>
+        <div id="revisionFeedback" class="feedback"></div>
+      </form>
+    </section>
+
+    <section class="panel panel-history">
+      <div class="panel-head">
+        <div>
+          <span class="panel-kicker">Traceability</span>
+          <h2>Release Timeline</h2>
+        </div>
+        <p>首发、修订、分发动作全留痕</p>
+      </div>
+      <div id="releaseTimeline" class="timeline"></div>
+    </section>
+
+    <section class="panel panel-roadmap">
+      <div class="panel-head">
+        <div>
+          <span class="panel-kicker">Expansion</span>
+          <h2>Next Modules</h2>
+        </div>
+        <p>客诉、Ticket 认领、责任闭环扩展位</p>
+      </div>
+      <div id="roadmap" class="roadmap-grid"></div>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

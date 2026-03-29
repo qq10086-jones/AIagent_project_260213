@@ -95,7 +95,7 @@ function validateOpenCodeCredentials(model) {
       };
     }
   }
-  if ((providerId === "minimax" || providerId.startsWith("minimax-")) && !hasMiniMaxKeyFromConfig()) {
+  if ((providerId === "minimax" || providerId.startsWith("minimax-") || providerId.startsWith("minimax/")) && !hasMiniMaxKeyFromConfig()) {
     return {
       ok: false,
       errorCode: "E_AUTH_FAILED",
@@ -618,7 +618,7 @@ function mapErrorCode({ proc, command }) {
   if (commandNotFound) {
     return { errorCode: "E_PROVIDER_UNAVAILABLE", providerErrorClass: "PROVIDER_UNAVAILABLE" };
   }
-  if (/(invalid access token|token expired|unauthorized|authentication failed|auth failed|incorrect api key provided|apikey-error|401|login fail|api secret key|authorization field)/i.test(stderrText)) {
+  if (/(invalid access token|token expired|unauthorized|authentication failed|auth failed|incorrect api key provided|apikey-error|(?:status|http|error|response)[\s:]*401|login fail|api secret key|authorization field)/i.test(stderrText)) {
     return { errorCode: "E_AUTH_FAILED", providerErrorClass: "AUTH_FAILURE" };
   }
   if (/(unknown model|model not found|no such model|unsupported model)/i.test(stderrText)) {
@@ -765,4 +765,5 @@ export async function runOpenCodeTask({
     };
   }
 }
+
 

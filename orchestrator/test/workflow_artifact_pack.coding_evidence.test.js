@@ -20,6 +20,24 @@ async function main() {
 
   const releaseRoot = path.join(workspaceRoot, "artifacts", "release", run.run_id);
   fs.mkdirSync(path.join(releaseRoot, "summary"), { recursive: true });
+  fs.mkdirSync(path.join(releaseRoot, "impl", "fe_changes", "public"), { recursive: true });
+  fs.mkdirSync(path.join(releaseRoot, "impl", "be_changes", "public"), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(releaseRoot, "impl", "fe_changes", "app.js"),
+    "document.querySelector('#cta').addEventListener('click', () => console.log('ok'));\n",
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(releaseRoot, "impl", "fe_changes", "public", "app.js"),
+    "// auto-generated scaffold — replace with actual implementation\nexport function placeholderRender() { return 'pending human review'; }\n",
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(releaseRoot, "impl", "be_changes", "public", "app.js"),
+    "// auto-generated scaffold — replace with actual implementation\nexport function placeholderRender() { return 'pending human review'; }\n",
+    "utf8"
+  );
 
   const testLogRel = `artifacts/runs/${run.run_id}/task_task-1/verification_1.json`;
   const promptContractRel = `artifacts/runs/${run.run_id}/task_task-1/prompt_contract_attempt1.json`;
@@ -100,6 +118,11 @@ async function main() {
 
   assert.ok(Array.isArray(manifest.coding_execution_evidence));
   assert.equal(manifest.coding_execution_evidence.length, 1);
+  assert.equal(manifest.frontend_assembly_repair?.repaired, true);
+  assert.deepEqual(manifest.frontend_assembly_repair?.targets_written, [
+    "impl/fe_changes/public/app.js",
+    "impl/be_changes/public/app.js",
+  ]);
   assert.equal(manifest.coding_execution_evidence[0].verification_checked, true);
   assert.equal(manifest.coding_execution_evidence[0].test_log_path, testLogRel);
   assert.equal(manifest.coding_execution_evidence[0].prompt_contract_path, promptContractRel);
@@ -110,6 +133,8 @@ async function main() {
   assert.ok(archivedExtraPaths.some((item) => item.endsWith(promptContractRel.replace(/\\/g, "/"))));
   assert.ok(archivedExtraPaths.some((item) => item.endsWith(failureLatestRel.replace(/\\/g, "/"))));
   assert.ok(archivedExtraPaths.some((item) => item.endsWith(failureJsonlRel.replace(/\\/g, "/"))));
+  assert.match(fs.readFileSync(path.join(releaseRoot, "impl", "fe_changes", "public", "app.js"), "utf8"), /querySelector/);
+  assert.match(fs.readFileSync(path.join(releaseRoot, "impl", "be_changes", "public", "app.js"), "utf8"), /querySelector/);
 
   console.log("workflow_artifact_pack.coding_evidence.test.js: all tests passed");
 }

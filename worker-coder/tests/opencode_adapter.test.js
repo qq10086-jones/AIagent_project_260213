@@ -1,4 +1,7 @@
 ﻿import assert from "assert";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { buildOpenCodeInvocation, runOpenCodeTask } from "../adapters/opencode_adapter.js";
 
 function shouldSkipSpawn(result) {
@@ -282,10 +285,15 @@ async function testRunOpenCodeTaskRequiresOpenCodeCredential() {
 }
 async function testRunOpenCodeTaskRequiresMiniMaxCredential() {
   const prevMiniMaxKey = process.env.MINIMAX_API_KEY;
+  const prevOpenCodeJsonPath = process.env.OPENCODE_JSON_PATH;
+  const prevCwd = process.cwd();
+  const isolatedCwd = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-minimax-auth-"));
   delete process.env.MINIMAX_API_KEY;
+  process.env.OPENCODE_JSON_PATH = path.join(isolatedCwd, "missing-opencode.json");
+  process.chdir(isolatedCwd);
   try {
     const result = await runOpenCodeTask({
-      workspaceRoot: process.cwd(),
+      workspaceRoot: isolatedCwd,
       taskPrompt: "missing minimax credential",
       model: "minimax/MiniMax-M2.5",
       opencodeCommand: [process.execPath, "-e", "console.log('should not run')"],
@@ -295,8 +303,12 @@ async function testRunOpenCodeTaskRequiresMiniMaxCredential() {
     assert.strictEqual(result.diagnostics.error_code, "E_AUTH_FAILED");
     assert.match(String(result.error || ""), /MINIMAX_API_KEY/i);
   } finally {
+    process.chdir(prevCwd);
+    fs.rmSync(isolatedCwd, { recursive: true, force: true });
     if (prevMiniMaxKey === undefined) delete process.env.MINIMAX_API_KEY;
     else process.env.MINIMAX_API_KEY = prevMiniMaxKey;
+    if (prevOpenCodeJsonPath === undefined) delete process.env.OPENCODE_JSON_PATH;
+    else process.env.OPENCODE_JSON_PATH = prevOpenCodeJsonPath;
   }
 }
 
@@ -324,6 +336,8 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+
 
 
 

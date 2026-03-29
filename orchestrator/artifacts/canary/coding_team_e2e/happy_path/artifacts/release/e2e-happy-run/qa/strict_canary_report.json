@@ -1,12 +1,12 @@
 {
-  "workflow_run_id": "2d6e901c-8c45-4d33-b27b-c328576fab07",
+  "workflow_run_id": "28ea15f6-62ba-47cc-9f16-a024934c2c0f",
   "run_id": "e2e-happy-run",
   "workflow_id": "coding_team_v0",
-  "generated_at": "2026-03-15T06:58:19.930Z",
+  "generated_at": "2026-03-29T15:25:08.650Z",
   "strict_mode_expected": true,
   "verdict": "pass",
   "totals": {
-    "steps": 6,
+    "steps": 8,
     "failed_steps": 0,
     "missing_artifacts_total": 0
   },
@@ -58,6 +58,7 @@
         "missing": [],
         "found": [
           "impl/be_changes/server.js",
+          "impl/be_changes/package.json",
           "impl/be_notes.md",
           "handoff/be_to_fe.json"
         ]
@@ -74,9 +75,11 @@
         "checked": true,
         "missing": [],
         "found": [
-          "impl/fe_changes/app.js",
+          "impl/fe_changes/public/index.html",
+          "impl/fe_changes/public/app.js",
           "impl/fe_notes.md",
           "impl/be_changes/server.js",
+          "impl/be_changes/package.json",
           "impl/be_notes.md",
           "handoff/impl_to_qa.json"
         ]
@@ -86,6 +89,21 @@
     },
     {
       "step_index": 4,
+      "step_id": "smoke_test",
+      "status": "succeeded",
+      "requires_artifact_audit": false,
+      "artifact_check": {
+        "checked": true,
+        "missing": [],
+        "found": [
+          "smoke/smoke_result.json"
+        ]
+      },
+      "pass": true,
+      "reason": ""
+    },
+    {
+      "step_index": 5,
       "step_id": "qa_verify",
       "status": "succeeded",
       "requires_artifact_audit": false,
@@ -101,7 +119,7 @@
       "reason": ""
     },
     {
-      "step_index": 5,
+      "step_index": 6,
       "step_id": "release_pack",
       "status": "succeeded",
       "requires_artifact_audit": false,
@@ -110,7 +128,24 @@
         "missing": [],
         "found": [
           "release/release_notes.md",
-          "release/artifact_manifest.json"
+          "release/artifact_manifest.json",
+          "release/README.md",
+          "release/start.sh"
+        ]
+      },
+      "pass": true,
+      "reason": ""
+    },
+    {
+      "step_index": 7,
+      "step_id": "deploy_preview",
+      "status": "succeeded",
+      "requires_artifact_audit": false,
+      "artifact_check": {
+        "checked": true,
+        "missing": [],
+        "found": [
+          "preview/deployment_result.json"
         ]
       },
       "pass": true,

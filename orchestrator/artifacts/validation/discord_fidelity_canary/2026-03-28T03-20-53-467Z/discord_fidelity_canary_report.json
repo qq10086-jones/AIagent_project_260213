@@ -1,0 +1,379 @@
+{
+  "generated_at": "2026-03-28T03:29:27.208Z",
+  "config": {
+    "base_url": "http://localhost:3000",
+    "suite_file": "E:\\AIagent_project_260213\\orchestrator\\canary_inputs\\discord_fidelity_suite_v1.json",
+    "timeout_ms": 1800000,
+    "poll_ms": 5000,
+    "fail_on_warn": false,
+    "fail_on_unexpected": false
+  },
+  "execution_window": {
+    "started_at": "2026-03-28T03:20:53.500Z",
+    "finished_at": "2026-03-28T03:29:27.208Z",
+    "elapsed_ms": 513708
+  },
+  "summary": {
+    "total_scenarios": 5,
+    "workflow_success_count": 2,
+    "fidelity_report_count": 2,
+    "fidelity_warn_count": 2,
+    "fidelity_report_rate_pct": 40,
+    "fidelity_warn_rate_pct": 100,
+    "missing_fidelity_on_success": 0,
+    "unexpected_classification_count": 0,
+    "fidelity_classification_counts": {
+      "preview_mismatch": 2
+    },
+    "perceptual_score_counts": {
+      "low": 2
+    }
+  },
+  "timing": {
+    "min_total_ms": 16540,
+    "max_total_ms": 440186,
+    "avg_total_ms": 102741
+  },
+  "verdict": "FAIL",
+  "verdict_reasons": [
+    "3 workflow failure(s)"
+  ],
+  "results": [
+    {
+      "index": 0,
+      "scenario_id": "ecommerce_product_grid",
+      "risk_profile": "high",
+      "expected_classifications": [
+        "demo_usable",
+        "domain_misaligned",
+        "artifact_complete_but_shallow",
+        "preview_mismatch"
+      ],
+      "dispatch_ok": true,
+      "dispatch_latency_ms": 6490,
+      "workflow_status": "failed",
+      "workflow_run_id": "ba92b99a-cb85-4a04-8340-b7df2d049434",
+      "run_id": "60a98a0d-0312-4919-98ae-d51be1b4167d",
+      "fidelity": {
+        "exists": false,
+        "classification": "",
+        "perceptual_score": "",
+        "should_warn": false,
+        "reasoning_count": 0
+      },
+      "preview": {
+        "exists": false,
+        "classification": "",
+        "preview_source": ""
+      },
+      "go_no_go": {
+        "exists": false,
+        "verdict": "",
+        "failed_checks": 0
+      },
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "failed"
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "failed"
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "pending"
+        },
+        {
+          "step_id": "release_pack",
+          "status": "pending"
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "pending"
+        }
+      ],
+      "classification_expected": null,
+      "total_duration_ms": 16540,
+      "ok": false,
+      "error": null
+    },
+    {
+      "index": 1,
+      "scenario_id": "crm_customer_list",
+      "risk_profile": "medium",
+      "expected_classifications": [
+        "demo_usable",
+        "domain_misaligned",
+        "artifact_complete_but_shallow"
+      ],
+      "dispatch_ok": true,
+      "dispatch_latency_ms": 8648,
+      "workflow_status": "failed",
+      "workflow_run_id": "2aa62d79-1c45-4287-8ea5-4c7fdd7a4ee6",
+      "run_id": "08434528-ebd3-4002-9984-baee1232383a",
+      "fidelity": {
+        "exists": false,
+        "classification": "",
+        "perceptual_score": "",
+        "should_warn": false,
+        "reasoning_count": 0
+      },
+      "preview": {
+        "exists": false,
+        "classification": "",
+        "preview_source": ""
+      },
+      "go_no_go": {
+        "exists": false,
+        "verdict": "",
+        "failed_checks": 0
+      },
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "failed"
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "pending"
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "pending"
+        },
+        {
+          "step_id": "release_pack",
+          "status": "pending"
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "pending"
+        }
+      ],
+      "classification_expected": null,
+      "total_duration_ms": 440186,
+      "ok": false,
+      "error": null
+    },
+    {
+      "index": 2,
+      "scenario_id": "todo_webapp_simple",
+      "risk_profile": "low",
+      "expected_classifications": [
+        "demo_usable",
+        "domain_misaligned",
+        "preview_mismatch"
+      ],
+      "dispatch_ok": true,
+      "dispatch_latency_ms": 9168,
+      "workflow_status": "failed",
+      "workflow_run_id": "9a550fdc-dc74-4f4d-9166-b215d8fff4a5",
+      "run_id": "60cd9a7c-e5dd-4c9b-ae34-3ccfe983a2c8",
+      "fidelity": {
+        "exists": false,
+        "classification": "",
+        "perceptual_score": "",
+        "should_warn": false,
+        "reasoning_count": 0
+      },
+      "preview": {
+        "exists": false,
+        "classification": "",
+        "preview_source": ""
+      },
+      "go_no_go": {
+        "exists": false,
+        "verdict": "",
+        "failed_checks": 0
+      },
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "failed"
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "failed"
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "pending"
+        },
+        {
+          "step_id": "release_pack",
+          "status": "pending"
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "pending"
+        }
+      ],
+      "classification_expected": null,
+      "total_duration_ms": 19196,
+      "ok": false,
+      "error": null
+    },
+    {
+      "index": 3,
+      "scenario_id": "landing_page_static",
+      "risk_profile": "low",
+      "expected_classifications": [
+        "demo_usable",
+        "visually_incomplete",
+        "preview_mismatch"
+      ],
+      "dispatch_ok": true,
+      "dispatch_latency_ms": 9983,
+      "workflow_status": "succeeded",
+      "workflow_run_id": "7616a0d5-7a36-4c38-aacb-8f51ddfcb6b1",
+      "run_id": "24bd84e5-fe2e-4b93-a5a0-f44787477937",
+      "fidelity": {
+        "exists": true,
+        "classification": "preview_mismatch",
+        "perceptual_score": "low",
+        "should_warn": true,
+        "reasoning_count": 7,
+        "domain_pack": null
+      },
+      "preview": {
+        "exists": true,
+        "classification": "preview_mismatch",
+        "preview_source": "shared_crm_sandbox",
+        "should_warn": true
+      },
+      "go_no_go": {
+        "exists": true,
+        "verdict": "GO",
+        "failed_checks": 0
+      },
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "release_pack",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "succeeded"
+        }
+      ],
+      "classification_expected": true,
+      "total_duration_ms": 20018,
+      "ok": true,
+      "error": null
+    },
+    {
+      "index": 4,
+      "scenario_id": "utility_script_only",
+      "risk_profile": "medium",
+      "expected_classifications": [
+        "demo_usable",
+        "visually_incomplete",
+        "artifact_complete_but_shallow",
+        "preview_mismatch"
+      ],
+      "dispatch_ok": true,
+      "dispatch_latency_ms": 7744,
+      "workflow_status": "succeeded",
+      "workflow_run_id": "bd07b576-8a50-4583-8ce7-6cb37674014a",
+      "run_id": "390151ba-95a9-400e-9569-21e115c3cc87",
+      "fidelity": {
+        "exists": true,
+        "classification": "preview_mismatch",
+        "perceptual_score": "low",
+        "should_warn": true,
+        "reasoning_count": 7,
+        "domain_pack": null
+      },
+      "preview": {
+        "exists": true,
+        "classification": "preview_mismatch",
+        "preview_source": "shared_crm_sandbox",
+        "should_warn": true
+      },
+      "go_no_go": {
+        "exists": true,
+        "verdict": "GO",
+        "failed_checks": 0
+      },
+      "steps": [
+        {
+          "step_id": "pm_spec",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "arch_design",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_be",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "impl_fe",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "qa_verify",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "release_pack",
+          "status": "succeeded"
+        },
+        {
+          "step_id": "deploy_preview",
+          "status": "succeeded"
+        }
+      ],
+      "classification_expected": true,
+      "total_duration_ms": 17767,
+      "ok": true,
+      "error": null
+    }
+  ]
+}

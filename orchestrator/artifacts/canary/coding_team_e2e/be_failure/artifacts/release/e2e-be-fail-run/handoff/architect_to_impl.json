@@ -8,7 +8,7 @@
     "auth-service"
   ],
   "interfaces": [
-    "POST /api/login"
+    "GET /api/login"
   ],
   "decisions": [
     {

@@ -1,0 +1,69 @@
+{
+  "version": "2026-03-27.v1",
+  "source_design": "docs/03_feature_development/2026-03-27_project_completion_design_v2.md",
+  "terms": {
+    "scaffold_only": {
+      "definition": "Output contains correct file structure and route stubs but fewer than 2 implemented user interactions.",
+      "signals": [
+        "frontend/backend implementation files are extremely short",
+        "placeholder or scaffold markers are present",
+        "QA evidence is auto-generated or pending human review only"
+      ]
+    },
+    "shallow": {
+      "definition": "Primary journey exists but critical steps are hardcoded, mocked, or non-functional.",
+      "signals": [
+        "sample records are returned from handlers without persistence",
+        "forms or list views only serialize payloads without executing a journey"
+      ]
+    },
+    "domain_aligned": {
+      "definition": "UI labels, API endpoints, and data models use vocabulary specific to the requested product type instead of generic CRUD nouns.",
+      "signals": [
+        "domain nouns are visible in UI or API artifacts",
+        "generic nouns like entity/item/record are absent from primary journey artifacts"
+      ]
+    },
+    "demo_usable": {
+      "definition": "Primary journey is visually present, executable, domain-aligned, preview-matched, and supported by journey-based QA evidence.",
+      "signals": [
+        "mid-fidelity or better presentation",
+        "no visible placeholder text in primary journey artifacts",
+        "preview target matches the intended product slice"
+      ]
+    },
+    "preview_matched": {
+      "definition": "Preview root serves artifacts from the current run's output, not a legacy or shared sandbox.",
+      "signals": [
+        "preview_runtime.project_root does not point to shared fallback sandboxes",
+        "preview runtime and run project type are coherent"
+      ]
+    },
+    "visually_incomplete": {
+      "definition": "All functional checks pass but the primary journey visual presentation is below mid-fidelity: layout is default browser flow, interactive affordances are not visually discoverable, or implementation lines are below threshold.",
+      "signals": [
+        "perceptual_quality.score=low in product_fidelity_report",
+        "frontend implementation has fewer than 8 non-empty lines",
+        "no interactive affordances detected (button, form, onClick, fetch, router)",
+        "layout_intentional=false"
+      ],
+      "perceptual_quality_minimum_for_demo_usable": "mid"
+    }
+  },
+  "classification_precedence": [
+    "preview_mismatch",
+    "artifact_complete_but_shallow",
+    "domain_misaligned",
+    "visually_incomplete",
+    "demo_usable"
+  ],
+  "demo_usable_requirements": [
+    "frontend_depth passes",
+    "backend_depth passes",
+    "placeholder_free passes",
+    "qa_evidence_not_scaffold_only passes",
+    "preview_matched passes (or preview absent)",
+    "domain_not_generic_crud passes",
+    "perceptual_quality_minimum passes (score != low)"
+  ]
+}

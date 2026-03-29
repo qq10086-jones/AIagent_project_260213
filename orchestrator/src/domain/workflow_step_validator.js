@@ -77,6 +77,8 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
     const notesAbs = path.resolve(workspaceRoot, notesRel);
     const handoffRel = `${relRoot}/handoff/be_to_fe.json`.replace(/\/+/g, "/").replace(/^\/+/, "");
     const handoffAbs = path.resolve(workspaceRoot, handoffRel);
+    const packageRel = `${relRoot}/impl/be_changes/package.json`.replace(/\/+/g, "/").replace(/^\/+/, "");
+    const packageAbs = path.resolve(workspaceRoot, packageRel);
     const patchRel = `${relRoot}/impl/be_patch_bundle.json`.replace(/\/+/g, "/").replace(/^\/+/, "");
     const patchAbs = path.resolve(workspaceRoot, patchRel);
     const dirExists = fs.existsSync(beDirAbs) && fs.statSync(beDirAbs).isDirectory();
@@ -86,12 +88,12 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
     const patchTargets = Array.isArray(patchBundle?.target_files) ? patchBundle.target_files.map((item) => normalizePathText(item)).filter(Boolean) : [];
     const hasPatchBundle = fs.existsSync(patchAbs) && patchBundle && (patchMode === "structured_patch" || patchMode === "full_file_fallback");
     const hasFullFileOutputs = dirExists && dirEntries.length > 0;
-    if ((!hasPatchBundle && !hasFullFileOutputs) || !fs.existsSync(notesAbs) || !fs.existsSync(handoffAbs)) {
+    if ((!hasPatchBundle && !hasFullFileOutputs) || !fs.existsSync(notesAbs) || !fs.existsSync(handoffAbs) || !fs.existsSync(packageAbs)) {
       return {
         checked: true,
         ok: false,
         code: "STEP_IMPL_BE_ARTIFACTS_MISSING",
-        detail: "backend implementation step requires either impl/be_patch_bundle.json or non-empty impl/be_changes/, plus impl/be_notes.md and handoff/be_to_fe.json",
+        detail: "backend implementation step requires either impl/be_patch_bundle.json or non-empty impl/be_changes/, plus impl/be_changes/package.json, impl/be_notes.md and handoff/be_to_fe.json",
         dir_exists: dirExists,
         be_changes_count: dirEntries.length,
         patch_bundle_exists: Boolean(hasPatchBundle),
@@ -106,6 +108,7 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
       execution_mode_used: hasPatchBundle ? patchMode : "full_file_fallback",
       be_changes_dir: "impl/be_changes",
       be_changes_count: dirEntries.length,
+      package_path: "impl/be_changes/package.json",
       patch_bundle_path: hasPatchBundle ? "impl/be_patch_bundle.json" : "",
       notes_path: "impl/be_notes.md",
       handoff_path: "handoff/be_to_fe.json",
@@ -116,6 +119,7 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
     const relRoot = String(payload?.artifact_root || "").trim().replace(/\\/g, "/");
     const feDirRel = `${relRoot}/impl/fe_changes`.replace(/\/+/g, "/").replace(/^\/+/, "");
     const feDirAbs = path.resolve(workspaceRoot, feDirRel);
+    const fePublicDirAbs = path.join(feDirAbs, "public");
     const notesRel = `${relRoot}/impl/fe_notes.md`.replace(/\/+/g, "/").replace(/^\/+/, "");
     const notesAbs = path.resolve(workspaceRoot, notesRel);
     const beHandoffRel = `${relRoot}/handoff/be_to_fe.json`.replace(/\/+/g, "/").replace(/^\/+/, "");
@@ -124,11 +128,14 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
     const patchAbs = path.resolve(workspaceRoot, patchRel);
     const dirExists = fs.existsSync(feDirAbs) && fs.statSync(feDirAbs).isDirectory();
     const dirEntries = dirExists ? fs.readdirSync(feDirAbs, { withFileTypes: true }).filter((item) => item.isFile()) : [];
+    const publicEntries = fs.existsSync(fePublicDirAbs) && fs.statSync(fePublicDirAbs).isDirectory()
+      ? fs.readdirSync(fePublicDirAbs, { withFileTypes: true }).filter((item) => item.isFile())
+      : [];
     const patchBundle = readJsonFileSafe(patchAbs);
     const patchMode = String(patchBundle?.mode || "");
     const patchTargets = Array.isArray(patchBundle?.target_files) ? patchBundle.target_files.map((item) => normalizePathText(item)).filter(Boolean) : [];
     const hasPatchBundle = fs.existsSync(patchAbs) && patchBundle && (patchMode === "structured_patch" || patchMode === "full_file_fallback");
-    const hasFullFileOutputs = dirExists && dirEntries.length > 0;
+    const hasFullFileOutputs = dirExists && (dirEntries.length > 0 || publicEntries.length > 0);
     if (!fs.existsSync(beHandoffAbs)) {
       return {
         checked: true,
@@ -142,21 +149,24 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
         checked: true,
         ok: false,
         code: "STEP_IMPL_FE_ARTIFACTS_MISSING",
-        detail: "frontend implementation step requires either impl/fe_patch_bundle.json or non-empty impl/fe_changes/, plus impl/fe_notes.md",
+        detail: "frontend implementation step requires either impl/fe_patch_bundle.json or non-empty impl/fe_changes/public/, plus impl/fe_notes.md",
         dir_exists: dirExists,
-        fe_changes_count: dirEntries.length,
+        fe_changes_count: dirEntries.length + publicEntries.length,
         patch_bundle_exists: Boolean(hasPatchBundle),
       };
     }
     const scopedFiles = hasPatchBundle && patchTargets.length > 0
       ? patchTargets
-      : dirEntries.map((e) => `${relRoot}/impl/fe_changes/${e.name}`.replace(/\/+/g, "/").replace(/^\/+/, ""));
+      : [
+          ...dirEntries.map((e) => `${relRoot}/impl/fe_changes/${e.name}`.replace(/\/+/g, "/").replace(/^\/+/, "")),
+          ...publicEntries.map((e) => `${relRoot}/impl/fe_changes/public/${e.name}`.replace(/\/+/g, "/").replace(/^\/+/, "")),
+        ];
     return {
       checked: true,
       ok: true,
       execution_mode_used: hasPatchBundle ? patchMode : "full_file_fallback",
       fe_changes_dir: "impl/fe_changes",
-      fe_changes_count: dirEntries.length,
+      fe_changes_count: dirEntries.length + publicEntries.length,
       patch_bundle_path: hasPatchBundle ? "impl/fe_patch_bundle.json" : "",
       notes_path: "impl/fe_notes.md",
       consumed_handoff_path: "handoff/be_to_fe.json",

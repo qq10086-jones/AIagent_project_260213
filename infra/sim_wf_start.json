@@ -1,0 +1,7 @@
+{
+  "workflow_id": "coding_team_v0",
+  "project_type": "generic_app",
+  "input": {
+    "goal": "做一个简单的待办事项网站，支持新增、完成和删除任务，界面清爽有基本样式。[SIM-004]"
+  }
+}

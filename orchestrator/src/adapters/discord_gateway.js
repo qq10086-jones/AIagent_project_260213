@@ -3,6 +3,17 @@ import { handleWorkflowEvent } from "./discord_progress_manager.js";
 
 const DISCORD_MAX_CONTENT = 1900;
 
+const STEP_LABELS = {
+  pm_spec: "PM 规格",
+  arch_design: "架构设计",
+  impl_be: "后端实现",
+  impl_fe: "前端实现",
+  smoke_test: "烟雾测试",
+  qa_verify: "QA 验证",
+  release_pack: "发布打包",
+  deploy_preview: "预览部署",
+};
+
 function splitForDiscord(text, maxLen = DISCORD_MAX_CONTENT) {
   const normalized = String(text || "").replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
@@ -20,6 +31,11 @@ function splitForDiscord(text, maxLen = DISCORD_MAX_CONTENT) {
   }
   if (rest) out.push(rest);
   return out;
+}
+
+function labelForStep(stepId) {
+  const safe = String(stepId || "").trim();
+  return STEP_LABELS[safe] || safe || "unknown";
 }
 
 export function createDiscordGateway({ translate }) {
@@ -110,9 +126,29 @@ export function createDiscordGateway({ translate }) {
       });
     }
 
+    if (event === "workflow.started") {
+      notifyCtx.stepCount = Number(rest.step_count || 0);
+      notifyCtx.stepIds = Array.isArray(rest.step_ids) ? rest.step_ids.map((item) => String(item || "")) : [];
+      workflowRunToContext.set(workflow_run_id, notifyCtx);
+      return;
+    }
+
     let notifMsg = "";
-    if (event === "step.approval_required") {
-      notifMsg = `⏸️ 步骤 **${rest.step_id}** 需要人工审批后才能继续执行。`;
+    if (event === "step.started") {
+      const stepIndex = Number(rest.step_index || 0);
+      const currentId = String(rest.step_id || "");
+      const currentLabel = labelForStep(currentId);
+      const nextId = Array.isArray(notifyCtx.stepIds) ? String(notifyCtx.stepIds[stepIndex + 1] || "") : "";
+      const nextLabel = nextId ? labelForStep(nextId) : "完成";
+      const total = Number(notifyCtx.stepCount || rest.step_count || 0);
+      notifMsg = `[Nexus] 步骤 ${stepIndex + 1}/${total || "?"}: ${currentLabel}\n状态: 运行中\n下一步: ${nextLabel}`;
+    } else if (event === "workflow.completed") {
+      const summary = String(rest.run_summary || "").trim();
+      notifMsg = `[Nexus] Workflow 已完成${rest.result_url ? `\n结果: ${rest.result_url}` : ""}${summary ? `\n\n运行摘要:\n${summary}` : ""}`;
+    } else if (event === "workflow.failed") {
+      notifMsg = `[Nexus] Workflow 失败\n原因: ${String(rest.error_message || "unknown error")}`;
+    } else if (event === "step.approval_required") {
+      notifMsg = `[Nexus] 步骤 ${labelForStep(rest.step_id)} 等待审批`;
     }
     if (!notifMsg) return;
     const translated = await safeTranslate(notifMsg, notifyCtx.lang || "zh").catch(() => notifMsg);

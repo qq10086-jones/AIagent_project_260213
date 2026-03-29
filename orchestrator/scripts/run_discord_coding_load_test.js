@@ -158,6 +158,29 @@ function readGoNoGo(workspaceRoot, runId) {
   };
 }
 
+function readFidelityReport(workspaceRoot, runId) {
+  const p = path.resolve(workspaceRoot, "artifacts", "release", String(runId || ""), "qa", "product_fidelity_report.json");
+  if (!fs.existsSync(p)) return { exists: false, classification: "", perceptual_score: "", should_warn: false };
+  const value = readJson(p);
+  return {
+    exists: true,
+    classification: String(value?.classification || ""),
+    perceptual_score: String(value?.perceptual_quality?.score || ""),
+    should_warn: Boolean(value?.should_warn),
+  };
+}
+
+function readPreviewValidationReport(workspaceRoot, runId) {
+  const p = path.resolve(workspaceRoot, "artifacts", "release", String(runId || ""), "qa", "preview_validation_report.json");
+  if (!fs.existsSync(p)) return { exists: false, classification: "", should_warn: false };
+  const value = readJson(p);
+  return {
+    exists: true,
+    classification: String(value?.classification || ""),
+    should_warn: Boolean(value?.should_warn),
+  };
+}
+
 async function runSingleDispatch({
   baseUrl,
   discordEvent,
@@ -193,6 +216,13 @@ async function runSingleDispatch({
       workflow_status: "",
       go_no_go_verdict: "",
       go_no_go_exists: false,
+      fidelity_classification: "",
+      fidelity_perceptual_score: "",
+      fidelity_should_warn: false,
+      fidelity_exists: false,
+      preview_classification: "",
+      preview_should_warn: false,
+      preview_validation_exists: false,
       ok: false,
       error_code: String(dispatch.json?.error_code || ""),
       error_message: String(dispatch.json?.error || dispatch.json?.raw || `HTTP ${dispatch.status}`),
@@ -215,6 +245,13 @@ async function runSingleDispatch({
       workflow_status: "",
       go_no_go_verdict: "",
       go_no_go_exists: false,
+      fidelity_classification: "",
+      fidelity_perceptual_score: "",
+      fidelity_should_warn: false,
+      fidelity_exists: false,
+      preview_classification: "",
+      preview_should_warn: false,
+      preview_validation_exists: false,
       ok: false,
       error_code: "UNEXPECTED_DISPATCH_MODE",
       error_message: `expected workflow/progress_update mode but received '${mode || "unknown"}'`,
@@ -224,7 +261,10 @@ async function runSingleDispatch({
   try {
     const terminal = await pollWorkflow(baseUrl, workflowRunId, timeoutMs, pollMs);
     const workflowStatus = String(terminal?.run?.status || "");
-    const goNoGo = readGoNoGo(workspaceRoot, runId || terminal?.run?.run_id || "");
+    const resolvedRunId = runId || String(terminal?.run?.run_id || "");
+    const goNoGo = readGoNoGo(workspaceRoot, resolvedRunId);
+    const fidelity = readFidelityReport(workspaceRoot, resolvedRunId);
+    const previewVal = readPreviewValidationReport(workspaceRoot, resolvedRunId);
     const steps = Array.isArray(terminal?.steps) ? terminal.steps : [];
     const failedStep = steps.find((step) => String(step?.status || "") === "failed") || null;
     return {
@@ -236,12 +276,19 @@ async function runSingleDispatch({
       dispatch_status: dispatch.status,
       dispatch_mode: mode,
       dispatch_latency_ms: dispatchLatencyMs,
-      run_id: runId || String(terminal?.run?.run_id || ""),
+      run_id: resolvedRunId,
       workflow_run_id: workflowRunId,
       workflow_status: workflowStatus,
       go_no_go_verdict: String(goNoGo.verdict || ""),
       go_no_go_exists: Boolean(goNoGo.exists),
       go_no_go_failed_checks: Number(goNoGo.failed_checks || 0),
+      fidelity_classification: fidelity.classification,
+      fidelity_perceptual_score: fidelity.perceptual_score,
+      fidelity_should_warn: fidelity.should_warn,
+      fidelity_exists: fidelity.exists,
+      preview_classification: previewVal.classification,
+      preview_should_warn: previewVal.should_warn,
+      preview_validation_exists: previewVal.exists,
       ok: workflowStatus === "succeeded" && (!goNoGo.exists || goNoGo.verdict === "GO"),
       error_code: String(terminal?.run?.error_code || failedStep?.error_code || ""),
       error_message: String(terminal?.run?.error_message || ""),
@@ -262,6 +309,13 @@ async function runSingleDispatch({
       workflow_status: "timeout",
       go_no_go_verdict: "",
       go_no_go_exists: false,
+      fidelity_classification: "",
+      fidelity_perceptual_score: "",
+      fidelity_should_warn: false,
+      fidelity_exists: false,
+      preview_classification: "",
+      preview_should_warn: false,
+      preview_validation_exists: false,
       ok: false,
       error_code: "LOAD_TEST_TIMEOUT",
       error_message: err.message || String(err),
@@ -329,9 +383,23 @@ function makeReportMd(report) {
   for (const [scenarioId, count] of Object.entries(report.summary.scenario_counts)) {
     lines.push(`- ${scenarioId}: ${count}`);
   }
+  const fwRate = report.rates.fidelity_warn_rate;
+  lines.push("", "## Product Fidelity Quality");
+  lines.push(`- fidelity_report_rate: ${(report.rates.fidelity_report_rate * 100).toFixed(1)}% (${report.summary.fidelity_report_count}/${report.summary.total_runs} runs generated report)`);
+  lines.push(`- fidelity_warn_rate: ${fwRate !== null ? `${(fwRate * 100).toFixed(1)}% (${report.summary.fidelity_warn_count}/${report.summary.fidelity_report_count} with report)` : "n/a (no fidelity reports)"}`);
+  lines.push(`- preview_mismatch_count: ${report.summary.preview_mismatch_count}`);
+  lines.push("", "### Fidelity Classifications");
+  for (const [cls, count] of Object.entries(report.summary.fidelity_classification_counts)) {
+    lines.push(`- ${cls}: ${count}`);
+  }
+  lines.push("", "### Perceptual Quality Scores");
+  for (const [score, count] of Object.entries(report.summary.perceptual_score_counts)) {
+    lines.push(`- ${score}: ${count}`);
+  }
   lines.push("", "## Runs");
   for (const item of report.results) {
-    lines.push(`- #${item.index} scenario=${item.scenario_id} class=${item.class} mode=${item.dispatch_mode} workflow_status=${item.workflow_status || "n/a"} dispatch_ms=${item.dispatch_latency_ms} total_ms=${item.total_duration_ms || 0} error=${item.error_code || "none"}`);
+    const fidelityTag = item.fidelity_exists ? `fidelity=${item.fidelity_classification}(${item.fidelity_perceptual_score})` : "fidelity=n/a";
+    lines.push(`- #${item.index} scenario=${item.scenario_id} class=${item.class} mode=${item.dispatch_mode} workflow_status=${item.workflow_status || "n/a"} dispatch_ms=${item.dispatch_latency_ms} total_ms=${item.total_duration_ms || 0} ${fidelityTag} error=${item.error_code || "none"}`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -352,6 +420,7 @@ function printUsage() {
   console.log("  --min-go-rate <0-1>      Gate threshold for GO/No-GO pass rate.");
   console.log("  --max-dispatch-p95-ms <ms> Gate threshold for dispatch p95 latency.");
   console.log("  --max-total-p95-ms <ms>  Gate threshold for end-to-end p95 latency.");
+  console.log("  --max-fidelity-warn-rate <0-1>  Gate threshold for fidelity warn rate (runs with fidelity report).");
   console.log("  --strict <bool>          Exit non-zero when failures exist. Default: true");
 }
 
@@ -422,7 +491,8 @@ async function main() {
         pollMs,
         workspaceRoot,
       });
-      console.log(`[discord-coding-load-test] done  #${index + 1} scenario=${job.scenario.id} mode=${result.dispatch_mode} workflow=${result.workflow_status || "n/a"} error=${result.error_code || "none"}`);
+      const fTag = result.fidelity_exists ? `fidelity=${result.fidelity_classification}(${result.fidelity_perceptual_score})` : "fidelity=n/a";
+      console.log(`[discord-coding-load-test] done  #${index + 1} scenario=${job.scenario.id} mode=${result.dispatch_mode} workflow=${result.workflow_status || "n/a"} ${fTag} error=${result.error_code || "none"}`);
       return result;
     },
     staggerMs,
@@ -438,19 +508,33 @@ async function main() {
     failure_count: measuredResults.filter((item) => !item.ok).length,
     workflow_success_count: measuredResults.filter((item) => item.workflow_status === "succeeded").length,
     go_pass_count: measuredResults.filter((item) => item.go_no_go_verdict === "GO").length,
+    fidelity_report_count: measuredResults.filter((item) => item.fidelity_exists).length,
+    fidelity_warn_count: measuredResults.filter((item) => item.fidelity_should_warn).length,
+    preview_mismatch_count: measuredResults.filter((item) => item.preview_classification === "preview_mismatch").length,
     dispatch_mode_counts: buildHistogram(measuredResults, "dispatch_mode"),
     workflow_status_counts: buildHistogram(measuredResults, "workflow_status"),
+    fidelity_classification_counts: buildHistogram(
+      measuredResults.filter((item) => item.fidelity_exists),
+      "fidelity_classification"
+    ),
+    perceptual_score_counts: buildHistogram(
+      measuredResults.filter((item) => item.fidelity_exists),
+      "fidelity_perceptual_score"
+    ),
     scenario_counts: buildHistogram(measuredResults, "scenario_id"),
     class_counts: buildHistogram(measuredResults, "class"),
   };
   const workflowSuccessRate = summary.total_runs > 0 ? summary.workflow_success_count / summary.total_runs : 0;
   const goRate = summary.total_runs > 0 ? summary.go_pass_count / summary.total_runs : 0;
+  const fidelityReportRate = summary.total_runs > 0 ? summary.fidelity_report_count / summary.total_runs : 0;
+  const fidelityWarnRate = summary.fidelity_report_count > 0 ? summary.fidelity_warn_count / summary.fidelity_report_count : null;
   const latency = {
     dispatch_p50_ms: percentile(dispatchDurations, 50),
     dispatch_p95_ms: percentile(dispatchDurations, 95),
     total_p50_ms: percentile(totalDurations, 50),
     total_p95_ms: percentile(totalDurations, 95),
   };
+  const maxFidelityWarnRate = toOptionalNumber(arg("max-fidelity-warn-rate", ""));
   const gateFailures = [];
   if (Number.isFinite(minWorkflowSuccessRate) && workflowSuccessRate < minWorkflowSuccessRate) {
     gateFailures.push(`workflow_success_rate ${workflowSuccessRate.toFixed(3)} < ${minWorkflowSuccessRate.toFixed(3)}`);
@@ -463,6 +547,9 @@ async function main() {
   }
   if (Number.isFinite(maxTotalP95Ms) && latency.total_p95_ms > maxTotalP95Ms) {
     gateFailures.push(`total_p95_ms ${latency.total_p95_ms} > ${maxTotalP95Ms}`);
+  }
+  if (Number.isFinite(maxFidelityWarnRate) && fidelityWarnRate !== null && fidelityWarnRate > maxFidelityWarnRate) {
+    gateFailures.push(`fidelity_warn_rate ${fidelityWarnRate.toFixed(3)} > ${maxFidelityWarnRate.toFixed(3)}`);
   }
 
   const report = {
@@ -482,6 +569,7 @@ async function main() {
       min_go_rate: Number.isFinite(minGoRate) ? minGoRate : null,
       max_dispatch_p95_ms: Number.isFinite(maxDispatchP95Ms) ? maxDispatchP95Ms : null,
       max_total_p95_ms: Number.isFinite(maxTotalP95Ms) ? maxTotalP95Ms : null,
+      max_fidelity_warn_rate: Number.isFinite(maxFidelityWarnRate) ? maxFidelityWarnRate : null,
       strict,
     },
     execution_window: {
@@ -494,6 +582,8 @@ async function main() {
     rates: {
       workflow_success_rate: workflowSuccessRate,
       go_rate: goRate,
+      fidelity_report_rate: fidelityReportRate,
+      fidelity_warn_rate: fidelityWarnRate,
     },
     gate_failures: gateFailures,
     verdict: summary.failure_count === 0 && gateFailures.length === 0 ? "PASS" : "FAIL",
@@ -511,6 +601,8 @@ async function main() {
   console.log(`- md: ${mdPath.replace(/\\/g, "/")}`);
   console.log(`- success_count: ${summary.success_count}`);
   console.log(`- failure_count: ${summary.failure_count}`);
+  console.log(`- fidelity_report_rate: ${(fidelityReportRate * 100).toFixed(1)}%`);
+  console.log(`- fidelity_warn_rate: ${fidelityWarnRate !== null ? `${(fidelityWarnRate * 100).toFixed(1)}%` : "n/a"}`);
   console.log(`- verdict: ${report.verdict}`);
 
   if (strict && report.verdict !== "PASS") {

@@ -232,7 +232,59 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
   assert.equal(payload.execution_lane, "stable_cloud_lane");
   assert.equal(payload.execution_mode_requested, "full_file_fallback");
   assert.equal(payload.prompt_script_id, "backend.impl.v1");
-  assert.deepEqual(payload.expected_artifacts, ["impl/be_changes/server.js", "impl/be_notes.md", "handoff/be_to_fe.json"]);
+  assert.deepEqual(payload.expected_artifacts, ["impl/be_changes/server.js", "impl/be_changes/package.json", "impl/be_notes.md", "handoff/be_to_fe.json"]);
+});
+
+test("generic_app impl_be injects primary_qwen_lane and uses full_file_fallback", () => {
+  const workspaceRoot = makeWorkspace();
+  // sandbox/app is empty — no target files — natural full_file_fallback
+  fs.mkdirSync(path.join(workspaceRoot, "sandbox/app"), { recursive: true });
+
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: {
+      scripts: {
+        "backend.impl.v1": { script_id: "backend.impl.v1", role: "backend", llm_role: "backend", validation: {} },
+      },
+    },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {
+      execution: { diff_first_enabled: true },
+      worker_coder: {
+        execution_lane_default: "stable_cloud_lane",
+        execution_lanes: {
+          stable_cloud_lane: { provider: "opencode", model: "minimax-coding-plan/MiniMax-M2.7" },
+          primary_qwen_lane: { provider: "opencode", model: "minimax-coding-plan/MiniMax-M2.7" },
+        },
+        wall_clock_timeout_s_default: 900,
+        max_attempts_default: 2,
+        same_error_repeat_limit_default: 2,
+      },
+    },
+  });
+
+  const payload = builder.buildStepPayload({
+    run: {
+      run_id: "generic-run",
+      workflow_run_id: "generic-wf",
+      workflow_id: "coding_team_v0",
+      project_type: "generic_app",
+      input_json: JSON.stringify({ goal: "Build todo app" }),
+    },
+    stepDef: {
+      id: "impl_be",
+      role: "backend",
+      tool: "coding.delegate",
+      gate: "policy",
+      prompt_script_id: "backend.impl.v1",
+    },
+    stepIndex: 2,
+  });
+
+  assert.equal(payload.execution_lane, "primary_qwen_lane", "generic_app impl_be should use primary_qwen_lane");
+  assert.equal(payload.model, "minimax-coding-plan/MiniMax-M2.7", "model should match primary_qwen_lane");
+  assert.equal(payload.execution_mode_requested, "full_file_fallback", "primary_qwen_lane forced to full_file_fallback");
 });
 
 test("deploy_preview payload includes release metadata and preview defaults", () => {
@@ -270,5 +322,43 @@ test("deploy_preview payload includes release metadata and preview defaults", ()
   assert.equal(payload.release_notes_path, "artifacts/release/preview-run/release/release_notes.md");
   assert.deepEqual(payload.target_paths, ["sandbox/crm_site/"]);
   assert.equal(payload.render_service_id, "");
+});
+
+test("smoke_test payload includes executable command and smoke artifact", () => {
+  const workspaceRoot = makeWorkspace();
+  writeFile(workspaceRoot, "artifacts/release/run-smoke/handoff/be_to_fe.json", JSON.stringify({
+    api_contracts: [{ method: "GET", path: "/api/books" }],
+  }, null, 2));
+
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: { scripts: {} },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {},
+  });
+
+  const payload = builder.buildStepPayload({
+    run: {
+      run_id: "run-smoke",
+      workflow_run_id: "wf-smoke",
+      workflow_id: "coding_team_v0",
+      project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "Smoke test app" }),
+    },
+    stepDef: {
+      id: "smoke_test",
+      role: "qa",
+      tool: "coding.execute",
+      gate: null,
+    },
+    stepIndex: 4,
+  });
+
+  assert.match(payload.command, /run_smoke_test\.mjs/);
+  assert.match(payload.command, /--artifact-root/);
+  assert.match(payload.command, /--api-endpoint "\/api\/books"/);
+  assert.equal(payload.max_runtime_s, 120);
+  assert.deepEqual(payload.expected_artifacts, ["smoke/smoke_result.json"]);
 });
 

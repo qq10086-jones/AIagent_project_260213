@@ -1,11 +1,11 @@
 {
   "ok": true,
-  "generated_at": "2026-03-15T06:58:19.966Z",
+  "generated_at": "2026-03-29T15:25:08.762Z",
   "cases": {
     "happy_path": {
       "verdict": "pass",
-      "steps_succeeded": 6,
-      "checkpoints": 6
+      "steps_succeeded": 8,
+      "checkpoints": 8
     },
     "be_failure": {
       "verdict": "pass",
@@ -17,7 +17,7 @@
       "verdict": "pass",
       "workflow_status": "failed",
       "qa_status": "failed",
-      "tasks_dispatched": 5
+      "tasks_dispatched": 6
     }
   }
 }

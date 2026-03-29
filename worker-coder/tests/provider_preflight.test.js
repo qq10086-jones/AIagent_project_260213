@@ -1,4 +1,4 @@
-import assert from "assert";
+﻿import assert from "assert";
 import { validateRuntimePreflight } from "../provider_preflight.js";
 
 function testPassesWhenDashScopeCredentialPresent() {
@@ -161,6 +161,25 @@ function testPassesWhenMiniMaxCredentialPresent() {
   assert.equal(result.issues.length, 0);
 }
 
+function testPassesWhenMiniMaxCodingPlanCredentialPresent() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "opencode",
+    defaultModel: "minimax-coding-plan/MiniMax-M2.7",
+    defaultExecutionLane: "stable_cloud_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_cloud_lane: {
+          provider: "opencode",
+          model: "minimax-coding-plan/MiniMax-M2.7",
+        },
+      },
+    },
+    env: { MINIMAX_API_KEY: "test-key" },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.length, 0);
+}
+
 function testCodexLaneRequiresOpenAIKey() {
   const result = validateRuntimePreflight({
     defaultProvider: "codex",
@@ -174,7 +193,7 @@ function testCodexLaneRequiresOpenAIKey() {
         },
       },
     },
-    env: {},  // no OPENAI_API_KEY, no auth.json in test env
+    env: {},
   });
   assert.equal(result.ok, false);
   assert.equal(result.issues[0].code, "CODEX_AUTH_MISSING");
@@ -199,6 +218,66 @@ function testCodexLanePassesWhenOpenAIKeyPresent() {
   assert.equal(result.issues.length, 0);
 }
 
+function testFailsWhenDefaultExecutionLaneMissing() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "opencode",
+    defaultModel: "minimax-coding-plan/MiniMax-M2.7",
+    defaultExecutionLane: "missing_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_cloud_lane: {
+          provider: "opencode",
+          model: "minimax-coding-plan/MiniMax-M2.7",
+        },
+      },
+    },
+    env: { MINIMAX_API_KEY: "test-key" },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.fatal, true);
+  assert.equal(result.issues[0].code, "EXECUTION_LANE_UNKNOWN");
+}
+
+function testFailsWhenDefaultModelConflictsWithLaneModel() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "opencode",
+    defaultModel: "minimax-coding-plan/MiniMax-M2.7",
+    defaultExecutionLane: "stable_dashscope_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_dashscope_lane: {
+          provider: "opencode",
+          model: "dashscope/qwen-plus-2025-04-28",
+        },
+      },
+    },
+    env: { DASHSCOPE_API_KEY: "test-key" },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.fatal, true);
+  assert.equal(result.issues[0].code, "DEFAULT_MODEL_LANE_MISMATCH");
+}
+
+function testFailsWhenDefaultProviderConflictsWithLaneProvider() {
+  const result = validateRuntimePreflight({
+    defaultProvider: "codex",
+    defaultModel: "codex-mini-latest",
+    defaultExecutionLane: "stable_dashscope_lane",
+    runtimeCoderConfig: {
+      execution_lanes: {
+        stable_dashscope_lane: {
+          provider: "opencode",
+          model: "dashscope/qwen-plus-2025-04-28",
+        },
+      },
+    },
+    env: { DASHSCOPE_API_KEY: "test-key", OPENAI_API_KEY: "sk-test-key" },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.fatal, true);
+  assert.equal(result.issues[0].code, "DEFAULT_PROVIDER_LANE_MISMATCH");
+}
+
 function main() {
   testPassesWhenDashScopeCredentialPresent();
   testRequiresDashScopeCredential();
@@ -206,8 +285,14 @@ function main() {
   testPassesWhenAlibabaCredentialPresent();
   testPassesWhenQwenCredentialPresentForAlibabaLane();
   testPassesForConfiguredLocalOllamaLane();
+  testRequiresMiniMaxCredential();
+  testPassesWhenMiniMaxCredentialPresent();
+  testPassesWhenMiniMaxCodingPlanCredentialPresent();
   testCodexLaneRequiresOpenAIKey();
   testCodexLanePassesWhenOpenAIKeyPresent();
+  testFailsWhenDefaultExecutionLaneMissing();
+  testFailsWhenDefaultModelConflictsWithLaneModel();
+  testFailsWhenDefaultProviderConflictsWithLaneProvider();
   console.log("provider_preflight.test.js: all tests passed");
 }
 

@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-03-27T00:00:00Z",
+  "baseline_type": "historical_release_artifact_backfill",
+  "source_design": "docs/03_feature_development/2026-03-27_project_completion_tasklist_v2.md",
+  "methodology": {
+    "note": "Baseline is derived from existing release artifacts and canary outputs already present in the repository. This is a backfill baseline, not a fresh live Discord rerun set.",
+    "assessment_rule": "Mark a run as false_positive when go_no_go_result.verdict=GO but the v2 rubric would not classify it as demo_usable.",
+    "signals_used": [
+      "product fidelity classification",
+      "preview validation classification",
+      "qa_report overall_status and warning profile",
+      "presence of shared sandbox or missing preview evidence"
+    ]
+  },
+  "totals": {
+    "samples": 5,
+    "go_count": 5,
+    "non_demo_usable_count": 5,
+    "false_positive_count": 5,
+    "false_positive_rate": 1.0,
+    "preview_issue_count": 3,
+    "preview_issue_rate": 0.6
+  },
+  "samples": [
+    {
+      "sample_id": "historical_generic_app_ecommerce",
+      "release_root": "artifacts/release/93ec9528-0dd7-4e40-b5d1-3d9d649bf6c3",
+      "run_id": "93ec9528-0dd7-4e40-b5d1-3d9d649bf6c3",
+      "workflow_id": "coding_team_v0",
+      "project_type": "generic_app",
+      "go_no_go_verdict": "GO",
+      "product_fidelity_classification": "preview_mismatch",
+      "preview_validation_classification": "preview_mismatch",
+      "actual_product_quality": "non_demo_usable",
+      "false_positive": true,
+      "evidence": [
+        "QA is pass_with_warnings with scaffold-style pending-human-review checks.",
+        "Preview points to /workspace/sandbox/crm_site instead of a run-scoped generic app target."
+      ]
+    },
+    {
+      "sample_id": "historical_crm_warning_0167",
+      "release_root": "artifacts/release/0167df14-b591-486f-a472-5b422e5a9c68",
+      "run_id": "0167df14-b591-486f-a472-5b422e5a9c68",
+      "workflow_id": "coding_team_v0",
+      "project_type": "webapp_crm",
+      "go_no_go_verdict": "GO",
+      "product_fidelity_classification": "artifact_complete_but_shallow",
+      "preview_validation_classification": "preview_matched",
+      "actual_product_quality": "non_demo_usable",
+      "false_positive": true,
+      "evidence": [
+        "QA is pass_with_warnings rather than journey-verified pass.",
+        "Current v2 fidelity heuristics classify the output as shallow rather than demo-usable."
+      ]
+    },
+    {
+      "sample_id": "historical_crm_warning_065c",
+      "release_root": "artifacts/release/065c4cd5-789e-42a2-986f-c1e2f2fd1221",
+      "run_id": "065c4cd5-789e-42a2-986f-c1e2f2fd1221",
+      "workflow_id": "coding_team_v0",
+      "project_type": "webapp_crm",
+      "go_no_go_verdict": "GO",
+      "product_fidelity_classification": "artifact_complete_but_shallow",
+      "preview_validation_classification": "preview_matched",
+      "actual_product_quality": "non_demo_usable",
+      "false_positive": true,
+      "evidence": [
+        "QA is pass_with_warnings rather than journey-verified pass.",
+        "Current v2 fidelity heuristics classify the output as shallow rather than demo-usable."
+      ]
+    },
+    {
+      "sample_id": "canary_e2e_happy",
+      "release_root": "orchestrator/artifacts/canary/coding_team_e2e/happy_path/artifacts/release/e2e-happy-run",
+      "run_id": "e2e-happy-run",
+      "workflow_id": "coding_team_v0",
+      "project_type": "webapp_crm",
+      "go_no_go_verdict": "GO",
+      "product_fidelity_classification": "artifact_complete_but_shallow",
+      "preview_validation_classification": "preview_missing",
+      "actual_product_quality": "non_demo_usable",
+      "false_positive": true,
+      "evidence": [
+        "Legacy canary validates contract completeness but does not include preview proof for demo-usability.",
+        "Under the v2 rubric, preview evidence is missing and product fidelity is still shallow."
+      ]
+    },
+    {
+      "sample_id": "canary_m4_compat",
+      "release_root": "orchestrator/artifacts/canary/m4_compat/happy_path/artifacts/release/m4-compat-run",
+      "run_id": "m4-compat-run",
+      "workflow_id": "coding_team_v0",
+      "project_type": "webapp_crm",
+      "go_no_go_verdict": "GO",
+      "product_fidelity_classification": "artifact_complete_but_shallow",
+      "preview_validation_classification": "preview_missing",
+      "actual_product_quality": "non_demo_usable",
+      "false_positive": true,
+      "evidence": [
+        "Compatibility canary proves pipeline integrity but not product-level journey completeness.",
+        "Under the v2 rubric, preview evidence is missing and product fidelity is still shallow."
+      ]
+    }
+  ],
+  "conclusion": {
+    "summary": "Current historical baseline indicates GO is materially over-issuing relative to demo-usable quality.",
+    "recommended_next_step": "Run a fresh 3-5 live Discord canary set after warning-only rollout so this backfill baseline can be replaced with operational baseline data."
+  }
+}

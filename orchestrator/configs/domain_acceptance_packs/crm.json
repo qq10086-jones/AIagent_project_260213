@@ -1,0 +1,63 @@
+{
+  "domain": "crm",
+  "version": "2026-03-28.v1",
+  "source_design": "docs/03_feature_development/2026-03-27_project_completion_design_v2.md",
+  "selection_rationale": "Moderate request frequency; well-understood domain vocabulary; directly testable journeys.",
+  "required_journeys": [
+    "list customers or contacts",
+    "open customer or contact detail",
+    "create or add a new customer record",
+    "edit or update an existing record"
+  ],
+  "expected_ui_components": [
+    "customer or contact list table",
+    "customer detail or profile panel",
+    "create or add record form",
+    "edit record form or inline editing"
+  ],
+  "domain_nouns": [
+    "customer",
+    "contact",
+    "account",
+    "deal",
+    "pipeline",
+    "activity",
+    "note",
+    "status"
+  ],
+  "forbidden_generic_nouns": [
+    "entity",
+    "record",
+    "item"
+  ],
+  "expected_api_surface": [
+    "GET /customers or /api/customers",
+    "GET /customers/:id or /api/customers/:id",
+    "POST /customers or /api/customers",
+    "PUT /customers/:id or PATCH /api/customers/:id"
+  ],
+  "expected_backend_behavior": [
+    "customer list returns array with id, name, email or contact fields",
+    "create customer persists and returns the new customer",
+    "update customer accepts partial payload and reflects changes"
+  ],
+  "preview_expectations": {
+    "must_serve_customer_list": true,
+    "must_not_be_unrelated_sandbox": false,
+    "preview_root_pattern": "crm|customer|contact|sales"
+  },
+  "perceptual_quality_minimum": {
+    "score": "mid",
+    "layout_must_be_intentional": true,
+    "placeholder_text_disqualifies": true,
+    "interactive_affordances_required": ["add customer button", "row click or detail link"]
+  },
+  "acceptance_criteria": [
+    "Customer list renders with domain-specific labels (customer name, email, not 'entity')",
+    "Create customer form submits to the backend and the new record appears in the list",
+    "Customer detail shows at minimum name and one contact field",
+    "QA report includes evidence for at least 3 of the 4 required journeys"
+  ],
+  "example_pass": "Customer list shows 3+ entries with name/email; clicking a row opens detail; add form creates and reloads list.",
+  "example_fail": "Table renders 'Sample Customer 1' with no clickable rows; create button opens an alert('not implemented')."
+}

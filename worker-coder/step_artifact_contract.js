@@ -72,7 +72,7 @@ export function getWorkflowStepHandoff(stepId) {
         case "impl_be":
             return {
                 from_step: "impl_be",
-                required_artifacts: ["impl/be_changes/server.js", "impl/be_notes.md", "handoff/be_to_fe.json"],
+                required_artifacts: ["impl/be_changes/server.js", "impl/be_changes/package.json", "impl/be_notes.md", "handoff/be_to_fe.json"],
                 required_sections: ["api_contracts", "shared_types", "scope_constraints"],
                 typed_handoff: {
                     file: "handoff/be_to_fe.json",
@@ -82,7 +82,7 @@ export function getWorkflowStepHandoff(stepId) {
         case "impl_fe":
             return {
                 from_step: "impl_fe",
-                required_artifacts: ["impl/be_changes/server.js", "impl/fe_changes/app.js", "impl/be_notes.md", "impl/fe_notes.md", "handoff/impl_to_qa.json"],
+                required_artifacts: ["impl/be_changes/server.js", "impl/fe_changes/public/index.html", "impl/fe_changes/public/app.js", "impl/be_notes.md", "impl/fe_notes.md", "handoff/impl_to_qa.json"],
                 required_sections: [],
                 typed_handoff: {
                     file: "handoff/impl_to_qa.json",

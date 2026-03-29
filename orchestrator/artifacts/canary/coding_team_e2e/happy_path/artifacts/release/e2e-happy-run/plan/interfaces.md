@@ -1,5 +1,5 @@
-# POST /api/login
+# GET /api/login
 
-Request: { email, password }
-Response: { token }
+Request: none
+Response: { ok, token }
 Auth: none

@@ -1,0 +1,57 @@
+{
+  "suite_id": "discord_fidelity_suite_v1",
+  "description": "Focused fidelity validation suite — 5 scenarios covering expected quality risk profiles. Used by canary_discord_fidelity.js to verify the fidelity classifier works on real LLM outputs.",
+  "defaults": {
+    "channel_prefix": "fidelity-test",
+    "user_prefix": "fidelity-user",
+    "guild_id": "guild-fidelity-test",
+    "thread_prefix": "fidelity-thread"
+  },
+  "scenarios": [
+    {
+      "id": "ecommerce_product_grid",
+      "class": "medium",
+      "project_type": "generic_app",
+      "risk_profile": "high",
+      "notes": "Complex request — high risk of shallow or domain-misaligned output. preview_mismatch eliminated (2026-03-28) via separate sandbox dirs. Expected baseline: artifact_complete_but_shallow from qwen-plus stub output.",
+      "expected_classifications": ["demo_usable", "domain_misaligned", "artifact_complete_but_shallow", "preview_mismatch"],
+      "message": "/coder: 做一个电商网站，包含商品列表页（网格布局）、商品详情页、购物车和简单结账流程，要用户能加购和删除商品。"
+    },
+    {
+      "id": "crm_customer_list",
+      "class": "medium",
+      "project_type": "webapp_crm",
+      "risk_profile": "medium",
+      "notes": "CRM domain pack will be applied. Expect domain_noun_present check to run. Output should use customer/contact vocabulary. preview_mismatch not expected here (project_type=webapp_crm is the sandbox type).",
+      "expected_classifications": ["demo_usable", "domain_misaligned", "artifact_complete_but_shallow"],
+      "message": "/coder: 做一个简单CRM系统，支持客户列表、客户详情查看、新建和编辑客户，后端要有客户数据API。"
+    },
+    {
+      "id": "todo_webapp_simple",
+      "class": "short",
+      "project_type": "generic_app",
+      "risk_profile": "low",
+      "notes": "Simple well-defined scope. artifact_complete_but_shallow is the current production baseline (qwen-plus stub output). preview_mismatch eliminated via sandbox/app dir.",
+      "expected_classifications": ["demo_usable", "domain_misaligned", "artifact_complete_but_shallow", "preview_mismatch"],
+      "message": "/coder: 做一个待办事项网站，支持新增、完成和删除任务，界面要清爽，有简单的样式。"
+    },
+    {
+      "id": "landing_page_static",
+      "class": "short",
+      "project_type": "generic_app",
+      "risk_profile": "low",
+      "notes": "Static marketing site. Frontend-heavy. artifact_complete_but_shallow is the current production baseline. preview_mismatch eliminated via sandbox/html_site dir. Brain router may classify as single_file_html.",
+      "expected_classifications": ["demo_usable", "visually_incomplete", "artifact_complete_but_shallow", "preview_mismatch"],
+      "message": "/coder: 做一个SaaS产品落地页，包含主视觉、三段卖点、用户评价和一个CTA按钮，要有基本样式。"
+    },
+    {
+      "id": "utility_script_only",
+      "class": "short",
+      "project_type": "generic_app",
+      "risk_profile": "medium",
+      "notes": "Pure utility script — no UI. artifact_complete_but_shallow is the current production baseline. preview_mismatch eliminated via sandbox/project dir. Brain router may classify as generic_coding_task.",
+      "expected_classifications": ["demo_usable", "visually_incomplete", "artifact_complete_but_shallow", "preview_mismatch"],
+      "message": "/coder: 写一个Node.js脚本，读取目录下所有JSON文件，合并成一个数组后输出到output.json，支持命令行传路径参数。"
+    }
+  ]
+}

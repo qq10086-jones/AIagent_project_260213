@@ -1,0 +1,161 @@
+{
+  "templates": [
+    {
+      "id": "tpl-sop",
+      "name": "标准作业指导书",
+      "category": "controlled_document",
+      "codePrefix": "DMS-SOP",
+      "defaultDepartment": "QA",
+      "defaultDistribution": ["QA", "制造", "仓储"],
+      "description": "用于 SOP / WI / 标准流程文件的首发和修订发行。",
+      "excelTemplateRef": "templates/SOP_master_v3.xlsx",
+      "fields": ["title", "department", "owner", "effectiveDate", "distribution", "changeSummary"]
+    },
+    {
+      "id": "tpl-form",
+      "name": "受控记录表单",
+      "category": "record_form",
+      "codePrefix": "DMS-FRM",
+      "defaultDepartment": "Document Control",
+      "defaultDistribution": ["Document Control", "相关部门"],
+      "description": "用于受控表单、点检表、签核页和记录模板发行。",
+      "excelTemplateRef": "templates/Form_register_v2.xlsx",
+      "fields": ["title", "department", "owner", "effectiveDate", "distribution", "changeSummary"]
+    },
+    {
+      "id": "tpl-spec",
+      "name": "客户规格/外来文件",
+      "category": "external_document",
+      "codePrefix": "DMS-EXT",
+      "defaultDepartment": "Engineering",
+      "defaultDistribution": ["Engineering", "QA", "Sales"],
+      "description": "用于客户来图、外来规范、客户特殊要求文件建档。",
+      "excelTemplateRef": "templates/External_spec_issue.xlsx",
+      "fields": ["title", "department", "owner", "effectiveDate", "distribution", "changeSummary"]
+    },
+    {
+      "id": "tpl-complaint",
+      "name": "客诉与 CAPA 模板",
+      "category": "future_module",
+      "codePrefix": "DMS-CMP",
+      "defaultDepartment": "Customer Quality",
+      "defaultDistribution": ["Customer Quality", "QA", "Sales"],
+      "description": "为后续客诉记录系统预留，当前可先纳入受控文档发行。",
+      "excelTemplateRef": "templates/Complaint_CAPA_tracker.xlsx",
+      "fields": ["title", "department", "owner", "effectiveDate", "distribution", "changeSummary"]
+    }
+  ],
+  "intakeRequests": [
+    {
+      "id": "req_1001",
+      "source": "discord",
+      "requester": "QA-Lee",
+      "channel": "#doc-control",
+      "summary": "发行 IQC 检验记录表 V1",
+      "content": "请按 IQC Excel 模板生成《来料检验记录表》，今日生效，分发到 IQC、仓储、QA。",
+      "status": "new",
+      "suggestedTemplateId": "tpl-form",
+      "createdAt": "2026-03-26T09:10:00.000Z"
+    },
+    {
+      "id": "req_1002",
+      "source": "discord",
+      "requester": "ENG-Wang",
+      "channel": "#engineering-change",
+      "summary": "修订 包装作业指导书",
+      "content": "包装 SOP 需要新增条码校验步骤，请发 Rev B，并保留旧版发行历史。",
+      "status": "in_review",
+      "suggestedTemplateId": "tpl-sop",
+      "createdAt": "2026-03-26T10:25:00.000Z"
+    }
+  ],
+  "documents": [
+    {
+      "id": "doc_1001",
+      "templateId": "tpl-sop",
+      "templateName": "标准作业指导书",
+      "docNumber": "DMS-SOP-2026-001",
+      "revision": "A",
+      "title": "包装作业指导书",
+      "department": "Manufacturing",
+      "owner": "ENG-Wang",
+      "effectiveDate": "2026-03-20",
+      "distribution": ["Manufacturing", "QA", "Warehouse"],
+      "status": "released",
+      "sourceLabel": "Discord / #engineering-change",
+      "sourceRequestId": "req_1002",
+      "excelTemplateRef": "templates/SOP_master_v3.xlsx",
+      "payloadSummary": "增加包装段首件确认、封箱标签核对、留样要求。",
+      "updatedAt": "2026-03-20T08:00:00.000Z"
+    },
+    {
+      "id": "doc_1002",
+      "templateId": "tpl-spec",
+      "templateName": "客户规格/外来文件",
+      "docNumber": "DMS-EXT-2026-001",
+      "revision": "A",
+      "title": "客户 A 外箱标签规范",
+      "department": "Engineering",
+      "owner": "Sales-Zhou",
+      "effectiveDate": "2026-03-18",
+      "distribution": ["Engineering", "QA", "Sales"],
+      "status": "released",
+      "sourceLabel": "Manual Import",
+      "sourceRequestId": null,
+      "excelTemplateRef": "templates/External_spec_issue.xlsx",
+      "payloadSummary": "客户 A 新版标签字段、字体、位置要求。",
+      "updatedAt": "2026-03-18T06:30:00.000Z"
+    }
+  ],
+  "releaseHistory": [
+    {
+      "id": "hist_1001",
+      "documentId": "doc_1001",
+      "docNumber": "DMS-SOP-2026-001",
+      "revision": "A",
+      "action": "issued",
+      "actionLabel": "首版发行",
+      "actor": "ENG-Wang",
+      "source": "Discord",
+      "distribution": ["Manufacturing", "QA", "Warehouse"],
+      "changeSummary": "首版发布包装作业指导书。",
+      "timestamp": "2026-03-20T08:00:00.000Z"
+    },
+    {
+      "id": "hist_1002",
+      "documentId": "doc_1002",
+      "docNumber": "DMS-EXT-2026-001",
+      "revision": "A",
+      "action": "issued",
+      "actionLabel": "外来文件登记",
+      "actor": "Sales-Zhou",
+      "source": "Manual Import",
+      "distribution": ["Engineering", "QA", "Sales"],
+      "changeSummary": "导入客户 A 标签规范并完成分发登记。",
+      "timestamp": "2026-03-18T06:30:00.000Z"
+    }
+  ],
+  "roadmap": [
+    {
+      "id": "roadmap_1",
+      "name": "客诉记录系统",
+      "status": "planned",
+      "description": "在同一工作台增加客诉建单、8D/CAPA 跟踪、责任部门闭环。",
+      "nextStep": "复用当前模板、编号和发行历史模型，增加 complaint case 表。"
+    },
+    {
+      "id": "roadmap_2",
+      "name": "Ticket 认领与派工",
+      "status": "planned",
+      "description": "从 Discord / 邮件 intake 进入 ticket 队列，支持认领、转派、逾期提醒。",
+      "nextStep": "把 intakeRequests 抽象成统一 Ticket inbox，再挂 SLA。"
+    },
+    {
+      "id": "roadmap_3",
+      "name": "Excel 模板实文件生成",
+      "status": "next",
+      "description": "把当前模板元数据升级为真实 Excel 模板填充、导出 PDF/Word。",
+      "nextStep": "引入模板上传和字段映射规则。"
+    }
+  ]
+}

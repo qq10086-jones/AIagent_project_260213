@@ -90,6 +90,11 @@ DASH_SCOPE_BASE_URL = (
     or os.getenv("QWEN_BASE_URL")
     or RUNTIME_QUANT.get("dash_scope_base_url", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1")
 )
+MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY")
+MINIMAX_BASE_URL = (
+    os.getenv("MINIMAX_BASE_URL")
+    or RUNTIME_QUANT.get("minimax_base_url", "https://api.minimaxi.com/v1")
+)
 
 QUANT_LLM_MODEL = os.getenv("QUANT_LLM_MODEL", RUNTIME_QUANT.get("quant_llm_model", "deepseek-r1:1.5b"))
 CODE_LLM_MODEL = os.getenv("CODE_LLM_MODEL", RUNTIME_QUANT.get("code_llm_model", "glm-4.7-flash:latest"))
@@ -115,7 +120,7 @@ def get_llm_response(system: str, user: str, model: str | None = None, provider:
     # Strip provider prefix if present (e.g. "ollama/deepseek-r1:1.5b")
     if isinstance(model, str) and "/" in model:
         p_prefix, m_name = model.split("/", 1)
-        if p_prefix in ["ollama", "openai", "dashscope", "gemini"]:
+        if p_prefix in ["ollama", "openai", "dashscope", "gemini", "minimax"]:
             prov = p_prefix
             model = m_name
 
@@ -157,14 +162,20 @@ def get_llm_response(system: str, user: str, model: str | None = None, provider:
             print(f"[LLM] Ollama error: {e}")
             return ""
             
-    elif prov in ["openai", "dashscope", "gemini"]:
+    elif prov in ["openai", "dashscope", "gemini", "minimax"]:
         # Standard OpenAI compatible API call
-        api_key = OPENAI_API_KEY if prov == "openai" else DASH_SCOPE_API_KEY
-        base_url = OPENAI_BASE_URL if prov == "openai" else DASH_SCOPE_BASE_URL
-        if prov == "gemini":
-            # Gemini typically uses its own SDK or specific endpoint, but let's assume compatible if requested via env
-            base_url = os.getenv("GEMINI_BASE_URL", base_url)
-            api_key = os.getenv("GEMINI_API_KEY", api_key)
+        if prov == "openai":
+            api_key = OPENAI_API_KEY
+            base_url = OPENAI_BASE_URL
+        elif prov == "minimax":
+            api_key = MINIMAX_API_KEY
+            base_url = MINIMAX_BASE_URL
+        elif prov == "gemini":
+            base_url = os.getenv("GEMINI_BASE_URL", DASH_SCOPE_BASE_URL)
+            api_key = os.getenv("GEMINI_API_KEY", DASH_SCOPE_API_KEY)
+        else:
+            api_key = DASH_SCOPE_API_KEY
+            base_url = DASH_SCOPE_BASE_URL
 
         if not api_key:
             print(f"[LLM] Provider {prov} requested but API key is missing.")
@@ -4436,7 +4447,13 @@ def _find_preview_project_root(payload: dict) -> tuple[Path | None, str]:
     for value in payload.get("target_paths", []) or []:
         if isinstance(value, str) and value.strip():
             candidates.append(value)
-    candidates.extend(["sandbox/crm_site", "ui"])
+    project_type = str(payload.get("project_type") or "")
+    if project_type == "webapp_crm":
+        candidates.extend(["sandbox/crm_site", "ui"])
+    elif project_type in ("generic_app", "single_file_html"):
+        candidates.extend(["sandbox/app", "sandbox/project", "ui"])
+    else:
+        candidates.extend(["sandbox/app", "sandbox/project", "sandbox/crm_site", "ui"])
     seen = set()
     for rel in candidates:
         if rel in seen:

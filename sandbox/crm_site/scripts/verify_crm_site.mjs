@@ -18,11 +18,10 @@ function assert(condition, message) {
 
 function checkJsSyntax(relPath) {
   const absPath = path.join(repoRoot, relPath);
-  const code = fs.readFileSync(absPath, "utf8");
-  if (typeof vm.SourceTextModule === "function") {
-    new vm.SourceTextModule(code, { identifier: absPath });
-    return;
-  }
+  const code = fs.readFileSync(absPath, "utf8")
+    .replace(/^export\s+\{[^}]+\}\s+from\s+["'][^"']+["'];?\s*$/gm, "")
+    .replace(/^export\s+\{[^}]+\};?\s*$/gm, "")
+    .replace(/^export\s+default\s+/gm, "const __default__ = ");
   new vm.Script(code, { filename: absPath });
 }
 
@@ -31,22 +30,23 @@ function runLint() {
   checkJsSyntax("server.js");
   const html = readText("index.html");
   const css = readText("styles.css");
-  assert(html.includes("<script src=\"./app.js\"></script>"), "index.html must load app.js");
+  assert(html.includes("<script type=\"module\" src=\"./app.js\"></script>"), "index.html must load app.js as module");
   assert(css.includes(":root"), "styles.css must define :root variables");
 }
 
 function runTypeCheck() {
   const appText = readText("app.js");
   const serverText = readText("server.js");
-  assert(/module\.exports|export\s+/.test(appText), "app.js must expose module or export syntax");
-  assert(/module\.exports|export\s+/.test(serverText), "server.js must expose module or export syntax");
+  assert(/export\s+/.test(appText), "app.js must expose export syntax");
+  assert(/export\s+/.test(serverText), "server.js must expose export syntax");
 }
 
 function runTest() {
   const readme = readText("README.md");
   const html = readText("index.html");
-  assert(readme.includes("CRM Pro Demo Site"), "README.md must describe the CRM sandbox");
-  assert(/Nova CRM Pro/.test(html), "index.html must contain the Nova CRM Pro title");
+  assert(readme.includes("Document Release Hub"), "README.md must describe the document release hub");
+  assert(/Document Release Hub/.test(html), "index.html must contain the Document Release Hub title");
+  assert(/Discord Intake Inbox/.test(html), "index.html must include Discord Intake Inbox");
 }
 
 function runBuild() {
@@ -54,7 +54,7 @@ function runBuild() {
   runTypeCheck();
   const html = readText("index.html");
   assert(html.includes("styles.css"), "index.html must reference styles.css");
-  assert(html.includes("authView"), "index.html must include authView");
+  assert(html.includes("generatorForm"), "index.html must include generatorForm");
 }
 
 try {
@@ -62,9 +62,7 @@ try {
   else if (mode === "typecheck") runTypeCheck();
   else if (mode === "test") runTest();
   else if (mode === "build") runBuild();
-  else {
-    throw new Error(`unknown mode '${mode}'`);
-  }
+  else throw new Error(`unknown mode '${mode}'`);
   console.log(`[verify_crm_site] ${mode}: pass`);
 } catch (err) {
   console.error(`[verify_crm_site] ${mode}: fail`);

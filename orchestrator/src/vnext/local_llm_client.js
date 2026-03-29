@@ -22,18 +22,14 @@ export function sanitizeLocalAssistantReply(raw) {
 }
 
 export async function callQwenChat(messages, { qwenBase, qwenModel } = {}) {
-  const QWEN_KEY = process.env.QWEN_API_KEY;
-  if (!QWEN_KEY) throw new Error("QWEN_API_KEY is not set");
+  const API_KEY = process.env.MINIMAX_API_KEY || process.env.QWEN_API_KEY;
+  if (!API_KEY) throw new Error("MINIMAX_API_KEY is not set");
   const base = String(
-    qwenBase || process.env.QWEN_BASE_URL || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    qwenBase || process.env.MINIMAX_BASE_URL || "https://api.minimaxi.com/v1"
   ).replace(/\/+$/, "");
-  const model = String(qwenModel || process.env.QWEN_MODEL || "qwen-plus");
-  const candidates = [...new Set([
-    base,
-    base.replace(/\/v1$/i, "/compatible-mode/v1"),
-    base.replace(/\/compatible-mode\/v1$/i, "/v1"),
-  ])].filter(x => /^https?:\/\//i.test(x));
-  let lastErr = "Qwen API error";
+  const model = String(qwenModel || process.env.MINIMAX_MODEL || "MiniMax-M2.7");
+  const candidates = [base].filter(x => /^https?:\/\//i.test(x));
+  let lastErr = "MiniMax API error";
 
   for (const baseUrl of candidates) {
     const controller = new AbortController();
@@ -41,13 +37,13 @@ export async function callQwenChat(messages, { qwenBase, qwenModel } = {}) {
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${QWEN_KEY}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
         body: JSON.stringify({ model, messages }),
         signal: controller.signal,
       });
       if (!response.ok) {
         const errText = await response.text().catch(() => "");
-        lastErr = `Qwen API error ${response.status} ${response.statusText} ${errText}`.trim();
+        lastErr = `MiniMax API error ${response.status} ${response.statusText} ${errText}`.trim();
         if (response.status === 404) continue;
         throw new Error(lastErr);
       }

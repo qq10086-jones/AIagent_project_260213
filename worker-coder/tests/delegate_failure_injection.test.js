@@ -1,17 +1,17 @@
-/**
- * T-33 Failure Injection Tests — CodingService.delegateTask
+﻿/**
+ * T-33 Failure Injection Tests 窶・CodingService.delegateTask
  *
  * Injects known failure conditions into the execution pipeline and asserts
  * the system responds with the correct error codes, retry decisions, and
- * failure summaries — without a live LLM.
+ * failure summaries 窶・without a live LLM.
  *
  * Technique: pass `opencode_command` override so the adapter runs a
  * deterministic node script instead of the real opencode binary.
  * No network, no filesystem side-effects outside a temp dir.
  *
  * Scenarios:
- *   1. Provider permanently fails → max_attempts exhausted
- *   2. Same error repeats → same_error_repeat_limit stops retry early
+ *   1. Provider permanently fails 竊・max_attempts exhausted
+ *   2. Same error repeats 竊・same_error_repeat_limit stops retry early
  *   3. Scope guard blocks impl_be with empty target_paths (pre-execution)
  *   4. Scope guard blocks impl_be with protected target path (pre-execution)
  *   5. Static check catches syntax error in changed file
@@ -29,14 +29,14 @@ function makeTmp() {
 }
 
 // Inline node script run as the fake "opencode" command
-const FAIL_CMD = ["node", "-e", "process.exit(1)"];
+const FAIL_CMD = [process.execPath, "-e", "process.exit(1)"];
 const SUCCEED_WRITE_SYNTAX_ERROR = (filePath) => [
-  "node",
-  "-e",
-  `var fs=require('fs'); fs.mkdirSync(require('path').dirname('${filePath}'),{recursive:true}); fs.writeFileSync('${filePath}','const x = {'); process.exit(0)`,
+  "mock-inline-autofix",
+  filePath,
+  "{{task_prompt}}",
 ];
 
-// ── 1. Max attempts exhausted ───────────────────────────────────────────────
+// 笏笏 1. Max attempts exhausted 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 async function testMaxAttemptsExhausted() {
   const workspaceRoot = makeTmp();
   const result = await CodingService.delegateTask({
@@ -64,7 +64,7 @@ async function testMaxAttemptsExhausted() {
   assert.match(String(terminalReason || ""), /attempt_budget_exhausted/, "terminal reason must be attempt_budget_exhausted");
 }
 
-// ── 2. Same-error-repeat-limit stops early ─────────────────────────────────
+// 笏笏 2. Same-error-repeat-limit stops early 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 async function testSameErrorRepeatLimit() {
   const workspaceRoot = makeTmp();
   const result = await CodingService.delegateTask({
@@ -97,7 +97,7 @@ async function testSameErrorRepeatLimit() {
   assert.ok(Number(attemptsUsed || 0) < 3, "must stop before max_attempts=3");
 }
 
-// ── 3. Scope guard: empty target_paths for impl_be ─────────────────────────
+// 笏笏 3. Scope guard: empty target_paths for impl_be 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 async function testScopeGuardEmptyTargetPaths() {
   const workspaceRoot = makeTmp();
   const result = await CodingService.delegateTask({
@@ -105,8 +105,8 @@ async function testScopeGuardEmptyTargetPaths() {
     task_prompt: "implement the backend",
     artifact_root: "artifacts/release/run-3",
     expected_artifacts: [],
-    step_id: "impl_be",      // requiresScopedTargetPaths → true for impl steps
-    target_paths: [],         // empty → validateAllowedTargetPaths fails
+    step_id: "impl_be",      // requiresScopedTargetPaths 竊・true for impl steps
+    target_paths: [],         // empty 竊・validateAllowedTargetPaths fails
     provider: "opencode",
     max_attempts: 1,
     wall_clock_timeout_s: 300,
@@ -128,7 +128,7 @@ async function testScopeGuardEmptyTargetPaths() {
   );
 }
 
-// ── 4. Scope guard: protected target path for impl_be ──────────────────────
+// 笏笏 4. Scope guard: protected target path for impl_be 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 async function testScopeGuardProtectedPath() {
   const workspaceRoot = makeTmp();
   const result = await CodingService.delegateTask({
@@ -137,7 +137,7 @@ async function testScopeGuardProtectedPath() {
     artifact_root: "artifacts/release/run-4",
     expected_artifacts: [],
     step_id: "impl_be",
-    target_paths: [".git/hooks"],   // protected root → E_UNAUTHORIZED_WRITE
+    target_paths: [".git/hooks"],   // protected root 竊・E_UNAUTHORIZED_WRITE
     provider: "opencode",
     max_attempts: 1,
     wall_clock_timeout_s: 300,
@@ -155,7 +155,7 @@ async function testScopeGuardProtectedPath() {
   assert.ok(!result.command_used, "no command should have been used");
 }
 
-// ── 5. Static check catches syntax error in changed file ───────────────────
+// 笏笏 5. Static check catches syntax error in changed file 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 async function testStaticCheckCatchesSyntaxError() {
   const workspaceRoot = makeTmp();
   // Use forward slashes for the inline node script (cross-platform safe in cwd)
@@ -187,13 +187,13 @@ async function testStaticCheckCatchesSyntaxError() {
   );
 }
 
-// ── 6. Verification command fails after successful execution ────────────────
+// 笏笏 6. Verification command fails after successful execution 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 async function testVerificationFailure() {
   const workspaceRoot = makeTmp();
   const relTarget = "src/ok.js";
   // Command writes a *valid* JS file (static check passes), then exits 0
   const writeCmd = [
-    "node",
+    process.execPath,
     "-e",
     `var fs=require('fs'); fs.mkdirSync(require('path').dirname('${relTarget}'),{recursive:true}); fs.writeFileSync('${relTarget}','const x = 1;'); process.exit(0)`,
   ];
@@ -212,7 +212,7 @@ async function testVerificationFailure() {
     task_id: "task-t33-6",
     opencode_command: writeCmd,
     // Verification command always fails
-    verification_command: "node -e process.exit(1)",
+    verification_command: `${JSON.stringify(process.execPath)} -e process.exit(1)`,
   });
 
   assert.equal(result.ok, false, "must fail after verification");
@@ -229,7 +229,7 @@ async function testVerificationFailure() {
   }
 }
 
-// ── 7. Unsupported provider name rejected pre-execution ─────────────────────
+// 笏笏 7. Unsupported provider name rejected pre-execution 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 async function testUnsupportedProvider() {
   const workspaceRoot = makeTmp();
   const result = await CodingService.delegateTask({
@@ -257,25 +257,25 @@ async function testUnsupportedProvider() {
 
 async function main() {
   await testMaxAttemptsExhausted();
-  console.log("  [PASS] max attempts exhausted → attempt_budget_exhausted");
+  console.log("  [PASS] max attempts exhausted 竊・attempt_budget_exhausted");
 
   await testSameErrorRepeatLimit();
-  console.log("  [PASS] same error repeat limit → stops early");
+  console.log("  [PASS] same error repeat limit 竊・stops early");
 
   await testScopeGuardEmptyTargetPaths();
-  console.log("  [PASS] scope guard: empty target_paths → E_UNAUTHORIZED_WRITE");
+  console.log("  [PASS] scope guard: empty target_paths 竊・E_UNAUTHORIZED_WRITE");
 
   await testScopeGuardProtectedPath();
-  console.log("  [PASS] scope guard: protected path → E_UNAUTHORIZED_WRITE");
+  console.log("  [PASS] scope guard: protected path 竊・E_UNAUTHORIZED_WRITE");
 
   await testStaticCheckCatchesSyntaxError();
-  console.log("  [PASS] static check: syntax error → E_STATIC_CHECK_FAILED");
+  console.log("  [PASS] static check: syntax error 竊・E_STATIC_CHECK_FAILED");
 
   await testVerificationFailure();
-  console.log("  [PASS] verification failure → E_VERIFICATION_FAILED");
+  console.log("  [PASS] verification failure 竊・E_VERIFICATION_FAILED");
 
   await testUnsupportedProvider();
-  console.log("  [PASS] unsupported provider → E_PROVIDER_UNAVAILABLE");
+  console.log("  [PASS] unsupported provider 竊・E_PROVIDER_UNAVAILABLE");
 
   console.log("delegate_failure_injection.test.js: all tests passed");
 }
@@ -285,3 +285,6 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+
+

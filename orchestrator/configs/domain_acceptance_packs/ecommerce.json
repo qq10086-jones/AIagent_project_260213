@@ -1,0 +1,64 @@
+{
+  "domain": "ecommerce",
+  "version": "2026-03-28.v1",
+  "source_design": "docs/03_feature_development/2026-03-27_project_completion_design_v2.md",
+  "selection_rationale": "Highest expected request frequency; largest gap between generic CRUD output and domain-specific expectation.",
+  "required_journeys": [
+    "browse product catalog or grid",
+    "open product detail page",
+    "add item to cart",
+    "view cart or begin checkout"
+  ],
+  "expected_ui_components": [
+    "product grid or list",
+    "product detail view",
+    "cart or basket indicator",
+    "checkout or order summary panel"
+  ],
+  "domain_nouns": [
+    "product",
+    "cart",
+    "order",
+    "checkout",
+    "price",
+    "quantity",
+    "category",
+    "customer"
+  ],
+  "forbidden_generic_nouns": [
+    "entity",
+    "item",
+    "record"
+  ],
+  "expected_api_surface": [
+    "GET /products or /api/products",
+    "GET /products/:id or /api/products/:id",
+    "POST /cart or /api/cart",
+    "GET /cart or /api/cart",
+    "POST /orders or /api/checkout"
+  ],
+  "expected_backend_behavior": [
+    "product list returns array with at least id, name, price fields",
+    "cart supports add and retrieve operations",
+    "order or checkout endpoint accepts cart payload"
+  ],
+  "preview_expectations": {
+    "must_serve_product_grid": true,
+    "must_not_be_shared_crm_sandbox": true,
+    "preview_root_pattern": "ecommerce|shop|store|product"
+  },
+  "perceptual_quality_minimum": {
+    "score": "mid",
+    "layout_must_be_intentional": true,
+    "placeholder_text_disqualifies": true,
+    "interactive_affordances_required": ["add to cart button", "product link or click target"]
+  },
+  "acceptance_criteria": [
+    "Product grid renders with domain-specific labels (name, price, not 'item')",
+    "Add-to-cart interaction is wired to a backend endpoint, not a hardcoded mock",
+    "Cart state persists across product browsing within the same session",
+    "QA report includes evidence for at least 3 of the 4 required journeys"
+  ],
+  "example_pass": "Product grid shows 3+ real product entries with name/price; detail page opens; cart count updates after add.",
+  "example_fail": "Page renders a table labeled 'Items' with rows 'Sample Item 1', 'Sample Item 2'; add button triggers console.log only."
+}

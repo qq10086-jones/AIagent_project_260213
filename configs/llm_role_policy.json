@@ -2,32 +2,32 @@
   "version": "1.1.0",
   "roles": {
     "pm": {
-      "provider": "cloud_qwen",
-      "model": "qwen-max"
+      "provider": "cloud_minimax",
+      "model": "MiniMax-M2.7"
     },
     "architect": {
-      "provider": "cloud_qwen",
-      "model": "qwen-max"
+      "provider": "cloud_minimax",
+      "model": "MiniMax-M2.7"
     },
     "backend": {
-      "provider": "local_ollama",
-      "model": "deepseek-r1:32b",
-      "secondary_model": "qwen2.5-coder:7b"
+      "provider": "cloud_minimax",
+      "model": "MiniMax-M2.7",
+      "secondary_model": "MiniMax-M2.5"
     },
     "frontend": {
-      "provider": "local_ollama",
-      "model": "deepseek-r1:32b",
-      "secondary_model": "qwen2.5-coder:7b"
+      "provider": "cloud_minimax",
+      "model": "MiniMax-M2.7",
+      "secondary_model": "MiniMax-M2.5"
     },
     "qa": {
-      "provider": "local_ollama",
-      "model": "deepseek-r1:32b",
-      "secondary_model": "qwen2.5-coder:7b"
+      "provider": "cloud_minimax",
+      "model": "MiniMax-M2.7",
+      "secondary_model": "MiniMax-M2.5"
     },
     "release": {
-      "provider": "local_ollama",
-      "model": "deepseek-r1:32b",
-      "secondary_model": "qwen2.5-coder:7b"
+      "provider": "cloud_minimax",
+      "model": "MiniMax-M2.7",
+      "secondary_model": "MiniMax-M2.5"
     }
   },
   "retry_policy": {

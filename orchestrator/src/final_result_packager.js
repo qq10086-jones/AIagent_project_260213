@@ -24,6 +24,8 @@ function labelForPath(filePath) {
   if (lower.endsWith("go_no_go_result.json")) return "go_no_go_result";
   if (lower.endsWith("strict_canary_report.md")) return "strict_canary_report";
   if (lower.endsWith("strict_canary_report.json")) return "strict_canary_json";
+  if (lower.endsWith("preview_validation_report.json")) return "preview_validation_report";
+  if (lower.endsWith("product_fidelity_report.json")) return "product_fidelity_report";
   return path.basename(filePath || "artifact");
 }
 
@@ -36,6 +38,8 @@ export function buildFinalResultPackage({
   goNoGoResultPath = "",
   strictCanaryReportPath = "",
   strictCanaryJsonPath = "",
+  previewValidationReportPath = "",
+  productFidelityReportPath = "",
   goNoGoVerdict = "",
   strictCanaryVerdict = "",
 }) {
@@ -45,6 +49,8 @@ export function buildFinalResultPackage({
     goNoGoResultPath,
     strictCanaryReportPath,
     strictCanaryJsonPath,
+    previewValidationReportPath,
+    productFidelityReportPath,
   ].filter(Boolean);
   const artifacts = artifactPaths.map((item) => ({
     label: labelForPath(item),

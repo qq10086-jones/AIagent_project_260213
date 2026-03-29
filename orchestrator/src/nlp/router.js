@@ -1,5 +1,5 @@
-﻿const QWEN_BASE = process.env.QWEN_BASE_URL || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-export let CURRENT_QWEN_MODEL = process.env.QWEN_MODEL || "qwen-max";
+﻿const QWEN_BASE = process.env.MINIMAX_BASE_URL || process.env.QWEN_BASE_URL || "https://api.minimaxi.com/v1";
+export let CURRENT_QWEN_MODEL = process.env.MINIMAX_MODEL || process.env.QWEN_MODEL || "MiniMax-M2.7";
 
 export function setQwenModel(modelName) {
   CURRENT_QWEN_MODEL = modelName;
@@ -163,7 +163,7 @@ function normalizeModeSuggested(value, { requiresTools = false } = {}) {
 }
 
 export async function qwenChat(messages, timeoutMs = 60000) {
-  const QWEN_KEY = process.env.QWEN_API_KEY;
+  const QWEN_KEY = process.env.MINIMAX_API_KEY || process.env.QWEN_API_KEY;
   if (!QWEN_KEY) return null;
   const baseRaw = String(QWEN_BASE || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1").replace(/\/+$/, "");
   const candidates = [...new Set([
@@ -188,13 +188,13 @@ export async function qwenChat(messages, timeoutMs = 60000) {
       });
       if (!response.ok) {
         const errText = await response.text().catch(() => "");
-        console.error(`Qwen Dispatcher Error: ${response.status} ${response.statusText} ${errText}`);
+        console.error(`MiniMax Dispatcher Error: ${response.status} ${response.statusText} ${errText}`);
         if (response.status === 404) continue;
         return null;
       }
       return await response.json();
     } catch (e) {
-      console.error("Qwen Dispatcher Error:", e);
+      console.error("MiniMax Dispatcher Error:", e);
     } finally {
       clearTimeout(timeoutId);
     }

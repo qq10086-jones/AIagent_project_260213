@@ -1,11 +1,11 @@
 {
   "verdict": "GO",
-  "workflow_run_id": "2d6e901c-8c45-4d33-b27b-c328576fab07",
+  "workflow_run_id": "28ea15f6-62ba-47cc-9f16-a024934c2c0f",
   "run_id": "e2e-happy-run",
   "workflow_id": "coding_team_v0",
   "project_type": "webapp_crm",
   "strict": true,
-  "generated_at": "2026-03-15T06:58:19.938Z",
+  "generated_at": "2026-03-29T15:25:08.668Z",
   "total_checks": 7,
   "passed_checks": 7,
   "failed_checks": 0,
@@ -23,12 +23,12 @@
     {
       "name": "step_success",
       "pass": true,
-      "detail": "succeeded=6/6"
+      "detail": "succeeded=8/8"
     },
     {
       "name": "step_count",
       "pass": true,
-      "detail": "steps=6 expected=6"
+      "detail": "steps=8 expected=8"
     },
     {
       "name": "acceptance_gate",
@@ -46,5 +46,15 @@
       "detail": "missing_artifacts_total=0"
     }
   ],
-  "reasons": []
+  "reasons": [],
+  "product_fidelity_warning": {
+    "classification": "artifact_complete_but_shallow",
+    "warning": "product_fidelity_warning:artifact_complete_but_shallow",
+    "report_path": "artifacts/release/e2e-happy-run/qa/product_fidelity_report.json"
+  },
+  "preview_validation_warning": {
+    "classification": "preview_missing",
+    "warning": "preview_validation_warning:preview_missing",
+    "report_path": "artifacts/release/e2e-happy-run/qa/preview_validation_report.json"
+  }
 }

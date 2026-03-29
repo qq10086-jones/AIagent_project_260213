@@ -1,421 +1,410 @@
-const API_BASE = '';
-
-const LANDING_CONTENT = {
-  hero: {
-    title: 'Artisan & Co.',
-    subtitle: 'Timeless elegance crafted with passion. Discover our curated collection of sustainable fashion, where every piece tells a story of quality and style.',
-    ctaText: 'Explore Collection'
-  },
-  features: [
-    {
-      icon: 'quality',
-      title: 'Premium Quality',
-      description: 'Each garment is crafted with the finest materials and meticulous attention to detail, ensuring lasting elegance.'
-    },
-    {
-      icon: 'design',
-      title: 'Thoughtful Design',
-      description: 'Our designs blend contemporary trends with classic silhouettes, creating pieces that transcend seasons.'
-    },
-    {
-      icon: 'sustainability',
-      title: 'Sustainable Fashion',
-      description: 'Committed to ethical practices and eco-friendly materials, for a wardrobe that cares for the planet.'
-    }
-  ],
-  faqs: [
-    {
-      question: 'What makes Artisan & Co. different?',
-      answer: 'We combine timeless design with sustainable practices, creating pieces that are both beautiful and responsible. Each item is crafted with premium materials and attention to detail.'
-    },
-    {
-      question: 'What is your return policy?',
-      answer: 'We offer a 30-day return policy for unworn items with tags attached. Simply contact our customer service to initiate a return.'
-    },
-    {
-      question: 'Do you ship internationally?',
-      answer: 'Yes, we ship to over 50 countries worldwide. Shipping times and costs vary by location.'
-    },
-    {
-      question: 'How should I care for my garments?',
-      answer: 'Each piece comes with specific care instructions. Generally, we recommend gentle washing and air drying to maintain quality.'
-    }
-  ],
-  contact: {
-    email: 'hello@artisanandco.com',
-    phone: '+86 400-XXX-XXXX',
-    address: '123 Fashion Avenue, Design District, Shanghai'
-  },
-  story: {
-    title: 'Our Story',
-    subtitle: 'A journey of craftsmanship and passion',
-    content: [
-      {
-        heading: 'The Beginning',
-        paragraph: 'Founded in 2010, Artisan & Co. began with a simple vision: to create clothing that celebrates the art of traditional craftsmanship while embracing modern aesthetics.'
-      },
-      {
-        heading: 'Our Philosophy',
-        paragraph: 'We believe that fashion should be sustainable, ethical, and beautiful. Every stitch tells a story of dedication and skill.'
-      },
-      {
-        heading: 'Today',
-        paragraph: 'Now a globally recognized brand, we continue to honor our roots while innovating for the future of sustainable fashion.'
-      }
-    ],
-    timeline: [
-      { year: '2010', event: 'Brand founded in Shanghai' },
-      { year: '2015', event: 'First international store opens' },
-      { year: '2018', event: 'Sustainability initiative launched' },
-      { year: '2023', event: 'Awarded Best Ethical Brand' }
-    ]
-  },
-  reviews: [
-    { id: 1, name: 'Sarah M.', rating: 5, comment: 'Beautiful quality, the fabric feels amazing. Worth every penny.', date: '2024-01-15' },
-    { id: 2, name: 'Emma L.', rating: 5, comment: 'Absolutely love the design. Gets compliments every time I wear it!', date: '2024-01-10' },
-    { id: 3, name: 'Jessica K.', rating: 4, comment: 'Great fit and excellent customer service. Highly recommend!', date: '2024-01-05' }
-  ]
+const state = {
+  store: null,
+  selectedRequestId: null,
+  selectedDocumentId: null,
+  activeTemplateId: null,
 };
 
-const ICONS = {
-  quality: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
-  design: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><path d="M12 2a10 10 0 0 0 0 20"/></svg>',
-  sustainability: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c4-4 8-7.5 8-12a8 8 0 1 0-16 0c0 4.5 4 8 8 12z"/><circle cx="12" cy="10" r="3"/></svg>'
+const els = {
+  metrics: document.getElementById("metrics"),
+  inbox: document.getElementById("intakeInbox"),
+  ledger: document.getElementById("documentLedger"),
+  history: document.getElementById("releaseTimeline"),
+  templates: document.getElementById("templateCatalog"),
+  roadmap: document.getElementById("roadmap"),
+  generatorForm: document.getElementById("generatorForm"),
+  intakeForm: document.getElementById("intakeForm"),
+  revisionForm: document.getElementById("revisionForm"),
+  selectedRequest: document.getElementById("selectedRequest"),
+  releaseFeedback: document.getElementById("releaseFeedback"),
+  revisionFeedback: document.getElementById("revisionFeedback"),
+  systemNotice: document.getElementById("systemNotice"),
 };
 
-async function fetchApi(endpoint) {
-  try {
-    const response = await fetch(`${API_BASE}${endpoint}`);
-    const data = await response.json();
-    if (data.success) {
-      return data.data;
-    }
-    throw new Error(data.error || 'API request failed');
-  } catch (error) {
-    console.error(`API Error for ${endpoint}:`, error);
-    return null;
-  }
-}
-
-function renderHero(hero) {
-  const heroSection = document.querySelector('.hero-title');
-  const subtitleEl = document.querySelector('.hero-subtitle');
-  const ctaEl = document.querySelector('.hero-cta');
-  
-  if (heroSection) heroSection.textContent = hero.title;
-  if (subtitleEl) subtitleEl.textContent = hero.subtitle;
-  if (ctaEl) ctaEl.textContent = hero.ctaText;
-}
-
-function renderFeatures(features) {
-  const container = document.querySelector('.features-grid');
-  if (!container) return;
-  
-  container.innerHTML = features.map(feature => `
-    <div class="promo-feature-card">
-      <div class="promo-feature-icon">${ICONS[feature.icon] || ICONS.quality}</div>
-      <h3>${feature.title}</h3>
-      <p>${feature.description}</p>
-    </div>
-  `).join('');
-}
-
-function renderStory(story) {
-  const container = document.getElementById('storyContent');
-  if (!container || !story) return;
-  
-  let contentHtml = story.content.map(section => `
-    <div class="story-section">
-      <h3>${section.heading}</h3>
-      <p>${section.paragraph}</p>
-    </div>
-  `).join('');
-  
-  let timelineHtml = story.timeline.map(item => `
-    <div class="timeline-item">
-      <span class="timeline-year">${item.year}</span>
-      <span class="timeline-event">${item.event}</span>
-    </div>
-  `).join('');
-  
-  container.innerHTML = `
-    <div class="story-text">
-      ${contentHtml}
-    </div>
-    <div class="story-timeline">
-      <h3>Our Journey</h3>
-      ${timelineHtml}
-    </div>
-  `;
-  
-  const titleEl = document.querySelector('.story-title');
-  const subtitleEl = document.querySelector('.story-subtitle');
-  if (titleEl) titleEl.textContent = story.title;
-  if (subtitleEl) subtitleEl.textContent = story.subtitle;
-}
-
-function renderReviews(reviews) {
-  const container = document.querySelector('.reviews-grid');
-  if (!container || !reviews) return;
-  
-  container.innerHTML = reviews.map(review => `
-    <div class="review-card">
-      <div class="review-header">
-        <span class="review-name">${review.name}</span>
-        <div class="review-rating">${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)}</div>
-      </div>
-      <p class="review-comment">${review.comment}</p>
-      <span class="review-date">${review.date}</span>
-    </div>
-  `).join('');
-  
-  initReviewForm();
-}
-
-function renderFaqs(faqs) {
-  const container = document.querySelector('.faq-list');
-  if (!container || !faqs) return;
-  
-  container.innerHTML = faqs.map(faq => `
-    <div class="faq-item">
-      <button class="faq-question" aria-expanded="false">
-        <span>${faq.question}</span>
-        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 9l6 6 6-6"/>
-        </svg>
-      </button>
-      <div class="faq-answer">
-        <p>${faq.answer}</p>
-      </div>
-    </div>
-  `).join('');
-  
-  container.querySelectorAll('.faq-question').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const isExpanded = btn.getAttribute('aria-expanded') === 'true';
-      btn.setAttribute('aria-expanded', !isExpanded);
-      btn.classList.toggle('active');
-      const answer = btn.nextElementSibling;
-      answer.style.maxHeight = isExpanded ? null : answer.scrollHeight + 'px';
-    });
+function fmtDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
-function renderContact(contact) {
-  const footerText = document.querySelector('.promo-footer-text');
-  if (footerText && contact) {
-    footerText.textContent = `Contact: ${contact.email} | ${contact.phone}`;
-  }
+function text(value) {
+  return String(value ?? "").replace(/[&<>"]/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+  }[char]));
 }
 
-function handleCtaClick() {
-  const featuresSection = document.getElementById('features');
-  if (featuresSection) {
-    featuresSection.scrollIntoView({ behavior: 'smooth' });
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options,
+  });
+  const data = await response.json();
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || `Request failed: ${response.status}`);
   }
+  return data.data;
 }
 
-async function handleContactSubmit(event) {
-  const form = event.target;
-  const feedbackEl = document.getElementById('contactFeedback');
-  const submitBtn = form.querySelector('.promo-submit-btn');
-  
-  const formData = {
-    name: form.name?.value?.trim(),
-    email: form.email?.value?.trim(),
-    message: form.message?.value?.trim()
-  };
-  
-  if (!formData.name || !formData.email || !formData.message) {
-    if (feedbackEl) {
-      feedbackEl.textContent = 'Please fill in all required fields.';
-      feedbackEl.className = 'promo-feedback promo-feedback-error';
-    }
+function getRequestById(id) {
+  return (state.store?.intakeRequests || []).find((item) => item.id === id) || null;
+}
+
+function getDocumentById(id) {
+  return (state.store?.documents || []).find((item) => item.id === id) || null;
+}
+
+function getTemplateById(id) {
+  return (state.store?.templates || []).find((item) => item.id === id) || null;
+}
+
+function updateSystemNotice(message, tone = "info") {
+  if (!els.systemNotice) return;
+  els.systemNotice.textContent = message;
+  els.systemNotice.className = `system-notice ${tone}`;
+}
+
+function renderMetrics() {
+  const totalDocs = state.store.documents.length;
+  const releasedDocs = state.store.documents.filter((doc) => doc.status === "released").length;
+  const openRequests = state.store.intakeRequests.filter((item) => item.status !== "issued").length;
+  const historyCount = state.store.releaseHistory.length;
+  const cards = [
+    { label: "模板", value: state.store.templates.length, note: "Excel / 文档模板台账" },
+    { label: "待处理请求", value: openRequests, note: "Discord intake inbox" },
+    { label: "在册文档", value: totalDocs, note: `${releasedDocs} 份已发行` },
+    { label: "发行记录", value: historyCount, note: "完整可追溯历史" },
+  ];
+  els.metrics.innerHTML = cards.map((card) => `
+    <article class="metric-card">
+      <span class="metric-label">${card.label}</span>
+      <strong class="metric-value">${card.value}</strong>
+      <span class="metric-note">${card.note}</span>
+    </article>
+  `).join("");
+}
+
+function renderTemplates() {
+  els.templates.innerHTML = state.store.templates.map((template) => `
+    <article class="template-card ${template.id === state.activeTemplateId ? "active" : ""}" data-template-id="${template.id}">
+      <div class="template-card-top">
+        <div>
+          <strong>${text(template.name)}</strong>
+          <p>${text(template.codePrefix)} / ${text(template.category)}</p>
+        </div>
+        <span class="template-badge">${text(template.defaultDepartment)}</span>
+      </div>
+      <p>${text(template.description)}</p>
+      <div class="template-meta">
+        <span>字段: ${template.fields.length}</span>
+        <span>下一个编号: ${text(template.nextNumberPreview)}</span>
+      </div>
+    </article>
+  `).join("");
+}
+
+function renderInbox() {
+  const rows = [...state.store.intakeRequests].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  els.inbox.innerHTML = rows.map((item) => `
+    <article class="inbox-card ${item.id === state.selectedRequestId ? "active" : ""}" data-request-id="${item.id}">
+      <div class="inbox-head">
+        <span class="template-badge">${text(item.source.toUpperCase())}</span>
+        <span class="status-pill ${text(item.status)}">${text(item.status)}</span>
+      </div>
+      <strong>${text(item.summary)}</strong>
+      <p>${text(item.content)}</p>
+      <div class="inbox-meta">
+        <span>${text(item.requester)}</span>
+        <span>${text(item.channel)}</span>
+        <span>${fmtDate(item.createdAt)}</span>
+      </div>
+    </article>
+  `).join("");
+}
+
+function renderSelectedRequest() {
+  const request = getRequestById(state.selectedRequestId);
+  if (!request) {
+    els.selectedRequest.innerHTML = `
+      <div class="empty-card">
+        <strong>等待选择 intake 请求</strong>
+        <p>从左侧 Discord inbox 选一条请求，表单会自动带入模板建议和主题。</p>
+      </div>
+    `;
     return;
   }
-  
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Sending...';
-  
-  try {
-    const response = await fetch(`${API_BASE}/api/contact`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData)
-    });
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      if (feedbackEl) {
-        feedbackEl.textContent = result.message || 'Thank you for your message!';
-        feedbackEl.className = 'promo-feedback promo-feedback-success';
-      }
-      form.reset();
-    } else {
-      throw new Error(result.error || 'Submission failed');
-    }
-  } catch (error) {
-    console.error('Contact form error:', error);
-    if (feedbackEl) {
-      feedbackEl.textContent = 'Failed to send message. Please try again.';
-      feedbackEl.className = 'promo-feedback promo-feedback-error';
-    }
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Send Message';
-  }
+  els.selectedRequest.innerHTML = `
+    <div class="selected-request-card">
+      <div class="selected-request-top">
+        <strong>${text(request.summary)}</strong>
+        <span class="status-pill ${text(request.status)}">${text(request.status)}</span>
+      </div>
+      <p>${text(request.content)}</p>
+      <div class="selected-request-grid">
+        <span>来源人: ${text(request.requester)}</span>
+        <span>频道: ${text(request.channel)}</span>
+        <span>建议模板: ${text(request.suggestedTemplateId || "-")}</span>
+        <span>创建时间: ${fmtDate(request.createdAt)}</span>
+      </div>
+    </div>
+  `;
 }
 
-function initContactForm() {
-  const form = document.getElementById('contactForm');
-  const formFields = document.querySelector('.form-fields');
-  
-  if (formFields && !formFields.querySelector('input')) {
-    formFields.innerHTML = `
-      <div class="promo-form-group">
-        <label for="name">Name *</label>
-        <input type="text" id="name" name="name" required placeholder="Your name">
+function renderLedger() {
+  const docs = [...state.store.documents].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  els.ledger.innerHTML = docs.map((doc) => `
+    <article class="ledger-card ${doc.id === state.selectedDocumentId ? "active" : ""}" data-document-id="${doc.id}">
+      <div class="ledger-head">
+        <div>
+          <strong>${text(doc.docNumber)}</strong>
+          <span class="revision-chip">Rev ${text(doc.revision)}</span>
+        </div>
+        <span class="status-pill ${text(doc.status)}">${text(doc.status)}</span>
       </div>
-      <div class="promo-form-group">
-        <label for="email">Email *</label>
-        <input type="email" id="email" name="email" required placeholder="your@email.com">
+      <h3>${text(doc.title)}</h3>
+      <p>${text(doc.templateName)} / ${text(doc.department)} / ${text(doc.owner)}</p>
+      <div class="ledger-meta">
+        <span>生效: ${text(doc.effectiveDate)}</span>
+        <span>分发: ${text((doc.distribution || []).join(", "))}</span>
       </div>
-      <div class="promo-form-group full">
-        <label for="message">Message *</label>
-        <textarea id="message" name="message" rows="4" required placeholder="How can we help you?"></textarea>
+      <div class="ledger-footer">
+        <span>来源: ${text(doc.sourceLabel || "manual")}</span>
+        <span>${fmtDate(doc.updatedAt)}</span>
       </div>
-      <div id="contactFeedback"></div>
-    `;
-  }
-  
-  if (form) {
-    form.addEventListener('submit', handleContactSubmit);
-  }
+    </article>
+  `).join("");
 }
 
-async function handleReviewSubmit(event) {
+function renderHistory() {
+  const rows = [...state.store.releaseHistory].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  els.history.innerHTML = rows.map((item) => `
+    <article class="timeline-item">
+      <div class="timeline-top">
+        <strong>${text(item.docNumber)} / Rev ${text(item.revision)}</strong>
+        <span>${fmtDate(item.timestamp)}</span>
+      </div>
+      <p>${text(item.actionLabel)} · ${text(item.changeSummary)}</p>
+      <div class="timeline-meta">
+        <span>操作者: ${text(item.actor)}</span>
+        <span>分发: ${text((item.distribution || []).join(", "))}</span>
+        <span>来源: ${text(item.source)}</span>
+      </div>
+    </article>
+  `).join("");
+}
+
+function renderRoadmap() {
+  els.roadmap.innerHTML = state.store.roadmap.map((item) => `
+    <article class="roadmap-card">
+      <div class="roadmap-top">
+        <strong>${text(item.name)}</strong>
+        <span class="status-pill ${text(item.status)}">${text(item.status)}</span>
+      </div>
+      <p>${text(item.description)}</p>
+      <span class="roadmap-note">${text(item.nextStep)}</span>
+    </article>
+  `).join("");
+}
+
+function syncGeneratorForm() {
+  const templateSelect = document.getElementById("templateId");
+  const request = getRequestById(state.selectedRequestId);
+  const doc = getDocumentById(state.selectedDocumentId);
+  templateSelect.innerHTML = state.store.templates.map((template) => `
+    <option value="${template.id}" ${template.id === state.activeTemplateId ? "selected" : ""}>
+      ${text(template.name)} (${text(template.codePrefix)})
+    </option>
+  `).join("");
+
+  const template = getTemplateById(state.activeTemplateId || request?.suggestedTemplateId || state.store.templates[0]?.id);
+  if (!template) return;
+  state.activeTemplateId = template.id;
+  const form = els.generatorForm;
+  if (!form.dataset.seeded || form.dataset.seeded !== `${state.selectedRequestId || ""}:${state.selectedDocumentId || ""}:${template.id}`) {
+    form.templateId.value = template.id;
+    form.title.value = doc?.title || request?.summary || "";
+    form.department.value = doc?.department || template.defaultDepartment || "";
+    form.owner.value = doc?.owner || request?.requester || "Document Control";
+    form.effectiveDate.value = doc?.effectiveDate || new Date().toISOString().slice(0, 10);
+    form.distribution.value = (doc?.distribution || template.defaultDistribution || []).join(", ");
+    form.excelTemplateRef.value = doc?.excelTemplateRef || template.excelTemplateRef || "";
+    form.changeSummary.value = doc ? "" : (request ? `根据 Discord 请求创建首版文件：${request.summary}` : "创建首版文件");
+    form.payloadSummary.value = doc?.payloadSummary || request?.content || "";
+    form.dataset.seeded = `${state.selectedRequestId || ""}:${state.selectedDocumentId || ""}:${template.id}`;
+  }
+  document.getElementById("templateGuidance").innerHTML = `
+    <strong>${text(template.name)}</strong>
+    <p>${text(template.description)}</p>
+    <div class="guidance-row">
+      <span>编号前缀: ${text(template.codePrefix)}</span>
+      <span>模板文件: ${text(template.excelTemplateRef)}</span>
+    </div>
+    <div class="guidance-row">
+      <span>默认部门: ${text(template.defaultDepartment)}</span>
+      <span>下一个编号: ${text(template.nextNumberPreview)}</span>
+    </div>
+  `;
+}
+
+function syncRevisionForm() {
+  const doc = getDocumentById(state.selectedDocumentId);
+  const label = document.getElementById("revisionTarget");
+  if (!doc) {
+    els.revisionForm.classList.add("is-disabled");
+    els.revisionForm.querySelectorAll("input, textarea, button").forEach((node) => { node.disabled = true; });
+    label.textContent = "先从文档台账中选择一份文件";
+    return;
+  }
+  els.revisionForm.classList.remove("is-disabled");
+  els.revisionForm.querySelectorAll("input, textarea, button").forEach((node) => { node.disabled = false; });
+  els.revisionForm.documentId.value = doc.id;
+  els.revisionForm.actor.value = doc.owner;
+  els.revisionForm.effectiveDate.value = new Date().toISOString().slice(0, 10);
+  label.textContent = `${doc.docNumber} / 当前 Rev ${doc.revision}`;
+}
+
+function renderAll() {
+  renderMetrics();
+  renderTemplates();
+  renderInbox();
+  renderSelectedRequest();
+  renderLedger();
+  renderHistory();
+  renderRoadmap();
+  syncGeneratorForm();
+  syncRevisionForm();
+}
+
+async function refresh() {
+  state.store = await api("/api/bootstrap");
+  if (!state.activeTemplateId) state.activeTemplateId = state.store.templates[0]?.id || null;
+  if (!state.selectedRequestId) state.selectedRequestId = state.store.intakeRequests[0]?.id || null;
+  renderAll();
+}
+
+async function handleIntakeSubmit(event) {
   event.preventDefault();
   const form = event.target;
-  const feedbackEl = document.getElementById('reviewFeedback');
-  const submitBtn = form.querySelector('.review-submit-btn');
-  
-  const formData = {
-    name: form.reviewName?.value?.trim(),
-    rating: parseInt(form.reviewRating?.value) || 5,
-    comment: form.reviewComment?.value?.trim()
+  const payload = {
+    requester: form.requester.value.trim() || "discord-user",
+    channel: form.channel.value.trim() || "#doc-control",
+    content: form.content.value.trim(),
+    suggestedTemplateId: form.suggestedTemplateId.value || null,
   };
-  
-  if (!formData.name || !formData.comment) {
-    if (feedbackEl) {
-      feedbackEl.textContent = 'Please fill in your name and comment.';
-      feedbackEl.className = 'promo-feedback promo-feedback-error';
-    }
+  if (!payload.content) {
+    updateSystemNotice("请先输入 Discord 请求内容。", "error");
     return;
   }
-  
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Submitting...';
-  
-  try {
-    const response = await fetch(`${API_BASE}/api/reviews`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData)
-    });
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      if (feedbackEl) {
-        feedbackEl.textContent = result.message || 'Thank you for your review!';
-        feedbackEl.className = 'promo-feedback promo-feedback-success';
-      }
-      form.reset();
-      
-      const reviews = await fetchApi('/api/reviews/latest');
-      if (reviews) {
-        renderReviews(reviews);
-      }
-    } else {
-      throw new Error(result.error || 'Submission failed');
-    }
-  } catch (error) {
-    console.error('Review submission error:', error);
-    if (feedbackEl) {
-      feedbackEl.textContent = 'Failed to submit review. Please try again.';
-      feedbackEl.className = 'promo-feedback promo-feedback-error';
-    }
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Submit Review';
-  }
+  await api("/api/intake/discord", { method: "POST", body: JSON.stringify(payload) });
+  form.reset();
+  updateSystemNotice("新的 Discord intake 请求已写入待办队列。", "success");
+  await refresh();
 }
 
-function initReviewForm() {
-  const form = document.getElementById('reviewForm');
-  if (form && !form.querySelector('input')) {
-    form.innerHTML = `
-      <div class="promo-form-group">
-        <label for="reviewName">Your Name *</label>
-        <input type="text" id="reviewName" name="reviewName" required placeholder="Your name">
-      </div>
-      <div class="promo-form-group">
-        <label for="reviewRating">Rating</label>
-        <select id="reviewRating" name="reviewRating">
-          <option value="5">★★★★★ (5)</option>
-          <option value="4">★★★★☆ (4)</option>
-          <option value="3">★★★☆☆ (3)</option>
-          <option value="2">★★☆☆☆ (2)</option>
-          <option value="1">★☆☆☆☆ (1)</option>
-        </select>
-      </div>
-      <div class="promo-form-group full">
-        <label for="reviewComment">Your Review *</label>
-        <textarea id="reviewComment" name="reviewComment" rows="3" required placeholder="Share your experience with us..."></textarea>
-      </div>
-      <div id="reviewFeedback"></div>
-      <button type="submit" class="review-submit-btn">Submit Review</button>
-    `;
-  }
-  
-  if (form) {
-    form.addEventListener('submit', handleReviewSubmit);
-  }
-}
-
-async function initLandingPage() {
-  initContactForm();
-  
-  const [hero, features, faqs, contact, story, reviews] = await Promise.all([
-    fetchApi('/api/hero'),
-    fetchApi('/api/features'),
-    fetchApi('/api/faqs'),
-    fetchApi('/api/contact'),
-    fetchApi('/api/story'),
-    fetchApi('/api/reviews/latest')
-  ]);
-  
-  const content = {
-    hero: hero || LANDING_CONTENT.hero,
-    features: features || LANDING_CONTENT.features,
-    faqs: faqs || LANDING_CONTENT.faqs,
-    contact: contact || LANDING_CONTENT.contact,
-    story: story || LANDING_CONTENT.story,
-    reviews: reviews || LANDING_CONTENT.reviews
+async function handleGeneratorSubmit(event) {
+  event.preventDefault();
+  const form = event.target;
+  const payload = {
+    templateId: form.templateId.value,
+    title: form.title.value.trim(),
+    department: form.department.value.trim(),
+    owner: form.owner.value.trim(),
+    effectiveDate: form.effectiveDate.value,
+    distribution: form.distribution.value.split(",").map((item) => item.trim()).filter(Boolean),
+    excelTemplateRef: form.excelTemplateRef.value.trim(),
+    payloadSummary: form.payloadSummary.value.trim(),
+    changeSummary: form.changeSummary.value.trim(),
+    sourceRequestId: state.selectedRequestId || null,
   };
-  
-  renderHero(content.hero);
-  renderFeatures(content.features);
-  renderStory(content.story);
-  renderReviews(content.reviews);
-  renderFaqs(content.faqs);
-  renderContact(content.contact);
-  
-  const ctaBtn = document.querySelector('.hero-cta');
-  if (ctaBtn) {
-    ctaBtn.addEventListener('click', handleCtaClick);
+  if (!payload.templateId || !payload.title || !payload.department || !payload.owner || !payload.effectiveDate) {
+    updateSystemNotice("发行前请补齐模板、标题、部门、责任人和生效日期。", "error");
+    return;
   }
+  const result = await api("/api/documents/generate", { method: "POST", body: JSON.stringify(payload) });
+  state.selectedDocumentId = result.document.id;
+  els.releaseFeedback.textContent = `发行成功：${result.document.docNumber} / Rev ${result.document.revision}`;
+  els.releaseFeedback.className = "feedback success";
+  updateSystemNotice(`已生成并发行 ${result.document.docNumber} / Rev ${result.document.revision}。`, "success");
+  await refresh();
 }
 
-document.addEventListener('DOMContentLoaded', initLandingPage);
+async function handleRevisionSubmit(event) {
+  event.preventDefault();
+  const form = event.target;
+  const payload = {
+    actor: form.actor.value.trim(),
+    effectiveDate: form.effectiveDate.value,
+    changeSummary: form.changeSummary.value.trim(),
+  };
+  if (!form.documentId.value || !payload.actor || !payload.effectiveDate || !payload.changeSummary) {
+    updateSystemNotice("修订前请填写操作者、生效日期和变更摘要。", "error");
+    return;
+  }
+  const result = await api(`/api/documents/${form.documentId.value}/revise`, { method: "POST", body: JSON.stringify(payload) });
+  state.selectedDocumentId = result.document.id;
+  els.revisionFeedback.textContent = `已创建新修订：${result.document.docNumber} / Rev ${result.document.revision}`;
+  els.revisionFeedback.className = "feedback success";
+  updateSystemNotice(`文档 ${result.document.docNumber} 已修订到 Rev ${result.document.revision}。`, "success");
+  await refresh();
+}
+
+function bindEvents() {
+  els.templates.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-template-id]");
+    if (!card) return;
+    state.activeTemplateId = card.dataset.templateId;
+    els.generatorForm.dataset.seeded = "";
+    renderAll();
+  });
+
+  els.inbox.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-request-id]");
+    if (!card) return;
+    state.selectedRequestId = card.dataset.requestId;
+    state.selectedDocumentId = null;
+    els.generatorForm.dataset.seeded = "";
+    renderAll();
+  });
+
+  els.ledger.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-document-id]");
+    if (!card) return;
+    state.selectedDocumentId = card.dataset.documentId;
+    els.generatorForm.dataset.seeded = "";
+    renderAll();
+  });
+
+  els.intakeForm.addEventListener("submit", (event) => {
+    handleIntakeSubmit(event).catch((error) => updateSystemNotice(error.message || "写入 intake 失败。", "error"));
+  });
+  els.generatorForm.addEventListener("submit", (event) => {
+    handleGeneratorSubmit(event).catch((error) => updateSystemNotice(error.message || "发行失败。", "error"));
+  });
+  els.revisionForm.addEventListener("submit", (event) => {
+    handleRevisionSubmit(event).catch((error) => updateSystemNotice(error.message || "修订失败。", "error"));
+  });
+  document.getElementById("templateId").addEventListener("change", (event) => {
+    state.activeTemplateId = event.target.value;
+    els.generatorForm.dataset.seeded = "";
+    renderAll();
+  });
+}
+
+async function init() {
+  bindEvents();
+  await refresh();
+  updateSystemNotice("Discord intake 已接通到本地发行工作台。你可以直接投喂请求，然后一键建档并登记发行历史。", "info");
+}
+
+init().catch((error) => updateSystemNotice(error.message || "系统初始化失败。", "error"));
+
+export { init };

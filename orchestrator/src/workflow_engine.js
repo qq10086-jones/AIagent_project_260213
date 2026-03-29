@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { analyzeTaskRisk } from "./policy.js";
 import { validateToolPermission } from "./vnext/tool_permission_guard.js";
@@ -150,11 +152,23 @@ export function createWorkflowEngine({
     await recordEvent(run.workflow_run_id, "workflow.succeeded", { workflow_run_id: run.workflow_run_id });
     const workflowResult = resolveWorkflowResultUrl({ steps, minio, minioBucket, run });
     
+    let runSummary = "";
+    try {
+      const releaseRoot = path.dirname(path.dirname(pack.run_manifest_path || ""));
+      const readmePath = path.join(releaseRoot, "release", "README.md");
+      if (fs.existsSync(readmePath)) {
+        runSummary = fs.readFileSync(readmePath, "utf8").split(/\r?\n/).slice(0, 8).join("\n").trim();
+      }
+    } catch {
+      runSummary = "";
+    }
+
     if (typeof onStepTransition === "function") {
       onStepTransition({
         event: "workflow.completed",
         workflow_run_id: run.workflow_run_id,
-        result_url: workflowResult.result_url
+        result_url: workflowResult.result_url,
+        run_summary: runSummary,
       }).catch(() => {});
     }
 
@@ -167,6 +181,12 @@ export function createWorkflowEngine({
       strict_canary_report: pack.strict_canary_report_path || null,
       strict_canary_json: pack.strict_canary_json_path || null,
       strict_canary_verdict: pack.strict_canary_verdict || null,
+      preview_validation_report: pack.preview_validation_report_path || null,
+      preview_validation_classification: pack.preview_validation_classification || null,
+      preview_validation_warning: pack.preview_validation_warning || null,
+      product_fidelity_report: pack.product_fidelity_report_path || null,
+      product_fidelity_classification: pack.product_fidelity_classification || null,
+      product_fidelity_warning: pack.product_fidelity_warning || null,
       preview_url: workflowResult.preview_url,
       preview_status: workflowResult.preview_status,
       preview_fallback_reason: workflowResult.fallback_reason,
@@ -412,7 +432,9 @@ export function createWorkflowEngine({
     if (typeof onStepTransition === "function") {
       onStepTransition({
         event: "workflow.started", workflow_run_id, run_id, workflow_id,
-        step_count: steps.length, first_step_id: String(first?.step_id || steps[0]?.id || ""),
+        step_count: steps.length,
+        first_step_id: String(first?.step_id || steps[0]?.id || ""),
+        step_ids: steps.map((step) => String(step?.id || "")),
       }).catch(() => {});
     }
     return {
@@ -565,7 +587,7 @@ export function createWorkflowEngine({
   const artifactPack = artifactPackService || createArtifactPackService({
     pool, workspaceRoot, registry,
     archiveReleasePackToMinio, indexReleasePackToDb, minioBucket,
-    recordEvent, getSteps,
+    recordEvent, getSteps, runtimeConfig,
   });
 
   const { handleTaskClaimed, handleTaskApproved, handleTaskRejected } = createTaskHandlerService({

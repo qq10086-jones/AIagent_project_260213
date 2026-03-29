@@ -48,7 +48,11 @@
     "validate:live_vnext_runtime": "node scripts/live_validate_vnext_runtime.js",
     "validate:live_m9_workflow": "node scripts/live_validate_m9_workflow.js",
     "validate:live_workflow_runtime": "node scripts/live_validate_workflow_runtime.js",
-    "validate:live_m2_e2e": "node scripts/live_validate_m2_e2e_bundle.js"
+    "validate:live_m2_e2e": "node scripts/live_validate_m2_e2e_bundle.js",
+    "metrics:fidelity": "node scripts/collect_fidelity_metrics.js",
+    "metrics:compare_baseline": "node scripts/compare_fidelity_baseline.js",
+    "canary:discord_fidelity": "node scripts/canary_discord_fidelity.js",
+    "load-test:discord_coding": "node scripts/run_discord_coding_load_test.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",

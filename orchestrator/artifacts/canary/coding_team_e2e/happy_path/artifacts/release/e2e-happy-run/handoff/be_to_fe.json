@@ -5,9 +5,9 @@
   "api_contracts": [
     {
       "name": "login",
-      "method": "POST",
+      "method": "GET",
       "path": "/api/login",
-      "response_shape": "{ token }"
+      "response_shape": "{ ok, token }"
     }
   ],
   "shared_types": [

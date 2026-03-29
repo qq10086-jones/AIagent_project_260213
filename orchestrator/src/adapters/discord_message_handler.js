@@ -167,7 +167,7 @@ export function createDiscordMessageHandler({
     const isCoderDirective = trimmedInput === "/coder" || trimmedInput.startsWith("/coder:") || trimmedInput.startsWith("/coder\uff1a") || trimmedInput.startsWith("/coder ");
     const coderTask = isCoderDirective ? extractCommandArg(trimmedInput, "\\/coder") : "";
     if (isCoderDirective && !coderTask) {
-      await msg.reply("[NEXUS] \u7528\u6cd5\uff1a`/coder: <\u5f00\u53d1\u4efb\u52a1>`\uff0c\u53ef\u9009\uff1a`@model=qwen-coder-next` / `@provider=opencode`");
+      await msg.reply("[NEXUS] \u7528\u6cd5\uff1a`/coder: <\u5f00\u53d1\u4efb\u52a1>`\uff0c\u53ef\u9009\uff1a`@model=minimax-coding-plan/MiniMax-M2.7` / `@provider=opencode`");
       return;
     }
 
@@ -212,7 +212,7 @@ export function createDiscordMessageHandler({
 
       if (isCoderDirective) {
         const progressText = await safeTranslate(
-          `\u5df2\u8fdb\u5165 Coding Team \u6a21\u5f0f\uff0c\u6b63\u5728\u542f\u52a8 PM/\u67b6\u6784/\u524d\u540e\u7aef/QA \u6d41\u7a0b\u3002provider=${coderOptions?.provider || coderProviderDefault}\uff0cmodel=${coderOptions?.model || "qwen-coder-next"}`, lang
+          `\u5df2\u8fdb\u5165 Coding Team \u6a21\u5f0f\uff0c\u6b63\u5728\u542f\u52a8 PM/\u67b6\u6784/\u524d\u540e\u7aef/QA \u6d41\u7a0b\u3002provider=${coderOptions?.provider || coderProviderDefault}\uff0cmodel=${coderOptions?.model || "minimax-coding-plan/MiniMax-M2.7"}`, lang
         );
         await msg.reply(`[NEXUS] ${progressText}`);
       }
@@ -238,7 +238,8 @@ export function createDiscordMessageHandler({
         workflowRunToContext.set(result.execution.workflow_run_id, { 
           channelId: context.channelId, 
           lang, 
-          progressMessageId: initialMsg.id 
+          progressMessageId: initialMsg.id,
+          runId: run_id
         });
         if (result.execution?.first_step?.waiting_approval && result.execution?.first_step?.task_id) {
           await msg.reply(`[NEXUS] \u4efb\u52a1\u7b49\u5f85\u5ba1\u6279\uff1atask_id=${result.execution.first_step.task_id}\n\u6279\u51c6\uff1a\`/approve: ${result.execution.first_step.task_id}\`\n\u62d2\u7edd\uff1a\`/reject: ${result.execution.first_step.task_id}\``);

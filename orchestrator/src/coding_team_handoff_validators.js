@@ -40,19 +40,15 @@ function readJsonFileSafe(absPath) {
   }
 }
 
-function getValueByPath(obj, dottedPath) {
-  return String(dottedPath || "")
-    .split(".")
-    .filter(Boolean)
-    .reduce((acc, key) => (acc && Object.prototype.hasOwnProperty.call(acc, key) ? acc[key] : undefined), obj);
-}
-
-function isPresentValue(value) {
-  if (typeof value === "string") return value.trim().length > 0;
-  if (typeof value === "number") return Number.isFinite(value);
-  if (typeof value === "boolean") return true;
-  if (Array.isArray(value)) return value.length > 0;
-  return value && typeof value === "object" ? Object.keys(value).length > 0 : false;
+function hasOwnPath(obj, dottedPath) {
+  const parts = String(dottedPath || "").split(".").filter(Boolean);
+  if (parts.length === 0) return false;
+  let current = obj;
+  for (const part of parts) {
+    if (!current || !Object.prototype.hasOwnProperty.call(current, part)) return false;
+    current = current[part];
+  }
+  return true;
 }
 
 function normalizeSectionToken(value) {
@@ -141,7 +137,7 @@ export function validateCodingTeamHandoff({ workspaceRoot, artifactRoot, handoff
         handoff,
       };
     }
-    const missingFields = (typed.required_fields || []).filter((field) => !isPresentValue(getValueByPath(manifest, field)));
+    const missingFields = (typed.required_fields || []).filter((field) => !hasOwnPath(manifest, field));
     if (missingFields.length > 0) {
       return {
         checked: true,

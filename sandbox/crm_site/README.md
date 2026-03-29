@@ -1,32 +1,31 @@
-# CRM Pro Demo Site
+# Document Release Hub
 
 Path: `sandbox/crm_site`
 
-## Features
-- Login and session state
-- Role-based access control (`admin` / `sales` / `viewer`)
-- Customer list with search + stage filter
-- Customer detail panel with stage transitions
-- Create/Edit/Delete (permission-controlled)
-- Activity audit log
-- Local learning insights (derived from pipeline + activity)
-- Local persistence via `localStorage`
+## Scope
+- Discord intake inbox for document requests
+- Template-driven document issuance
+- Automatic controlled document numbering
+- Release ledger with full revision history
+- Expansion path for complaints, CAPA, and ticket claiming
 
-## Demo Accounts
-- `admin / admin123`
-- `sales / sales123`
-- `viewer / viewer123`
-- `tech / tech123` (complaint management module only)
+## Current Model
+- Intake source is currently simulated by a local Discord-form entry
+- Templates reference Excel master files by path / ID
+- One click can create a document record and its first release-history entry
+- Existing documents can be revised with tracked revision bumps
 
 ## Run
-From project root:
 
 ```bash
 cd sandbox/crm_site
-python -m http.server 8088
+npm start
 ```
 
 Then open:
-- `http://localhost:8088`
+- `http://localhost:3000`
 
-You can also double-click `index.html` directly for a quick preview.
+## Notes
+- Persistence is file-based in `data/store.json`
+- This is the first operational scaffold for document control, not the final ERP/QMS integration
+- Next planned modules: complaint record system, ticket intake / claiming, real Excel template generation

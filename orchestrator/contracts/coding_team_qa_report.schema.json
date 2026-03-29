@@ -29,6 +29,38 @@
       "minItems": 1,
       "items": { "type": "string", "minLength": 1 }
     },
+    "journey_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["journey_id", "description", "status", "evidence"],
+        "properties": {
+          "journey_id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["pass", "fail", "warning", "not_tested"] },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "rubric_citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["term", "criterion", "evidence", "pass"],
+        "properties": {
+          "term": { "type": "string", "minLength": 1 },
+          "criterion": { "type": "string", "minLength": 1 },
+          "evidence": { "type": "string", "minLength": 1 },
+          "pass": { "type": "boolean" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "rubric_path": { "type": "string" },
     "generated_at": { "type": "string" },
     "step_id": { "type": "string" }
   },

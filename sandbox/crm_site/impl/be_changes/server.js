@@ -1,257 +1,276 @@
-import express from 'express';
-import cors from 'cors';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import express from "express";
+import cors from "cors";
+import fs from "fs";
+import { randomUUID } from "crypto";
+import { dirname, join, resolve } from "path";
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const appRoot = resolve(__dirname, "..", "..");
+const dataPath = join(appRoot, "data", "store.json");
+
+function readStore() {
+  return JSON.parse(fs.readFileSync(dataPath, "utf8"));
+}
+
+function writeStore(store) {
+  fs.writeFileSync(dataPath, JSON.stringify(store, null, 2), "utf8");
+}
+
+function withPreviews(store) {
+  const year = new Date().getFullYear();
+  const templates = (store.templates || []).map((template) => {
+    const count = (store.documents || []).filter((doc) => doc.templateId === template.id && String(doc.docNumber || "").includes(String(year))).length;
+    return {
+      ...template,
+      nextNumberPreview: `${template.codePrefix}-${year}-${String(count + 1).padStart(3, "0")}`,
+    };
+  });
+  return { ...store, templates };
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function summarizeFromContent(content) {
+  const clean = String(content || "").trim();
+  if (!clean) return "未命名请求";
+  return clean.length > 28 ? `${clean.slice(0, 28)}...` : clean;
+}
+
+function nextDocNumber(store, template) {
+  const year = new Date().getFullYear();
+  const matches = (store.documents || []).filter((doc) => doc.templateId === template.id && String(doc.docNumber || "").includes(`${year}`));
+  return `${template.codePrefix}-${year}-${String(matches.length + 1).padStart(3, "0")}`;
+}
+
+function nextRevision(currentRevision) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const idx = alphabet.indexOf(String(currentRevision || "A").toUpperCase());
+  if (idx < 0 || idx >= alphabet.length - 1) return "Z";
+  return alphabet[idx + 1];
+}
+
+function makeHistory(action, document, payload) {
+  const labelMap = { issued: "首版发行", revised: "修订发行" };
+  return {
+    id: `hist_${randomUUID()}`,
+    documentId: document.id,
+    docNumber: document.docNumber,
+    revision: document.revision,
+    action,
+    actionLabel: labelMap[action] || action,
+    actor: payload.actor || document.owner,
+    source: payload.source || document.sourceLabel || "system",
+    distribution: document.distribution,
+    changeSummary: payload.changeSummary,
+    timestamp: nowIso(),
+  };
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(join(__dirname, '..', '..')));
+app.use(express.static(appRoot));
 
-const LANDING_CONTENT = {
-  hero: {
-    title: 'Elegance Fashion',
-    subtitle: 'Discover timeless elegance and modern style. Premium fashion designed for the confident you.',
-    ctaText: 'Explore Collection'
-  },
-  features: [
-    {
-      icon: 'quality',
-      title: 'Premium Quality',
-      description: 'Crafted with the finest materials and meticulous attention to detail for lasting elegance.'
-    },
-    {
-      icon: 'design',
-      title: 'Modern Design',
-      description: 'Contemporary styles that blend classic sophistication with current trends.'
-    },
-    {
-      icon: 'sustainability',
-      title: 'Sustainable Fashion',
-      description: 'Committed to ethical production and environmentally conscious practices.'
-    }
-  ],
-  faqs: [
-    {
-      question: 'What is your return policy?',
-      answer: 'We offer a 30-day return policy for all unworn items with original tags attached.'
-    },
-    {
-      question: 'How do I find my correct size?',
-      answer: 'Use our detailed size guide available on each product page. We also offer free virtual styling consultations.'
-    },
-    {
-      question: 'Do you ship internationally?',
-      answer: 'Yes, we ship to over 100 countries worldwide. Free shipping on orders over $200.'
-    },
-    {
-      question: 'How do I care for my garments?',
-      answer: 'Each item comes with specific care instructions. Most pieces are machine washable on gentle cycles.'
-    }
-  ],
-  contact: {
-    email: 'contact@elegancefashion.com',
-    phone: '+86 400-888-8888',
-    address: '888 Fashion Avenue, Style District, Shanghai, China'
+app.get("/api/bootstrap", (_req, res) => {
+  res.json({ success: true, data: withPreviews(readStore()) });
+});
+
+app.post("/api/intake/discord", (req, res) => {
+  const store = readStore();
+  const content = String(req.body?.content || "").trim();
+  if (!content) {
+    return res.status(400).json({ success: false, error: "content is required" });
   }
-};
-
-const BRAND_STORY = {
-  title: 'Our Story',
-  subtitle: 'A Legacy of Elegance',
-  content: [
-    {
-      heading: 'Founded in 2010',
-      paragraph: 'Elegance Fashion began with a simple vision: to create timeless pieces that empower women to feel confident and beautiful.'
-    },
-    {
-      heading: 'Our Philosophy',
-      paragraph: 'We believe fashion is more than clothing—it is self-expression. Each piece in our collection is designed to celebrate individuality and grace.'
-    },
-    {
-      heading: 'Craftsmanship',
-      paragraph: 'Every garment is crafted by skilled artisans using traditional techniques combined with modern innovation.'
-    }
-  ],
-  timeline: [
-    { year: '2010', event: 'Founded in Shanghai' },
-    { year: '2015', event: 'Expanded to 50 stores worldwide' },
-    { year: '2020', event: 'Launched sustainable fashion line' },
-    { year: '2024', event: '100+ international locations' }
-  ]
-};
-
-const REVIEWS = [
-  {
-    id: 1,
-    name: 'Sarah Chen',
-    rating: 5,
-    comment: 'Absolutely love the quality! These pieces have become my wardrobe essentials.',
-    date: '2024-01-15'
-  },
-  {
-    id: 2,
-    name: 'Emily Wang',
-    rating: 5,
-    comment: 'The design is elegant and sophisticated. Received many compliments!',
-    date: '2024-01-10'
-  },
-  {
-    id: 3,
-    name: 'Jessica Liu',
-    rating: 4,
-    comment: 'Great customer service and beautiful packaging. Will definitely order again.',
-    date: '2024-01-05'
-  },
-  {
-    id: 4,
-    name: 'Amanda Zhang',
-    rating: 5,
-    comment: 'The sustainable fashion line is amazing. Feel good about my purchase!',
-    date: '2023-12-28'
-  },
-  {
-    id: 5,
-    name: 'Michelle Tan',
-    rating: 5,
-    comment: 'Perfect fit and excellent quality. Worth every penny!',
-    date: '2023-12-20'
-  }
-];
-
-const ICONS = {
-  quality: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
-  design: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>',
-  sustainability: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c4-4 8-7.5 8-12a8 8 0 1 0-16 0c0 4.5 4 8 8 12z"/><circle cx="12" cy="10" r="3"/></svg>'
-};
-
-app.get('/api/content', (req, res) => {
-  res.json({
-    success: true,
-    data: LANDING_CONTENT
-  });
-});
-
-app.get('/api/hero', (req, res) => {
-  res.json({
-    success: true,
-    data: LANDING_CONTENT.hero
-  });
-});
-
-app.get('/api/features', (req, res) => {
-  res.json({
-    success: true,
-    data: LANDING_CONTENT.features
-  });
-});
-
-app.get('/api/faqs', (req, res) => {
-  res.json({
-    success: true,
-    data: LANDING_CONTENT.faqs
-  });
-});
-
-app.get('/api/contact', (req, res) => {
-  res.json({
-    success: true,
-    data: LANDING_CONTENT.contact
-  });
-});
-
-app.post('/api/contact', (req, res) => {
-  const { name, email, message } = req.body;
-  
-  if (!name || !email || !message) {
-    return res.status(400).json({
-      success: false,
-      error: 'Missing required fields: name, email, message'
-    });
-  }
-  
-  console.log('Contact form submission:', { name, email, message });
-  
-  res.json({
-    success: true,
-    message: 'Thank you for your message! We will get back to you soon.'
-  });
-});
-
-app.get('/api/icons', (req, res) => {
-  res.json({
-    success: true,
-    data: ICONS
-  });
-});
-
-app.get('/api/story', (req, res) => {
-  res.json({
-    success: true,
-    data: BRAND_STORY
-  });
-});
-
-app.get('/api/reviews', (req, res) => {
-  res.json({
-    success: true,
-    data: REVIEWS
-  });
-});
-
-app.get('/api/reviews/latest', (req, res) => {
-  const latestReviews = REVIEWS.slice(0, 3);
-  res.json({
-    success: true,
-    data: latestReviews
-  });
-});
-
-app.post('/api/reviews', (req, res) => {
-  const { name, rating, comment } = req.body;
-  
-  if (!name || !rating || !comment) {
-    return res.status(400).json({
-      success: false,
-      error: 'Missing required fields: name, rating, comment'
-    });
-  }
-  
-  if (rating < 1 || rating > 5) {
-    return res.status(400).json({
-      success: false,
-      error: 'Rating must be between 1 and 5'
-    });
-  }
-  
-  const newReview = {
-    id: REVIEWS.length + 1,
-    name,
-    rating,
-    comment,
-    date: new Date().toISOString().split('T')[0]
+  const request = {
+    id: `req_${randomUUID()}`,
+    source: "discord",
+    requester: String(req.body?.requester || "discord-user"),
+    channel: String(req.body?.channel || "#doc-control"),
+    summary: summarizeFromContent(content),
+    content,
+    status: "new",
+    suggestedTemplateId: req.body?.suggestedTemplateId || null,
+    createdAt: nowIso(),
   };
-  
-  console.log('New review:', newReview);
-  
+  store.intakeRequests.unshift(request);
+  writeStore(store);
+  res.json({ success: true, data: request });
+});
+
+app.post("/api/documents/generate", (req, res) => {
+  const store = readStore();
+  const payload = req.body || {};
+  const template = (store.templates || []).find((item) => item.id === payload.templateId);
+  if (!template) {
+    return res.status(400).json({ success: false, error: "unknown templateId" });
+  }
+  if (!payload.title || !payload.department || !payload.owner || !payload.effectiveDate) {
+    return res.status(400).json({ success: false, error: "title, department, owner, effectiveDate are required" });
+  }
+
+  const document = {
+    id: `doc_${randomUUID()}`,
+    templateId: template.id,
+    templateName: template.name,
+    docNumber: nextDocNumber(store, template),
+    revision: "A",
+    title: String(payload.title).trim(),
+    department: String(payload.department).trim(),
+    owner: String(payload.owner).trim(),
+    effectiveDate: String(payload.effectiveDate).trim(),
+    distribution: Array.isArray(payload.distribution) ? payload.distribution : [],
+    status: "released",
+    sourceLabel: payload.sourceRequestId ? "Discord Intake" : "Manual Issue",
+    sourceRequestId: payload.sourceRequestId || null,
+    excelTemplateRef: String(payload.excelTemplateRef || template.excelTemplateRef || ""),
+    payloadSummary: String(payload.payloadSummary || ""),
+    updatedAt: nowIso(),
+  };
+
+  const history = makeHistory("issued", document, {
+    actor: document.owner,
+    source: document.sourceLabel,
+    changeSummary: String(payload.changeSummary || `首版发行 ${document.title}`),
+  });
+
+  store.documents.unshift(document);
+  store.releaseHistory.unshift(history);
+  if (document.sourceRequestId) {
+    store.intakeRequests = (store.intakeRequests || []).map((item) => (
+      item.id === document.sourceRequestId ? { ...item, status: "issued" } : item
+    ));
+  }
+  writeStore(store);
+  res.json({ success: true, data: { document, history } });
+});
+
+app.post("/api/documents/:id/revise", (req, res) => {
+  const store = readStore();
+  const payload = req.body || {};
+  const target = (store.documents || []).find((item) => item.id === req.params.id);
+  if (!target) {
+    return res.status(404).json({ success: false, error: "document not found" });
+  }
+  if (!payload.actor || !payload.effectiveDate || !payload.changeSummary) {
+    return res.status(400).json({ success: false, error: "actor, effectiveDate, changeSummary are required" });
+  }
+
+  target.revision = nextRevision(target.revision);
+  target.effectiveDate = String(payload.effectiveDate).trim();
+  target.updatedAt = nowIso();
+  target.status = "released";
+
+  const history = makeHistory("revised", target, {
+    actor: String(payload.actor).trim(),
+    source: target.sourceLabel || "Revision Desk",
+    changeSummary: String(payload.changeSummary).trim(),
+  });
+
+  store.releaseHistory.unshift(history);
+  writeStore(store);
+  res.json({ success: true, data: { document: target, history } });
+});
+
+app.get("*", (_req, res) => {
+  res.sendFile(join(appRoot, "index.html"));
+});
+
+const customerStore = new Map();
+
+function createCustomer(data) {
+  const now = new Date().toISOString();
+  const customer = {
+    id: `cust_${randomUUID()}`,
+    name: data.name || '',
+    email: data.email || '',
+    phone: data.phone || '',
+    company: data.company || '',
+    notes: data.notes || '',
+    createdAt: now,
+    updatedAt: now,
+  };
+  customerStore.set(customer.id, customer);
+  return customer;
+}
+
+createCustomer({ name: '张三', email: 'zhangsan@example.com', phone: '13800138000', company: '示例公司A' });
+createCustomer({ name: '李四', email: 'lisi@example.com', phone: '13900139000', company: '示例公司B' });
+createCustomer({ name: '王五', email: 'wangwu@example.com', phone: '13700137000', company: '示例公司C' });
+
+app.get('/api/customers', (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const search = (req.query.search || '').toLowerCase();
+
+  let result = Array.from(customerStore.values());
+  if (search) {
+    result = result.filter(c =>
+      c.name.toLowerCase().includes(search) ||
+      c.email.toLowerCase().includes(search)
+    );
+  }
+
+  result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const total = result.length;
+  const totalPages = Math.ceil(total / limit);
+  const offset = (page - 1) * limit;
+
   res.json({
-    success: true,
-    message: 'Thank you for your review!',
-    data: newReview
+    data: result.slice(offset, offset + limit),
+    pagination: { page, limit, total, totalPages }
   });
 });
 
-app.get('*', (req, res) => {
-  res.sendFile(join(__dirname, '..', '..', 'index.html'));
+app.get('/api/customers/:id', (req, res) => {
+  const customer = customerStore.get(req.params.id);
+  if (!customer) {
+    return res.status(404).json({ success: false, error: 'Customer not found' });
+  }
+  res.json({ success: true, data: customer });
+});
+
+app.post('/api/customers', (req, res) => {
+  const { name, email } = req.body;
+  if (!name || !email) {
+    return res.status(400).json({ success: false, error: 'name and email are required' });
+  }
+  const customer = createCustomer(req.body);
+  res.status(201).json({ success: true, data: customer });
+});
+
+app.put('/api/customers/:id', (req, res) => {
+  const customer = customerStore.get(req.params.id);
+  if (!customer) {
+    return res.status(404).json({ success: false, error: 'Customer not found' });
+  }
+  const updated = {
+    ...customer,
+    ...req.body,
+    id: customer.id,
+    createdAt: customer.createdAt,
+    updatedAt: new Date().toISOString(),
+  };
+  customerStore.set(updated.id, updated);
+  res.json({ success: true, data: updated });
+});
+
+app.delete('/api/customers/:id', (req, res) => {
+  if (!customerStore.has(req.params.id)) {
+    return res.status(404).json({ success: false, error: 'Customer not found' });
+  }
+  customerStore.delete(req.params.id);
+  res.status(204).send();
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Document Release Hub listening on http://localhost:${PORT}`);
 });
 
 export default app;

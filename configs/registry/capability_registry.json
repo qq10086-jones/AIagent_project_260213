@@ -359,9 +359,15 @@
           ]
         },
         {
-          "id": "qa_verify",
+          "id": "smoke_test",
           "role": "qa",
           "tool": "coding.execute",
+          "gate": null
+        },
+        {
+          "id": "qa_verify",
+          "role": "qa",
+          "tool": "coding.delegate",
           "gate": "acceptance",
           "prompt_script_id": "qa.verify.v1"
         },

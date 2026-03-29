@@ -1,0 +1,48 @@
+{
+  "from_step": "impl_be",
+  "to_step": "impl_fe",
+  "be_changes_path": "impl/be_changes",
+  "api_contracts": [
+    {
+      "name": "listCustomers",
+      "method": "GET",
+      "path": "/api/customers"
+    },
+    {
+      "name": "getCustomer",
+      "method": "GET",
+      "path": "/api/customers/:id"
+    },
+    {
+      "name": "createCustomer",
+      "method": "POST",
+      "path": "/api/customers"
+    },
+    {
+      "name": "updateCustomer",
+      "method": "PUT",
+      "path": "/api/customers/:id"
+    }
+  ],
+  "shared_types": [
+    {
+      "name": "Customer"
+    },
+    {
+      "name": "CustomerListResponse"
+    },
+    {
+      "name": "CustomerCreateRequest"
+    },
+    {
+      "name": "CustomerUpdateRequest"
+    }
+  ],
+  "scope_constraints": [
+    "No database persistence - in-memory store only",
+    "No authentication/authorization",
+    "No cursor-based pagination",
+    "No bulk operations",
+    "No soft delete or recovery"
+  ]
+}

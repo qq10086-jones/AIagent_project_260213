@@ -14,9 +14,9 @@ test("impl_fe validation passes with non-empty fe_changes, notes, and upstream b
   const workspaceRoot = makeWorkspace();
   const artifactRoot = "artifacts/release/run-fe-1";
   const releaseRoot = path.join(workspaceRoot, artifactRoot);
-  fs.mkdirSync(path.join(releaseRoot, "impl", "fe_changes"), { recursive: true });
+  fs.mkdirSync(path.join(releaseRoot, "impl", "fe_changes", "public"), { recursive: true });
   fs.mkdirSync(path.join(releaseRoot, "handoff"), { recursive: true });
-  fs.writeFileSync(path.join(releaseRoot, "impl", "fe_changes", "app.js"), "export const ui = true;\n");
+  fs.writeFileSync(path.join(releaseRoot, "impl", "fe_changes", "public", "app.js"), "export const ui = true;\n");
   fs.writeFileSync(path.join(releaseRoot, "impl", "fe_notes.md"), "# FE Notes\n");
   fs.writeFileSync(
     path.join(releaseRoot, "handoff", "be_to_fe.json"),
@@ -46,8 +46,8 @@ test("impl_fe validation fails when upstream be handoff is missing", () => {
   const workspaceRoot = makeWorkspace();
   const artifactRoot = "artifacts/release/run-fe-2";
   const releaseRoot = path.join(workspaceRoot, artifactRoot);
-  fs.mkdirSync(path.join(releaseRoot, "impl", "fe_changes"), { recursive: true });
-  fs.writeFileSync(path.join(releaseRoot, "impl", "fe_changes", "app.js"), "export const ui = true;\n");
+  fs.mkdirSync(path.join(releaseRoot, "impl", "fe_changes", "public"), { recursive: true });
+  fs.writeFileSync(path.join(releaseRoot, "impl", "fe_changes", "public", "app.js"), "export const ui = true;\n");
   fs.writeFileSync(path.join(releaseRoot, "impl", "fe_notes.md"), "# FE Notes\n");
 
   const result = validateImplementationDelta({

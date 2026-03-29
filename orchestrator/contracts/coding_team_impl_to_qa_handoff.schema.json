@@ -29,9 +29,11 @@
       "description": "Relative path to impl/fe_changes/ directory."
     },
     "run_instructions": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Step-by-step instructions for QA to run the implementation locally and reproduce the expected behavior."
+      "description": "Step-by-step instructions for QA to run the implementation locally and reproduce the expected behavior. Accepts a plain string or an array of instruction strings.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      ]
     },
     "known_limitations": {
       "type": "array",

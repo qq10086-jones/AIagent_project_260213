@@ -1,4 +1,4 @@
-import Redis from "ioredis";
+﻿import Redis from "ioredis";
 import pg from "pg";
 import crypto from "crypto";
 import { pathToFileURL } from "url";
@@ -63,6 +63,9 @@ if (STARTUP_PREFLIGHT.ok) {
 } else {
   for (const issue of STARTUP_PREFLIGHT.issues) {
     console.warn(`[startup-preflight] ${issue.severity} lane=${issue.lane} code=${issue.code} message=${issue.message}`);
+  }
+  if (STARTUP_PREFLIGHT.fatal) {
+    throw new Error("startup preflight failed with fatal runtime configuration issues");
   }
 }
 
@@ -261,7 +264,7 @@ async function processTask(msgId, task, lifecycle) {
       });
       output = result;
       isSuccess = result.ok;
-      if (!isSuccess) error = result.message || result.reason || "GitHub 交付失败";
+      if (!isSuccess) error = result.message || result.reason || "GitHub delivery failed";
     } else {
       throw new Error(`Unknown tool: ${tool_name}`);
     }

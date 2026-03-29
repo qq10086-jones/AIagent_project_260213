@@ -229,7 +229,7 @@ function buildWorkflowPayload({ task, template }) {
     input: {
       goal: buildScenarioGoal(task),
       provider: "opencode",
-      model: "qwen3-coder-next",
+      model: "minimax-coding-plan/MiniMax-M2.7",
       fast_mode: true,
       max_runtime_s: 180,
       step_payloads: stepPayloads,
@@ -344,7 +344,7 @@ export async function main(options = {}) {
   const registryPath = path.resolve(options.registryPath || arg("registry", resolveRepoPath("configs", "registry", "worker_coding_beta_templates.json")));
   const schemaPath = path.resolve(options.schemaPath || arg("schema", path.resolve(process.cwd(), "contracts", "worker_coding_cohort_result.schema.json")));
   const provider = String(options.provider || arg("provider", process.env.COHORT_PROVIDER || "opencode"));
-  const model = String(options.model || arg("model", process.env.COHORT_MODEL || "qwen3-coder-next"));
+  const model = String(options.model || arg("model", process.env.COHORT_MODEL || "minimax-coding-plan/MiniMax-M2.7"));
   const executionLane = String(options.executionLane || arg("execution-lane", process.env.COHORT_EXECUTION_LANE || "")).trim();
   const realImplOnly = String(options.realImplOnly || arg("real-impl-only", process.env.COHORT_REAL_IMPL_ONLY || "false")).toLowerCase() === "true";
   const plan = readJson(planPath);

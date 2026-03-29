@@ -97,10 +97,10 @@ const RUNTIME_ORCH = RUNTIME_CONFIG.orchestrator || {};
 const RUNTIME_EXECUTION = RUNTIME_CONFIG.execution || {};
 const RUNTIME_WATCHDOG = RUNTIME_CONFIG.watchdog || {};
 const RUNTIME_STREAMS = RUNTIME_CONFIG.streams || {};
-const QWEN_BASE = process.env.QWEN_BASE_URL || RUNTIME_ORCH.qwen_base_url || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-const QWEN_MODEL = process.env.QWEN_MODEL || RUNTIME_ORCH.qwen_model || "qwen-plus";
+const QWEN_BASE = process.env.MINIMAX_BASE_URL || process.env.QWEN_BASE_URL || RUNTIME_ORCH.qwen_base_url || "https://api.minimaxi.com/v1";
+const QWEN_MODEL = process.env.MINIMAX_MODEL || process.env.QWEN_MODEL || RUNTIME_ORCH.qwen_model || "MiniMax-M2.7";
 const CODER_PROVIDER_DEFAULT = String(process.env.CODER_PROVIDER_DEFAULT || RUNTIME_ORCH.coder_provider_default || "opencode").toLowerCase();
-const CODER_MODEL_DEFAULT = String(process.env.CODER_MODEL_DEFAULT || RUNTIME_ORCH.coder_model_default || "alibaba-coding-plan/qwen3-coder-plus");
+const CODER_MODEL_DEFAULT = String(process.env.CODER_MODEL_DEFAULT || RUNTIME_ORCH.coder_model_default || "minimax-coding-plan/MiniMax-M2.7");
 const DEFAULT_LOCAL_MODEL = process.env.QUANT_LLM_MODEL || RUNTIME_ORCH.quant_llm_model || "deepseek-r1:32b";
 const RESOLVED_WORKFLOW_STEP_ARTIFACT_AUDIT = String(WORKFLOW_STEP_ARTIFACT_AUDIT || (RUNTIME_ORCH.workflow_step_artifact_audit ? "1" : "0")) !== "0";
 const RESOLVED_WORKFLOW_STRICT_STEP_ARTIFACTS = String(WORKFLOW_STRICT_STEP_ARTIFACTS || (RUNTIME_ORCH.workflow_strict_step_artifacts ? "1" : "0")) !== "0";
@@ -255,7 +255,7 @@ async function generateBrainDirectReply(rawInput, modelPreference = "auto") {
     rawInput,
     modelPreference,
     forceLocalLlm: appState.forceLocalLlm,
-    hasQwenKey: Boolean(process.env.QWEN_API_KEY),
+    hasQwenKey: Boolean(process.env.MINIMAX_API_KEY || process.env.QWEN_API_KEY),
     qwenBase: QWEN_BASE,
     qwenModel: QWEN_MODEL,
     currentLocalModel: appState.currentLocalModel,

@@ -239,7 +239,7 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
   };
 }
 
-export const RELEASE_REQUIRED_FILES = ["release/release_notes.md", "release/artifact_manifest.json"];
+export const RELEASE_REQUIRED_FILES = ["release/release_notes.md", "release/artifact_manifest.json", "release/README.md", "release/start.sh"];
 
 export function validateReleaseOutput({ workspaceRoot, artifactRoot }) {
   const rootAbs = normalizeRoot(workspaceRoot, artifactRoot);
@@ -249,8 +249,10 @@ export function validateReleaseOutput({ workspaceRoot, artifactRoot }) {
 
   const notesPath = path.resolve(rootAbs, "release/release_notes.md");
   const manifestPath = path.resolve(rootAbs, "release/artifact_manifest.json");
+  const readmePath = path.resolve(rootAbs, "release/README.md");
+  const startScriptPath = path.resolve(rootAbs, "release/start.sh");
 
-  const missingFiles = [notesPath, manifestPath].filter((item) => !fs.existsSync(item));
+  const missingFiles = [notesPath, manifestPath, readmePath, startScriptPath].filter((item) => !fs.existsSync(item));
   if (missingFiles.length > 0) {
     return {
       checked: true,
@@ -267,6 +269,26 @@ export function validateReleaseOutput({ workspaceRoot, artifactRoot }) {
       ok: false,
       code: "RELEASE_NOTES_EMPTY",
       detail: "release/release_notes.md is empty or too short",
+    };
+  }
+
+  const readmeText = readTextFile(readmePath);
+  if (!readmeText || !/npm install/i.test(readmeText) || !/node server\.js/i.test(readmeText)) {
+    return {
+      checked: true,
+      ok: false,
+      code: "RELEASE_README_INVALID",
+      detail: "release/README.md must include npm install and node server.js instructions",
+    };
+  }
+
+  const startScriptText = readTextFile(startScriptPath);
+  if (!startScriptText || !/node server\.js/i.test(startScriptText)) {
+    return {
+      checked: true,
+      ok: false,
+      code: "RELEASE_START_SCRIPT_INVALID",
+      detail: "release/start.sh must include node server.js",
     };
   }
 

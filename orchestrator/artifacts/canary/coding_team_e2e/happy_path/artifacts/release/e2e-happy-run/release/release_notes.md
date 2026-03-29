@@ -1,10 +1,10 @@
 # Release Notes
 
-CRM MVP — auth endpoint delivered and verified.
+CRM MVP auth endpoint delivered and verified.
 
 ## What was built
 
-- POST /api/login backend + frontend
+- GET /api/login backend + frontend
 
 ## QA Status
 

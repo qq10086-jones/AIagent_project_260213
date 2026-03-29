@@ -17,6 +17,8 @@ import {
   buildReleasePackPaths,
   buildStepArtifactsFromCheckpoints,
   buildGoNoGoResult,
+  buildProductFidelityReport,
+  buildPreviewValidationReport,
   buildStrictCanaryMarkdown,
   buildStrictCanaryReport,
   ensureDir,
@@ -39,6 +41,7 @@ export function createArtifactPackService({
   minioBucket,
   recordEvent,
   getSteps,
+  runtimeConfig = {},
 }) {
   function collectContextBudgetReports(steps = []) {
     const reports = [];
@@ -86,7 +89,7 @@ export function createArtifactPackService({
     });
   }
 
-  function collectCodingExecutionEvidence(steps = []) {
+function collectCodingExecutionEvidence(steps = []) {
     const items = (steps || []).map((step) => {
       const result = parseJsonSafe(step?.result_json, {});
       const diagnostics = result?.diagnostics && typeof result.diagnostics === "object"
@@ -130,6 +133,63 @@ export function createArtifactPackService({
     return { items, summary };
   }
 
+  const fidelityGateMode = String(runtimeConfig?.orchestrator?.fidelity_gate_mode || "warning").trim();
+  const resolvedExecutionLane = String(runtimeConfig?.worker_coder?.execution_lane_default || "").trim();
+  const resolvedProvider = String(runtimeConfig?.worker_coder?.provider_default || "").trim();
+  const resolvedModel = String(runtimeConfig?.worker_coder?.model_default || "").trim();
+
+  function readTextSafe(filePath) {
+    try {
+      return fs.readFileSync(filePath, "utf8");
+    } catch {
+      return "";
+    }
+  }
+
+  function writeTextSafe(filePath, text) {
+    ensureDir(path.dirname(filePath));
+    fs.writeFileSync(filePath, text, "utf8");
+  }
+
+  function isFrontendScaffold(text = "") {
+    return /auto-generated scaffold|pending human review|placeholderRender/i.test(String(text || ""));
+  }
+
+  function repairFrontendAssembly(releaseRoot) {
+    const feRootAppPath = path.join(releaseRoot, "impl", "fe_changes", "app.js");
+    const fePublicAppPath = path.join(releaseRoot, "impl", "fe_changes", "public", "app.js");
+    const bePublicAppPath = path.join(releaseRoot, "impl", "be_changes", "public", "app.js");
+
+    const feRootAppText = readTextSafe(feRootAppPath);
+    const fePublicAppText = readTextSafe(fePublicAppPath);
+    const bePublicAppText = readTextSafe(bePublicAppPath);
+    const hasRealFeRootApp = Boolean(feRootAppText) && !isFrontendScaffold(feRootAppText);
+
+    if (!hasRealFeRootApp) {
+      return {
+        repaired: false,
+        source_used: null,
+        targets_written: [],
+      };
+    }
+
+    const targetsWritten = [];
+    if (!fePublicAppText || isFrontendScaffold(fePublicAppText)) {
+      writeTextSafe(fePublicAppPath, feRootAppText);
+      targetsWritten.push("impl/fe_changes/public/app.js");
+    }
+    if (!bePublicAppText || isFrontendScaffold(bePublicAppText)) {
+      writeTextSafe(bePublicAppPath, feRootAppText);
+      targetsWritten.push("impl/be_changes/public/app.js");
+    }
+
+    return {
+      repaired: targetsWritten.length > 0,
+      source_used: targetsWritten.length > 0 ? "impl/fe_changes/app.js" : null,
+      targets_written: targetsWritten,
+    };
+  }
+
   async function generateArtifactPack(run) {
     const steps = await getSteps(run.workflow_run_id);
     const checkpoints = await listWorkflowCheckpoints(pool, run.workflow_run_id);
@@ -153,11 +213,18 @@ export function createArtifactPackService({
     const releasePaths = buildReleasePackPaths(workspaceRoot, run);
     const { manifest_path: manifestPath, summary_path: summaryPath,
             strict_canary_json_path: canaryJsonPath, strict_canary_report_path: canaryMdPath,
-            go_no_go_result_path: goNoGoJsonPath } = releasePaths;
+            go_no_go_result_path: goNoGoJsonPath,
+            product_fidelity_report_path: productFidelityReportPath,
+            preview_validation_report_path: previewValidationReportPath } = releasePaths;
 
     const canaryReport = buildStrictCanaryReport({ run, steps });
     const canaryJsonRel = path.relative(workspaceRoot, canaryJsonPath).replace(/\\/g, "/");
     const canaryMdRel = path.relative(workspaceRoot, canaryMdPath).replace(/\\/g, "/");
+    const frontendAssemblyRepair = repairFrontendAssembly(releasePaths.release_root);
+    const previewValidationReport = buildPreviewValidationReport({ run, releaseRoot: releasePaths.release_root });
+    const previewValidationReportRel = path.relative(workspaceRoot, previewValidationReportPath).replace(/\\/g, "/");
+    const productFidelityReport = buildProductFidelityReport({ run, releaseRoot: releasePaths.release_root });
+    const productFidelityReportRel = path.relative(workspaceRoot, productFidelityReportPath).replace(/\\/g, "/");
     if (String(canaryReport.verdict) !== "pass") reasons.push("strict canary report failed");
 
     const manifest = {
@@ -175,6 +242,7 @@ export function createArtifactPackService({
       context_artifacts: contextArtifacts,
       coding_execution_evidence: codingExecutionEvidence.items,
       coding_execution_summary: codingExecutionEvidence.summary,
+      frontend_assembly_repair: frontendAssemblyRepair,
       steps: steps.map((s) => ({
         step_index: Number(s.step_index),
         step_id: s.step_id,
@@ -207,6 +275,8 @@ export function createArtifactPackService({
       writeJsonFile(canaryJsonPath, canaryReport);
       ensureDir(path.dirname(canaryMdPath));
       fs.writeFileSync(canaryMdPath, buildStrictCanaryMarkdown(canaryReport, canaryJsonRel), "utf8");
+      writeJsonFile(previewValidationReportPath, previewValidationReport);
+      writeJsonFile(productFidelityReportPath, productFidelityReport);
       writeJsonFile(manifestPath, manifest);
       ensureDir(path.dirname(summaryPath));
       const summaryLines = [
@@ -217,6 +287,10 @@ export function createArtifactPackService({
         `- project_type: ${run.project_type}`,
         `- status: ${manifest.status}`,
         `- strict_canary_verdict: ${String(canaryReport.verdict || "").toUpperCase()}`,
+        `- preview_validation: ${String(previewValidationReport.classification || "").toUpperCase()}`,
+        `- preview_warning: ${previewValidationReport.should_warn ? "YES" : "NO"}`,
+        `- product_fidelity: ${String(productFidelityReport.classification || "").toUpperCase()}`,
+        `- product_fidelity_warning: ${productFidelityReport.should_warn ? "YES" : "NO"}`,
         `- generated_at: ${manifest.generated_at}`, ``,
         `## Context Budget`,
         `- total_steps: ${Number(contextBudget.summary.total_steps || 0)}`,
@@ -234,6 +308,20 @@ export function createArtifactPackService({
         `- retry_enabled_steps: ${Number(codingExecutionEvidence.summary.retry_enabled_steps || 0)}`,
         `- retry_attempted_steps: ${Number(codingExecutionEvidence.summary.retry_attempted_steps || 0)}`,
         `- failure_memory_entries: ${Number(codingExecutionEvidence.summary.failure_memory_entries || 0)}`, ``,
+        `## Preview Validation`,
+        `- classification: ${String(previewValidationReport.classification || "")}`,
+        `- should_warn: ${Boolean(previewValidationReport.should_warn)}`,
+        `- report_path: ${previewValidationReportRel}`, ``,
+        `## Product Fidelity`,
+        `- classification: ${String(productFidelityReport.classification || "")}`,
+        `- should_warn: ${Boolean(productFidelityReport.should_warn)}`,
+        `- perceptual_quality_score: ${String(productFidelityReport?.perceptual_quality?.score || "")}`,
+        `- fidelity_gate_mode: ${fidelityGateMode}`,
+        `- report_path: ${productFidelityReportRel}`, ``,
+        `## Execution Config`,
+        `- execution_lane: ${resolvedExecutionLane || "not_configured"}`,
+        `- provider: ${resolvedProvider || "not_configured"}`,
+        `- model: ${resolvedModel || "not_configured"}`, ``,
         `## Steps`,
         ...manifest.steps.map((s) => `- [${s.status === "succeeded" ? "OK" : "FAIL"}] ${s.step_index}:${s.step_id} (${s.tool_name})`),
       ];
@@ -257,7 +345,20 @@ export function createArtifactPackService({
     } catch { /* ignore: summary write error is non-fatal */ }
 
     const expectedSteps = getExpectedWorkflowStepCount(registry, run.workflow_id);
-    const goNoGo = buildGoNoGoResult({ run, manifest, steps, validator, canaryReport, expectedSteps, strict: true });
+    const goNoGo = buildGoNoGoResult({
+      run,
+      manifest,
+      steps,
+      validator,
+      canaryReport,
+      productFidelityReport,
+      productFidelityReportRelPath: productFidelityReportRel,
+      previewValidationReport,
+      previewValidationReportRelPath: previewValidationReportRel,
+      expectedSteps,
+      strict: true,
+      fidelityGateMode,
+    });
     writeJsonFile(goNoGoJsonPath, goNoGo);
 
     const finalResultPackage = buildFinalResultPackage({
@@ -269,6 +370,8 @@ export function createArtifactPackService({
       goNoGoResultPath: goNoGoJsonPath,
       strictCanaryReportPath: canaryMdPath,
       strictCanaryJsonPath: canaryJsonPath,
+      previewValidationReportPath,
+      productFidelityReportPath,
       goNoGoVerdict: goNoGo.verdict,
       strictCanaryVerdict: canaryReport.verdict,
     });
@@ -283,6 +386,8 @@ export function createArtifactPackService({
         canaryJsonPath,
         canaryMdPath,
         goNoGoJsonPath,
+        previewValidationReportPath,
+        productFidelityReportPath,
         ...contextBudget.reports
           .map((item) => (item.report_path ? path.resolve(workspaceRoot, item.report_path) : ""))
           .filter(Boolean),
@@ -301,6 +406,8 @@ export function createArtifactPackService({
         canaryJsonPath,
         canaryMdPath,
         goNoGoJsonPath,
+        previewValidationReportPath,
+        productFidelityReportPath,
         ...contextBudget.reports
           .map((item) => (item.report_path ? path.resolve(workspaceRoot, item.report_path) : ""))
           .filter(Boolean),
@@ -326,6 +433,12 @@ export function createArtifactPackService({
       strict_canary_report_path: canaryMdPath,
       strict_canary_json_path: canaryJsonPath,
       strict_canary_verdict: canaryReport.verdict,
+      preview_validation_report_path: previewValidationReportPath,
+      preview_validation_classification: previewValidationReport.classification,
+      preview_validation_warning: previewValidationReport.warning || null,
+      product_fidelity_report_path: productFidelityReportPath,
+      product_fidelity_classification: productFidelityReport.classification,
+      product_fidelity_warning: productFidelityReport.warning || null,
       final_result_package: finalResultPackage,
       validator,
     };
@@ -364,7 +477,9 @@ export function createArtifactPackService({
     const releasePaths = buildReleasePackPaths(workspaceRoot, run);
     const { manifest_path: manifestPath, summary_path: summaryPath,
             strict_canary_json_path: canaryJsonPath, strict_canary_report_path: canaryMdPath,
-            go_no_go_result_path: goNoGoJsonPath } = releasePaths;
+            go_no_go_result_path: goNoGoJsonPath,
+            product_fidelity_report_path: productFidelityReportPath,
+            preview_validation_report_path: previewValidationReportPath } = releasePaths;
 
     if (!fs.existsSync(manifestPath) || !fs.existsSync(summaryPath)) {
       const err = new Error("ARTIFACT_INCOMPLETE: release pack files missing");
@@ -374,7 +489,7 @@ export function createArtifactPackService({
     const steps = await getSteps(workflow_run_id);
     const checkpoints = await listWorkflowCheckpoints(pool, workflow_run_id);
     const stepArtifacts = buildStepArtifactsFromCheckpoints(steps, checkpoints, parseJsonSafe);
-    const extraPaths = [canaryJsonPath, canaryMdPath, goNoGoJsonPath].filter((p) => fs.existsSync(p));
+    const extraPaths = [canaryJsonPath, canaryMdPath, goNoGoJsonPath, productFidelityReportPath, previewValidationReportPath].filter((p) => fs.existsSync(p));
     const contextBudgetPaths = steps
       .map((step) => parseJsonSafe(step?.result_json, {}))
       .map((result) => String(result?.context_budget_report_path || "").trim())

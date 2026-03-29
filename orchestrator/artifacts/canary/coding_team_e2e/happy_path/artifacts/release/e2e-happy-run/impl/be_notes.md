@@ -2,7 +2,7 @@
 
 ## API Contracts
 
-POST /api/login implemented.
+GET /api/login implemented.
 
 ## Shared Types
 

@@ -39,6 +39,16 @@ async function main() {
   assert.match(badJson.error, /json parse failed/);
   assert.ok(badJson.logPath);
 
+  writeFile(workspaceRoot, "sandbox/data/node_modules/pkg/tsconfig.json", "{ bad json with comments }");
+  const ignoredNodeModules = await runStaticChecks({
+    workspaceRoot,
+    filesChanged: ["sandbox/data/node_modules/pkg/tsconfig.json"],
+    taskDir,
+  });
+  assert.equal(ignoredNodeModules.checked, true);
+  assert.equal(ignoredNodeModules.ok, true);
+  assert.deepEqual(ignoredNodeModules.records, []);
+
   console.log("static_checks.test.js: all tests passed");
 }
 

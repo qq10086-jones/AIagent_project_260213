@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,15 +26,23 @@ function main() {
   const scaffold = ensureExpectedArtifacts({
     workspaceRoot,
     artifactRoot,
-    expectedArtifacts: ["impl/be_notes.md", "handoff/be_to_fe.json", "release/release_notes.md", "plan/interfaces.md"],
+    expectedArtifacts: ["impl/be_notes.md", "impl/be_changes/package.json", "handoff/be_to_fe.json", "release/release_notes.md", "release/README.md", "release/start.sh", "plan/interfaces.md", "impl/fe_changes/public/app.js"],
     stepId: "impl_be",
     taskPrompt: "Implement backend changes.",
   });
   assert.equal(scaffold.checked, true);
   assert.deepEqual(scaffold.failed, []);
   assert.ok(scaffold.created.includes("impl/be_notes.md"));
+  assert.ok(scaffold.created.includes("impl/be_changes/package.json"));
   assert.ok(scaffold.created.includes("plan/interfaces.md"));
+  assert.ok(scaffold.created.includes("impl/fe_changes/public/app.js"));
   assert.ok(fs.existsSync(path.join(rootAbs, "handoff", "be_to_fe.json")));
+  const packageJson = JSON.parse(fs.readFileSync(path.join(rootAbs, "impl", "be_changes", "package.json"), "utf8"));
+  assert.equal(packageJson.main, "server.js");
+  const readmeText = fs.readFileSync(path.join(rootAbs, "release", "README.md"), "utf8");
+  assert.match(readmeText, /npm install/);
+  const startScriptText = fs.readFileSync(path.join(rootAbs, "release", "start.sh"), "utf8");
+  assert.match(startScriptText, /node server\.js/);
   const interfacesText = fs.readFileSync(path.join(rootAbs, "plan", "interfaces.md"), "utf8");
   assert.match(interfacesText, /## GET \/api\/customers/);
 
@@ -57,7 +65,15 @@ function main() {
     stepId: "qa_verify",
     taskPrompt: "Run QA.",
   });
-  assert.equal(isQaReportValid(qaReport, rootAbs), true);
+  // scaffold output should NOT be considered valid (all checks are "pending human review")
+  assert.equal(isQaReportValid(qaReport, rootAbs), false);
+  // a real model-produced report (non-scaffold) should be valid
+  const realQaReport = JSON.stringify({
+    overall_status: "pass",
+    checks: [{ id: "check-1", status: "pass", evidence: "impl/fe_changes/app.js contains addTask function" }],
+    verified_artifacts: ["impl/fe_changes/app.js"],
+  });
+  assert.equal(isQaReportValid(realQaReport, rootAbs), true);
   assert.deepEqual(loadAcceptanceIds(rootAbs), ["A1", "A2"]);
   assert.equal(markdownHasHeadings("# Smoke Report\n## Executed Checks\n## Result Summary\n", ["smoke report", "executed checks", "result summary"]), true);
 
@@ -76,6 +92,23 @@ function main() {
   const repairedInterfacesText = fs.readFileSync(path.join(rootAbs, "plan", "interfaces.md"), "utf8");
   assert.match(repairedInterfacesText, /## POST \/api\/customers/);
 
+  const staticArchHandoff = JSON.parse(buildArtifactTemplate({
+    relPath: "handoff/architect_to_impl.json",
+    rootAbs,
+    stepId: "arch_design",
+    taskPrompt: "Workflow: coding_team_v0\nProject Type: single_file_html\nGoal: Build a landing page",
+  }));
+  assert.deepEqual(staticArchHandoff.interfaces, ["GET /", "GET /styles.css", "GET /app.js", "Event: faq.toggle"]);
+
+  const staticInterfacesText = buildArtifactTemplate({
+    relPath: "plan/interfaces.md",
+    rootAbs,
+    stepId: "arch_design",
+    taskPrompt: "Workflow: coding_team_v0\nProject Type: single_file_html\nGoal: Build a landing page",
+  });
+  assert.match(staticInterfacesText, /## GET \//);
+  assert.match(staticInterfacesText, /## Event: faq\.toggle/);
+
   console.log("artifact_scaffold.test.js: all tests passed");
 }
 
@@ -86,3 +119,4 @@ try {
   console.error(err);
   process.exit(1);
 }
+

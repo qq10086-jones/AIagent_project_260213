@@ -60,7 +60,7 @@
       },
       "primary_qwen_lane": {
         "provider": "opencode",
-        "model": "minimax-coding-plan/MiniMax-M2.7",
+        "model": "dashscope/qwen-plus-2025-04-28",
         "provider_class": "opencode-provider",
         "purpose": "generic_app impl lane — MiniMax M2.7 (qwen3-coder-plus placeholder until DashScope key is configured)"
       }

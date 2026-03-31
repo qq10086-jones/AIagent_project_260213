@@ -5,7 +5,7 @@ import { analyzeTaskRisk } from "./policy.js";
 import { validateToolPermission } from "./vnext/tool_permission_guard.js";
 import { parseJsonSafe } from "./domain/workflow_runner.js";
 import { normalizeStepStatus, validatePromptScriptBinding } from "./domain/workflow_state.js";
-import { classifyArtifactReasons, buildFailurePayload } from "./domain/workflow_artifact_audit.js";
+import { buildReleasePackPaths, classifyArtifactReasons, buildFailurePayload } from "./domain/workflow_artifact_audit.js";
 import { createWorkflowReleasePackService } from "./domain/workflow_release_pack.js";
 import { createStepBuilder } from "./domain/workflow_step_builder.js";
 import { runStepSuccessValidations } from "./domain/workflow_step_validator.js";
@@ -60,6 +60,24 @@ export function createWorkflowEngine({
   waterfallTraceService = null,
   artifactPackService = null,
 }) {
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function withTimeout(promise, timeoutMs, timeoutMessage) {
+    let timer = null;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   const { archiveReleasePackToMinio, indexReleasePackToDb, minioBucket } =
     createWorkflowReleasePackService({ pool, recordEvent, workspaceRoot, minio });
 
@@ -109,12 +127,38 @@ export function createWorkflowEngine({
     }
   }
 
-  async function succeedWorkflowRun(run) {
+  async function succeedWorkflowRun(run, { failOnPackError = true } = {}) {
     const steps = await getSteps(run.workflow_run_id);
     let pack = null;
+    const releasePaths = buildReleasePackPaths(workspaceRoot, run);
     try {
-      pack = await artifactPack.generateArtifactPack(run);
+      pack = await withTimeout(
+        artifactPack.generateArtifactPack(run),
+        15000,
+        `artifact pack generation timed out after 15000ms`,
+      );
     } catch (err) {
+      if (fs.existsSync(releasePaths.manifest_path) && fs.existsSync(releasePaths.summary_path)) {
+        await updateWorkflowRunSucceeded(pool, run.workflow_run_id);
+        if (run.run_id) {
+          await updateRunStatus(pool, run.run_id, "completed").catch(() => {});
+        }
+        await recordEvent(run.workflow_run_id, "workflow.succeeded", {
+          workflow_run_id: run.workflow_run_id,
+          adopted_existing_artifact_pack: true,
+          partial_finalization: true,
+          finalization_error: err?.message || String(err),
+        });
+        return { ok: true, adopted_existing_artifact_pack: true };
+      }
+      if (!failOnPackError) {
+        return {
+          ok: false,
+          deferred: true,
+          error_code: "WORKFLOW_FINALIZATION_FAILED",
+          error: err?.message || "workflow finalization failed",
+        };
+      }
       const errorCode = "WORKFLOW_FINALIZATION_FAILED";
       const errorMessage = err?.message || "workflow finalization failed";
       await updateWorkflowRunFailed(pool, run.workflow_run_id, errorCode, errorMessage);
@@ -127,6 +171,15 @@ export function createWorkflowEngine({
       return { ok: false, error_code: errorCode, error: errorMessage };
     }
     if (!pack.ok) {
+      if (!failOnPackError) {
+        return {
+          ok: false,
+          deferred: true,
+          error_code: "ARTIFACT_INCOMPLETE",
+          error: pack.error || "artifact pack incomplete",
+          reasons: pack.reasons || [],
+        };
+      }
       const classified = classifyArtifactReasons(pack.reasons || []);
       const failurePayload = buildFailurePayload({
         errorCode: "ARTIFACT_INCOMPLETE",
@@ -210,6 +263,41 @@ export function createWorkflowEngine({
       });
     }
     return { ok: true };
+  }
+
+  async function finalizeWorkflowRunIfReady(workflow_run_id) {
+    const run = await getRun(workflow_run_id);
+    if (!run) return { ok: false, error_code: "WORKFLOW_RUN_NOT_FOUND" };
+    if (["failed", "succeeded", "partial_failure"].includes(String(run.status || ""))) {
+      return { ok: true, skipped: true, reason: `run status ${run.status}` };
+    }
+    const steps = await getSteps(workflow_run_id);
+    if (!Array.isArray(steps) || steps.length === 0) {
+      return { ok: false, ready: false, reason: "no workflow steps found" };
+    }
+    if (steps.some((step) => normalizeStepStatus(step.status) !== "succeeded")) {
+      return { ok: false, ready: false, reason: "not all workflow steps are succeeded" };
+    }
+    const checkpoints = await listWorkflowCheckpoints(pool, workflow_run_id);
+    if (checkpoints.length < steps.length) {
+      return {
+        ok: false,
+        ready: false,
+        reason: `checkpoint count lower than step count (${checkpoints.length}/${steps.length})`,
+      };
+    }
+    if (fs.existsSync(releasePaths.manifest_path) && fs.existsSync(releasePaths.summary_path)) {
+      await updateWorkflowRunSucceeded(pool, run.workflow_run_id);
+      if (run.run_id) {
+        await updateRunStatus(pool, run.run_id, "completed").catch(() => {});
+      }
+      await recordEvent(run.workflow_run_id, "workflow.succeeded", {
+        workflow_run_id: run.workflow_run_id,
+        adopted_existing_artifact_pack: true,
+      });
+      return { ok: true, adopted_existing_artifact_pack: true };
+    }
+    return succeedWorkflowRun(run, { failOnPackError: false });
   }
 
   async function dispatchStepByIndex(workflow_run_id, stepIndex, context = null) {
@@ -605,6 +693,7 @@ export function createWorkflowEngine({
     handleTaskApproved,
     handleTaskRejected,
     handleTaskTerminal,
+    finalizeWorkflowRunIfReady,
     issueResumeToken,
     resumeFromToken,
     getWorkflowRunStatus,

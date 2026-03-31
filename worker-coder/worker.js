@@ -219,6 +219,7 @@ async function processTask(msgId, task, lifecycle) {
       if (!isSuccess) error = result.error;
     } else if (tool_name === "coding.delegate") {
       const hasFallbackFlag = Object.prototype.hasOwnProperty.call(payload, "allow_provider_fallback");
+      const requestedModel = payload.model_override || payload.model || DEFAULT_MODEL || null;
       const result = await CodingService.delegateTask({
         workspaceRoot: WORKSPACE_ROOT,
         task_prompt: payload.task_prompt || payload.prompt,
@@ -227,7 +228,7 @@ async function processTask(msgId, task, lifecycle) {
         step_id: payload.step_id || "",
         target_paths: Array.isArray(payload.target_paths) ? payload.target_paths : [],
         provider: payload.provider || DEFAULT_PROVIDER,
-        model: payload.model || DEFAULT_MODEL || null,
+        model: requestedModel,
         execution_lane: payload.execution_lane || DEFAULT_EXECUTION_LANE || null,
         allow_provider_fallback: hasFallbackFlag
           ? parseBool(payload.allow_provider_fallback, DEFAULT_ALLOW_PROVIDER_FALLBACK)

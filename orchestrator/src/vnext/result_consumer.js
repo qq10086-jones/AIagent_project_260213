@@ -44,6 +44,10 @@ export function createResultConsumer({
   const staleResultMinIdleMs = 30000;
   const staleResultBatchSize = 20;
 
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   function parseOutputField(rawOutput) {
     if (!rawOutput) return null;
     try {
@@ -82,6 +86,20 @@ export function createResultConsumer({
           console.warn(`[workflow] handleTaskTerminal failed: ${err.message}`);
           return null;
         });
+
+      if (status === "succeeded" && workflowTerminal?.workflow_run_id && typeof workflowEngine.finalizeWorkflowRunIfReady === "function") {
+        let finalizeAttempt = await workflowEngine.finalizeWorkflowRunIfReady(workflowTerminal.workflow_run_id).catch((err) => {
+          console.warn(`[workflow] finalizeWorkflowRunIfReady failed: ${err.message}`);
+          return null;
+        });
+        if (finalizeAttempt?.deferred) {
+          await sleep(1500);
+          finalizeAttempt = await workflowEngine.finalizeWorkflowRunIfReady(workflowTerminal.workflow_run_id).catch((err) => {
+            console.warn(`[workflow] finalizeWorkflowRunIfReady retry failed: ${err.message}`);
+            return null;
+          });
+        }
+      }
 
       await deliverWorkflowRuntimeNotification({
         workflowTerminal,

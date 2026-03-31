@@ -20,16 +20,40 @@ function resolveRegistryPath() {
   return CAPABILITY_REGISTRY_CANDIDATES[0];
 }
 
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function pathLikePattern(pathPrefix) {
+  const normalized = String(pathPrefix || "").trim().replace(/\\/g, "/");
+  if (!normalized) return null;
+  if (normalized === ".env*") {
+    return /(^|[\s"'`(])(?:\.env(?:\.[A-Za-z0-9._-]+)?)(?=$|[\s"'`),/\\])/i;
+  }
+  const hasWildcard = normalized.endsWith("*");
+  const clean = hasWildcard ? normalized.slice(0, -1) : normalized;
+  if (!clean) return null;
+  const escaped = escapeRegex(clean);
+  const boundaryPrefix = "(^|[\\s\"'`(])";
+  const boundarySuffix = "(?=$|[\\s\"'`),/\\\\])";
+  if (clean.endsWith("/")) {
+    return new RegExp(boundaryPrefix + escaped + "(?=\\S|$)", "i");
+  }
+  return new RegExp("(^|[\\s\"'`(/])" + escaped + boundarySuffix, "i");
+}
+
 export function analyzeTaskRisk(tool_name, payload) {
   const prompt = String(payload?.task_prompt || payload?.prompt || "");
   const reasons = [];
-  
+
   // 1. Static Pattern Matching (Heuristics)
   const highRiskPatterns = [
     { re: /\b(?:rm\s+-rf|git\s+reset\s+--hard|del\s+\/f|format\s+|mkfs|dd\s+if=)\b/i, reason: "destructive_command" },
     { re: /\b(?:drop\s+table|truncate\s+table|alter\s+table)\b/i, reason: "db_destructive_operation" },
-    { re: /\b(?:\.github\/|infra\/|deploy\/|k8s\/|Dockerfile|\.env|secret|credentials?)\b/i, reason: "sensitive_path_or_secret" },
-    { re: /(生产|正式环境|线上|密钥|数据库迁移|删除表)/i, reason: "high_risk_intent" }
+    { re: /(?:^|[\s"'`(/])(?:\.github\/|infra\/|deploy\/|k8s\/|Dockerfile)(?=$|[\s"'`),/\\])/i, reason: "sensitive_path_or_secret" },
+    { re: /(^|[\s"'`(])(?:\.env(?:\.[A-Za-z0-9._-]+)?)(?=$|[\s"'`),/\\])/i, reason: "sensitive_path_or_secret" },
+    { re: /\b(?:secret|credentials?)\b/i, reason: "sensitive_path_or_secret" },
+    { re: /(生产|正式环境|线上|密钥|数据库迁移|删除表)/i, reason: "high_risk_intent" },
   ];
 
   for (const item of highRiskPatterns) {
@@ -41,11 +65,11 @@ export function analyzeTaskRisk(tool_name, payload) {
     const registryPath = resolveRegistryPath();
     const registry = JSON.parse(fs.readFileSync(registryPath, "utf8"));
     const codingPolicy = registry.project_types?.coding_task?.policy;
-    
+
     if (codingPolicy?.manual_approve_paths) {
       for (const pathPrefix of codingPolicy.manual_approve_paths) {
-        const cleanPrefix = pathPrefix.replace("*", "");
-        if (prompt.includes(cleanPrefix)) {
+        const re = pathLikePattern(pathPrefix);
+        if (re?.test(prompt)) {
           reasons.push(`registry_manual_path:${pathPrefix}`);
         }
       }
@@ -60,6 +84,6 @@ export function analyzeTaskRisk(tool_name, payload) {
   return {
     risk_level: isHighRisk ? "high" : (tool_name.startsWith("coding.") ? "medium" : "low"),
     requires_approval: isHighRisk,
-    reasons: uniqueReasons
+    reasons: uniqueReasons,
   };
 }

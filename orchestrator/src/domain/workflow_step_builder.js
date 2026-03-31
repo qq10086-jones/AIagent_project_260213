@@ -320,6 +320,48 @@ function applyGenericAppQwenLaneDefaults({ run, stepDef, payload, runtimeConfig 
   if (laneConfig.model) payload.model = String(laneConfig.model);
 }
 
+function getExecutionLaneConfig(runtimeConfig, laneId) {
+  const runtimeWorkerCoder = runtimeConfig?.worker_coder || {};
+  const laneRegistry = runtimeWorkerCoder.execution_lanes && typeof runtimeWorkerCoder.execution_lanes === "object"
+    ? runtimeWorkerCoder.execution_lanes
+    : {};
+  const laneConfig = laneRegistry[laneId] && typeof laneRegistry[laneId] === "object"
+    ? laneRegistry[laneId]
+    : null;
+  return laneConfig;
+}
+
+function applyStepModelRoutingDefaults({ run, stepDef, payload, runtimeConfig }) {
+  if (String(run?.workflow_id || "") !== "coding_team_v0") return;
+  if (String(run?.project_type || "") !== "webapp_crm") return;
+
+  const lowRiskCodingSteps = {
+    release_pack: "primary_qwen_lane",
+  };
+  const targetLane = lowRiskCodingSteps[String(stepDef?.id || "")] || "";
+  if (targetLane && String(stepDef?.tool || "") === "coding.delegate") {
+    const laneConfig = getExecutionLaneConfig(runtimeConfig, targetLane);
+    if (!laneConfig) return;
+    payload.execution_lane = targetLane;
+    if (laneConfig.provider) payload.provider = String(laneConfig.provider);
+    if (laneConfig.model) {
+      const resolvedModel = String(laneConfig.model);
+      payload.model = resolvedModel;
+      payload.model_override = resolvedModel;
+    }
+    return;
+  }
+
+  if (String(stepDef?.id || "") === "deploy_preview") {
+    const laneConfig = getExecutionLaneConfig(runtimeConfig, "primary_qwen_lane");
+    if (laneConfig?.model) {
+      // deploy_preview is currently an ops tool, not an LLM task. Keep the planned lane
+      // as metadata so run artifacts remain aligned with the design intent.
+      payload.model_override = String(laneConfig.model);
+    }
+  }
+}
+
 function inferVerificationCommand({ stepId, targetPaths = [], workspaceRoot }) {
   const safeStepId = String(stepId || "");
   const safeTargets = Array.isArray(targetPaths) ? targetPaths : [];
@@ -516,6 +558,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     };
     applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeConfig });
     applyGenericAppQwenLaneDefaults({ run, stepDef, payload, runtimeConfig });
+    applyStepModelRoutingDefaults({ run, stepDef, payload, runtimeConfig });
     applyWorkerCodingTemplateDefaults({
       payload,
       templateRegistry: workerCodingTemplateRegistry,
@@ -568,7 +611,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         stepDef: effectiveStepDef,
         payload,
         provider: input.provider || payload.provider || "",
-        model: input.model || payload.model || "",
+        model: payload.model_override || input.model || payload.model || "",
       });
       const checked = validateBackendExecutionPacket(executionPacket);
       if (!checked.ok) {
@@ -584,7 +627,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         stepDef: effectiveStepDef,
         payload,
         provider: input.provider || payload.provider || "",
-        model: input.model || payload.model || "",
+        model: payload.model_override || input.model || payload.model || "",
       });
       const checked = validateFrontendExecutionPacket(executionPacket);
       if (!checked.ok) {
@@ -624,6 +667,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       }
       if (!payload.prompt) payload.prompt = payload.task_prompt;
       if (input.provider && !payload.provider) payload.provider = input.provider;
+      if (payload.model_override && !payload.model) payload.model = payload.model_override;
       if (input.model && !payload.model) payload.model = input.model;
       if (!Number.isFinite(Number(payload.max_runtime_s))) {
         const configured = Number(input.max_runtime_s || 0);

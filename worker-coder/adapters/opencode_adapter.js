@@ -40,6 +40,53 @@ function validateOpenCodeModelRef(model) {
   return { ok: true, normalizedModel: normalized };
 }
 
+function getOpenCodeConfigCandidates(cwd) {
+  return [
+    process.env.OPENCODE_JSON_PATH,
+    path.join(cwd, "opencode.json"),
+    "/app/opencode.json",
+  ].filter(Boolean);
+}
+
+function detectSuperpowersPlugin({ cwd }) {
+  const pluginHints = [];
+  const pluginPathCandidates = [
+    "/root/.config/opencode/plugins/superpowers.js",
+    "/root/.config/opencode/superpowers/.opencode/plugins/superpowers.js",
+    path.join(cwd, "vendor", "superpowers", ".opencode", "plugins", "superpowers.js"),
+  ];
+  for (const candidate of pluginPathCandidates) {
+    try {
+      if (fs.existsSync(candidate)) pluginHints.push(candidate);
+    } catch {}
+  }
+
+  for (const configPath of getOpenCodeConfigCandidates(cwd)) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      const plugins = Array.isArray(cfg?.plugins) ? cfg.plugins.map((item) => String(item || "").trim()).filter(Boolean) : [];
+      const matched = plugins.filter((item) => /superpowers/i.test(item));
+      if (matched.length > 0) {
+        return {
+          configured: true,
+          available: pluginHints.length > 0,
+          config_path: configPath,
+          configured_entries: matched,
+          detected_paths: pluginHints,
+        };
+      }
+    } catch {}
+  }
+
+  return {
+    configured: false,
+    available: pluginHints.length > 0,
+    config_path: null,
+    configured_entries: [],
+    detected_paths: pluginHints,
+  };
+}
+
 // MiniMax key may live in MINIMAX_API_KEY env var OR in opencode.json
 // (provider.minimax.options.apiKey).  Check both to avoid false-negative preflight.
 function hasMiniMaxKeyFromConfig() {
@@ -652,11 +699,12 @@ export async function runOpenCodeTask({
   opencodeCommand,
 }) {
   try {
+    const superpowersPlugin = detectSuperpowersPlugin({ cwd: workspaceRoot });
     if (!taskPrompt || !String(taskPrompt).trim()) {
       return {
         ok: false,
         error: "task_prompt is required for coding.delegate",
-        diagnostics: { error_code: "E_INVALID_INPUT", provider_class: "opencode-provider", provider_error_class: "REQUEST_SHAPE_ERROR" },
+        diagnostics: { error_code: "E_INVALID_INPUT", provider_class: "opencode-provider", provider_error_class: "REQUEST_SHAPE_ERROR", superpowers_plugin: superpowersPlugin },
       };
     }
 
@@ -681,6 +729,7 @@ export async function runOpenCodeTask({
           timeout: false,
           provider_class: "opencode-provider",
           provider_error_class: modelValidation.providerErrorClass,
+          superpowers_plugin: superpowersPlugin,
         },
         error: modelValidation.error,
       };
@@ -701,6 +750,7 @@ export async function runOpenCodeTask({
           timeout: false,
           provider_class: "opencode-provider",
           provider_error_class: credentialValidation.providerErrorClass,
+          superpowers_plugin: superpowersPlugin,
         },
         error: credentialValidation.error,
       };
@@ -744,6 +794,7 @@ export async function runOpenCodeTask({
         timeout: effectiveProc.timedOut,
         provider_class: "opencode-provider",
         provider_error_class: providerErrorClass,
+        superpowers_plugin: superpowersPlugin,
       },
       error: errorMsg,
     };
@@ -760,6 +811,7 @@ export async function runOpenCodeTask({
         timeout: false,
         provider_class: "opencode-provider",
         provider_error_class: "PROVIDER_EXECUTION_ERROR",
+        superpowers_plugin: detectSuperpowersPlugin({ cwd: workspaceRoot }),
       },
       error: `OpenCode internal error: ${err.message}`,
     };

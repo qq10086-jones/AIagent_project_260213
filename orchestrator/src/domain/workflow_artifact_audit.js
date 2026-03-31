@@ -423,8 +423,9 @@ export function buildProductFidelityReport({ run, releaseRoot }) {
   const genericCrudPatterns = isGenericProject
     ? [/\bentity\b/i]
     : [/\bentity\b/i, /\brecord\b/i, /\bitem\b/i];
-  const frontendSurfaceText = isSingleFileHtml
-    ? [feText, fePublicJsText, fePublicHtmlText].filter(Boolean).join("\n")
+  const hasPublishedFrontendSurface = Boolean(fePublicHtmlText || fePublicJsText);
+  const frontendSurfaceText = (isSingleFileHtml || hasPublishedFrontendSurface)
+    ? [fePublicHtmlText, fePublicJsText].filter(Boolean).join("\n")
     : feText;
   const frontendSurfaceLines = countNonEmptyLines(frontendSurfaceText);
   const frontendSurfaceBytes = Buffer.byteLength(frontendSurfaceText || "", "utf8");

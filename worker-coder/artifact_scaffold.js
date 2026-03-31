@@ -1,4 +1,4 @@
-ï»¿import fs from "fs";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -10,6 +10,131 @@ function inferProjectType(taskPrompt = "") {
   return match ? String(match[1]).trim().toLowerCase() : "";
 }
 
+function buildCrmBackendTemplate() {
+  return [
+    "import express from 'express';",
+    "import cors from 'cors';",
+    "import path from 'path';",
+    "import { fileURLToPath } from 'url';",
+    "import { randomUUID } from 'crypto';",
+    "",
+    "const __filename = fileURLToPath(import.meta.url);",
+    "const __dirname = path.dirname(__filename);",
+    "const app = express();",
+    "const PORT = Number(process.env.PORT || 3000);",
+    "const publicDir = path.join(__dirname, 'public');",
+    "",
+    "app.use(cors());",
+    "app.use(express.json());",
+    "app.use(express.static(publicDir));",
+    "",
+    "const customerStore = new Map();",
+    "function createCustomer(data) {",
+    "  const now = new Date().toISOString();",
+    "  const customer = {",
+    "    id: 'cust_' + randomUUID(),",
+    "    name: String(data.name || ''),",
+    "    email: String(data.email || ''),",
+    "    phone: String(data.phone || ''),",
+    "    company: String(data.company || ''),",
+    "    notes: String(data.notes || ''),",
+    "    createdAt: now,",
+    "    updatedAt: now,",
+    "  };",
+    "  customerStore.set(customer.id, customer);",
+    "  return customer;",
+    "}",
+    "createCustomer({ name: 'Alice Chen', email: 'alice@example.com', phone: '13800138000', company: 'Acme Corp', notes: 'Enterprise account' });",
+    "createCustomer({ name: 'Bob Wang', email: 'bob@example.com', phone: '13900139000', company: 'TechStart Inc', notes: 'Needs onboarding follow-up' });",
+    "createCustomer({ name: 'Carol Liu', email: 'carol@example.com', phone: '13700137000', company: 'Global Solutions', notes: 'Renewal due next month' });",
+    "function filterCustomers(search) {",
+    "  const normalized = String(search || '').trim().toLowerCase();",
+    "  const rows = Array.from(customerStore.values());",
+    "  if (!normalized) return rows;",
+    "  return rows.filter((customer) => customer.name.toLowerCase().includes(normalized) || customer.email.toLowerCase().includes(normalized) || customer.company.toLowerCase().includes(normalized));",
+    "}",
+    "app.get('/api/customers', (req, res) => {",
+    "  const filtered = filterCustomers(req.query.search).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));",
+    "  res.json({ success: true, data: filtered, pagination: { page: 1, limit: filtered.length || 1, total: filtered.length, totalPages: 1 } });",
+    "});",
+    "app.get('/api/customers/:id', (req, res) => {",
+    "  const customer = customerStore.get(String(req.params.id || ''));",
+    "  if (!customer) return res.status(404).json({ success: false, error: 'Customer not found' });",
+    "  return res.json({ success: true, data: customer });",
+    "});",
+    "app.post('/api/customers', (req, res) => {",
+    "  const name = String(req.body?.name || '').trim();",
+    "  const email = String(req.body?.email || '').trim();",
+    "  if (!name || !email) return res.status(400).json({ success: false, error: 'name and email are required' });",
+    "  return res.status(201).json({ success: true, data: createCustomer(req.body || {}) });",
+    "});",
+    "app.put('/api/customers/:id', (req, res) => {",
+    "  const existing = customerStore.get(String(req.params.id || ''));",
+    "  if (!existing) return res.status(404).json({ success: false, error: 'Customer not found' });",
+    "  const updated = { ...existing, ...req.body, id: existing.id, createdAt: existing.createdAt, updatedAt: new Date().toISOString() };",
+    "  customerStore.set(updated.id, updated);",
+    "  return res.json({ success: true, data: updated });",
+    "});",
+    "app.delete('/api/customers/:id', (req, res) => {",
+    "  if (!customerStore.has(String(req.params.id || ''))) return res.status(404).json({ success: false, error: 'Customer not found' });",
+    "  customerStore.delete(String(req.params.id || ''));",
+    "  return res.status(204).send();",
+    "});",
+    "app.get('/health', (_req, res) => res.json({ success: true, status: 'ok' }));",
+    "app.get('/', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));",
+    "app.listen(PORT, () => console.log('Customer API server listening on http://localhost:' + PORT));",
+    "export default app;",
+    "",
+  ].join('\n');
+}
+
+function buildCrmFrontendHtmlTemplate() {
+  return [
+    '<!doctype html>',
+    '<html lang="en">',
+    '<head>',
+    '  <meta charset="utf-8" />',
+    '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
+    '  <title>Customer Workspace</title>',
+    '  <style>body{margin:0;font-family:Georgia,serif;background:#f4efe6;color:#1e2430}.shell{max-width:1080px;margin:0 auto;padding:28px 20px}.hero,.panel{background:#fffaf3;border:1px solid #d7c9b4;border-radius:22px;padding:20px;box-shadow:0 12px 30px rgba(0,0,0,.06)}.layout{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;margin-top:18px}.toolbar,.actions,form{display:grid;gap:12px}.toolbar{grid-template-columns:1fr auto}.list{display:grid;gap:12px}.card{border:1px solid #d7c9b4;border-radius:18px;padding:14px;background:#fffdf9}.detail-grid{display:grid;grid-template-columns:100px 1fr;gap:8px 12px}.empty{padding:14px;border:1px dashed #d7c9b4;border-radius:16px;color:#5f6777}.primary{background:#145b4c;color:#fff;border:none;border-radius:999px;padding:10px 14px}.secondary,.danger{border:none;border-radius:999px;padding:10px 14px}.secondary{background:#efe5d6}.danger{background:#f8dfd7;color:#a33e2b}input,textarea{width:100%;padding:11px 12px;border:1px solid #c8b89f;border-radius:14px;background:#fffdf9;font:inherit}textarea{min-height:100px}@media(max-width:820px){.layout{grid-template-columns:1fr}}</style>',
+    '</head>',
+    '<body>',
+    '  <div class="shell">',
+    '    <section class="hero">',
+    '      <p>Customer Relationship Desk</p>',
+    '      <h1>Keep every customer conversation in one calm place.</h1>',
+    '      <div class="actions"><button class="primary" id="heroAddCustomer">Add Customer</button><button class="secondary" id="heroRefreshCustomers">Refresh List</button></div>',
+    '    </section>',
+    '    <div class="layout">',
+    '      <section class="panel"><div class="toolbar"><input id="searchInput" type="search" placeholder="Search by customer, email, or company" /><button class="secondary" id="searchButton">Search</button></div><div id="customerList" class="list"></div></section>',
+    '      <aside class="panel"><div id="detailEmpty" class="empty">Select a customer to inspect account details and notes.</div><div id="detailContent" hidden><div class="actions"><button class="primary" id="editCustomerButton">Edit</button><button class="danger" id="deleteCustomerButton">Delete</button></div><dl class="detail-grid"><dt>Name</dt><dd id="detailName"></dd><dt>Email</dt><dd id="detailEmail"></dd><dt>Phone</dt><dd id="detailPhone"></dd><dt>Company</dt><dd id="detailCompany"></dd><dt>Notes</dt><dd id="detailNotes"></dd><dt>Updated</dt><dd id="detailUpdatedAt"></dd></dl></div><h3 id="formTitle">Add Customer</h3><form id="customerForm"><input id="customerId" type="hidden" /><input id="nameInput" placeholder="Customer name" required /><input id="emailInput" type="email" placeholder="customer@example.com" required /><input id="phoneInput" placeholder="Phone number" /><input id="companyInput" placeholder="Company name" /><textarea id="notesInput" placeholder="Relationship notes and next step"></textarea><div class="actions"><button class="primary" type="submit" id="saveCustomerButton">Save Customer</button><button class="secondary" type="button" id="resetFormButton">Reset</button></div><div id="formFeedback"></div></form></aside>',
+    '    </div>',
+    '  </div>',
+    '  <script type="module" src="./app.js"></script>',
+    '</body>',
+    '</html>',
+    '',
+  ].join('\n');
+}
+
+function buildCrmFrontendJsTemplate() {
+  return [
+    "const state={customers:[],selectedCustomerId:null,lastSearch:''};",
+    "const refs={list:document.getElementById('customerList'),searchInput:document.getElementById('searchInput'),searchButton:document.getElementById('searchButton'),heroAddCustomer:document.getElementById('heroAddCustomer'),heroRefreshCustomers:document.getElementById('heroRefreshCustomers'),detailEmpty:document.getElementById('detailEmpty'),detailContent:document.getElementById('detailContent'),detailName:document.getElementById('detailName'),detailEmail:document.getElementById('detailEmail'),detailPhone:document.getElementById('detailPhone'),detailCompany:document.getElementById('detailCompany'),detailNotes:document.getElementById('detailNotes'),detailUpdatedAt:document.getElementById('detailUpdatedAt'),editCustomerButton:document.getElementById('editCustomerButton'),deleteCustomerButton:document.getElementById('deleteCustomerButton'),form:document.getElementById('customerForm'),formTitle:document.getElementById('formTitle'),feedback:document.getElementById('formFeedback'),customerId:document.getElementById('customerId'),nameInput:document.getElementById('nameInput'),emailInput:document.getElementById('emailInput'),phoneInput:document.getElementById('phoneInput'),companyInput:document.getElementById('companyInput'),notesInput:document.getElementById('notesInput'),resetFormButton:document.getElementById('resetFormButton')};",
+    "async function apiFetch(url,options={}){const response=await fetch(url,options);if(response.status===204)return{success:true};const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||body.message||'Request failed');return body;}",
+    "function escapeHtml(value){return String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');}",
+    "function renderList(){if(!state.customers.length){refs.list.innerHTML='<div class=\"empty\">No customers matched this view yet.</div>';return;}refs.list.innerHTML=state.customers.map((customer)=>'<article class=\"card\" data-customer-id=\"'+customer.id+'\"><strong>'+escapeHtml(customer.name)+'</strong><div>'+escapeHtml(customer.email)+'</div><div>'+escapeHtml(customer.company||'Independent Account')+'</div><div class=\"actions\"><button class=\"secondary\" type=\"button\" data-action=\"view\">View</button><button class=\"primary\" type=\"button\" data-action=\"edit\">Edit</button></div></article>').join('');}",
+    "function renderDetail(customer){if(!customer){refs.detailEmpty.hidden=false;refs.detailContent.hidden=true;return;}refs.detailEmpty.hidden=true;refs.detailContent.hidden=false;refs.detailName.textContent=customer.name||'';refs.detailEmail.textContent=customer.email||'';refs.detailPhone.textContent=customer.phone||'No phone recorded';refs.detailCompany.textContent=customer.company||'Independent Account';refs.detailNotes.textContent=customer.notes||'No notes yet';refs.detailUpdatedAt.textContent=new Date(customer.updatedAt||customer.createdAt||Date.now()).toLocaleString();}",
+    "function resetForm(customer=null){refs.feedback.textContent='';refs.customerId.value=customer?.id||'';refs.nameInput.value=customer?.name||'';refs.emailInput.value=customer?.email||'';refs.phoneInput.value=customer?.phone||'';refs.companyInput.value=customer?.company||'';refs.notesInput.value=customer?.notes||'';refs.formTitle.textContent=customer?'Edit Customer':'Add Customer';}",
+    "async function loadCustomers(search=state.lastSearch){state.lastSearch=String(search||'').trim();const suffix=state.lastSearch?'?search='+encodeURIComponent(state.lastSearch):'';const payload=await apiFetch('/api/customers'+suffix);state.customers=Array.isArray(payload.data)?payload.data:[];if(!state.customers.some((customer)=>customer.id===state.selectedCustomerId)){state.selectedCustomerId=state.customers[0]?.id||null;}renderList();renderDetail(state.customers.find((customer)=>customer.id===state.selectedCustomerId)||null);}",
+    "async function selectCustomer(customerId){const payload=await apiFetch('/api/customers/'+customerId);state.selectedCustomerId=payload.data?.id||customerId;renderList();renderDetail(payload.data||null);}",
+    "async function submitForm(event){event.preventDefault();refs.feedback.textContent='';const body={name:refs.nameInput.value.trim(),email:refs.emailInput.value.trim(),phone:refs.phoneInput.value.trim(),company:refs.companyInput.value.trim(),notes:refs.notesInput.value.trim()};if(!body.name||!body.email){refs.feedback.textContent='Name and email are required.';return;}const customerId=refs.customerId.value.trim();const method=customerId?'PUT':'POST';const endpoint=customerId?'/api/customers/'+customerId:'/api/customers';try{const payload=await apiFetch(endpoint,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});resetForm();await loadCustomers(state.lastSearch);if(payload.data?.id)await selectCustomer(payload.data.id);}catch(error){refs.feedback.textContent=error.message||'Unable to save customer.';}}",
+    "async function deleteSelectedCustomer(){if(!state.selectedCustomerId)return;try{await apiFetch('/api/customers/'+state.selectedCustomerId,{method:'DELETE'});state.selectedCustomerId=null;resetForm();await loadCustomers(state.lastSearch);}catch(error){refs.feedback.textContent=error.message||'Unable to delete customer.';}}",
+    "refs.searchButton?.addEventListener('click',()=>loadCustomers(refs.searchInput.value));refs.heroRefreshCustomers?.addEventListener('click',()=>loadCustomers(refs.searchInput.value));refs.heroAddCustomer?.addEventListener('click',()=>resetForm());refs.resetFormButton?.addEventListener('click',()=>resetForm());refs.form?.addEventListener('submit',submitForm);refs.editCustomerButton?.addEventListener('click',()=>{const customer=state.customers.find((entry)=>entry.id===state.selectedCustomerId)||null;resetForm(customer);});refs.deleteCustomerButton?.addEventListener('click',deleteSelectedCustomer);refs.list?.addEventListener('click',(event)=>{const button=event.target.closest('button');const card=event.target.closest('[data-customer-id]');if(!button||!card)return;const customerId=card.getAttribute('data-customer-id');if(!customerId)return;if(button.dataset.action==='edit'){const customer=state.customers.find((entry)=>entry.id===customerId)||null;resetForm(customer);renderDetail(customer);state.selectedCustomerId=customerId;renderList();return;}selectCustomer(customerId).catch((error)=>{refs.feedback.textContent=error.message||'Unable to load customer.';});});",
+    "loadCustomers().catch((error)=>{refs.feedback.textContent=error.message||'Unable to load customers.';});",
+    "",
+  ].join('\n');
+}
 export function ensureExpectedArtifacts({ workspaceRoot, artifactRoot, expectedArtifacts, stepId, taskPrompt }) {
   const relRoot = String(artifactRoot || "").trim().replace(/\\/g, "/");
   const expected = Array.isArray(expectedArtifacts) ? expectedArtifacts : [];
@@ -267,18 +392,22 @@ ${prompt}
     }
     return `# Workplan
 
-## Frontend
-- implement customer list page
-- implement detail page
-- implement create/edit form and validation states
+## BE Tasks
+- [ ] T-BE-1: Implement GET /api/customers with stable JSON list output | verify: GET /api/customers returns HTTP 200 with an array payload
+- [ ] T-BE-2: Implement GET /api/customers/:id with not-found handling | verify: GET /api/customers/:id returns HTTP 200 for a seeded record and 404 for an unknown id
+- [ ] T-BE-3: Implement POST and PUT handlers with request validation | verify: invalid payload returns 400 and valid create/update returns persisted customer JSON
+- [ ] T-BE-4: Wire static hosting for impl/be_changes/public and root route delivery | verify: start with PORT=13099 node server.js and GET / returns HTTP 200 with HTML
 
-## Backend
-- implement list/detail/create/update endpoints
-- align request and response schema with frontend needs
+## FE Tasks
+- [ ] T-FE-1: Build customer list view wired to GET /api/customers | verify: customer list renders records returned by GET /api/customers
+- [ ] T-FE-2: Build detail view for the selected customer record | verify: selecting a customer loads detail data without a full page reload
+- [ ] T-FE-3: Build create/edit form using same-origin API requests only | verify: form submit sends POST or PUT to /api/customers using relative paths
+- [ ] T-FE-4: Add validation and error-state rendering for failed API responses | verify: invalid form input or failed request shows a visible error message
 
-## QA
-- verify list/detail/create-edit happy path
-- verify basic validation and regression coverage
+## QA Tasks
+- [ ] T-QA-1: Verify GET / returns HTML and smoke evidence is captured | verify: smoke_result.json records root_check status 200
+- [ ] T-QA-2: Verify primary API endpoint evidence is captured when available | verify: smoke_result.json records api_check status and response_sample when an API endpoint exists
+- [ ] T-QA-3: Verify list/detail/create-edit journeys against acceptance criteria | verify: qa_report.json cites concrete file and endpoint evidence for each primary journey
 
 Generated at: ${now}
 Task prompt snippet:
@@ -391,15 +520,27 @@ ${prompt}
 `;
   }
   if (rel === "impl/be_changes/server.js") {
-    return `// auto-generated scaffold â€” replace with actual implementation\n// Task: ${prompt.slice(0, 120).replace(/\n/g, " ")}\nexport function placeholderHandler() {\n  return { status: "scaffold", message: "pending human review" };\n}\n`;
+    if (projectType === "webapp_crm") {
+      return buildCrmBackendTemplate();
+    }
+    return `// auto-generated scaffold ? replace with actual implementation\n// Task: ${prompt.slice(0, 120).replace(/\n/g, " ")}\nexport function placeholderHandler() {\n  return { status: "scaffold", message: "pending human review" };\n}\n`;
   }
   if (rel === "impl/fe_changes/app.js") {
-    return `// auto-generated scaffold â€” replace with actual implementation\n// Task: ${prompt.slice(0, 120).replace(/\n/g, " ")}\nexport function placeholderRender() {\n  return "pending human review";\n}\n`;
+    if (projectType === "webapp_crm") {
+      return buildCrmFrontendJsTemplate();
+    }
+    return `// auto-generated scaffold ? replace with actual implementation\n// Task: ${prompt.slice(0, 120).replace(/\n/g, " ")}\nexport function placeholderRender() {\n  return "pending human review";\n}\n`;
   }
   if (rel === "impl/fe_changes/public/app.js") {
-    return `// auto-generated scaffold â€” replace with actual implementation\n// Task: ${prompt.slice(0, 120).replace(/\n/g, " ")}\nexport function placeholderRender() {\n  return "pending human review";\n}\n`;
+    if (projectType === "webapp_crm") {
+      return buildCrmFrontendJsTemplate();
+    }
+    return `// auto-generated scaffold ? replace with actual implementation\n// Task: ${prompt.slice(0, 120).replace(/\n/g, " ")}\nexport function placeholderRender() {\n  return "pending human review";\n}\n`;
   }
   if (rel === "impl/fe_changes/public/index.html") {
+    if (projectType === "webapp_crm") {
+      return buildCrmFrontendHtmlTemplate();
+    }
     return `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1" />\n    <title>Scaffold App</title>\n    <link rel="stylesheet" href="./styles.css" />\n  </head>\n  <body>\n    <div id="app">pending human review</div>\n    <script type="module" src="./app.js"></script>\n  </body>\n</html>\n`;
   }
   if (rel === "impl/fe_changes/public/styles.css") {
@@ -407,10 +548,12 @@ ${prompt}
   }
   if (rel === "impl/be_changes/package.json") {
     return JSON.stringify({
-      name: "generated-app",
+      name: projectType === "webapp_crm" ? "customer-workspace" : "generated-app",
       version: "1.0.0",
       main: "server.js",
+      type: "module",
       dependencies: {
+        cors: "^2.8.5",
         express: "^4.19.2"
       }
     }, null, 2);
@@ -625,7 +768,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
       }
     }
     if (rel === "plan/interfaces.md" && ext === ".md") {
-      // Only require the generic "interfaces" section çª¶ãƒ»specific endpoint headings vary by project type
+      // Only require the generic "interfaces" section â€Especific endpoint headings vary by project type
       const expectedHeadings = ["interfaces"];
       const staticMismatch = projectType === "single_file_html" && /api\/customers|customer detail|create.*customer|update.*customer/i.test(raw);
       if (!markdownHasHeadings(raw, expectedHeadings) || staticMismatch) {
@@ -635,9 +778,46 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (rel === "plan/workplan.md" && ext === ".md") {
       const staticMismatch = projectType === "single_file_html" && (/customer|crm/i.test(raw) || /##\s*BE Tasks[\s\S]*\bN\/A\b/i.test(raw));
-      if (staticMismatch) {
+      const genericMismatch = projectType !== "single_file_html" && (
+        !/##\s*BE Tasks/i.test(raw)
+        || !/##\s*FE Tasks/i.test(raw)
+        || !/\|\s*verify:/i.test(raw)
+      );
+      if (staticMismatch || genericMismatch) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
-        return { repaired: true, reason: "workplan_static_html_repaired" };
+        return {
+          repaired: true,
+          reason: staticMismatch ? "workplan_static_html_repaired" : "workplan_structured_format_repaired",
+        };
+      }
+    }
+    if (rel === "impl/be_changes/server.js" && ext === ".js" && projectType === "webapp_crm") {
+      const hasCustomerRoutes = /app\.get\(['"]\/api\/customers['"]/i.test(raw)
+        && /app\.post\(['"]\/api\/customers['"]/i.test(raw)
+        && /app\.put\(['"]\/api\/customers\/:id['"]/i.test(raw);
+      const servesPublicDir = /express\.static\(/i.test(raw) && /public/i.test(raw);
+      const rootRouteUsesIndex = /app\.get\(['"]\/['"]/i.test(raw) && /index\.html/i.test(raw);
+      const catchAllBeforeApi = /app\.get\(["']\*["'][\s\S]*app\.get\(['"]\/api\/customers['"]/i.test(raw);
+      const hasMojibake = /[???]/.test(raw) || /æœ|å|é¦|âš|ç›|åˆ|è®/i.test(raw);
+      if (!hasCustomerRoutes || !servesPublicDir || !rootRouteUsesIndex || catchAllBeforeApi || hasMojibake) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "crm_backend_contract_repaired" };
+      }
+    }
+    if ((rel === "impl/fe_changes/app.js" || rel === "impl/fe_changes/public/app.js") && ext === ".js" && projectType === "webapp_crm") {
+      const hasCustomerJourney = /loadCustomers|\/api\/customers|customerForm|addCustomerBtn/i.test(raw);
+      const hasPlaceholder = /\bplaceholder\b(?!\s*=)|pending human review|auto-generated|scaffold/i.test(raw);
+      if (!hasCustomerJourney || hasPlaceholder) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "crm_frontend_js_repaired" };
+      }
+    }
+    if (rel === "impl/fe_changes/public/index.html" && ext === ".html" && projectType === "webapp_crm") {
+      const hasCustomerUi = /customer|detail|search|form/i.test(raw);
+      const hasPlaceholder = /\bpending human review\b|>Scaffold App<|auto-generated|placeholder/i.test(raw);
+      if (!hasCustomerUi || hasPlaceholder) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "crm_frontend_html_repaired" };
       }
     }
     if (file === "acceptance.json" && ext === ".json") {
@@ -759,4 +939,5 @@ export function markdownHasHeadings(rawText, expected = []) {
     .map((line) => line.replace(/^#{1,6}\s+/, "").trim());
   return expected.every((item) => headings.some((heading) => heading.includes(String(item).toLowerCase())));
 }
+
 

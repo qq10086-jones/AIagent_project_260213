@@ -312,6 +312,65 @@ async function testRunOpenCodeTaskRequiresMiniMaxCredential() {
   }
 }
 
+async function testRunOpenCodeTaskReportsConfiguredSuperpowersPlugin() {
+  const prevOpenCodeJsonPath = process.env.OPENCODE_JSON_PATH;
+  const isolatedCwd = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-superpowers-"));
+  const configPath = path.join(isolatedCwd, "opencode.json");
+  fs.writeFileSync(configPath, JSON.stringify({
+    plugins: ["/root/.config/opencode/plugins/superpowers.js"],
+    provider: {},
+  }, null, 2));
+  process.env.OPENCODE_JSON_PATH = configPath;
+  try {
+    const result = await runOpenCodeTask({
+      workspaceRoot: isolatedCwd,
+      taskPrompt: "configured superpowers plugin",
+      model: "mock-model",
+      opencodeCommand: [process.execPath, "-e", "console.log('plugin ok')"],
+      maxRuntimeS: 10,
+    });
+    if (shouldSkipSpawn(result)) {
+      console.log("opencode superpowers-configured test skipped due sandbox EPERM");
+      return;
+    }
+    assert.strictEqual(result.ok, true, JSON.stringify(result));
+    assert.strictEqual(result.diagnostics.superpowers_plugin.configured, true);
+    assert.ok(Array.isArray(result.diagnostics.superpowers_plugin.configured_entries));
+    assert.ok(result.diagnostics.superpowers_plugin.configured_entries.some((item) => /superpowers/i.test(String(item))));
+  } finally {
+    if (prevOpenCodeJsonPath === undefined) delete process.env.OPENCODE_JSON_PATH;
+    else process.env.OPENCODE_JSON_PATH = prevOpenCodeJsonPath;
+    fs.rmSync(isolatedCwd, { recursive: true, force: true });
+  }
+}
+
+async function testRunOpenCodeTaskReportsMissingSuperpowersPlugin() {
+  const prevOpenCodeJsonPath = process.env.OPENCODE_JSON_PATH;
+  const isolatedCwd = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-no-superpowers-"));
+  const configPath = path.join(isolatedCwd, "opencode.json");
+  fs.writeFileSync(configPath, JSON.stringify({ provider: {} }, null, 2));
+  process.env.OPENCODE_JSON_PATH = configPath;
+  try {
+    const result = await runOpenCodeTask({
+      workspaceRoot: isolatedCwd,
+      taskPrompt: "missing superpowers plugin",
+      model: "mock-model",
+      opencodeCommand: [process.execPath, "-e", "console.log('plugin absent ok')"],
+      maxRuntimeS: 10,
+    });
+    if (shouldSkipSpawn(result)) {
+      console.log("opencode superpowers-missing test skipped due sandbox EPERM");
+      return;
+    }
+    assert.strictEqual(result.ok, true, JSON.stringify(result));
+    assert.strictEqual(result.diagnostics.superpowers_plugin.configured, false);
+  } finally {
+    if (prevOpenCodeJsonPath === undefined) delete process.env.OPENCODE_JSON_PATH;
+    else process.env.OPENCODE_JSON_PATH = prevOpenCodeJsonPath;
+    fs.rmSync(isolatedCwd, { recursive: true, force: true });
+  }
+}
+
 async function main() {
   await testBuildInvocation();
   await testRunOpenCodeTaskWithMockCommand();

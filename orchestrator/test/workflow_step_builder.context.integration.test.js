@@ -321,6 +321,11 @@ test("deploy_preview payload includes release metadata and preview defaults", ()
   assert.equal(payload.release_manifest_path, "artifacts/release/preview-run/meta/run_manifest.json");
   assert.equal(payload.release_notes_path, "artifacts/release/preview-run/release/release_notes.md");
   assert.deepEqual(payload.target_paths, ["sandbox/crm_site/"]);
+  assert.deepEqual(payload.project_root_candidates, [
+    "artifacts/release/preview-run/impl/be_changes",
+    "artifacts/release/preview-run/impl/fe_changes/public",
+    "sandbox/crm_site/",
+  ]);
   assert.equal(payload.render_service_id, "");
 });
 

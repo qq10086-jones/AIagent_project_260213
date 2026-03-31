@@ -372,6 +372,68 @@ test("buildProductFidelityReport applies domain pack checks for webapp_crm proje
   assert.equal(domainNounCheck.pass, true, "domain nouns should be found in crm impl");
 });
 
+test("buildProductFidelityReport prefers published frontend surface when public assets exist", () => {
+  const releaseRoot = makeWorkspace();
+  writeText(path.join(releaseRoot, "impl", "fe_changes", "app.js"), [
+    "export function showReservationPlaceholder() {",
+    "  return 'placeholder';",
+    "}",
+    "export function renderMenuItem(item) {",
+    "  return item.name;",
+    "}",
+  ].join("\n"));
+  writeText(path.join(releaseRoot, "impl", "fe_changes", "public", "index.html"), [
+    "<!doctype html>",
+    "<html>",
+    "<body>",
+    "  <main>",
+    "    <h1>Customer Workspace</h1>",
+    "    <button id='addCustomerBtn'>Add Customer</button>",
+    "    <form id='customerForm'></form>",
+    "  </main>",
+    "  <script src='app.js'></script>",
+    "</body>",
+    "</html>",
+  ].join("\n"));
+  writeText(path.join(releaseRoot, "impl", "fe_changes", "public", "app.js"), [
+    "async function loadCustomers() {",
+    "  const res = await fetch('/api/customers');",
+    "  return res.json();",
+    "}",
+    "document.getElementById('addCustomerBtn')?.addEventListener('click', loadCustomers);",
+  ].join("\n"));
+  writeText(path.join(releaseRoot, "impl", "be_changes", "server.js"), [
+    "export function listCustomersHandler() {",
+    "  return [{ id: 'cust-001', name: 'Acme Corp' }];",
+    "}",
+    "export function createCustomerHandler(input) {",
+    "  return { id: 'cust-new', ...input };",
+    "}",
+  ].join("\n"));
+  writeJson(path.join(releaseRoot, "verify", "qa_report.json"), {
+    overall_status: "pass",
+    checks: [{ check_id: "qa-1", layer: "semantic", description: "Customer journey", status: "pass", detail: "customer list and add flow verified" }],
+    verified_artifacts: ["A1"],
+  });
+  writeJson(path.join(releaseRoot, "preview", "preview_runtime.json"), {
+    project_root: "/workspace/sandbox/crm_site",
+  });
+
+  const result = buildProductFidelityReport({
+    run: {
+      workflow_run_id: "wf-crm-public-1",
+      run_id: "run-crm-public-1",
+      workflow_id: "coding_team_v0",
+      project_type: "webapp_crm",
+    },
+    releaseRoot,
+  });
+
+  assert.equal(result.reasoning.find((item) => item.criterion === "placeholder_free")?.pass, true);
+  assert.equal(result.reasoning.find((item) => item.criterion === "domain_not_generic_crud")?.pass, true);
+  assert.ok(["mid", "high"].includes(result.perceptual_quality.score));
+});
+
 test("buildGoNoGoResult blocks GO when fidelityGateMode=blocking and fidelity warns", () => {
   const result = buildGoNoGoResult({
     run: {

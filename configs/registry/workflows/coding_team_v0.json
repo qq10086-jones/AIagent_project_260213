@@ -33,6 +33,12 @@
       ]
     },
     {
+      "id": "smoke_test",
+      "role": "qa",
+      "tool": "coding.execute",
+      "gate": "acceptance"
+    },
+    {
       "id": "qa_verify",
       "role": "qa",
       "tool": "coding.execute",

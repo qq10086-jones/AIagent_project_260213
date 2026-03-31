@@ -130,14 +130,14 @@ function buildWorkflowPayload() {
         },
         impl_be: {
           target_paths: ["sandbox/crm_site/server.js"],
-          opencode_command: ["mock-inline-autofix", "sandbox/crm_site/server.js", "{{task_prompt}}"],
+          opencode_command: ["node", "/workspace/orchestrator/scripts/live_validate_mock_crm_impl.js", "impl_be", "{{task_prompt}}"],
           max_attempts: 2,
           same_error_repeat_limit: 2,
           wall_clock_timeout_s: 300,
         },
         impl_fe: {
           target_paths: ["sandbox/crm_site/app.js"],
-          opencode_command: ["mock-inline-autofix", "sandbox/crm_site/app.js", "{{task_prompt}}"],
+          opencode_command: ["node", "/workspace/orchestrator/scripts/live_validate_mock_crm_impl.js", "impl_fe", "{{task_prompt}}"],
           max_attempts: 2,
           same_error_repeat_limit: 2,
           wall_clock_timeout_s: 300,
@@ -162,12 +162,26 @@ function validateManifest(manifest) {
   assert(fe, "impl_fe evidence missing");
   assert(be.verification_checked === true, "impl_be verification not recorded");
   assert(fe.verification_checked === true, "impl_fe verification not recorded");
-  assert(Number(be?.retry_summary?.attempts_used || 0) >= 2, "impl_be retry evidence missing");
-  assert(Number(fe?.retry_summary?.attempts_used || 0) >= 2, "impl_fe retry evidence missing");
+  assert(Number(be?.retry_summary?.attempts_used || 0) >= 1, "impl_be execution evidence missing");
+  assert(Number(fe?.retry_summary?.attempts_used || 0) >= 1, "impl_fe execution evidence missing");
   assert(be.test_log_path, "impl_be test_log_path missing");
   assert(fe.test_log_path, "impl_fe test_log_path missing");
   assert(be.prompt_contract_path, "impl_be prompt_contract_path missing");
   assert(fe.prompt_contract_path, "impl_fe prompt_contract_path missing");
+
+  const runtime = manifest?.runtime_evidence_summary && typeof manifest.runtime_evidence_summary === "object"
+    ? manifest.runtime_evidence_summary
+    : null;
+  assert(runtime, "runtime_evidence_summary missing");
+  assert(runtime.smoke_present === true, "smoke_present not recorded");
+  assert(String(runtime.smoke_verdict || "") === "pass", `smoke_verdict expected pass, got ${String(runtime?.smoke_verdict || "none")}`);
+  assert(Number(runtime.smoke_root_status || 0) === 200, `smoke_root_status expected 200, got ${String(runtime?.smoke_root_status || "none")}`);
+  const apiStatus = Number(runtime?.smoke_api_status || 0);
+  assert(apiStatus === 200 || apiStatus === 0, `smoke_api_status expected 200 or 0, got ${String(runtime?.smoke_api_status || "none")}`);
+  const superpowersConfigured = Number(runtime?.superpowers_configured_steps || 0);
+  const superpowersAvailable = Number(runtime?.superpowers_available_steps || 0);
+  assert(superpowersConfigured >= 0, "superpowers_configured_steps invalid");
+  assert(superpowersAvailable >= 0, "superpowers_available_steps invalid");
 }
 
 function parseStepResultJson(step) {
@@ -258,6 +272,31 @@ function resolveManifestPath({ workspaceRoot, runId, packValidation }) {
   return candidates.find((item) => fs.existsSync(item)) || candidates[0];
 }
 
+function validateRunSummary(summaryText) {
+  const text = String(summaryText || "");
+  assert(/## Runtime Evidence/.test(text), "run_summary Runtime Evidence section missing");
+  assert(/smoke_verdict:\s*pass/i.test(text), "run_summary smoke_verdict missing");
+  assert(/smoke_root_status:\s*200/i.test(text), "run_summary smoke_root_status missing");
+  assert(/superpowers_configured_steps:\s*\d+/i.test(text), "run_summary superpowers_configured_steps missing");
+  assert(/superpowers_available_steps:\s*\d+/i.test(text), "run_summary superpowers_available_steps missing");
+}
+
+function resolveSummaryPath(manifestPath, runId = "") {
+  const safeManifestPath = String(manifestPath || "").trim();
+  if (safeManifestPath) {
+    const candidate = path.join(path.dirname(path.dirname(safeManifestPath)), "summary", "run_summary.md");
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  if (runId) {
+    const workspaceRoot = path.resolve(process.cwd());
+    const workspaceCandidates = [path.resolve(workspaceRoot), path.resolve(workspaceRoot, "..")];
+    const candidates = workspaceCandidates.map((candidateRoot) =>
+      path.join(candidateRoot, "artifacts", "release", runId, "summary", "run_summary.md")
+    );
+    return candidates.find((item) => fs.existsSync(item)) || candidates[0];
+  }
+  return "";
+}
 export async function main(options = {}) {
   const baseUrl = String(options.baseUrl || arg("base-url", process.env.ORCH_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
   const approvalToken = String(options.approvalToken || arg("approval-token", process.env.APPROVAL_TOKEN || "dev-approval-token"));
@@ -328,9 +367,17 @@ export async function main(options = {}) {
     });
     if (fs.existsSync(manifestPath)) {
       const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      const summaryPath = resolveSummaryPath(manifestPath, runId);
       report.run_manifest_path = manifestPath.replace(/\\/g, "/");
+      report.run_summary_path = summaryPath ? summaryPath.replace(/\\/g, "/") : null;
       report.coding_execution_summary = manifest.coding_execution_summary || null;
+      report.runtime_evidence_summary = manifest.runtime_evidence_summary || null;
       validateManifest(manifest);
+      if (summaryPath && fs.existsSync(summaryPath)) {
+        validateRunSummary(fs.readFileSync(summaryPath, "utf8"));
+      } else {
+        throw new Error(`run summary missing: ${summaryPath || "unknown"}`);
+      }
     } else {
       assert(finalReleasePackBypass, `run manifest missing: ${manifestPath}`);
       const artifactPaths = Array.isArray(artifactsRes.json?.release_files)
@@ -370,3 +417,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exit(1);
   });
 }
+

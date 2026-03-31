@@ -234,7 +234,7 @@ export function createDiscordMessageHandler({
       if (result.response_mode === "direct_reply") { await replyChunked(msg, result.reply || "I didn't understand that."); return; }
 
       if (result.execution?.workflow_run_id) {
-        const initialMsg = await msg.reply(`[NEXUS] 🛠️ **项目制作中**\n⏳ [⏳] (排队中...) \`Initializing\`\n💬 Waiting for workflow to start...`);
+        const initialMsg = await msg.reply("[NEXUS] **Workflow Started**\nStatus: Initializing\nWaiting for workflow to start...");
         workflowRunToContext.set(result.execution.workflow_run_id, { 
           channelId: context.channelId, 
           lang, 

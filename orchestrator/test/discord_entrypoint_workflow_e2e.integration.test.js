@@ -133,8 +133,8 @@ test("discord coder directive can simulate full workflow notification chain", as
   await gateway.sendStepTransitionNotification({
     event: "workflow.started",
     workflow_run_id: "wf-discord-1",
-    step_count: 7,
-    step_ids: ["pm_spec", "arch_design", "impl_be", "impl_fe", "smoke_test", "qa_verify", "release_pack"],
+    step_count: 8,
+    step_ids: ["pm_spec", "arch_design", "impl_be", "impl_fe", "smoke_test", "qa_verify", "release_pack", "deploy_preview"],
   });
 
   await gateway.sendStepTransitionNotification({
@@ -153,7 +153,8 @@ test("discord coder directive can simulate full workflow notification chain", as
 
   assert.equal(channelMessages.length, 2);
   assert.match(String(channelMessages[0]), /^\[NEXUS\] /);
-  assert.match(String(channelMessages[0]), /1\/7/);
+  assert.match(String(channelMessages[0]), /1\/8/);
+  assert.match(String(channelMessages[0]), /PM Spec/);
   assert.match(String(channelMessages[1]), /preview\.example\.test/);
   assert.match(String(channelMessages[1]), /npm install/);
   assert.equal(progressEdits.length, 1);

@@ -133,6 +133,62 @@ function collectCodingExecutionEvidence(steps = []) {
     return { items, summary };
   }
 
+  function readJsonSafe(filePath) {
+    try {
+      return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  function collectRuntimeEvidence(steps = [], releaseRoot = "") {
+    const superpowers = (steps || []).map((step) => {
+      const result = parseJsonSafe(step?.result_json, {});
+      const diagnostics = result?.diagnostics && typeof result.diagnostics === "object"
+        ? result.diagnostics
+        : {};
+      const plugin = diagnostics?.superpowers_plugin && typeof diagnostics.superpowers_plugin === "object"
+        ? diagnostics.superpowers_plugin
+        : null;
+      return {
+        step_index: Number(step?.step_index),
+        step_id: String(step?.step_id || ""),
+        configured: Boolean(plugin?.configured),
+        available: Boolean(plugin?.available),
+        config_path: String(plugin?.config_path || "").trim().replace(/\\/g, "/") || null,
+        configured_entries: Array.isArray(plugin?.configured_entries) ? plugin.configured_entries : [],
+        detected_paths: Array.isArray(plugin?.detected_paths) ? plugin.detected_paths.map((item) => String(item || "").replace(/\\/g, "/")) : [],
+      };
+    }).filter((item) => item.configured || item.available || item.config_path || item.detected_paths.length > 0);
+
+    const smokePath = releaseRoot ? path.join(releaseRoot, "smoke", "smoke_result.json") : "";
+    const smokeRaw = smokePath && fs.existsSync(smokePath) ? readJsonSafe(smokePath) : null;
+    const smoke = smokeRaw ? {
+      path: path.relative(workspaceRoot, smokePath).replace(/\\/g, "/"),
+      verdict: String(smokeRaw?.verdict || "").trim() || null,
+      evidence_level: String(smokeRaw?.evidence_level || "").trim() || null,
+      root_status: Number.isFinite(Number(smokeRaw?.root_check?.status)) ? Number(smokeRaw.root_check.status) : null,
+      root_passed: typeof smokeRaw?.root_check?.passed === "boolean" ? smokeRaw.root_check.passed : null,
+      api_endpoint: String(smokeRaw?.api_check?.endpoint || "").trim() || null,
+      api_status: Number.isFinite(Number(smokeRaw?.api_check?.status)) ? Number(smokeRaw.api_check.status) : null,
+      api_passed: typeof smokeRaw?.api_check?.passed === "boolean" ? smokeRaw.api_check.passed : null,
+      api_skipped: typeof smokeRaw?.api_check?.skipped === "boolean" ? smokeRaw.api_check.skipped : null,
+    } : null;
+
+    const summary = {
+      superpowers_detected_steps: superpowers.length,
+      superpowers_configured_steps: superpowers.filter((item) => item.configured).length,
+      superpowers_available_steps: superpowers.filter((item) => item.available).length,
+      smoke_present: Boolean(smoke),
+      smoke_verdict: smoke?.verdict || null,
+      smoke_evidence_level: smoke?.evidence_level || null,
+      smoke_root_status: smoke?.root_status ?? null,
+      smoke_api_status: smoke?.api_skipped ? null : (smoke?.api_status ?? null),
+    };
+
+    return { superpowers, smoke, summary };
+  }
+
   const fidelityGateMode = String(runtimeConfig?.orchestrator?.fidelity_gate_mode || "warning").trim();
   const resolvedExecutionLane = String(runtimeConfig?.worker_coder?.execution_lane_default || "").trim();
   const resolvedProvider = String(runtimeConfig?.worker_coder?.provider_default || "").trim();
@@ -225,6 +281,7 @@ function collectCodingExecutionEvidence(steps = []) {
     const previewValidationReportRel = path.relative(workspaceRoot, previewValidationReportPath).replace(/\\/g, "/");
     const productFidelityReport = buildProductFidelityReport({ run, releaseRoot: releasePaths.release_root });
     const productFidelityReportRel = path.relative(workspaceRoot, productFidelityReportPath).replace(/\\/g, "/");
+    const runtimeEvidence = collectRuntimeEvidence(steps, releasePaths.release_root);
     if (String(canaryReport.verdict) !== "pass") reasons.push("strict canary report failed");
 
     const manifest = {
@@ -242,6 +299,8 @@ function collectCodingExecutionEvidence(steps = []) {
       context_artifacts: contextArtifacts,
       coding_execution_evidence: codingExecutionEvidence.items,
       coding_execution_summary: codingExecutionEvidence.summary,
+      runtime_evidence: runtimeEvidence,
+      runtime_evidence_summary: runtimeEvidence.summary,
       frontend_assembly_repair: frontendAssemblyRepair,
       steps: steps.map((s) => ({
         step_index: Number(s.step_index),
@@ -292,6 +351,16 @@ function collectCodingExecutionEvidence(steps = []) {
         `- product_fidelity: ${String(productFidelityReport.classification || "").toUpperCase()}`,
         `- product_fidelity_warning: ${productFidelityReport.should_warn ? "YES" : "NO"}`,
         `- generated_at: ${manifest.generated_at}`, ``,
+        `## Runtime Evidence`,
+        `- superpowers_detected_steps: ${Number(runtimeEvidence.summary.superpowers_detected_steps || 0)}`,
+        `- superpowers_configured_steps: ${Number(runtimeEvidence.summary.superpowers_configured_steps || 0)}`,
+        `- superpowers_available_steps: ${Number(runtimeEvidence.summary.superpowers_available_steps || 0)}`,
+        `- smoke_present: ${Boolean(runtimeEvidence.summary.smoke_present)}`,
+        `- smoke_verdict: ${String(runtimeEvidence.summary.smoke_verdict || "not_found")}`,
+        `- smoke_evidence_level: ${String(runtimeEvidence.summary.smoke_evidence_level || "n/a")}`,
+        `- smoke_root_status: ${String(runtimeEvidence.summary.smoke_root_status ?? "n/a")}`,
+        `- smoke_api_status: ${String(runtimeEvidence.summary.smoke_api_status ?? "n/a")}`,
+        runtimeEvidence.smoke?.path ? `- smoke_path: ${runtimeEvidence.smoke.path}` : `- smoke_path: not_found`, ``,
         `## Context Budget`,
         `- total_steps: ${Number(contextBudget.summary.total_steps || 0)}`,
         `- ok: ${Number(contextBudget.summary.ok || 0)}`,
@@ -528,3 +597,4 @@ function collectCodingExecutionEvidence(steps = []) {
 
   return { generateArtifactPack, validateRunArtifactPack, archiveRunArtifactPack };
 }
+

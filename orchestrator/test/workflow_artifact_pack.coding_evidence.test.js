@@ -20,6 +20,7 @@ async function main() {
 
   const releaseRoot = path.join(workspaceRoot, "artifacts", "release", run.run_id);
   fs.mkdirSync(path.join(releaseRoot, "summary"), { recursive: true });
+  fs.mkdirSync(path.join(releaseRoot, "smoke"), { recursive: true });
   fs.mkdirSync(path.join(releaseRoot, "impl", "fe_changes", "public"), { recursive: true });
   fs.mkdirSync(path.join(releaseRoot, "impl", "be_changes", "public"), { recursive: true });
 
@@ -30,12 +31,25 @@ async function main() {
   );
   fs.writeFileSync(
     path.join(releaseRoot, "impl", "fe_changes", "public", "app.js"),
-    "// auto-generated scaffold — replace with actual implementation\nexport function placeholderRender() { return 'pending human review'; }\n",
+    "// auto-generated scaffold replace with actual implementation\nexport function placeholderRender() { return 'pending human review'; }\n",
     "utf8"
   );
   fs.writeFileSync(
     path.join(releaseRoot, "impl", "be_changes", "public", "app.js"),
-    "// auto-generated scaffold — replace with actual implementation\nexport function placeholderRender() { return 'pending human review'; }\n",
+    "// auto-generated scaffold replace with actual implementation\nexport function placeholderRender() { return 'pending human review'; }\n",
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(releaseRoot, "smoke", "smoke_result.json"),
+    JSON.stringify({
+      install_ok: true,
+      server_started: true,
+      root_check: { status: 200, content_type: "text/html", passed: true },
+      api_check: { endpoint: "/api/login", status: 200, response_sample: "{\"ok\":true}", passed: true, skipped: false },
+      errors: [],
+      verdict: "pass",
+      evidence_level: "l1_l2",
+    }, null, 2),
     "utf8"
   );
 
@@ -84,6 +98,13 @@ async function main() {
             latest_path: failureLatestRel,
             jsonl_path: failureJsonlRel,
           },
+          superpowers_plugin: {
+            configured: true,
+            available: true,
+            config_path: "artifacts/config/opencode.json",
+            configured_entries: ["/root/.config/opencode/plugins/superpowers.js"],
+            detected_paths: ["/root/.config/opencode/plugins/superpowers.js"],
+          },
         },
       }),
     },
@@ -128,7 +149,16 @@ async function main() {
   assert.equal(manifest.coding_execution_evidence[0].prompt_contract_path, promptContractRel);
   assert.equal(manifest.coding_execution_summary.retry_attempted_steps, 1);
   assert.equal(manifest.coding_execution_summary.failure_memory_entries, 1);
-  assert.match(summary, /Coding Execution Evidence/);
+  assert.equal(manifest.runtime_evidence_summary.superpowers_configured_steps, 1);
+  assert.equal(manifest.runtime_evidence_summary.superpowers_available_steps, 1);
+  assert.equal(manifest.runtime_evidence_summary.smoke_verdict, "pass");
+  assert.equal(manifest.runtime_evidence_summary.smoke_root_status, 200);
+  assert.equal(manifest.runtime_evidence_summary.smoke_api_status, 200);
+  assert.equal(manifest.runtime_evidence.smoke.path, `artifacts/release/${run.run_id}/smoke/smoke_result.json`);
+  assert.match(summary, /Runtime Evidence/);
+  assert.match(summary, /superpowers_configured_steps: 1/);
+  assert.match(summary, /smoke_verdict: pass/);
+  assert.match(summary, /smoke_root_status: 200/);
   assert.ok(archivedExtraPaths.some((item) => item.endsWith(testLogRel.replace(/\\/g, "/"))));
   assert.ok(archivedExtraPaths.some((item) => item.endsWith(promptContractRel.replace(/\\/g, "/"))));
   assert.ok(archivedExtraPaths.some((item) => item.endsWith(failureLatestRel.replace(/\\/g, "/"))));

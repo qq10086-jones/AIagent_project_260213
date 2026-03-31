@@ -12,61 +12,61 @@
       "id": "fashion_brand_site",
       "class": "medium",
       "weight": 3,
-      "message": "/coder: 帮我做一个服饰品牌宣传网站，包含首页主视觉、商品卖点、用户评价、品牌故事和联系我们。"
+      "message": "/coder: Build a lightweight fashion brand landing site with hero section, product highlights, brand story, and a contact form."
     },
     {
       "id": "coffee_shop_site",
       "class": "medium",
       "weight": 2,
-      "message": "/coder: 做一个咖啡店网站，包含门店介绍、菜单展示、营业时间、门店地址和预约按钮占位。"
+      "message": "/coder: Build a small coffee shop website with menu cards, store hours, map section, and a reservation/contact area."
     },
     {
       "id": "event_registration_site",
       "class": "long",
       "weight": 2,
-      "message": "/coder: 做一个活动报名网站，包含活动介绍、日程安排、报名表单、成功页和基础字段校验。"
+      "message": "/coder: Build a compact event registration site with agenda, speaker cards, ticket selection, and a registration form."
     },
     {
       "id": "restaurant_reservation_site",
       "class": "long",
       "weight": 2,
-      "message": "/coder: 做一个餐厅预约网站，包含首页、菜品展示、预约表单、成功提示页和基础交互。"
+      "message": "/coder: Build a restaurant reservation site with menu preview, booking form, opening hours, and location details."
     },
     {
       "id": "course_landing_site",
       "class": "long",
       "weight": 2,
-      "message": "/coder: 做一个线上课程宣传网站，展示课程亮点、讲师信息、课程大纲、价格和报名入口。"
+      "message": "/coder: Build a course landing page with curriculum, instructor bio, testimonials, pricing, and signup CTA."
     },
     {
       "id": "todo_webapp_e2e",
       "class": "medium",
       "weight": 2,
-      "message": "/coder: 做一个轻量待办事项网站，支持新增、完成、删除任务，并保留清晰的页面结构。"
+      "message": "/coder: Build a small task tracking web app with add, edit, status toggle, and basic validation."
     },
     {
       "id": "log_summary_tool",
       "class": "medium",
       "weight": 2,
-      "message": "/coder: 写一个日志分析脚本，统计错误和警告数量，按天输出汇总报表。"
+      "message": "/coder: Build a small log summary tool that scans a folder and outputs a readable error summary report."
     },
     {
       "id": "invoice_template_tool",
       "class": "medium",
       "weight": 2,
-      "message": "/coder: 写一个脚本，根据客户信息和商品清单生成简易发票HTML模板。"
+      "message": "/coder: Build a simple invoice HTML template generator with customer info, line items, totals, and print styling."
     },
     {
       "id": "markdown_toc_tool",
       "class": "short",
       "weight": 1,
-      "message": "/coder: 写一个Markdown目录生成工具，自动更新文档中的TOC区域。"
+      "message": "/coder: Build a small Markdown utility that inserts or refreshes a table of contents section."
     },
     {
       "id": "image_manifest_tool",
       "class": "medium",
       "weight": 1,
-      "message": "/coder: 写一个脚本，扫描图片目录并输出manifest.json，包含文件名、大小和修改时间。"
+      "message": "/coder: Build a small image manifest tool that scans a folder and writes manifest.json with file metadata."
     }
   ]
 }

@@ -855,7 +855,11 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         ? payload.target_paths
         : defaultCodingTargetPaths(payload.project_type);
       payload.target_paths = defaultTargetPaths;
-      payload.project_root_candidates = defaultTargetPaths;
+      payload.project_root_candidates = [
+        `${artifactRoot}/impl/be_changes`,
+        `${artifactRoot}/impl/fe_changes/public`,
+        ...defaultTargetPaths,
+      ];
       payload.release_manifest_path = `${artifactRoot}/meta/run_manifest.json`;
       payload.release_notes_path = `${artifactRoot}/release/release_notes.md`;
       payload.preview_ttl_hours = clampInt(

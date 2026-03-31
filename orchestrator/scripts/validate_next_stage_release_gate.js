@@ -103,6 +103,7 @@ async function main() {
         async run() {
           return runLiveM9Workflow({
             baseUrl,
+            approvalToken,
             timeoutMs: workflowTimeoutMs,
           });
         },
@@ -155,3 +156,4 @@ try {
   console.error(err?.message || err);
   process.exit(1);
 }
+

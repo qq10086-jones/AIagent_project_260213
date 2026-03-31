@@ -458,7 +458,19 @@ function writeDeployArtifacts(rootAbs) {
   });
 }
 
-async function advanceStep({ engine, pool, taskIndex, writeArtifacts, workspaceRoot }) {
+function buildSuperpowersDiagnostics() {
+  return {
+    superpowers_plugin: {
+      configured: true,
+      available: true,
+      config_path: "/root/.config/opencode/opencode.json",
+      configured_entries: ["/root/.config/opencode/plugins/superpowers.js"],
+      detected_paths: ["/root/.config/opencode/plugins/superpowers.js"],
+    },
+  };
+}
+
+async function advanceStep({ engine, pool, taskIndex, writeArtifacts, workspaceRoot, buildOutput = null }) {
   const task = pool.state.tasks[taskIndex];
   if (!task) throw new Error(`No task at index ${taskIndex}`);
   const payload = JSON.parse(task.payload_json);
@@ -466,7 +478,8 @@ async function advanceStep({ engine, pool, taskIndex, writeArtifacts, workspaceR
   ensureDir(artifactRootAbs);
   writeArtifacts(artifactRootAbs);
   await engine.handleTaskClaimed(task.task_id);
-  return engine.handleTaskTerminal({ task_id: task.task_id, status: "succeeded", output: { artifacts: [] } });
+  const output = typeof buildOutput === "function" ? buildOutput({ payload, task }) : { artifacts: [] };
+  return engine.handleTaskTerminal({ task_id: task.task_id, status: "succeeded", output });
 }
 
 async function runHappyPath({ workspaceRoot, runName }) {
@@ -481,8 +494,8 @@ async function runHappyPath({ workspaceRoot, runName }) {
 
   await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 0, writeArtifacts: writePmArtifacts, workspaceRoot });
   await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 1, writeArtifacts: writeArchArtifacts, workspaceRoot });
-  await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 2, writeArtifacts: writeBeArtifacts, workspaceRoot });
-  await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 3, writeArtifacts: writeFeArtifacts, workspaceRoot });
+  await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 2, writeArtifacts: writeBeArtifacts, workspaceRoot, buildOutput: () => ({ artifacts: [], diagnostics: buildSuperpowersDiagnostics() }) });
+  await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 3, writeArtifacts: writeFeArtifacts, workspaceRoot, buildOutput: () => ({ artifacts: [], diagnostics: buildSuperpowersDiagnostics() }) });
   await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 4, writeArtifacts: writeSmokeArtifacts, workspaceRoot });
   await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 5, writeArtifacts: writeQaArtifacts, workspaceRoot });
   await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 6, writeArtifacts: (rootAbs) => writeReleaseArtifacts(rootAbs, `${runName}-run`), workspaceRoot });
@@ -501,6 +514,12 @@ async function runHappyPath({ workspaceRoot, runName }) {
   assert(fs.existsSync(path.join(releaseRoot, "release", "README.md")), "happy_path: README.md");
   assert(fs.existsSync(path.join(releaseRoot, "release", "start.sh")), "happy_path: start.sh");
   assert(fs.existsSync(path.join(releaseRoot, "preview", "deployment_result.json")), "happy_path: deployment_result.json");
+  const manifest = JSON.parse(fs.readFileSync(path.join(releaseRoot, "meta", "run_manifest.json"), "utf8"));
+  assertEqual(manifest?.runtime_evidence_summary?.smoke_verdict, "pass", "happy_path: smoke verdict summary");
+  assertEqual(Number(manifest?.runtime_evidence_summary?.smoke_root_status || 0), 200, "happy_path: smoke root status summary");
+  assertEqual(Number(manifest?.runtime_evidence_summary?.smoke_api_status || 0), 200, "happy_path: smoke api status summary");
+  assertEqual(Number(manifest?.runtime_evidence_summary?.superpowers_configured_steps || 0), 2, "happy_path: superpowers configured steps summary");
+  assertEqual(Number(manifest?.runtime_evidence_summary?.superpowers_available_steps || 0), 2, "happy_path: superpowers available steps summary");
   assert(harness.events.find((item) => item.event_name === "workflow.succeeded"), "happy_path: workflow.succeeded emitted");
 
   return {
@@ -565,8 +584,8 @@ async function runQaFailureInjection({ workspaceRoot, runName }) {
 
   await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 0, writeArtifacts: writePmArtifacts, workspaceRoot });
   await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 1, writeArtifacts: writeArchArtifacts, workspaceRoot });
-  await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 2, writeArtifacts: writeBeArtifacts, workspaceRoot });
-  await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 3, writeArtifacts: writeFeArtifacts, workspaceRoot });
+  await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 2, writeArtifacts: writeBeArtifacts, workspaceRoot, buildOutput: () => ({ artifacts: [], diagnostics: buildSuperpowersDiagnostics() }) });
+  await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 3, writeArtifacts: writeFeArtifacts, workspaceRoot, buildOutput: () => ({ artifacts: [], diagnostics: buildSuperpowersDiagnostics() }) });
   await advanceStep({ engine: harness.engine, pool: harness.pool, taskIndex: 4, writeArtifacts: writeSmokeArtifacts, workspaceRoot });
 
   const qaTask = harness.pool.state.tasks[5];
@@ -640,3 +659,6 @@ main().catch((err) => {
   console.error("[canary_coding_team_e2e] FAILED:", err.message || err);
   process.exit(1);
 });
+
+
+

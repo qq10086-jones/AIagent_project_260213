@@ -414,3 +414,60 @@ test("artifact-pack crash fails workflow instead of leaving it running", async (
   assert.equal(harness.pool.state.runs[0].status, "failed");
   assert.ok(harness.events.some((event) => event.event_name === "workflow.finalization.failed"));
 });
+
+test("workflow completion notification uses manifest runtime evidence summary when present", async () => {
+  const workspaceRoot = path.join(__dirname, "../artifacts/test/workflow_finalization/runtime_summary");
+  ensureDir(workspaceRoot);
+  const transitions = [];
+  const manifestPath = path.join(workspaceRoot, "artifacts", "release", "runtime-summary", "meta", "run_manifest.json");
+  const summaryPath = path.join(workspaceRoot, "artifacts", "release", "runtime-summary", "summary", "run_summary.md");
+  ensureDir(path.dirname(manifestPath));
+  ensureDir(path.dirname(summaryPath));
+  writeJson(manifestPath, {
+    workflow_run_id: "wf-runtime-summary",
+    status: "succeeded",
+    runtime_evidence_summary: {
+      smoke_verdict: "pass",
+      smoke_root_status: 200,
+      smoke_api_status: 200,
+      superpowers_configured_steps: 2,
+      superpowers_available_steps: 2,
+    },
+  });
+  writeText(summaryPath, "# Run Summary\n\n- smoke_verdict: pass\n");
+
+  const harness = createHarness(workspaceRoot, {
+    onStepTransition: async (event) => {
+      transitions.push(event);
+    },
+    artifactPackService: {
+      generateArtifactPack: async () => ({
+        ok: true,
+        run_manifest_path: manifestPath,
+        summary_path: summaryPath,
+        go_no_go_result_path: path.join(workspaceRoot, "artifacts", "release", "runtime-summary", "meta", "go_no_go_result.json"),
+        go_no_go_verdict: "GO",
+        strict_canary_report_path: path.join(workspaceRoot, "artifacts", "release", "runtime-summary", "summary", "strict_canary_report.md"),
+        strict_canary_json_path: path.join(workspaceRoot, "artifacts", "release", "runtime-summary", "meta", "strict_canary_report.json"),
+        strict_canary_verdict: "pass",
+      }),
+    },
+  });
+  harness.pool.state.runs.push({ run_id: "runtime-summary", status: "running" });
+
+  await harness.engine.startWorkflowRun({
+    workflow_id: "workflow_finalization_v0",
+    project_type: "webapp_crm",
+    run_id: "runtime-summary",
+    input: { goal: "Build CRM" },
+  });
+
+  await completeTask(harness, 0, writePmArtifacts);
+
+  const completed = transitions.find((event) => event.event === "workflow.completed");
+  assert.ok(completed);
+  assert.match(String(completed.run_summary || ""), /smoke=pass/);
+  assert.match(String(completed.run_summary || ""), /root=200/);
+  assert.match(String(completed.run_summary || ""), /api=200/);
+  assert.match(String(completed.run_summary || ""), /superpowers_configured_steps=2/);
+});

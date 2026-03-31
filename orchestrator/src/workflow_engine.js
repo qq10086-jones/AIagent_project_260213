@@ -207,10 +207,29 @@ export function createWorkflowEngine({
     
     let runSummary = "";
     try {
-      const releaseRoot = path.dirname(path.dirname(pack.run_manifest_path || ""));
-      const readmePath = path.join(releaseRoot, "release", "README.md");
-      if (fs.existsSync(readmePath)) {
-        runSummary = fs.readFileSync(readmePath, "utf8").split(/\r?\n/).slice(0, 8).join("\n").trim();
+      const manifest = pack.run_manifest_path && fs.existsSync(pack.run_manifest_path)
+        ? JSON.parse(fs.readFileSync(pack.run_manifest_path, "utf8"))
+        : null;
+      const runtimeEvidence = manifest?.runtime_evidence_summary && typeof manifest.runtime_evidence_summary === "object"
+        ? manifest.runtime_evidence_summary
+        : null;
+      if (runtimeEvidence) {
+        const summaryLines = [
+          `status=${String(manifest?.status || run.status || "succeeded")}`,
+          `smoke=${String(runtimeEvidence.smoke_verdict || "not_found")}`,
+          `root=${String(runtimeEvidence.smoke_root_status ?? "n/a")}`,
+          `api=${String(runtimeEvidence.smoke_api_status ?? "n/a")}`,
+          `superpowers_configured_steps=${Number(runtimeEvidence.superpowers_configured_steps || 0)}`,
+          `superpowers_available_steps=${Number(runtimeEvidence.superpowers_available_steps || 0)}`,
+        ];
+        runSummary = summaryLines.join("\n").trim();
+      }
+      if (!runSummary) {
+        const releaseRoot = path.dirname(path.dirname(pack.run_manifest_path || ""));
+        const readmePath = path.join(releaseRoot, "release", "README.md");
+        if (fs.existsSync(readmePath)) {
+          runSummary = fs.readFileSync(readmePath, "utf8").split(/\r?\n/).slice(0, 8).join("\n").trim();
+        }
       }
     } catch {
       runSummary = "";
@@ -554,7 +573,7 @@ export function createWorkflowEngine({
     // and XACK.  Skip re-processing to prevent duplicate step dispatch.
     const stepStatus = String(stepRow?.status || "");
     if (stepStatus === "succeeded" || stepStatus === "failed") {
-      console.warn(`[workflow] handleTaskTerminal: step ${step_id}[${step_index}] already ${stepStatus} — skipping duplicate`);
+      console.warn(`[workflow] handleTaskTerminal: step ${step_id}[${step_index}] already ${stepStatus} - skipping duplicate`);
       return { handled: false, skipped_duplicate: true };
     }
 
@@ -701,3 +720,5 @@ export function createWorkflowEngine({
     archiveRunArtifactPack: artifactPack.archiveRunArtifactPack,
   };
 }
+
+

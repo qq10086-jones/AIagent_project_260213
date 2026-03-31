@@ -4,14 +4,14 @@ import { handleWorkflowEvent } from "./discord_progress_manager.js";
 const DISCORD_MAX_CONTENT = 1900;
 
 const STEP_LABELS = {
-  pm_spec: "PM 规格",
-  arch_design: "架构设计",
-  impl_be: "后端实现",
-  impl_fe: "前端实现",
-  smoke_test: "烟雾测试",
-  qa_verify: "QA 验证",
-  release_pack: "发布打包",
-  deploy_preview: "预览部署",
+  pm_spec: "PM Spec",
+  arch_design: "Architecture",
+  impl_be: "Backend",
+  impl_fe: "Frontend",
+  smoke_test: "Smoke Test",
+  qa_verify: "QA Verification",
+  release_pack: "Release Pack",
+  deploy_preview: "Deploy Preview",
 };
 
 function splitForDiscord(text, maxLen = DISCORD_MAX_CONTENT) {
@@ -52,7 +52,7 @@ export function createDiscordGateway({ translate }) {
   const runToContext = new Map();
   const workflowRunToContext = new Map();
 
-  client.on("error", err => console.error("[discord] Client error:", err.message));
+  client.on("error", (err) => console.error("[discord] Client error:", err.message));
   client.on("clientReady", () => console.log(`[discord] Logged in as ${client.user.tag}`));
 
   async function replyChunked(msg, text, header = "") {
@@ -122,7 +122,7 @@ export function createDiscordGateway({ translate }) {
         step_index: rest.step_index,
         step_count: rest.step_count,
         error_message: rest.error_message || rest.detail,
-        result_url: rest.result_url
+        result_url: rest.result_url,
       });
     }
 
@@ -139,20 +139,20 @@ export function createDiscordGateway({ translate }) {
       const currentId = String(rest.step_id || "");
       const currentLabel = labelForStep(currentId);
       const nextId = Array.isArray(notifyCtx.stepIds) ? String(notifyCtx.stepIds[stepIndex + 1] || "") : "";
-      const nextLabel = nextId ? labelForStep(nextId) : "完成";
+      const nextLabel = nextId ? labelForStep(nextId) : "Done";
       const total = Number(notifyCtx.stepCount || rest.step_count || 0);
-      notifMsg = `[Nexus] 步骤 ${stepIndex + 1}/${total || "?"}: ${currentLabel}\n状态: 运行中\n下一步: ${nextLabel}`;
+      notifMsg = `[Nexus] Step ${stepIndex + 1}/${total || "?"}: ${currentLabel}\nStatus: in progress\nNext: ${nextLabel}`;
     } else if (event === "workflow.completed") {
       const summary = String(rest.run_summary || "").trim();
-      notifMsg = `[Nexus] Workflow 已完成${rest.result_url ? `\n结果: ${rest.result_url}` : ""}${summary ? `\n\n运行摘要:\n${summary}` : ""}`;
+      notifMsg = `[Nexus] Workflow completed${rest.result_url ? `\nPreview: ${rest.result_url}` : ""}${summary ? `\n\nRun Summary:\n${summary}` : ""}`;
     } else if (event === "workflow.failed") {
-      notifMsg = `[Nexus] Workflow 失败\n原因: ${String(rest.error_message || "unknown error")}`;
+      notifMsg = `[Nexus] Workflow failed\nError: ${String(rest.error_message || "unknown error")}`;
     } else if (event === "step.approval_required") {
-      notifMsg = `[Nexus] 步骤 ${labelForStep(rest.step_id)} 等待审批`;
+      notifMsg = `[Nexus] Step ${labelForStep(rest.step_id)} is waiting for approval`;
     }
     if (!notifMsg) return;
     const translated = await safeTranslate(notifMsg, notifyCtx.lang || "zh").catch(() => notifMsg);
-    await channel.send(`[NEXUS] ${translated}`).catch(err => {
+    await channel.send(`[NEXUS] ${translated}`).catch((err) => {
       console.warn(`[step_notify] send failed: ${err?.message}`);
     });
   }
@@ -175,7 +175,7 @@ export function createDiscordGateway({ translate }) {
 
   function registerHandlers({ onMessage, onReaction }) {
     if (typeof onMessage === "function") {
-      client.on("messageCreate", async msg => {
+      client.on("messageCreate", async (msg) => {
         await onMessage(msg, { client, replyChunked, safeTranslate, taskToContext, runToContext, workflowRunToContext });
       });
     }
@@ -189,7 +189,7 @@ export function createDiscordGateway({ translate }) {
   async function login(token) {
     if (token && token !== "" && token !== "your_discord_token_here") {
       console.log("[discord] Attempting to login...");
-      client.login(token).catch(err => {
+      client.login(token).catch((err) => {
         console.error(`[discord] Login failed: ${err.message}`);
       });
       return;

@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -45,6 +45,24 @@ function main() {
   assert.match(startScriptText, /node server\.js/);
   const interfacesText = fs.readFileSync(path.join(rootAbs, "plan", "interfaces.md"), "utf8");
   assert.match(interfacesText, /## GET \/api\/customers/);
+  const genericWorkplanText = buildArtifactTemplate({
+    relPath: "plan/workplan.md",
+    rootAbs,
+    stepId: "arch_design",
+    taskPrompt: "Workflow: coding_team_v0\nProject Type: webapp_crm\nGoal: Build a minimal CRM web app",
+  });
+  assert.match(genericWorkplanText, /## BE Tasks/);
+  assert.match(genericWorkplanText, /## FE Tasks/);
+  assert.match(genericWorkplanText, /\|\s*verify:/);
+  const crmServerText = buildArtifactTemplate({
+    relPath: "impl/be_changes/server.js",
+    rootAbs,
+    stepId: "impl_be",
+    taskPrompt: "Workflow: coding_team_v0\nProject Type: webapp_crm\nGoal: Build a minimal CRM web app",
+  });
+  assert.match(crmServerText, /app\.get\('\/api\/customers'/);
+  assert.match(crmServerText, /express\.static\(publicDir\)/);
+  assert.match(crmServerText, /process\.env\.PORT/);
 
   const handoff = JSON.parse(fs.readFileSync(path.join(rootAbs, "handoff", "be_to_fe.json"), "utf8"));
   assert.equal(handoff.from_step, "impl_be");
@@ -65,9 +83,7 @@ function main() {
     stepId: "qa_verify",
     taskPrompt: "Run QA.",
   });
-  // scaffold output should NOT be considered valid (all checks are "pending human review")
   assert.equal(isQaReportValid(qaReport, rootAbs), false);
-  // a real model-produced report (non-scaffold) should be valid
   const realQaReport = JSON.stringify({
     overall_status: "pass",
     checks: [{ id: "check-1", status: "pass", evidence: "impl/fe_changes/app.js contains addTask function" }],
@@ -91,6 +107,24 @@ function main() {
   assert.ok(repaired.repaired.includes("plan/interfaces.md"));
   const repairedInterfacesText = fs.readFileSync(path.join(rootAbs, "plan", "interfaces.md"), "utf8");
   assert.match(repairedInterfacesText, /## POST \/api\/customers/);
+  fs.mkdirSync(path.join(rootAbs, "impl", "be_changes"), { recursive: true });
+  fs.writeFileSync(path.join(rootAbs, "impl", "be_changes", "server.js"), [
+    "import express from 'express';",
+    "const app = express();",
+    "app.get('*', (_req, res) => res.status(404).send('Not Found'));",
+    "app.listen(process.env.PORT || 3000);",
+  ].join("\n"));
+  const repairedCrmBackend = ensureExpectedArtifacts({
+    workspaceRoot,
+    artifactRoot,
+    expectedArtifacts: ["impl/be_changes/server.js"],
+    stepId: "impl_be",
+    taskPrompt: "Workflow: coding_team_v0\nProject Type: webapp_crm\nGoal: Build a minimal CRM web app",
+  });
+  assert.ok(repairedCrmBackend.repaired.includes("impl/be_changes/server.js"));
+  const repairedServerText = fs.readFileSync(path.join(rootAbs, "impl", "be_changes", "server.js"), "utf8");
+  assert.match(repairedServerText, /app\.get\('\/api\/customers'/);
+  assert.doesNotMatch(repairedServerText, /app\.get\('\*'/);
 
   const staticArchHandoff = JSON.parse(buildArtifactTemplate({
     relPath: "handoff/architect_to_impl.json",
@@ -108,6 +142,15 @@ function main() {
   });
   assert.match(staticInterfacesText, /## GET \//);
   assert.match(staticInterfacesText, /## Event: faq\.toggle/);
+  const staticWorkplanText = buildArtifactTemplate({
+    relPath: "plan/workplan.md",
+    rootAbs,
+    stepId: "arch_design",
+    taskPrompt: "Workflow: coding_team_v0\nProject Type: single_file_html\nGoal: Build a landing page",
+  });
+  assert.match(staticWorkplanText, /## BE Tasks/);
+  assert.match(staticWorkplanText, /## FE Tasks/);
+  assert.match(staticWorkplanText, /\|\s*verify:/);
 
   console.log("artifact_scaffold.test.js: all tests passed");
 }
@@ -119,4 +162,3 @@ try {
   console.error(err);
   process.exit(1);
 }
-

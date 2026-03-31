@@ -52,6 +52,7 @@
     "metrics:fidelity": "node scripts/collect_fidelity_metrics.js",
     "metrics:compare_baseline": "node scripts/compare_fidelity_baseline.js",
     "canary:discord_fidelity": "node scripts/canary_discord_fidelity.js",
+    "validate:discord_coding_supported_beta": "node scripts/run_discord_coding_load_test.js --suite discord_coding_supported_beta_suite_v1.json",
     "load-test:discord_coding": "node scripts/run_discord_coding_load_test.js"
   },
   "dependencies": {

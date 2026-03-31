@@ -1,0 +1,30 @@
+{
+  "suite_id": "discord_coding_supported_beta_suite_v1",
+  "description": "Supported internal-beta Discord coding prompts aligned to the frozen beta scope.",
+  "defaults": {
+    "channel_prefix": "supported-beta-chan",
+    "user_prefix": "supported-beta-user",
+    "guild_id": "guild-supported-beta",
+    "thread_prefix": "supported-beta-thread"
+  },
+  "scenarios": [
+    {
+      "id": "crm_minimal_reviewable",
+      "class": "medium",
+      "weight": 3,
+      "message": "/coder: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts."
+    },
+    {
+      "id": "crm_small_admin",
+      "class": "medium",
+      "weight": 2,
+      "message": "/coder: Build a small customer admin app with a list view, detail pane, create form, edit flow, and local preview instructions."
+    },
+    {
+      "id": "inventory_tracker_light",
+      "class": "medium",
+      "weight": 1,
+      "message": "/coder: Build a lightweight inventory tracker web app with item list, detail view, add/edit form, and explicit release artifacts."
+    }
+  ]
+}

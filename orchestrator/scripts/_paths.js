@@ -20,7 +20,7 @@ export function resolveCanaryInputPath(fileName) {
 }
 
 export function resolveOrchestratorArtifactPath(...segments) {
-  return resolveOrchestratorPath("artifacts", ...segments);
+  return resolveRepoPath("runtime", "artifacts", "orchestrator", ...segments);
 }
 
 export function getDefaultWorkspaceRoot() {

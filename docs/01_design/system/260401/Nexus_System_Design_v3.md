@@ -27,7 +27,7 @@ Nexus/OpenClaw = Control Plane（路由、编排、合同、审计、可观测�
 外部执行内核   = OpenCode / quant_briefing.py / 未来 vertical worker
 ```
 
-**关键原则**：Nexus 不重造执行内核。OpenClaw 已经通过 `@mariozechner/pi-coding-agent` SDK 内嵌了完整的 agent session 能力（turn loop、compact、session 持久化、tool 注入、事件订阅），见 `openclaw/src/agents/pi-embedded-runner/`。
+**关键原则**：Nexus 不重造执行内核。OpenClaw 已经通过 `@mariozechner/pi-coding-agent` SDK 内嵌了完整的 agent session 能力（turn loop、compact、session 持久化、tool 注入、事件订阅），见 `external/openclaw/src/agents/pi-embedded-runner/`。
 
 v3.1 的新增层是**控制平面基础设施**（合同、可观测性、事件适配），而不是又一个执行内核。
 
@@ -195,7 +195,7 @@ AuditHooks.onTaskError(run_id, error)
 worker-coder 通过 OpenClaw pi-embedded-runner 执行任务，pi 的事件系统（`pi-embedded-subscribe.ts`）已经有完整的事件流。StreamAdapter 的工作是**订阅 pi 事件，转换格式，推送到 Discord thread**，不自己产生事件。
 
 ```javascript
-// 对接 openclaw/src/agents/pi-embedded-subscribe.ts 的现有事件
+// 对接 external/openclaw/src/agents/pi-embedded-subscribe.ts 的现有事件
 piSession.on('tool_use', (event) => discordThread.post(formatToolUse(event)))
 piSession.on('tool_result', (event) => discordThread.update(formatResult(event)))
 piSession.on('agent_message', (event) => discordThread.update(formatMessage(event)))
@@ -216,7 +216,7 @@ Permission Council advisory 预筛（如需，medium+）
     ↓
 （如果需要人工审批）→ Discord approve/reject 流程
     ↓
-调用 openclaw/src/agents/pi-embedded-runner/run.ts
+调用 external/openclaw/src/agents/pi-embedded-runner/run.ts
   → runEmbeddedPiAgent() 内含：
     - createAgentSession() via pi SDK
     - turn loop（pi-agent-core 提供）
@@ -288,7 +288,7 @@ single_agent 不是 DAG bypass，是一个**轻量但有质量门控的执行路
 
 `detectSuperpowersPlugin()`（`worker-coder/adapters/opencode_adapter.js:51`）检测以下路径：
 1. `/root/.config/opencode/plugins/superpowers.js`
-2. `{cwd}/vendor/superpowers/.opencode/plugins/superpowers.js`
+2. `{cwd}/external/vendor/superpowers/.opencode/plugins/superpowers.js`
 
 SP-01 的实施必须以这两个路径为准，不要以文档中的路径字符串为准。**验收标准是 `detectSuperpowersPlugin()` 返回 `{ available: true }`**，而不是文件存在。
 

@@ -28,10 +28,10 @@ async function main() {
   assert.equal(empty.checked, false);
   assert.equal(empty.ok, true);
 
-  writeFile(workspaceRoot, "sandbox/data/bad.json", "{ bad json");
+  writeFile(workspaceRoot, "workspace/sandbox/data/bad.json", "{ bad json");
   const badJson = await runStaticChecks({
     workspaceRoot,
-    filesChanged: ["sandbox/data/bad.json"],
+    filesChanged: ["workspace/sandbox/data/bad.json"],
     taskDir,
   });
   assert.equal(badJson.checked, true);
@@ -39,10 +39,10 @@ async function main() {
   assert.match(badJson.error, /json parse failed/);
   assert.ok(badJson.logPath);
 
-  writeFile(workspaceRoot, "sandbox/data/node_modules/pkg/tsconfig.json", "{ bad json with comments }");
+  writeFile(workspaceRoot, "workspace/sandbox/data/node_modules/pkg/tsconfig.json", "{ bad json with comments }");
   const ignoredNodeModules = await runStaticChecks({
     workspaceRoot,
-    filesChanged: ["sandbox/data/node_modules/pkg/tsconfig.json"],
+    filesChanged: ["workspace/sandbox/data/node_modules/pkg/tsconfig.json"],
     taskDir,
   });
   assert.equal(ignoredNodeModules.checked, true);

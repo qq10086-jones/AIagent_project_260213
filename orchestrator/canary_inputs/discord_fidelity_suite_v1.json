@@ -31,7 +31,7 @@
       "class": "short",
       "project_type": "generic_app",
       "risk_profile": "low",
-      "notes": "Simple well-defined scope. artifact_complete_but_shallow is the current production baseline (qwen-plus stub output). preview_mismatch eliminated via sandbox/app dir.",
+      "notes": "Simple well-defined scope. artifact_complete_but_shallow is the current production baseline (qwen-plus stub output). preview_mismatch eliminated via workspace/sandbox/app dir.",
       "expected_classifications": ["demo_usable", "domain_misaligned", "artifact_complete_but_shallow", "preview_mismatch"],
       "message": "/coder: 做一个待办事项网站，支持新增、完成和删除任务，界面要清爽，有简单的样式。"
     },
@@ -40,7 +40,7 @@
       "class": "short",
       "project_type": "generic_app",
       "risk_profile": "low",
-      "notes": "Static marketing site. Frontend-heavy. artifact_complete_but_shallow is the current production baseline. preview_mismatch eliminated via sandbox/html_site dir. Brain router may classify as single_file_html.",
+      "notes": "Static marketing site. Frontend-heavy. artifact_complete_but_shallow is the current production baseline. preview_mismatch eliminated via workspace/sandbox/html_site dir. Brain router may classify as single_file_html.",
       "expected_classifications": ["demo_usable", "visually_incomplete", "artifact_complete_but_shallow", "preview_mismatch"],
       "message": "/coder: 做一个SaaS产品落地页，包含主视觉、三段卖点、用户评价和一个CTA按钮，要有基本样式。"
     },
@@ -49,7 +49,7 @@
       "class": "short",
       "project_type": "generic_app",
       "risk_profile": "medium",
-      "notes": "Pure utility script — no UI. artifact_complete_but_shallow is the current production baseline. preview_mismatch eliminated via sandbox/project dir. Brain router may classify as generic_coding_task.",
+      "notes": "Pure utility script — no UI. artifact_complete_but_shallow is the current production baseline. preview_mismatch eliminated via workspace/sandbox/project dir. Brain router may classify as generic_coding_task.",
       "expected_classifications": ["demo_usable", "visually_incomplete", "artifact_complete_but_shallow", "preview_mismatch"],
       "message": "/coder: 写一个Node.js脚本，读取目录下所有JSON文件，合并成一个数组后输出到output.json，支持命令行传路径参数。"
     }

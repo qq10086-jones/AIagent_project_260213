@@ -20,13 +20,13 @@ async function main() {
   const taskDir = path.join(workspaceRoot, "artifacts", "runs", "run-1", "task_1");
   fs.mkdirSync(taskDir, { recursive: true });
 
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "export const value = 1;\n");
-  const baseline = captureScopedSnapshot(workspaceRoot, ["sandbox/crm_site"]);
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "export const value = 2;\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "export const value = 1;\n");
+  const baseline = captureScopedSnapshot(workspaceRoot, ["workspace/sandbox/crm_site"]);
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "export const value = 2;\n");
 
-  const summary = await gatherGitSummary(workspaceRoot, taskDir, baseline, ["sandbox/crm_site"]);
+  const summary = await gatherGitSummary(workspaceRoot, taskDir, baseline, ["workspace/sandbox/crm_site"]);
   assert.equal(summary.diffStats.files, 1);
-  assert.deepEqual(summary.filesChanged, ["sandbox/crm_site/app.js"]);
+  assert.deepEqual(summary.filesChanged, ["workspace/sandbox/crm_site/app.js"]);
   assert.ok(summary.diffPath);
 
   const fallbackWorkspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scoped-delta-fallback-"));
@@ -37,12 +37,12 @@ async function main() {
     filesChanged: [],
     diffStats: { added: 0, deleted: 0, files: 0 },
   };
-  const noDeltaBaseline = captureScopedSnapshot(fallbackWorkspaceRoot, ["sandbox/crm_site/server.js"]);
+  const noDeltaBaseline = captureScopedSnapshot(fallbackWorkspaceRoot, ["workspace/sandbox/crm_site/server.js"]);
   const recovered = await ensureImplementationDelta({
     workspaceRoot: fallbackWorkspaceRoot,
     stepId: "impl_be",
     taskId: "task-empty",
-    executionAdapterPacket: { target_paths: ["sandbox/crm_site/server.js"] },
+    executionAdapterPacket: { target_paths: ["workspace/sandbox/crm_site/server.js"] },
     taskPrompt: "Implement backend.",
     taskDir: fallbackTaskDir,
     baselineSnapshot: noDeltaBaseline,
@@ -60,12 +60,12 @@ async function main() {
   const dirFallbackTaskDir = path.join(dirFallbackWorkspaceRoot, "artifacts", "runs", "run-3", "task_3");
   fs.mkdirSync(dirFallbackTaskDir, { recursive: true });
 
-  const dirBaseline = captureScopedSnapshot(dirFallbackWorkspaceRoot, ["sandbox/crm_site"]);
+  const dirBaseline = captureScopedSnapshot(dirFallbackWorkspaceRoot, ["workspace/sandbox/crm_site"]);
   const recoveredDir = await ensureImplementationDelta({
     workspaceRoot: dirFallbackWorkspaceRoot,
     stepId: "impl_fe",
     taskId: "task-dir",
-    executionAdapterPacket: { target_paths: ["sandbox/crm_site"] },
+    executionAdapterPacket: { target_paths: ["workspace/sandbox/crm_site"] },
     taskPrompt: "Implement frontend.",
     taskDir: dirFallbackTaskDir,
     baselineSnapshot: dirBaseline,

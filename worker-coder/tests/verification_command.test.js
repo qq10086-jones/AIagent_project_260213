@@ -21,22 +21,22 @@ function shouldSkipSpawn(result) {
 
 async function testVerificationCommandPasses() {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "const value = 1;\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "const value = 1;\n");
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
     task_prompt: "update frontend file",
     step_id: "impl_fe",
-    target_paths: ["sandbox/crm_site/"],
+    target_paths: ["workspace/sandbox/crm_site/"],
     provider: "opencode",
     run_id: "run-pass",
     task_id: "task-pass",
     opencode_command: [
       process.execPath,
       "-e",
-      "require('fs').appendFileSync('sandbox/crm_site/app.js', '\\nconst nextValue = 2;\\n');",
+      "require('fs').appendFileSync('workspace/sandbox/crm_site/app.js', '\\nconst nextValue = 2;\\n');",
     ],
-    verification_command: "node --check sandbox/crm_site/app.js",
+    verification_command: "node --check workspace/sandbox/crm_site/app.js",
   });
 
   if (shouldSkipSpawn(result)) {
@@ -49,25 +49,25 @@ async function testVerificationCommandPasses() {
   assert.ok(result.artifacts.test_log);
   assert.equal(result.diagnostics.verification.checked, true);
   assert.equal(result.diagnostics.verification.ok, true);
-  assert.equal(result.diagnostics.verification.command, "node --check sandbox/crm_site/app.js");
+  assert.equal(result.diagnostics.verification.command, "node --check workspace/sandbox/crm_site/app.js");
 }
 
 async function testVerificationCommandFails() {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "const value = 1;\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "const value = 1;\n");
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
     task_prompt: "update frontend file",
     step_id: "impl_fe",
-    target_paths: ["sandbox/crm_site/"],
+    target_paths: ["workspace/sandbox/crm_site/"],
     provider: "opencode",
     run_id: "run-fail",
     task_id: "task-fail",
     opencode_command: [
       process.execPath,
       "-e",
-      "require('fs').appendFileSync('sandbox/crm_site/app.js', '\\nconst nextValue = 2;\\n');",
+      "require('fs').appendFileSync('workspace/sandbox/crm_site/app.js', '\\nconst nextValue = 2;\\n');",
     ],
     verification_command: "node missing_entry.js",
   });
@@ -87,23 +87,23 @@ async function testVerificationCommandFails() {
 
 async function testVerificationPlanPasses() {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "const value = 1;\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "const value = 1;\n");
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
     task_prompt: "update frontend file",
     step_id: "impl_fe",
-    target_paths: ["sandbox/crm_site/"],
+    target_paths: ["workspace/sandbox/crm_site/"],
     provider: "opencode",
     run_id: "run-plan-pass",
     task_id: "task-plan-pass",
     opencode_command: [
       process.execPath,
       "-e",
-      "require('fs').appendFileSync('sandbox/crm_site/app.js', '\\nconst nextValue = 2;\\n');",
+      "require('fs').appendFileSync('workspace/sandbox/crm_site/app.js', '\\nconst nextValue = 2;\\n');",
     ],
     verification_plan: [
-      { tier: "syntax_check", command: "node --check sandbox/crm_site/app.js" },
+      { tier: "syntax_check", command: "node --check workspace/sandbox/crm_site/app.js" },
       { tier: "custom_smoke", command: "node --version" },
     ],
   });

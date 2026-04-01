@@ -185,7 +185,7 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
     };
   }
   const targetPathsRaw = Array.isArray(payload?.target_paths) ? payload.target_paths : [];
-  const targetPaths = (targetPathsRaw.length > 0 ? targetPathsRaw : ["sandbox/crm_site/"])
+  const targetPaths = (targetPathsRaw.length > 0 ? targetPathsRaw : ["workspace/sandbox/crm_site/"])
     .map((item) => normalizePathText(item).replace(/\/+$/, "") + "/");
   const scopedFiles = changedFiles.filter((f) => targetPaths.some((prefix) => f.startsWith(prefix)));
   if (scopedFiles.length === 0) {

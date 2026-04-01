@@ -121,22 +121,22 @@ function buildWorkflowPayload() {
       max_runtime_s: 180,
       step_payloads: {
         pm_spec: {
-          target_paths: ["sandbox/live_validation/pm_spec.txt"],
-          opencode_command: ["mock-inline-autofix", "sandbox/live_validation/pm_spec.txt", "{{task_prompt}}"],
+          target_paths: ["workspace/sandbox/live_validation/pm_spec.txt"],
+          opencode_command: ["mock-inline-autofix", "workspace/sandbox/live_validation/pm_spec.txt", "{{task_prompt}}"],
         },
         arch_design: {
-          target_paths: ["sandbox/live_validation/arch_design.txt"],
-          opencode_command: ["mock-inline-autofix", "sandbox/live_validation/arch_design.txt", "{{task_prompt}}"],
+          target_paths: ["workspace/sandbox/live_validation/arch_design.txt"],
+          opencode_command: ["mock-inline-autofix", "workspace/sandbox/live_validation/arch_design.txt", "{{task_prompt}}"],
         },
         impl_be: {
-          target_paths: ["sandbox/crm_site/server.js"],
+          target_paths: ["workspace/sandbox/crm_site/server.js"],
           opencode_command: ["node", "/workspace/orchestrator/scripts/live_validate_mock_crm_impl.js", "impl_be", "{{task_prompt}}"],
           max_attempts: 2,
           same_error_repeat_limit: 2,
           wall_clock_timeout_s: 300,
         },
         impl_fe: {
-          target_paths: ["sandbox/crm_site/app.js"],
+          target_paths: ["workspace/sandbox/crm_site/app.js"],
           opencode_command: ["node", "/workspace/orchestrator/scripts/live_validate_mock_crm_impl.js", "impl_fe", "{{task_prompt}}"],
           max_attempts: 2,
           same_error_repeat_limit: 2,
@@ -146,8 +146,8 @@ function buildWorkflowPayload() {
           command: "node --version",
         },
         release_pack: {
-          target_paths: ["sandbox/live_validation/release_pack.txt"],
-          opencode_command: ["mock-inline-autofix", "sandbox/live_validation/release_pack.txt", "{{task_prompt}}"],
+          target_paths: ["workspace/sandbox/live_validation/release_pack.txt"],
+          opencode_command: ["mock-inline-autofix", "workspace/sandbox/live_validation/release_pack.txt", "{{task_prompt}}"],
         },
       },
     },

@@ -543,12 +543,12 @@ async function runCanary() {
         },
         step_payloads: {
           impl_be: {
-            target_paths: ["sandbox/crm_site/server.js"],
-            opencode_command: ["mock-inline-autofix", "sandbox/crm_site/server.js", "{{task_prompt}}"],
+            target_paths: ["workspace/sandbox/crm_site/server.js"],
+            opencode_command: ["mock-inline-autofix", "workspace/sandbox/crm_site/server.js", "{{task_prompt}}"],
           },
           impl_fe: {
-            target_paths: ["sandbox/crm_site/app.js"],
-            opencode_command: ["mock-inline-autofix", "sandbox/crm_site/app.js", "{{task_prompt}}"],
+            target_paths: ["workspace/sandbox/crm_site/app.js"],
+            opencode_command: ["mock-inline-autofix", "workspace/sandbox/crm_site/app.js", "{{task_prompt}}"],
           },
         },
       },
@@ -558,11 +558,11 @@ async function runCanary() {
     await completeTaskByStep(harness, workflowRunId, "pm_spec", writePmArtifacts);
     await completeTaskByStep(harness, workflowRunId, "arch_design", writeArchArtifacts);
     await completeTaskByStep(harness, workflowRunId, "impl_be", writeBackendArtifacts, {
-      files_changed: ["sandbox/crm_site/server.js"],
+      files_changed: ["workspace/sandbox/crm_site/server.js"],
       diff_stats: { files: 1 },
     });
     await completeTaskByStep(harness, workflowRunId, "impl_fe", writeFrontendArtifacts, {
-      files_changed: ["sandbox/crm_site/app.js"],
+      files_changed: ["workspace/sandbox/crm_site/app.js"],
       diff_stats: { files: 1 },
     });
 

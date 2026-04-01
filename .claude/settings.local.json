@@ -105,7 +105,7 @@
       "Bash(find /c/Users/linweiye/AIagent_project_260213/orchestrator/artifacts/validation -name *.json -o -name *report*.md)",
       "Bash(find /c/Users/linweiye/AIagent_project_260213 -name progress_*.md -type f)",
       "Bash(mkdir -p scratch)",
-      "Bash(mv dump.txt dump_attempts.txt dump_attempts.json db_out.txt db_out2.txt db_out3.txt db_out4.txt clean_dump.json db_pretty.json fail_dump.json latest_fail.json bbc_attempts.json brain_test_dummy.txt coder_smoke.txt coder_smoke2.txt full_chain_test_file.txt registry_smoke_patch.txt __write_test__.txt scratch/)",
+      "Bash(mv dump.txt dump_attempts.txt dump_attempts.json db_out.txt db_out2.txt db_out3.txt db_out4.txt clean_dump.json db_pretty.json fail_dump.json latest_fail.json bbc_attempts.json brain_test_dummy.txt coder_smoke.txt coder_smoke2.txt full_chain_test_file.txt registry_smoke_patch.txt __write_test__.txt workspace/scratch/)",
       "Bash(grep -E \"\\\\.md$\")",
       "Bash(echo \"=== diff exit code: $?\")",
       "Bash(echo \"exit: $?\")",

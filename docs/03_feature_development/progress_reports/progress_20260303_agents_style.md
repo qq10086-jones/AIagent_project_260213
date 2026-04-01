@@ -112,5 +112,5 @@
 - `docs/01_design/system/260302/openclaw_nexus_v1_4_coding_team_first_tasklist.md`
 
 ## Tracking Notes
-- Existing unrelated git state remains (including `openclaw` submodule drift); not reverted.
+- Existing unrelated git state remains (including `external/openclaw` submodule drift); not reverted.
 - Docker control intermittently returned local permission errors (`dockerDesktopLinuxEngine access denied`) during this session, then partially recovered.

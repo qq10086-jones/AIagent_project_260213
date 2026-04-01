@@ -37,7 +37,7 @@
 
 ### Install dependencies
 ```bash
-cd sandbox/project/impl/be_changes
+cd workspace/sandbox/project/impl/be_changes
 npm init -y
 npm install express cors
 ```

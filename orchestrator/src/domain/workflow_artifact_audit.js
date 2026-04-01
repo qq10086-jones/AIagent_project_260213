@@ -95,7 +95,7 @@ export function writeJsonFile(targetPath, obj) {
 }
 
 export function buildReleasePackPaths(workspaceRoot, run) {
-  const releaseRoot = path.join(workspaceRoot, "artifacts", "release", String(run.run_id || run.workflow_run_id));
+  const releaseRoot = path.join(workspaceRoot, "runtime", "artifacts", "release", String(run.run_id || run.workflow_run_id));
   return {
     release_root: releaseRoot,
     manifest_path: path.join(releaseRoot, "meta", "run_manifest.json"),

@@ -161,7 +161,7 @@ function main() {
 
   if (stepId === "impl_be") {
     const serverSource = buildBackendSource();
-    writeText(cwd, "sandbox/crm_site/server.js", serverSource);
+    writeText(cwd, "workspace/sandbox/crm_site/server.js", serverSource);
     writeText(artifactAbs, "impl/be_changes/server.js", serverSource);
     writeJson(artifactAbs, "impl/be_changes/package.json", {
       name: "crm-live-validation",
@@ -210,7 +210,7 @@ function main() {
       shared_types: [
         { name: "Customer", description: "CRM customer record.", fields: ["id", "name", "email"] }
       ],
-      scope_constraints: ["Only sandbox/crm_site/server.js is modified."]
+      scope_constraints: ["Only workspace/sandbox/crm_site/server.js is modified."]
     });
     console.log("live_validate_mock_crm_impl: backend artifacts written");
     return;
@@ -218,7 +218,7 @@ function main() {
 
   if (stepId === "impl_fe") {
     const appSource = buildFrontendSource();
-    writeText(cwd, "sandbox/crm_site/app.js", appSource);
+    writeText(cwd, "workspace/sandbox/crm_site/app.js", appSource);
     writeText(artifactAbs, "impl/fe_changes/app.js", appSource);
     writeText(artifactAbs, "impl/fe_changes/public/index.html", buildIndexHtml());
     writeText(artifactAbs, "impl/fe_changes/public/app.js", appSource);

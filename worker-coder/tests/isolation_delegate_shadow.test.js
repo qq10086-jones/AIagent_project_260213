@@ -21,10 +21,10 @@ async function main() {
 
   try {
     const workspaceRoot = makeWorkspace();
-    writeFile(workspaceRoot, "sandbox/crm_site/app.js", "export const value = 1;\n");
+    writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "export const value = 1;\n");
     writeFile(
       workspaceRoot,
-      "sandbox/crm_site/package.json",
+      "workspace/sandbox/crm_site/package.json",
       JSON.stringify({
         name: "crm-site-shadow-test",
         scripts: {
@@ -37,16 +37,16 @@ async function main() {
       workspaceRoot,
       task_prompt: "update frontend file",
       step_id: "impl_fe",
-      target_paths: ["sandbox/crm_site/app.js"],
+      target_paths: ["workspace/sandbox/crm_site/app.js"],
       provider: "opencode",
       run_id: "run-shadow",
       task_id: "task-shadow",
       opencode_command: [
         "mock-inline-autofix",
-        "sandbox/crm_site/app.js",
+        "workspace/sandbox/crm_site/app.js",
         "{{task_prompt}}",
       ],
-      verification_command: "node --check sandbox/crm_site/app.js",
+      verification_command: "node --check workspace/sandbox/crm_site/app.js",
     });
 
     assert.equal(result.ok, false, JSON.stringify(result));

@@ -84,7 +84,7 @@ function main() {
       "",
     ].join("\n")
   );
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "export const app = true;\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "export const app = true;\n");
 
   const service = createPatchBundleService({ workspaceRoot });
   const checks = [];
@@ -136,20 +136,20 @@ function main() {
     operations: [
       {
         type: "insert_after_anchor",
-        target_file: "sandbox/crm_site/app.js",
+        target_file: "workspace/sandbox/crm_site/app.js",
         anchor: "export const app = true;",
         content: "\nexport const markerB = true;",
       },
       {
         type: "insert_after_anchor",
-        target_file: "sandbox/crm_site/app.js",
+        target_file: "workspace/sandbox/crm_site/app.js",
         anchor: "export const markerB = true;",
         content: "\nexport const markerC = true;",
       },
     ],
   });
   assert(sameFile.ok === true, "same-file multi-op patch failed");
-  assert(/markerC/.test(readFile(workspaceRoot, "sandbox/crm_site/app.js")), "anchor shift case not applied");
+  assert(/markerC/.test(readFile(workspaceRoot, "workspace/sandbox/crm_site/app.js")), "anchor shift case not applied");
   checks.push({ id: "same_file_anchor_shift", ok: true });
 
   let malformedError = null;
@@ -162,7 +162,7 @@ function main() {
       operations: [
         {
           type: "insert_after_anchor",
-          target_file: "sandbox/crm_site/app.js",
+          target_file: "workspace/sandbox/crm_site/app.js",
           content: "missing anchor",
         },
       ],
@@ -184,14 +184,14 @@ function main() {
       operations: [
         {
           type: "replace_range",
-          target_file: "sandbox/crm_site/app.js",
+          target_file: "workspace/sandbox/crm_site/app.js",
           anchor_start: "export const app = true;",
           anchor_end: "export const markerB = true;",
           content: "export const rewritten = true;",
         },
         {
           type: "insert_after_anchor",
-          target_file: "sandbox/crm_site/app.js",
+          target_file: "workspace/sandbox/crm_site/app.js",
           anchor: "export const markerB = true;",
           content: "\nexport const shouldFail = true;",
         },

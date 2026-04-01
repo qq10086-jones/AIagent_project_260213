@@ -330,7 +330,7 @@ Examples:
 
 Implementation adapters must stop assuming:
 
-- `sandbox/crm_site/`
+- `workspace/sandbox/crm_site/`
 - server/client split
 - backend API existence
 

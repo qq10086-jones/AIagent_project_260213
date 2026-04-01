@@ -74,13 +74,18 @@ MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "nexus")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "nexuspassword")
 WORKSPACE_ROOT = Path(os.getenv("WORKSPACE_ROOT", "/workspace"))
+WORKSPACE_RUNTIME_ROOT = Path(os.getenv("WORKSPACE_RUNTIME_ROOT", str(WORKSPACE_ROOT / "runtime")))
+RUNTIME_ARTIFACTS_ROOT = Path(os.getenv("RUNTIME_ARTIFACTS_ROOT", str(WORKSPACE_RUNTIME_ROOT / "artifacts")))
+QUANT_PROJECT_ROOT = Path(os.getenv("QUANT_PROJECT_ROOT", "/app/quant_trading/Project_optimized"))
+QUANT_RUNTIME_ROOT = Path(os.getenv("QUANT_RUNTIME_ROOT", str(WORKSPACE_RUNTIME_ROOT / "worker-quant" / "quant_trading" / "Project_optimized")))
+QUANT_DB_PATH = Path(os.getenv("QUANT_DB_PATH", str(QUANT_RUNTIME_ROOT / "japan_market.db")))
 RENDER_API_KEY = os.getenv("RENDER_API_KEY", "")
 RENDER_API_BASE_URL = os.getenv("RENDER_API_BASE_URL", "https://api.render.com/v1")
 PREVIEW_PORT_START = int(os.getenv("PREVIEW_PORT_START", "46000"))
 PREVIEW_PORT_END = int(os.getenv("PREVIEW_PORT_END", "46020"))
 PREVIEW_PUBLIC_HOST = os.getenv("PREVIEW_PUBLIC_HOST", "localhost").strip() or "localhost"
 PREVIEW_HEALTH_TIMEOUT_S = int(os.getenv("PREVIEW_HEALTH_TIMEOUT_S", "15"))
-PREVIEW_REGISTRY_PATH = WORKSPACE_ROOT / "artifacts" / "preview_runtime_registry.json"
+PREVIEW_REGISTRY_PATH = RUNTIME_ARTIFACTS_ROOT / "preview_runtime_registry.json"
 
 # --- LLM Config ---
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", RUNTIME_QUANT.get("llm_provider", "ollama")).lower() # ollama, openai, dashscope, gemini
@@ -105,7 +110,7 @@ MINIMAX_BASE_URL = (
 
 QUANT_LLM_MODEL = os.getenv("QUANT_LLM_MODEL", RUNTIME_QUANT.get("quant_llm_model", "deepseek-r1:1.5b"))
 CODE_LLM_MODEL = os.getenv("CODE_LLM_MODEL", RUNTIME_QUANT.get("code_llm_model", "glm-4.7-flash:latest"))
-DISCOVERY_LEARNING_PATH = Path(os.getenv("DISCOVERY_LEARNING_PATH", "/tmp/nexus_discovery_learning.json"))
+DISCOVERY_LEARNING_PATH = Path(os.getenv("DISCOVERY_LEARNING_PATH", str(QUANT_RUNTIME_ROOT / "nexus_discovery_learning.json")))
 LLM_TIMEOUT_S = int(os.getenv("LLM_TIMEOUT_S", str(RUNTIME_QUANT.get("llm_timeout_s", 25))))
 DISCOVERY_TIME_BUDGET_S = int(os.getenv("DISCOVERY_TIME_BUDGET_S", "75"))
 DISCOVERY_QUICK_UNIVERSE_CAP = int(os.getenv("DISCOVERY_QUICK_UNIVERSE_CAP", "28"))
@@ -619,7 +624,7 @@ def _fetch_quote_facts(symbol: str) -> dict:
 def _fetch_ss6_signal(symbol: str) -> dict:
     """Fetch professional regression signal from ss6_sqlite database if available."""
     sym = str(symbol or "").upper()
-    db_path = Path("/app/quant_trading/Project_optimized/japan_market.db")
+    db_path = QUANT_DB_PATH
     if not db_path.exists():
         return {"found": False}
     
@@ -2200,7 +2205,7 @@ def news_daily_report(payload: dict):
     }
 
 def _get_current_positions_from_fills(max_symbols: int = 20) -> list[dict]:
-    db_path = Path("/app/quant_trading/Project_optimized/japan_market.db")
+    db_path = QUANT_DB_PATH
     if not db_path.exists():
         return []
     conn = None
@@ -2241,7 +2246,7 @@ def _get_current_positions_from_fills(max_symbols: int = 20) -> list[dict]:
             pass
 
 def _get_account_state_snapshot() -> dict:
-    db_path = Path("/app/quant_trading/Project_optimized/japan_market.db")
+    db_path = QUANT_DB_PATH
     if not db_path.exists():
         return {}
     conn = None
@@ -3808,7 +3813,7 @@ def compute_news_risk_factor(payload: dict):
     effective_news_risk_z = news_risk_raw * news_factor_weight
 
     # 4. Save to feature_daily (SQLite)
-    db_path = Path("/app/quant_trading/Project_optimized/japan_market.db")
+    db_path = QUANT_DB_PATH
     saved = False
     if db_path.exists():
         try:
@@ -3876,7 +3881,7 @@ def portfolio_set_account(payload: dict):
     ccy = payload.get("ccy", "JPY")
     date_str = _now_date_str()
     
-    db_path = Path("/app/quant_trading/Project_optimized/japan_market.db")
+    db_path = QUANT_DB_PATH
     if not db_path.exists():
         return {"ok": False, "error": "Database not found."}
         
@@ -3922,7 +3927,7 @@ def portfolio_record_fill(payload: dict):
     date_str = _now_date_str()
     fill_id = uuid.uuid4().hex
     
-    db_path = Path("/app/quant_trading/Project_optimized/japan_market.db")
+    db_path = QUANT_DB_PATH
     if not db_path.exists():
         return {"ok": False, "error": "Database not found."}
         
@@ -4500,11 +4505,11 @@ def _find_preview_project_root(payload: dict) -> tuple[Path | None, str]:
             candidates.append(value)
     project_type = str(payload.get("project_type") or "")
     if project_type == "webapp_crm":
-        candidates.extend(["sandbox/crm_site", "ui"])
+        candidates.extend(["workspace/sandbox/crm_site", "ui"])
     elif project_type in ("generic_app", "single_file_html"):
-        candidates.extend(["sandbox/app", "sandbox/project", "ui"])
+        candidates.extend(["workspace/sandbox/app", "workspace/sandbox/project", "ui"])
     else:
-        candidates.extend(["sandbox/app", "sandbox/project", "sandbox/crm_site", "ui"])
+        candidates.extend(["workspace/sandbox/app", "workspace/sandbox/project", "workspace/sandbox/crm_site", "ui"])
     seen = set()
     for rel in candidates:
         if rel in seen:
@@ -5037,7 +5042,7 @@ def _build_reverse_alias(alias_map: dict) -> dict:
 # ─────────────────────────────────────────────────────────────
 # SECTION: Cost Price & Position Snapshot  (A-01, A-02)
 # ─────────────────────────────────────────────────────────────
-_DB_PATH = Path("/app/quant_trading/Project_optimized/japan_market.db")
+_DB_PATH = QUANT_DB_PATH
 
 def _ensure_positions_snapshot_table(conn):
     conn.execute("""

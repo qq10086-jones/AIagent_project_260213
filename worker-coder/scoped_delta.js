@@ -131,8 +131,8 @@ export async function ensureImplementationDelta({
     ? executionAdapterPacket.target_paths
     : Array.isArray(targetPaths) && targetPaths.length > 0
       ? targetPaths
-      : ["sandbox/crm_site/"];
-  const firstTargetPath = String(effectiveTargetPaths[0] || "sandbox/crm_site/").replace(/\\/g, "/").replace(/\/+$/, "");
+      : ["workspace/sandbox/crm_site/"];
+  const firstTargetPath = String(effectiveTargetPaths[0] || "workspace/sandbox/crm_site/").replace(/\\/g, "/").replace(/\/+$/, "");
   const isFileTarget = /\.[A-Za-z0-9]+$/.test(firstTargetPath);
   if (isFileTarget) {
     return current;

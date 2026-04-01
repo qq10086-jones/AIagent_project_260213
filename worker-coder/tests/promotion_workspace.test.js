@@ -18,17 +18,17 @@ function main() {
   const isolatedRoot = path.join(taskDir, "isolated_workspace");
   fs.mkdirSync(taskDir, { recursive: true });
 
-  writeFile(root, "sandbox/crm_site/app.js", "export const value = 1;\n");
-  writeFile(isolatedRoot, "sandbox/crm_site/app.js", "export const value = 2;\n");
+  writeFile(root, "workspace/sandbox/crm_site/app.js", "export const value = 1;\n");
+  writeFile(isolatedRoot, "workspace/sandbox/crm_site/app.js", "export const value = 2;\n");
 
-  const baselineSnapshot = captureScopedSnapshot(root, ["sandbox/crm_site/app.js"]);
+  const baselineSnapshot = captureScopedSnapshot(root, ["workspace/sandbox/crm_site/app.js"]);
 
   const shadow = promoteIsolatedChanges({
     workspaceRoot: root,
     isolatedWorkspaceRoot: isolatedRoot,
     taskDir,
-    filesChanged: ["sandbox/crm_site/app.js"],
-    allowedTargetPaths: ["sandbox/crm_site/app.js"],
+    filesChanged: ["workspace/sandbox/crm_site/app.js"],
+    allowedTargetPaths: ["workspace/sandbox/crm_site/app.js"],
     mode: "shadow",
     baselineSnapshot,
   });
@@ -43,8 +43,8 @@ function main() {
     workspaceRoot: root,
     isolatedWorkspaceRoot: isolatedRoot,
     taskDir,
-    filesChanged: ["sandbox/crm_site/app.js"],
-    allowedTargetPaths: ["sandbox/crm_site/app.js"],
+    filesChanged: ["workspace/sandbox/crm_site/app.js"],
+    allowedTargetPaths: ["workspace/sandbox/crm_site/app.js"],
     mode: "promote",
     baselineSnapshot,
   });
@@ -59,8 +59,8 @@ function main() {
     workspaceRoot: root,
     isolatedWorkspaceRoot: isolatedRoot,
     taskDir,
-    filesChanged: ["sandbox/other/file.js"],
-    allowedTargetPaths: ["sandbox/crm_site/app.js"],
+    filesChanged: ["workspace/sandbox/other/file.js"],
+    allowedTargetPaths: ["workspace/sandbox/crm_site/app.js"],
     mode: "promote",
     baselineSnapshot,
   });
@@ -69,13 +69,13 @@ function main() {
   assert.match(blocked.error, /outside scope/);
 
   // Test drift detection — conflicting drift (drifted file overlaps with changedFiles)
-  writeFile(root, "sandbox/crm_site/app.js", "export const value = 3;\n"); // mutate host after baseline
+  writeFile(root, "workspace/sandbox/crm_site/app.js", "export const value = 3;\n"); // mutate host after baseline
   const drifted = promoteIsolatedChanges({
     workspaceRoot: root,
     isolatedWorkspaceRoot: isolatedRoot,
     taskDir,
-    filesChanged: ["sandbox/crm_site/app.js"],
-    allowedTargetPaths: ["sandbox/crm_site/app.js"],
+    filesChanged: ["workspace/sandbox/crm_site/app.js"],
+    allowedTargetPaths: ["workspace/sandbox/crm_site/app.js"],
     mode: "promote",
     baselineSnapshot,
   });
@@ -88,17 +88,17 @@ function main() {
   const taskDir2 = path.join(root, "artifacts", "runs", "run-1", "task_2");
   const isolatedRoot2 = path.join(taskDir2, "isolated_workspace");
   fs.mkdirSync(taskDir2, { recursive: true });
-  writeFile(root, "sandbox/crm_site/stub_from_other_workflow.js", "// other workflow\n");
-  const baselineSnapshotOther = captureScopedSnapshot(root, ["sandbox/crm_site/other.js"]);
-  writeFile(isolatedRoot2, "sandbox/crm_site/other.js", "export const x = 42;\n");
+  writeFile(root, "workspace/sandbox/crm_site/stub_from_other_workflow.js", "// other workflow\n");
+  const baselineSnapshotOther = captureScopedSnapshot(root, ["workspace/sandbox/crm_site/other.js"]);
+  writeFile(isolatedRoot2, "workspace/sandbox/crm_site/other.js", "export const x = 42;\n");
   // The workspace has stub_from_other_workflow.js (from another workflow), but this task
   // only touches other.js — that's additive drift, not a conflict.
   const additiveDrift = promoteIsolatedChanges({
     workspaceRoot: root,
     isolatedWorkspaceRoot: isolatedRoot2,
     taskDir: taskDir2,
-    filesChanged: ["sandbox/crm_site/other.js"],
-    allowedTargetPaths: ["sandbox/crm_site/other.js"],
+    filesChanged: ["workspace/sandbox/crm_site/other.js"],
+    allowedTargetPaths: ["workspace/sandbox/crm_site/other.js"],
     mode: "promote",
     baselineSnapshot: baselineSnapshotOther,
   });

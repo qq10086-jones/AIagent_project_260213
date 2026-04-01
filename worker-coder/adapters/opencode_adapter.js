@@ -301,7 +301,7 @@ function createArchArtifacts({ cwd, prompt, artifactWorkspaceRoot }) {
   writeJson(path.join(artifactRoot, "risk", "risk_report.json"), {
     risks: [
       { title: "API/frontend contract drift", mitigation: "Keep interface headings and shared JSON fields aligned", level: "medium" },
-      { title: "Out-of-scope file edits", mitigation: "Restrict edits to sandbox/crm_site target paths", level: "low" },
+      { title: "Out-of-scope file edits", mitigation: "Restrict edits to workspace/sandbox/crm_site target paths", level: "low" },
     ],
     decision_log: [
       "Use Express handlers for deterministic CRUD endpoints",
@@ -329,7 +329,7 @@ function createArchArtifacts({ cwd, prompt, artifactWorkspaceRoot }) {
     ],
     decisions: [
       { adr_id: "ADR-001", title: "Use Express for backend API", status: "accepted" },
-      { adr_id: "ADR-002", title: "Keep frontend in sandbox/crm_site/app.js", status: "accepted" },
+      { adr_id: "ADR-002", title: "Keep frontend in workspace/sandbox/crm_site/app.js", status: "accepted" },
     ],
     risks: ["API/frontend contract drift", "Out-of-scope file edits"],
   });
@@ -373,7 +373,7 @@ function createReleaseArtifacts({ cwd, prompt, artifactWorkspaceRoot }) {
 function createBackendImplArtifacts({ cwd, prompt, fixed = false, artifactWorkspaceRoot }) {
   const artifactRoot = buildArtifactRoot(cwd, prompt, artifactWorkspaceRoot);
   if (!artifactRoot) return false;
-  const targetFile = "sandbox/crm_site/server.js";
+  const targetFile = "workspace/sandbox/crm_site/server.js";
   const finalContent = fixed
     ? "const status = 'fixed';\nmodule.exports = { status };\n"
     : "const status = ;\nmodule.exports = { status };\n";
@@ -412,7 +412,7 @@ function createBackendImplArtifacts({ cwd, prompt, fixed = false, artifactWorksp
     "",
     "## Run Instructions",
     "",
-    "1. Run node --check sandbox/crm_site/server.js",
+    "1. Run node --check workspace/sandbox/crm_site/server.js",
   ].join("\n"));
   writeJson(path.join(artifactRoot, "handoff", "be_to_fe.json"), {
     from_step: "impl_be",
@@ -427,7 +427,7 @@ function createBackendImplArtifacts({ cwd, prompt, fixed = false, artifactWorksp
     shared_types: [
       { name: "Customer", description: "Shared CRM customer record.", fields: ["id", "name", "email"] },
     ],
-    scope_constraints: ["Only sandbox/crm_site/server.js is modified."],
+    scope_constraints: ["Only workspace/sandbox/crm_site/server.js is modified."],
   });
   return true;
 }
@@ -435,7 +435,7 @@ function createBackendImplArtifacts({ cwd, prompt, fixed = false, artifactWorksp
 function createFrontendImplArtifacts({ cwd, prompt, fixed = false, artifactWorkspaceRoot }) {
   const artifactRoot = buildArtifactRoot(cwd, prompt, artifactWorkspaceRoot);
   if (!artifactRoot) return false;
-  const targetFile = "sandbox/crm_site/app.js";
+  const targetFile = "workspace/sandbox/crm_site/app.js";
   const finalContent = fixed
     ? "const status = 'fixed';\nmodule.exports = { status };\n"
     : "const status = ;\nmodule.exports = { status };\n";
@@ -469,7 +469,7 @@ function createFrontendImplArtifacts({ cwd, prompt, fixed = false, artifactWorks
     "",
     "## Run Instructions",
     "",
-    "1. Run node --check sandbox/crm_site/app.js",
+    "1. Run node --check workspace/sandbox/crm_site/app.js",
   ].join("\n"));
   writeJson(path.join(artifactRoot, "handoff", "impl_to_qa.json"), {
     from_steps: ["impl_be", "impl_fe"],
@@ -618,7 +618,7 @@ export function buildOpenCodeInvocation({
 }
 
 async function runInlineMockProcess({ cwd, args = [], artifactWorkspaceRoot = null }) {
-  const targetRel = String(args[0] || "sandbox/crm_site/app.js").replace(/\\/g, "/");
+  const targetRel = String(args[0] || "workspace/sandbox/crm_site/app.js").replace(/\\/g, "/");
   const prompt = String(args[1] || "");
   const targetAbs = path.resolve(cwd, targetRel);
   fs.mkdirSync(path.dirname(targetAbs), { recursive: true });

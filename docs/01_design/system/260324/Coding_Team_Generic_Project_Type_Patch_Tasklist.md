@@ -94,7 +94,7 @@ Remove the structural assumption that `coding_team_v0` implies `webapp_crm`, whi
 
 ### WS-06 Implementation Contract Generalization
 
-- [ ] T16: Remove `sandbox/crm_site/` as the universal impl target-path default
+- [ ] T16: Remove `workspace/sandbox/crm_site/` as the universal impl target-path default
   - Owner: Backend
   - DoD: target paths derive from project type or execution template
 

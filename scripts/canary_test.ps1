@@ -9,7 +9,7 @@ $tasks = @(
     @{ name="Doc update 1"; prompt="Update CHANGELOG.md with 'Canary test started'"; risk="low" },
     @{ name="Doc update 2"; prompt="Add a note to docs/README.md about system stability"; risk="low" },
     @{ name="Doc update 3"; prompt="Create a new file docs/canary_status.txt with text 'OK'"; risk="low" },
-    @{ name="Doc update 4"; prompt="Check version in openclaw/README.md"; risk="low" },
+    @{ name="Doc update 4"; prompt="Check version in external/openclaw/README.md"; risk="low" },
     @{ name="Doc update 5"; prompt="Summarize the current progress in docs/03_feature_development/PROGRESS_LATEST.md"; risk="low" },
 
     # --- MEDIUM RISK (10) ---

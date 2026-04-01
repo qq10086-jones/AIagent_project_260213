@@ -36,14 +36,14 @@ const CODING_TEAM_WORKPLAN_SCHEMA = JSON.parse(
 );
 
 export function pathForRunArtifacts(run_id) {
-  return `artifacts/release/${run_id || "unknown-run"}`;
+  return `runtime/artifacts/release/${run_id || "unknown-run"}`;
 }
 
 function defaultCodingTargetPaths(projectType) {
-  if (String(projectType || "") === "webapp_crm") return ["sandbox/crm_site/"];
-  if (String(projectType || "") === "single_file_html") return ["sandbox/html_site/"];
-  if (String(projectType || "") === "generic_app") return ["sandbox/app/"];
-  return ["sandbox/project/"];
+  if (String(projectType || "") === "webapp_crm") return ["workspace/sandbox/crm_site/"];
+  if (String(projectType || "") === "single_file_html") return ["workspace/sandbox/html_site/"];
+  if (String(projectType || "") === "generic_app") return ["workspace/sandbox/app/"];
+  return ["workspace/sandbox/project/"];
 }
 
 function listTargetFilesWithContent({ workspaceRoot, targetPaths, maxFiles = 3, maxCharsPerFile = 4000 }) {

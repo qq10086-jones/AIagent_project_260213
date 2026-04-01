@@ -13,7 +13,7 @@
   "verification": {
     "checked": true,
     "ok": true,
-    "command": "node --check sandbox/crm_site/app.js",
+    "command": "node --check workspace/sandbox/crm_site/app.js",
     "exit_code": 0,
     "stdout": "",
     "stderr": "",
@@ -24,16 +24,16 @@
   "prompt_contract": {
     "contract_version": "execution_contract_v1",
     "target_paths": [
-      "sandbox/crm_site/"
+      "workspace/sandbox/crm_site/"
     ],
     "required_outputs": [],
-    "verification_command": "node --check sandbox/crm_site/app.js",
+    "verification_command": "node --check workspace/sandbox/crm_site/app.js",
     "execution_mode": "default",
     "prompt_sha1": "2b4c35648dfb55d33d7345f02f12c411a4f80945",
     "attempt": 2
   },
   "test_log": "C:\\Users\\jones\\AppData\\Local\\Temp\\worker-coder-autofix-Y5YqYi\\artifacts\\runs\\run-autofix\\task_task-autofix\\verification_1773185355932.json",
   "files_changed": [
-    "sandbox/crm_site/app.js"
+    "workspace/sandbox/crm_site/app.js"
   ]
 }

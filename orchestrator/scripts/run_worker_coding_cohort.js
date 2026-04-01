@@ -101,7 +101,7 @@ function inferCounterpartStepId(focusedStepId) {
 
 function buildIsolatedStubTarget(cohortTaskId, stepId) {
   const safeStepId = String(stepId || "").trim() || "impl_stub";
-  return `sandbox/worker_coding_cohort/${cohortTaskId}/${safeStepId}_isolated_stub.js`;
+  return `workspace/sandbox/worker_coding_cohort/${cohortTaskId}/${safeStepId}_isolated_stub.js`;
 }
 
 export function inferVerificationTierAchieved(stepOutput = {}) {
@@ -172,7 +172,7 @@ function buildWorkflowPayload({ task, template }) {
   const cohortTaskId = sanitizeId(task.cohort_task_id);
   const focusedStepId = inferFocusedStepId(task.task_class);
   const counterpartStepId = inferCounterpartStepId(focusedStepId);
-  const focusedTarget = focusedStepId === "impl_be" ? "sandbox/crm_site/server.js" : "sandbox/crm_site/app.js";
+  const focusedTarget = focusedStepId === "impl_be" ? "workspace/sandbox/crm_site/server.js" : "workspace/sandbox/crm_site/app.js";
   const isolatedCounterpartTarget = buildIsolatedStubTarget(cohortTaskId, counterpartStepId);
   const focusedPayload = {
     target_paths: [focusedTarget],
@@ -188,23 +188,23 @@ function buildWorkflowPayload({ task, template }) {
 
   const stepPayloads = {
     pm_spec: {
-      target_paths: [`sandbox/worker_coding_cohort/${cohortTaskId}/pm_spec.txt`],
-      opencode_command: ["mock-inline-autofix", `sandbox/worker_coding_cohort/${cohortTaskId}/pm_spec.txt`, "{{task_prompt}}"],
+      target_paths: [`workspace/sandbox/worker_coding_cohort/${cohortTaskId}/pm_spec.txt`],
+      opencode_command: ["mock-inline-autofix", `workspace/sandbox/worker_coding_cohort/${cohortTaskId}/pm_spec.txt`, "{{task_prompt}}"],
     },
     arch_design: {
-      target_paths: [`sandbox/worker_coding_cohort/${cohortTaskId}/arch_design.txt`],
-      opencode_command: ["mock-inline-autofix", `sandbox/worker_coding_cohort/${cohortTaskId}/arch_design.txt`, "{{task_prompt}}"],
+      target_paths: [`workspace/sandbox/worker_coding_cohort/${cohortTaskId}/arch_design.txt`],
+      opencode_command: ["mock-inline-autofix", `workspace/sandbox/worker_coding_cohort/${cohortTaskId}/arch_design.txt`, "{{task_prompt}}"],
     },
     impl_be: {
-      target_paths: [focusedStepId === "impl_be" ? "sandbox/crm_site/server.js" : isolatedCounterpartTarget],
-      opencode_command: ["mock-inline-autofix", focusedStepId === "impl_be" ? "sandbox/crm_site/server.js" : isolatedCounterpartTarget, "{{task_prompt}}"],
+      target_paths: [focusedStepId === "impl_be" ? "workspace/sandbox/crm_site/server.js" : isolatedCounterpartTarget],
+      opencode_command: ["mock-inline-autofix", focusedStepId === "impl_be" ? "workspace/sandbox/crm_site/server.js" : isolatedCounterpartTarget, "{{task_prompt}}"],
       max_attempts: 2,
       same_error_repeat_limit: 2,
       wall_clock_timeout_s: 300,
     },
     impl_fe: {
-      target_paths: [focusedStepId === "impl_fe" ? "sandbox/crm_site/app.js" : isolatedCounterpartTarget],
-      opencode_command: ["mock-inline-autofix", focusedStepId === "impl_fe" ? "sandbox/crm_site/app.js" : isolatedCounterpartTarget, "{{task_prompt}}"],
+      target_paths: [focusedStepId === "impl_fe" ? "workspace/sandbox/crm_site/app.js" : isolatedCounterpartTarget],
+      opencode_command: ["mock-inline-autofix", focusedStepId === "impl_fe" ? "workspace/sandbox/crm_site/app.js" : isolatedCounterpartTarget, "{{task_prompt}}"],
       max_attempts: 2,
       same_error_repeat_limit: 2,
       wall_clock_timeout_s: 300,
@@ -213,8 +213,8 @@ function buildWorkflowPayload({ task, template }) {
       command: "node --version",
     },
     release_pack: {
-      target_paths: [`sandbox/worker_coding_cohort/${cohortTaskId}/release_pack.txt`],
-      opencode_command: ["mock-inline-autofix", `sandbox/worker_coding_cohort/${cohortTaskId}/release_pack.txt`, "{{task_prompt}}"],
+      target_paths: [`workspace/sandbox/worker_coding_cohort/${cohortTaskId}/release_pack.txt`],
+      opencode_command: ["mock-inline-autofix", `workspace/sandbox/worker_coding_cohort/${cohortTaskId}/release_pack.txt`, "{{task_prompt}}"],
     },
   };
 

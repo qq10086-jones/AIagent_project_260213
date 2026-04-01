@@ -24,14 +24,14 @@
 
 **⚠️ 路径说明**：检测代码（`worker-coder/adapters/opencode_adapter.js:51`）查找的是：
 1. `/root/.config/opencode/plugins/superpowers.js`
-2. `{cwd}/vendor/superpowers/.opencode/plugins/superpowers.js`
+2. `{cwd}/external/vendor/superpowers/.opencode/plugins/superpowers.js`
 
 实施时以代码路径为准，不要以文档字符串为准。
 
 **步骤**：
 1. 在 `worker-coder/opencode.json` 中添加 `plugins` 字段：
    ```json
-   "plugins": ["{cwd}/vendor/superpowers/.opencode/plugins/superpowers.js"]
+   "plugins": ["{cwd}/external/vendor/superpowers/.opencode/plugins/superpowers.js"]
    ```
 2. 重新构建 worker-coder Docker 镜像
 3. 在容器内运行检测验证
@@ -169,7 +169,7 @@
 **目标**：agent 执行过程实时推流到 Discord，复用 pi 现有事件系统
 
 **⚠️ 实现说明**：这是订阅 pi 事件并转发，不是自己产生事件。
-参考：`openclaw/src/agents/pi-embedded-subscribe.ts` 的现有事件机制。
+参考：`external/openclaw/src/agents/pi-embedded-subscribe.ts` 的现有事件机制。
 
 **步骤**：
 1. 创建 `shared/stream_adapter.js`

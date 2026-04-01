@@ -67,7 +67,7 @@
 ### Development Mode
 
 ```bash
-cd sandbox/crm_site
+cd workspace/sandbox/crm_site
 npm install
 npm start
 ```
@@ -77,13 +77,13 @@ The server will start on http://localhost:3000
 ### Verification
 
 ```bash
-node --check sandbox/crm_site/impl/fe_changes/app.js
+node --check workspace/sandbox/crm_site/impl/fe_changes/app.js
 ```
 
 ### File Structure
 
 ```
-sandbox/crm_site/
+workspace/sandbox/crm_site/
 ├── impl/
 │   └── fe_changes/
 │       └── app.js          # Frontend implementation

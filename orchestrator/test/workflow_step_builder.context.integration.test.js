@@ -50,8 +50,8 @@ function makeBuilder(workspaceRoot) {
 test("impl_be payload includes context packet, repo map, and coding context block", () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "package.json", JSON.stringify({ name: "crm-app" }, null, 2));
-  writeFile(workspaceRoot, "sandbox/crm_site/server.js", "function startServer() { return 'ok'; }\n");
-  writeFile(workspaceRoot, "sandbox/crm_site/server.test.js", "test('server', () => {})\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/server.js", "function startServer() { return 'ok'; }\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/server.test.js", "test('server', () => {})\n");
 
   const { buildStepPayload } = makeBuilder(workspaceRoot);
   const payload = buildStepPayload({
@@ -82,11 +82,11 @@ test("impl_be payload includes context packet, repo map, and coding context bloc
   assert.match(payload.task_prompt, /Target Paths:/);
   assert.match(payload.tool_adapter_request.payload.task_prompt, /\[Coding Context Packet\]/);
   assert.equal(payload.tool_adapter_request.payload.context_packet.step_id, "impl_be");
-  assert.equal(payload.verification_command, "node --check sandbox/crm_site/server.js");
+  assert.equal(payload.verification_command, "node --check workspace/sandbox/crm_site/server.js");
   assert.equal(payload.max_attempts, 2);
   assert.equal(payload.same_error_repeat_limit, 2);
   assert.equal(payload.wall_clock_timeout_s, 480);
-  assert.equal(payload.tool_adapter_request.payload.verification_command, "node --check sandbox/crm_site/server.js");
+  assert.equal(payload.tool_adapter_request.payload.verification_command, "node --check workspace/sandbox/crm_site/server.js");
   assert.equal(payload.tool_adapter_request.payload.max_attempts, 2);
   assert.equal(payload.tool_adapter_request.payload.same_error_repeat_limit, 2);
   assert.equal(payload.tool_adapter_request.payload.wall_clock_timeout_s, 480);
@@ -185,7 +185,7 @@ test("wall_clock_timeout_s defaults to max(max_runtime_s, 300) when not configur
 test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outputs", () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "package.json", JSON.stringify({ name: "crm-app" }, null, 2));
-  writeFile(workspaceRoot, "sandbox/crm_site/server.js", "function startServer() { return 'ok'; }\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/server.js", "function startServer() { return 'ok'; }\n");
 
   const builder = createStepBuilder({
     workspaceRoot,
@@ -238,8 +238,8 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
 
 test("generic_app impl_be injects primary_minimax_lane and uses full_file_fallback", () => {
   const workspaceRoot = makeWorkspace();
-  // sandbox/app is empty — no target files — natural full_file_fallback
-  fs.mkdirSync(path.join(workspaceRoot, "sandbox/app"), { recursive: true });
+  // workspace/sandbox/app is empty — no target files — natural full_file_fallback
+  fs.mkdirSync(path.join(workspaceRoot, "workspace/sandbox/app"), { recursive: true });
 
   const builder = createStepBuilder({
     workspaceRoot,
@@ -290,7 +290,7 @@ test("generic_app impl_be injects primary_minimax_lane and uses full_file_fallba
 
 test("deploy_preview payload includes release metadata and preview defaults", () => {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "sandbox/crm_site/index.html", "<!doctype html><html></html>");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/index.html", "<!doctype html><html></html>");
 
   const builder = createStepBuilder({
     workspaceRoot,
@@ -321,11 +321,11 @@ test("deploy_preview payload includes release metadata and preview defaults", ()
   assert.equal(payload.preview_ttl_hours, 24);
   assert.equal(payload.release_manifest_path, "artifacts/release/preview-run/meta/run_manifest.json");
   assert.equal(payload.release_notes_path, "artifacts/release/preview-run/release/release_notes.md");
-  assert.deepEqual(payload.target_paths, ["sandbox/crm_site/"]);
+  assert.deepEqual(payload.target_paths, ["workspace/sandbox/crm_site/"]);
   assert.deepEqual(payload.project_root_candidates, [
     "artifacts/release/preview-run/impl/be_changes",
     "artifacts/release/preview-run/impl/fe_changes/public",
-    "sandbox/crm_site/",
+    "workspace/sandbox/crm_site/",
   ]);
   assert.equal(payload.render_service_id, "");
   assert.equal(payload.model_override, "minimax-coding-plan/MiniMax-M2.7");

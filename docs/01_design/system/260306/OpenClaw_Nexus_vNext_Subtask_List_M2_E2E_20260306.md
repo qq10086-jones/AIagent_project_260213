@@ -168,7 +168,7 @@ Scope:
 - fix path assumptions in canary/integration scripts
 - make test execution independent of invocation directory
 - document required local test commands
-- separate sandbox/environment failures from true code failures
+- separate workspace/sandbox/environment failures from true code failures
 
 Deliverables:
 - corrected path resolution in integration scripts

@@ -1,4 +1,4 @@
-# Obsidian
+﻿# Obsidian
 **/.obsidian/
 
 # OS / editor junk
@@ -25,16 +25,26 @@ orchestrator/artifacts/canary/
 orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_*/
 orchestrator/artifacts/validation/m10_load_test/
 orchestrator/orchestrator/
-sandbox/worker_coding_cohort/c-*/
-sandbox/crm_site/workflow_impl_*.js
-backup_20260301*/
-coder_test/
+workspace/sandbox/worker_coding_cohort/c-*/
+workspace/sandbox/crm_site/workflow_impl_*.js
+archive/backup_20260301*/
+workspace/coder_test/
 __write_test*.txt
 *.log
 .env*
 *.pem
 *.key
 *credentials*.json
+
+# Future normalized structure
+runtime/artifacts/
+runtime/metrics/
+runtime/reports/
+runtime/state/
+archive/*/
+workspace/scratch/
+workspace/tmp/
+external/vendor-cache/
 
 # Quant local runtime artifacts
 /japan_market.db
@@ -44,4 +54,3 @@ worker-quant/quant_trading/Project_optimized/logs/
 worker-quant/quant_trading/Project_optimized/.yf_cache/
 worker-quant/quant_trading/Project_optimized/artifacts/decision/
 worker-quant/quant_trading/Project_optimized/reports/random_subset_2021_03_11/
-

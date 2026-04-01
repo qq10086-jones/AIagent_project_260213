@@ -16,15 +16,15 @@ function main() {
       task_prompt: "Implement backend",
       artifact_root: "artifacts/release/run-1",
       expected_artifacts: ["patch/diff.patch"],
-      target_paths: ["sandbox/crm_site/"],
-      verification_command: "node --check sandbox/crm_site/server.js",
+      target_paths: ["workspace/sandbox/crm_site/"],
+      verification_command: "node --check workspace/sandbox/crm_site/server.js",
       wall_clock_timeout_s: 480,
     },
   });
 
   assert.equal(
     request.payload.verification_command,
-    "node --check sandbox/crm_site/server.js",
+    "node --check workspace/sandbox/crm_site/server.js",
   );
   assert.equal(request.payload.wall_clock_timeout_s, 480);
 

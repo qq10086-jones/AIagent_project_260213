@@ -91,7 +91,7 @@ async function main() {
           verification: {
             checked: true,
             ok: true,
-            command: "node --check sandbox/crm_site/server.js",
+            command: "node --check workspace/sandbox/crm_site/server.js",
           },
           retry_summary: {
             attempts_used: 2,

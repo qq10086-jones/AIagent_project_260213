@@ -64,7 +64,7 @@ function main() {
       diagnostics: {
         failed_phase: "verification",
         error_code: "E_VERIFICATION_FAILED",
-        verification: { command: "node --check sandbox/crm_site/app.js" },
+        verification: { command: "node --check workspace/sandbox/crm_site/app.js" },
       },
     },
     attemptRecords: [{ attempt: 1, phase: "verification" }],

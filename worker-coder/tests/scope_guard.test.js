@@ -9,13 +9,13 @@ import {
 } from "../scope_guard.js";
 
 function main() {
-  assert.equal(normalizeRelPath("\\sandbox\\crm_site\\app.js"), "sandbox/crm_site/app.js");
+  assert.equal(normalizeRelPath("\\sandbox\\crm_site\\app.js"), "workspace/sandbox/crm_site/app.js");
   assert.equal(isProtectedRoot("configs/runtime"), true);
-  assert.equal(isProtectedRoot("sandbox/crm_site"), false);
+  assert.equal(isProtectedRoot("workspace/sandbox/crm_site"), false);
 
   const allowed = validateAllowedTargetPaths({
     workspaceRoot: process.cwd(),
-    allowedTargetPaths: ["sandbox/crm_site/app.js"],
+    allowedTargetPaths: ["workspace/sandbox/crm_site/app.js"],
   });
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
 
@@ -28,28 +28,28 @@ function main() {
 
   const inScope = validateRequestedWrite({
     workspaceRoot: process.cwd(),
-    targetPath: "sandbox/crm_site/app.js",
-    allowedTargetPaths: ["sandbox/crm_site"],
+    targetPath: "workspace/sandbox/crm_site/app.js",
+    allowedTargetPaths: ["workspace/sandbox/crm_site"],
   });
   assert.equal(inScope.ok, true, JSON.stringify(inScope));
 
   const outOfScope = validateRequestedWrite({
     workspaceRoot: process.cwd(),
-    targetPath: "sandbox/other/file.js",
-    allowedTargetPaths: ["sandbox/crm_site"],
+    targetPath: "workspace/sandbox/other/file.js",
+    allowedTargetPaths: ["workspace/sandbox/crm_site"],
   });
   assert.equal(outOfScope.ok, false);
   assert.match(outOfScope.error, /outside allowed target_paths/);
 
   const changedInScope = validateChangedFilesWithinScope({
-    filesChanged: ["sandbox/crm_site/app.js"],
-    allowedTargetPaths: ["sandbox/crm_site"],
+    filesChanged: ["workspace/sandbox/crm_site/app.js"],
+    allowedTargetPaths: ["workspace/sandbox/crm_site"],
   });
   assert.equal(changedInScope.ok, true, JSON.stringify(changedInScope));
 
   const changedOutOfScope = validateChangedFilesWithinScope({
-    filesChanged: ["sandbox/crm_site/app.js", "sandbox/other/file.js"],
-    allowedTargetPaths: ["sandbox/crm_site"],
+    filesChanged: ["workspace/sandbox/crm_site/app.js", "workspace/sandbox/other/file.js"],
+    allowedTargetPaths: ["workspace/sandbox/crm_site"],
   });
   assert.equal(changedOutOfScope.ok, false);
   assert.match(changedOutOfScope.error, /outside scope/);

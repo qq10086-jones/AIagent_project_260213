@@ -16,7 +16,7 @@ function main() {
       phase: "verification",
       error_code: "E_VERIFICATION_FAILED",
       error: "tests failed",
-      command_used: "node --check sandbox/crm_site/app.js",
+      command_used: "node --check workspace/sandbox/crm_site/app.js",
     },
     attemptIndex: 2,
   });
@@ -26,16 +26,16 @@ function main() {
 
   const contract = buildExecutionPromptContract({
     stepId: "impl_fe",
-    targetPaths: ["sandbox/crm_site/app.js"],
+    targetPaths: ["workspace/sandbox/crm_site/app.js"],
     expectedArtifacts: ["impl/fe_patch_bundle.json", "impl/fe_notes.md"],
-    verificationCommand: "node --check sandbox/crm_site/app.js",
+    verificationCommand: "node --check workspace/sandbox/crm_site/app.js",
     verificationPlan: [
-      { tier: "syntax_check", command: "node --check sandbox/crm_site/app.js" },
+      { tier: "syntax_check", command: "node --check workspace/sandbox/crm_site/app.js" },
       { tier: "build", command: "npm run build" },
     ],
     executionAdapterPacket: { execution_mode: "structured_patch_from_backend_handoff", input_artifacts: ["handoff/be_to_fe.json"] },
-    contextPacket: { entrypoints: ["sandbox/crm_site/app.js"], related_tests: ["worker-coder/tests/verification_command.test.js"] },
-    repoMap: { candidate_files: ["sandbox/crm_site/app.js"] },
+    contextPacket: { entrypoints: ["workspace/sandbox/crm_site/app.js"], related_tests: ["worker-coder/tests/verification_command.test.js"] },
+    repoMap: { candidate_files: ["workspace/sandbox/crm_site/app.js"] },
   });
   assert.match(contract, /step_id: impl_fe/);
   assert.match(contract, /target_paths: sandbox\/crm_site\/app\.js/);
@@ -51,13 +51,13 @@ function main() {
     attemptIndex: 1,
     stepId: "impl_fe",
     basePrompt: "Implement frontend changes.",
-    targetPaths: ["sandbox/crm_site/app.js"],
+    targetPaths: ["workspace/sandbox/crm_site/app.js"],
     expectedArtifacts: ["impl/fe_patch_bundle.json"],
-    verificationCommand: "node --check sandbox/crm_site/app.js",
-    verificationPlan: [{ tier: "syntax_check", command: "node --check sandbox/crm_site/app.js" }],
+    verificationCommand: "node --check workspace/sandbox/crm_site/app.js",
+    verificationPlan: [{ tier: "syntax_check", command: "node --check workspace/sandbox/crm_site/app.js" }],
     executionAdapterPacket: { execution_mode: "structured_patch_from_backend_handoff" },
-    contextPacket: { entrypoints: ["sandbox/crm_site/app.js"] },
-    repoMap: { candidate_files: ["sandbox/crm_site/app.js"] },
+    contextPacket: { entrypoints: ["workspace/sandbox/crm_site/app.js"] },
+    repoMap: { candidate_files: ["workspace/sandbox/crm_site/app.js"] },
   });
   assert.ok(artifact.path);
   assert.ok(fs.existsSync(path.join(tempRoot, artifact.path)));

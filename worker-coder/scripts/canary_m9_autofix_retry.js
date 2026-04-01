@@ -26,21 +26,21 @@ function writeReport(payload) {
 
 async function main() {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "const status = 'initial';\nmodule.exports = { status };\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "const status = 'initial';\nmodule.exports = { status };\n");
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
     task_prompt: "implement frontend update with verification",
     step_id: "impl_fe",
-    target_paths: ["sandbox/crm_site/"],
+    target_paths: ["workspace/sandbox/crm_site/"],
     provider: "opencode",
     run_id: "run-autofix",
     task_id: "task-autofix",
     max_attempts: 2,
     same_error_repeat_limit: 2,
     wall_clock_timeout_s: 300,
-    opencode_command: ["mock-inline-autofix", "sandbox/crm_site/app.js", "{{task_prompt}}"],
-    verification_command: "node --check sandbox/crm_site/app.js",
+    opencode_command: ["mock-inline-autofix", "workspace/sandbox/crm_site/app.js", "{{task_prompt}}"],
+    verification_command: "node --check workspace/sandbox/crm_site/app.js",
   });
 
   assert.equal(result.ok, true, JSON.stringify(result));
@@ -51,7 +51,7 @@ async function main() {
   assert.equal(result.diagnostics.verification.checked, true);
   assert.equal(result.diagnostics.verification.ok, true);
 
-  const finalContent = fs.readFileSync(path.join(workspaceRoot, "sandbox/crm_site/app.js"), "utf8");
+  const finalContent = fs.readFileSync(path.join(workspaceRoot, "workspace/sandbox/crm_site/app.js"), "utf8");
   assert.match(finalContent, /fixed/);
 
   writeReport({

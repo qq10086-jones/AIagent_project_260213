@@ -58,7 +58,7 @@ async function main() {
   const stepDef = registry.workflows.coding_team_v0.steps.find((item) => String(item.id) === "impl_be");
   const payload = builder.buildStepPayload({ run, stepDef, stepIndex: 3 });
 
-  assert(payload.verification_command === "node --check sandbox/crm_site/server.js", "step builder did not infer backend verification_command");
+  assert(payload.verification_command === "node --check workspace/sandbox/crm_site/server.js", "step builder did not infer backend verification_command");
   assert(Number(payload.max_attempts) === 2, "step builder did not set max_attempts");
   assert(Number(payload.same_error_repeat_limit) === 2, "step builder did not set same_error_repeat_limit");
   assert(payload.tool_adapter_request?.payload?.verification_command === payload.verification_command, "tool adapter request dropped verification_command");

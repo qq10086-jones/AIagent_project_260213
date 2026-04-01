@@ -28,9 +28,9 @@
   - 查看 opencode.json.tpl 当前结构，确认 `plugins` key 的正确写法
 
 - [ ] **A-2** 决定 superpowers 的引入方式
-  - 选项 1（推荐）：`git submodule add https://github.com/obra/superpowers vendor/superpowers`，COPY 进镜像
+  - 选项 1（推荐）：`git submodule add https://github.com/obra/superpowers external/vendor/superpowers`，COPY 进镜像
   - 选项 2：Dockerfile 里 `RUN git clone --depth 1`（网络不稳定时有风险）
-  - 若选项 1：在 `worker-coder/Dockerfile` 里加 `COPY ../vendor/superpowers /app/superpowers`
+  - 若选项 1：在 `worker-coder/Dockerfile` 里加 `COPY ../external/vendor/superpowers /app/superpowers`
 
 - [ ] **A-3** 在 `opencode.json.tpl` 里注册插件
   - 加 `"plugins": ["/app/superpowers"]`（或 opencode 实际支持的插件语法）

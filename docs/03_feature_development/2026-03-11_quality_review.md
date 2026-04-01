@@ -75,7 +75,7 @@ New targeted coverage:
 
 ### P1 Fixed During Review
 
-`worker-coder/scoped_delta.js` previously emitted deterministic fallback stub files even when the allowed target scope was a single file such as `sandbox/crm_site/app.js` or `sandbox/crm_site/server.js`. Under truthful live cohort validation, that behavior produced `E_UNAUTHORIZED_WRITE` noise and distorted readiness evidence.
+`worker-coder/scoped_delta.js` previously emitted deterministic fallback stub files even when the allowed target scope was a single file such as `workspace/sandbox/crm_site/app.js` or `workspace/sandbox/crm_site/server.js`. Under truthful live cohort validation, that behavior produced `E_UNAUTHORIZED_WRITE` noise and distorted readiness evidence.
 
 This has now been fixed by:
 

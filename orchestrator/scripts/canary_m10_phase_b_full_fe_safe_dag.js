@@ -537,17 +537,17 @@ function writeBackendArtifacts(rootAbs) {
     operations: [
       {
         type: "create_file",
-        target_file: "sandbox/crm_site/server.js",
+        target_file: "workspace/sandbox/crm_site/server.js",
         file_content: "export function listCustomers() { return []; }\n",
       },
     ],
-    target_files: ["sandbox/crm_site/server.js"],
+    target_files: ["workspace/sandbox/crm_site/server.js"],
     summary: "Mock backend patch bundle for full fe_safe DAG canary.",
   });
   writeText(path.join(rootAbs, "impl", "be_changes", "server.js"), "export function listCustomers() { return []; }\n");
   writeText(
     path.join(rootAbs, "impl", "be_notes.md"),
-    "# Backend Notes\n\n## API Contracts\n\n- GET /api/customers\n\n## Shared Types\n\n- Customer\n\n## Scope Constraints\n\n- Only sandbox/crm_site/server.js is modified.\n"
+    "# Backend Notes\n\n## API Contracts\n\n- GET /api/customers\n\n## Shared Types\n\n- Customer\n\n## Scope Constraints\n\n- Only workspace/sandbox/crm_site/server.js is modified.\n"
   );
   writeJson(path.join(rootAbs, "handoff", "be_to_fe.json"), {
     from_step: "impl_be",
@@ -567,11 +567,11 @@ function writeFrontendArtifacts(rootAbs) {
     operations: [
       {
         type: "create_file",
-        target_file: "sandbox/crm_site/app.js",
+        target_file: "workspace/sandbox/crm_site/app.js",
         file_content: "export function CustomerList() { return null; }\n",
       },
     ],
-    target_files: ["sandbox/crm_site/app.js"],
+    target_files: ["workspace/sandbox/crm_site/app.js"],
     summary: "Mock frontend patch bundle for full fe_safe DAG canary.",
   });
   writeText(path.join(rootAbs, "impl", "fe_changes", "app.js"), "export function CustomerList() { return null; }\n");
@@ -685,12 +685,12 @@ async function runCanary() {
         },
         step_payloads: {
           impl_be: {
-            target_paths: ["sandbox/crm_site/server.js"],
-            opencode_command: ["mock-inline-autofix", "sandbox/crm_site/server.js", "{{task_prompt}}"],
+            target_paths: ["workspace/sandbox/crm_site/server.js"],
+            opencode_command: ["mock-inline-autofix", "workspace/sandbox/crm_site/server.js", "{{task_prompt}}"],
           },
           impl_fe: {
-            target_paths: ["sandbox/crm_site/app.js"],
-            opencode_command: ["mock-inline-autofix", "sandbox/crm_site/app.js", "{{task_prompt}}"],
+            target_paths: ["workspace/sandbox/crm_site/app.js"],
+            opencode_command: ["mock-inline-autofix", "workspace/sandbox/crm_site/app.js", "{{task_prompt}}"],
           },
         },
       },
@@ -710,11 +710,11 @@ async function runCanary() {
     assert(feStep?.status === "queued", `impl_fe should be queued, got ${feStep?.status}`);
 
     await completeTaskByStep(harness, workflowRunId, "impl_be", writeBackendArtifacts, {
-      files_changed: ["sandbox/crm_site/server.js"],
+      files_changed: ["workspace/sandbox/crm_site/server.js"],
       diff_stats: { files: 1 },
     });
     await completeTaskByStep(harness, workflowRunId, "impl_fe", writeCombinedImplArtifacts, {
-      files_changed: ["sandbox/crm_site/app.js"],
+      files_changed: ["workspace/sandbox/crm_site/app.js"],
       diff_stats: { files: 1 },
     });
 

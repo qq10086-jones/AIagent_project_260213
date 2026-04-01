@@ -20,7 +20,7 @@ export function buildBackendExecutionPacket({ stepDef, payload = {}, provider = 
     step_id: String(stepDef?.id || "impl_be"),
     target_paths: Array.isArray(payload.target_paths) && payload.target_paths.length > 0
       ? payload.target_paths
-      : ["sandbox/app/"],
+      : ["workspace/sandbox/app/"],
     required_outputs: Array.isArray(payload.expected_artifacts) && payload.expected_artifacts.length > 0
       ? payload.expected_artifacts
       : diffFirst
@@ -63,7 +63,7 @@ export function buildFrontendExecutionPacket({ stepDef, payload = {}, provider =
     step_id: String(stepDef?.id || "impl_fe"),
     target_paths: Array.isArray(payload.target_paths) && payload.target_paths.length > 0
       ? payload.target_paths
-      : ["sandbox/app/"],
+      : ["workspace/sandbox/app/"],
     required_outputs: Array.isArray(payload.expected_artifacts) && payload.expected_artifacts.length > 0
       ? payload.expected_artifacts
       : diffFirst

@@ -1,6 +1,6 @@
 # Document Release Hub
 
-Path: `sandbox/crm_site`
+Path: `workspace/sandbox/crm_site`
 
 ## Scope
 - Discord intake inbox for document requests
@@ -18,7 +18,7 @@ Path: `sandbox/crm_site`
 ## Run
 
 ```bash
-cd sandbox/crm_site
+cd workspace/sandbox/crm_site
 npm start
 ```
 

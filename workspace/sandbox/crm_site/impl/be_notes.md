@@ -70,7 +70,7 @@ Response (404): `{ "success": false, "error": "Customer not found" }`
 ## Run Instructions
 
 ```bash
-cd sandbox/crm_site
+cd workspace/sandbox/crm_site
 npm install
 npm start
 ```

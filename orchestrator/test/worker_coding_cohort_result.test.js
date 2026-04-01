@@ -43,7 +43,7 @@ function main() {
       task_id: "task-1",
       result_json: JSON.stringify({
         output: {
-          files_changed: ["sandbox/crm_site/server.js"],
+          files_changed: ["workspace/sandbox/crm_site/server.js"],
           artifact_check: { checked: true, missing: [] },
           diagnostics: {
             verification: {

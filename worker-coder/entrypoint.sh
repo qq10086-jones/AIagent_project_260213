@@ -9,9 +9,9 @@ fi
 # Resolve provider API key placeholders into the runtime OpenCode config.
 if [ -f /app/opencode.json.tpl ]; then
   mkdir -p /root/.config/opencode /root/.config/opencode/plugins
-  if [ -d /workspace/vendor/superpowers ] && [ -f /workspace/vendor/superpowers/.opencode/plugins/superpowers.js ]; then
-    ln -snf /workspace/vendor/superpowers /root/.config/opencode/superpowers
-    ln -snf /workspace/vendor/superpowers/.opencode/plugins/superpowers.js /root/.config/opencode/plugins/superpowers.js
+  if [ -d /workspace/external/vendor/superpowers ] && [ -f /workspace/external/vendor/superpowers/.opencode/plugins/superpowers.js ]; then
+    ln -snf /workspace/external/vendor/superpowers /root/.config/opencode/superpowers
+    ln -snf /workspace/external/vendor/superpowers/.opencode/plugins/superpowers.js /root/.config/opencode/plugins/superpowers.js
   fi
 
   if [ -z "${DASHSCOPE_API_KEY:-}" ]; then

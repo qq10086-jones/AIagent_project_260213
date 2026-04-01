@@ -16,7 +16,7 @@ function main() {
     stepDef: { id: "impl_fe", role: "frontend" },
     payload: {
       expected_artifacts: ["impl/fe_changes/app.js", "impl/fe_notes.md"],
-      target_paths: ["sandbox/crm_site/"],
+      target_paths: ["workspace/sandbox/crm_site/"],
     },
     provider: "opencode",
     model: "qwen-coder-next",

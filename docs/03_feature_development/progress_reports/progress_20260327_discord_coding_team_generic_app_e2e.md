@@ -54,7 +54,7 @@
 1. Handoff generation and handoff validation are not aligned for backend-to-frontend contracts.
 2. Generic-app execution still has timeout risk in implementation stages.
 3. Non-ASCII request text can degrade inside generated artifacts, which can distort downstream execution quality.
-4. Historical workspace-local prototype files under `sandbox/crm_site/` remain unrelated to this validation thread and were intentionally not included in the core fix scope.
+4. Historical workspace-local prototype files under `workspace/sandbox/crm_site/` remain unrelated to this validation thread and were intentionally not included in the core fix scope.
 
 ## Recommended Next Tasks
 

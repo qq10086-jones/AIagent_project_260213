@@ -61,8 +61,8 @@ export function inferIsolationContextPaths(targetPaths = []) {
     : [];
   const contextPaths = [];
   for (const relPath of normalizedTargets) {
-    if (relPath === "sandbox/crm_site" || relPath.startsWith("sandbox/crm_site/")) {
-      contextPaths.push("sandbox/crm_site");
+    if (relPath === "workspace/sandbox/crm_site" || relPath.startsWith("workspace/sandbox/crm_site/")) {
+      contextPaths.push("workspace/sandbox/crm_site");
       continue;
     }
     contextPaths.push(relPath);

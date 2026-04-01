@@ -21,7 +21,7 @@ function shouldSkipSpawn(result) {
 
 async function testArtifactOnlyStepAllowsEmptyTargetPaths() {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "const value = 1;\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "const value = 1;\n");
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
@@ -49,7 +49,7 @@ async function testArtifactOnlyStepAllowsEmptyTargetPaths() {
 
 async function testImplementationStepStillRequiresTargetPaths() {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "sandbox/crm_site/app.js", "const value = 1;\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "const value = 1;\n");
 
   const result = await CodingService.delegateTask({
     workspaceRoot,

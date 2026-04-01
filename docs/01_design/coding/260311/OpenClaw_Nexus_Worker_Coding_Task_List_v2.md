@@ -270,7 +270,7 @@ Create a governed registry of approved internal beta coding templates so first-u
   - achieved tiers are persisted in verification diagnostics
   - unresolved tiers remain distinguishable from executed tiers
   - cohort reports now reflect actual achieved verification evidence instead of a generic pass/fail label
-- repo-aware verification source is now wired for `sandbox/crm_site` via local `package.json` scripts
+- repo-aware verification source is now wired for `workspace/sandbox/crm_site` via local `package.json` scripts
 - latest controlled cohort after real verification-source wiring produced a stricter signal:
   - `0 pass / 4 fail / 0 partial`
   - `fe_create`, `fe_modify`, and `bug_fix` currently fail under `verification_failure`
@@ -460,7 +460,7 @@ Improve the readability and actionability of coding outcomes for internal beta u
 **Current Progress**
 
 - `verification_plan` execution is landed in orchestrator and worker runtime
-- `sandbox/crm_site` now has repo-aware verification sources via local `package.json` scripts
+- `workspace/sandbox/crm_site` now has repo-aware verification sources via local `package.json` scripts
 - container-safe task-class authority is now loaded from `configs/registry/worker_coding_task_classes.json`
 - current truthful live signal is negative but useful:
   - real verification enforcement no longer reports optimistic `partial` readiness

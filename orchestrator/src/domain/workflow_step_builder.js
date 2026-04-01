@@ -8,6 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { validateJsonSchemaLite } from "../schema_lite_validator.js";
 import { getProjectContext, getPriorADRs, getTaskHistory } from "./memory_reader.js";
 import {
   buildStepPrompt,
@@ -30,6 +31,9 @@ import {
 } from "../worker_coding_templates.js";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const CODING_TEAM_WORKPLAN_SCHEMA = JSON.parse(
+  fs.readFileSync(path.resolve(MODULE_DIR, "..", "..", "contracts", "coding_team_workplan.schema.json"), "utf8")
+);
 
 export function pathForRunArtifacts(run_id) {
   return `artifacts/release/${run_id || "unknown-run"}`;
@@ -106,6 +110,81 @@ function buildArchHandoffBlock(handoff) {
   return lines.length > 1 ? lines.join("\n") : "";
 }
 
+function buildStructuredWorkplanBlock(tasks = [], sectionLabel = "") {
+  const safeTasks = Array.isArray(tasks) ? tasks.filter((item) => item && typeof item === "object") : [];
+  if (safeTasks.length === 0) return "";
+  const lines = [``, `[Structured Workplan — ${sectionLabel}]`];
+  for (const task of safeTasks) {
+    const id = String(task.id || "").trim();
+    const description = String(task.description || "").trim();
+    const verify = String(task.verify || "").trim();
+    if (!id && !description) continue;
+    lines.push(`- ${id || "TASK"}: ${description || "No description provided"}${verify ? ` | verify: ${verify}` : ""}`);
+  }
+  lines.push("Execute tasks in order. After completing each task, self-check against its verify condition before proceeding to the next.");
+  return lines.join("\n");
+}
+
+function readStructuredWorkplan({ workspaceRoot, artifactRoot, stepId }) {
+  const workplanJsonPath = path.resolve(workspaceRoot, artifactRoot, "plan/workplan.json");
+  if (!fs.existsSync(workplanJsonPath)) {
+    return { block: "", validation: { checked: false, ok: true, code: null, errors: [] } };
+  }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(workplanJsonPath, "utf8"));
+    const errors = validateJsonSchemaLite(CODING_TEAM_WORKPLAN_SCHEMA, parsed, "$");
+    if (errors.length > 0) {
+      return {
+        block: "",
+        validation: {
+          checked: true,
+          ok: false,
+          code: "WORKPLAN_JSON_INVALID",
+          errors,
+          path: path.relative(workspaceRoot, workplanJsonPath).replace(/\\/g, "/"),
+        },
+      };
+    }
+    const tasks = String(stepId || "") === "impl_be" ? parsed?.be_tasks : parsed?.fe_tasks;
+    const sectionLabel = String(stepId || "") === "impl_be" ? "BE Tasks" : "FE Tasks";
+    return {
+      block: buildStructuredWorkplanBlock(tasks, sectionLabel),
+      validation: {
+        checked: true,
+        ok: true,
+        code: null,
+        errors: [],
+        path: path.relative(workspaceRoot, workplanJsonPath).replace(/\\/g, "/"),
+      },
+    };
+  } catch {
+    return {
+      block: "",
+      validation: {
+        checked: true,
+        ok: false,
+        code: "WORKPLAN_JSON_PARSE_FAILED",
+        errors: ["plan/workplan.json is not valid JSON"],
+        path: path.relative(workspaceRoot, workplanJsonPath).replace(/\\/g, "/"),
+      },
+    };
+  }
+}
+
+function buildWorkplanFallbackNotice(validation = {}) {
+  if (!validation?.checked || validation?.ok) return "";
+  const lines = [
+    "",
+    "[Workplan JSON Fallback]",
+    `Structured workplan unavailable: ${String(validation.code || "WORKPLAN_JSON_INVALID")}`,
+  ];
+  if (Array.isArray(validation.errors) && validation.errors.length > 0) {
+    lines.push(...validation.errors.slice(0, 5).map((item) => `- ${String(item)}`));
+  }
+  lines.push("Fallback to plan/workplan.md if present.");
+  return lines.join("\n");
+}
+
 function buildCodingContextBlock({ contextPacket = null, repoMap = null }) {
   if (!contextPacket || typeof contextPacket !== "object") return "";
   const lines = ["", "[Coding Context Packet]"];
@@ -155,9 +234,9 @@ function chooseImplementationMode({
   const requestedLane = String(payload?.execution_lane || "").trim();
   // stable_local_lane uses a local ollama model with a limited context window.
   // stable_cloud_lane currently shows weak structured-patch reliability on impl steps.
-  // primary_qwen_lane is new — structured-patch reliability unverified, keep full_file_fallback.
+  // primary_minimax_lane stays on full_file_fallback to keep prompts smaller and stable.
   // Force full_file_fallback on these lanes to keep prompts smaller and avoid empty patch bundles.
-  if (["impl_be", "impl_fe"].includes(String(stepDef?.id || "")) && ["stable_local_lane", "stable_cloud_lane", "primary_qwen_lane"].includes(requestedLane)) {
+  if (["impl_be", "impl_fe"].includes(String(stepDef?.id || "")) && ["stable_local_lane", "stable_cloud_lane", "primary_minimax_lane"].includes(requestedLane)) {
     return {
       executionModeRequested: "full_file_fallback",
       promptScriptId: String(stepDef?.prompt_script_id || ""),
@@ -297,20 +376,20 @@ function applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeCo
   }
 }
 
-function shouldEnforceGenericAppQwenLane({ run, stepDef }) {
+function shouldEnforceGenericAppPrimaryLane({ run, stepDef }) {
   return String(run?.workflow_id || "") === "coding_team_v0"
     && ["generic_app", "single_file_html", "generic_coding_task"].includes(String(run?.project_type || ""))
     && ["impl_be", "impl_fe"].includes(String(stepDef?.id || ""))
     && String(stepDef?.tool || "") === "coding.delegate";
 }
 
-function applyGenericAppQwenLaneDefaults({ run, stepDef, payload, runtimeConfig }) {
-  if (!shouldEnforceGenericAppQwenLane({ run, stepDef })) return;
+function applyGenericAppPrimaryLaneDefaults({ run, stepDef, payload, runtimeConfig }) {
+  if (!shouldEnforceGenericAppPrimaryLane({ run, stepDef })) return;
   const runtimeWorkerCoder = runtimeConfig?.worker_coder || {};
   const laneRegistry = runtimeWorkerCoder.execution_lanes && typeof runtimeWorkerCoder.execution_lanes === "object"
     ? runtimeWorkerCoder.execution_lanes
     : {};
-  const targetLane = "primary_qwen_lane";
+  const targetLane = "primary_minimax_lane";
   const laneConfig = laneRegistry[targetLane] && typeof laneRegistry[targetLane] === "object"
     ? laneRegistry[targetLane]
     : null;
@@ -336,29 +415,24 @@ function applyStepModelRoutingDefaults({ run, stepDef, payload, runtimeConfig })
   if (String(run?.project_type || "") !== "webapp_crm") return;
 
   const lowRiskCodingSteps = {
-    release_pack: "primary_qwen_lane",
+    release_pack: "primary_minimax_lane",
   };
   const targetLane = lowRiskCodingSteps[String(stepDef?.id || "")] || "";
   if (targetLane && String(stepDef?.tool || "") === "coding.delegate") {
     const laneConfig = getExecutionLaneConfig(runtimeConfig, targetLane);
-    if (!laneConfig) return;
     payload.execution_lane = targetLane;
-    if (laneConfig.provider) payload.provider = String(laneConfig.provider);
-    if (laneConfig.model) {
-      const resolvedModel = String(laneConfig.model);
-      payload.model = resolvedModel;
-      payload.model_override = resolvedModel;
-    }
+    if (laneConfig?.provider) payload.provider = String(laneConfig.provider);
+    const resolvedModel = String(laneConfig?.model || payload.model_override || payload.model || "minimax-coding-plan/MiniMax-M2.7");
+    payload.model = resolvedModel;
+    payload.model_override = resolvedModel;
     return;
   }
 
   if (String(stepDef?.id || "") === "deploy_preview") {
-    const laneConfig = getExecutionLaneConfig(runtimeConfig, "primary_qwen_lane");
-    if (laneConfig?.model) {
-      // deploy_preview is currently an ops tool, not an LLM task. Keep the planned lane
-      // as metadata so run artifacts remain aligned with the design intent.
-      payload.model_override = String(laneConfig.model);
-    }
+    const laneConfig = getExecutionLaneConfig(runtimeConfig, "primary_minimax_lane");
+    // deploy_preview is currently an ops tool, not an LLM task. Keep the planned lane
+    // as metadata so run artifacts remain aligned with the design intent.
+    payload.model_override = String(laneConfig?.model || payload.model_override || "minimax-coding-plan/MiniMax-M2.7");
   }
 }
 
@@ -557,7 +631,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       handoff_contract_in: upstreamHandoffs,
     };
     applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeConfig });
-    applyGenericAppQwenLaneDefaults({ run, stepDef, payload, runtimeConfig });
+    applyGenericAppPrimaryLaneDefaults({ run, stepDef, payload, runtimeConfig });
     applyStepModelRoutingDefaults({ run, stepDef, payload, runtimeConfig });
     applyWorkerCodingTemplateDefaults({
       payload,
@@ -580,6 +654,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     payload.prompt_script_id = implMode.promptScriptId;
     payload.context_packet = null;
     payload.repo_map = null;
+    payload.workplan_validation = { checked: false, ok: true, code: null, errors: [] };
 
     if (String(stepDef.id || "") === "impl_be" && payload.execution_mode_requested === "structured_patch") {
       payload.expected_artifacts = ["impl/be_patch_bundle.json", "impl/be_notes.md", "handoff/be_to_fe.json"];
@@ -791,8 +866,15 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         }
       }
       if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
-        const workplanPath = path.resolve(workspaceRoot, artifactRoot, "plan/workplan.md");
-        if (fs.existsSync(workplanPath)) {
+        const structuredWorkplan = readStructuredWorkplan({ workspaceRoot, artifactRoot, stepId: stepDef.id });
+        payload.workplan_validation = structuredWorkplan.validation;
+        if (structuredWorkplan.block) {
+          payload.task_prompt = `${payload.task_prompt}${structuredWorkplan.block}`;
+        } else {
+          const fallbackNotice = buildWorkplanFallbackNotice(structuredWorkplan.validation);
+          if (fallbackNotice) payload.task_prompt = `${payload.task_prompt}${fallbackNotice}`;
+          const workplanPath = path.resolve(workspaceRoot, artifactRoot, "plan/workplan.md");
+          if (fs.existsSync(workplanPath)) {
           try {
             const workplan = fs.readFileSync(workplanPath, "utf8");
             const sectionLabel = stepDef.id === "impl_be" ? "BE Tasks" : "FE Tasks";
@@ -804,6 +886,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
               }
             }
           } catch { /* graceful fallback — workplan read failure does not block step */ }
+          }
         }
       }
       if (["impl_be", "impl_fe"].includes(String(stepDef.id || "")) && payload.execution_adapter_packet) {

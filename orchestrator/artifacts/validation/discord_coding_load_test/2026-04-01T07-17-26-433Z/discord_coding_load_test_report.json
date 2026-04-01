@@ -1,0 +1,99 @@
+{
+  "generated_at": "2026-04-01T07:19:08.194Z",
+  "config": {
+    "base_url": "http://localhost:3000",
+    "suite_file": "C:\\Users\\linweiye\\AIagent_project_260213\\orchestrator\\canary_inputs\\discord_coding_supported_beta_suite_v1.json",
+    "suite_id": "discord_coding_supported_beta_suite_v1",
+    "workspace_root": "C:\\Users\\linweiye\\AIagent_project_260213",
+    "run_count": 1,
+    "warmup_count": 0,
+    "concurrency": 1,
+    "stagger_ms": 300,
+    "poll_ms": 5000,
+    "timeout_ms": 1800000,
+    "min_workflow_success_rate": 1,
+    "min_go_rate": 1,
+    "max_dispatch_p95_ms": null,
+    "max_total_p95_ms": 3600000,
+    "max_fidelity_warn_rate": null,
+    "strict": false
+  },
+  "execution_window": {
+    "started_at": "2026-04-01T07:17:26.646Z",
+    "finished_at": "2026-04-01T07:19:08.193Z",
+    "elapsed_ms": 101547
+  },
+  "latency": {
+    "dispatch_p50_ms": 10948,
+    "dispatch_p95_ms": 10948,
+    "total_p50_ms": 101546,
+    "total_p95_ms": 101546
+  },
+  "summary": {
+    "total_runs": 1,
+    "success_count": 0,
+    "failure_count": 1,
+    "workflow_success_count": 1,
+    "go_pass_count": 0,
+    "fidelity_report_count": 1,
+    "fidelity_warn_count": 1,
+    "preview_mismatch_count": 0,
+    "dispatch_mode_counts": {
+      "progress_update": 1
+    },
+    "workflow_status_counts": {
+      "succeeded": 1
+    },
+    "fidelity_classification_counts": {
+      "artifact_complete_but_shallow": 1
+    },
+    "perceptual_score_counts": {
+      "low": 1
+    },
+    "scenario_counts": {
+      "crm_minimal_reviewable": 1
+    },
+    "class_counts": {
+      "medium": 1
+    }
+  },
+  "rates": {
+    "workflow_success_rate": 1,
+    "go_rate": 0,
+    "fidelity_report_rate": 1,
+    "fidelity_warn_rate": 1
+  },
+  "gate_failures": [
+    "go_rate 0.000 < 1.000"
+  ],
+  "verdict": "FAIL",
+  "results": [
+    {
+      "index": 1,
+      "scenario_id": "crm_minimal_reviewable",
+      "class": "medium",
+      "discord_message": "/coder: Build a minimal CRM web app with customer list, detail page, and add/edit form. Keep changes reviewable and include required artifacts. [DLT 2026-04-01T07-17-26-433Z #1 scenario=crm_minimal_reviewable]",
+      "dispatch_ok": true,
+      "dispatch_status": 200,
+      "dispatch_mode": "progress_update",
+      "dispatch_latency_ms": 10948,
+      "run_id": "20782314-65bd-4b5b-a1ef-830a86b1b2ea",
+      "workflow_run_id": "32553ac7-ddb6-4c36-bcc5-d82726e38382",
+      "workflow_status": "succeeded",
+      "go_no_go_verdict": "NO_GO",
+      "go_no_go_exists": true,
+      "go_no_go_failed_checks": 0,
+      "fidelity_classification": "artifact_complete_but_shallow",
+      "fidelity_perceptual_score": "low",
+      "fidelity_should_warn": true,
+      "fidelity_exists": true,
+      "preview_classification": "preview_matched",
+      "preview_should_warn": false,
+      "preview_validation_exists": true,
+      "ok": false,
+      "error_code": "",
+      "error_message": "",
+      "total_duration_ms": 101546
+    }
+  ]
+}

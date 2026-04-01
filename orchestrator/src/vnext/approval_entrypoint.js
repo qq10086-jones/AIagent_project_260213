@@ -3,6 +3,7 @@ export function createHandleApproveTask({
   pool,
   getTaskForApproval,
   markTaskQueued,
+  updatePermissionAuditHumanDecision,
   recordEvent,
   workflowEngine,
   getTaskStream,
@@ -11,6 +12,7 @@ export function createHandleApproveTask({
   if (!pool?.query || typeof pool.query !== "function") throw new Error("pool.query is required");
   if (typeof getTaskForApproval !== "function") throw new Error("getTaskForApproval is required");
   if (typeof markTaskQueued !== "function") throw new Error("markTaskQueued is required");
+  if (typeof updatePermissionAuditHumanDecision !== "function") throw new Error("updatePermissionAuditHumanDecision is required");
   if (typeof recordEvent !== "function") throw new Error("recordEvent is required");
   if (!workflowEngine?.handleTaskApproved || typeof workflowEngine.handleTaskApproved !== "function") {
     throw new Error("workflowEngine.handleTaskApproved is required");
@@ -34,6 +36,7 @@ export function createHandleApproveTask({
     }
 
     await markTaskQueued(pool, task_id);
+    await updatePermissionAuditHumanDecision(pool, { task_id, final_human_decision: "approved" }).catch(() => {});
     await recordEvent(task_id, "approval.approved", { task_id });
     await workflowEngine.handleTaskApproved(task_id).catch((err) => {
       console.warn(`[workflow] handleTaskApproved failed: ${err.message}`);
@@ -75,6 +78,7 @@ export function createHandleRejectTask({
   getTaskForRejection,
   markTaskApprovalRejected,
   countPendingTasksForRun,
+  updatePermissionAuditHumanDecision,
   recordEvent,
   workflowEngine,
   normalizeResultPayload,
@@ -86,6 +90,7 @@ export function createHandleRejectTask({
   if (typeof getTaskForRejection !== "function") throw new Error("getTaskForRejection is required");
   if (typeof markTaskApprovalRejected !== "function") throw new Error("markTaskApprovalRejected is required");
   if (typeof countPendingTasksForRun !== "function") throw new Error("countPendingTasksForRun is required");
+  if (typeof updatePermissionAuditHumanDecision !== "function") throw new Error("updatePermissionAuditHumanDecision is required");
   if (typeof recordEvent !== "function") throw new Error("recordEvent is required");
   if (!workflowEngine?.handleTaskRejected || typeof workflowEngine.handleTaskRejected !== "function") {
     throw new Error("workflowEngine.handleTaskRejected is required");
@@ -115,6 +120,7 @@ export function createHandleRejectTask({
       task_id,
       normalizeResultPayload("failed", { rejected: true, reason, approval: "rejected" }, "APPROVAL_REJECTED"),
     );
+    await updatePermissionAuditHumanDecision(pool, { task_id, final_human_decision: "rejected" }).catch(() => {});
     await recordEvent(task_id, "approval.rejected", { task_id, reason });
     await workflowEngine.handleTaskRejected(task_id, reason).catch((err) => {
       console.warn(`[workflow] handleTaskRejected failed: ${err.message}`);

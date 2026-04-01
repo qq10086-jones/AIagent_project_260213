@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+# Expose shared contracts at /shared so worker.js can import from ../shared/
+if [ -d /workspace/shared ] && [ ! -e /shared ]; then
+  ln -snf /workspace/shared /shared
+fi
+
 # Resolve provider API key placeholders into the runtime OpenCode config.
 if [ -f /app/opencode.json.tpl ]; then
   mkdir -p /root/.config/opencode /root/.config/opencode/plugins

@@ -53,5 +53,49 @@
     "summary": "Workflow workflow_finalization_v0 completed successfully",
     "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
     "created_at": "2026-03-29T16:59:34.413Z"
+  },
+  {
+    "workflow_run_id": "4563f60c-986a-4128-8905-b3751de71568",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "C:/Users/linweiye/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-01T05:40:19.328Z"
+  },
+  {
+    "workflow_run_id": "2b5b8406-f78e-47eb-b004-7fcc0a184169",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "C:/Users/linweiye/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-01T05:42:15.944Z"
+  },
+  {
+    "workflow_run_id": "8c2c0a9d-706d-4368-b382-96204088c300",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "C:/Users/linweiye/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-01T05:43:16.295Z"
+  },
+  {
+    "workflow_run_id": "b7b99e58-b473-4347-9767-7e7acf266d4f",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "C:/Users/linweiye/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-01T05:44:11.855Z"
   }
 ]

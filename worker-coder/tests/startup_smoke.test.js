@@ -23,6 +23,7 @@ function main() {
   const codingServiceText = fs.readFileSync(path.join(root, "coding_service.js"), "utf8");
   const providerPreflightText = fs.readFileSync(path.join(root, "provider_preflight.js"), "utf8");
   const entrypointText = fs.readFileSync(path.join(root, "entrypoint.sh"), "utf8");
+  const opencodeTemplateText = fs.readFileSync(path.join(root, "opencode.json.tpl"), "utf8");
 
   assert.match(workerText, /import\s+\{\s*validateSafeCommand\s*\}\s+from\s+"\.\/verification_runner\.js"/);
   assert.doesNotMatch(workerText, /import\s+\{[^}]*validateSafeCommand[^}]*\}\s+from\s+"\.\/coding_service\.js"/);
@@ -32,6 +33,7 @@ function main() {
 
   assert.match(entrypointText, /OPENCODE_PLUGINS_JSON/);
   assert.match(entrypointText, /superpowers\.js/);
+  assert.match(opencodeTemplateText, /"plugins"\s*:\s*\$\{OPENCODE_PLUGINS_JSON\}/);
 
   assert.match(codingServiceText, /from '\.\/scope_guard\.js'/);
   assert.match(codingServiceText, /from '\.\/step_artifact_contract\.js'/, "coding_service must import from step_artifact_contract");

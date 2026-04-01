@@ -486,7 +486,12 @@ function createFrontendImplArtifacts({ cwd, prompt, fixed = false, artifactWorks
   return true;
 }
 
-function runProcess({ command, args = [], cwd, timeoutMs = 600000, stdinText = "" }) {
+function emitRuntimeEvent(onRuntimeEvent, event) {
+  if (typeof onRuntimeEvent !== "function" || !event) return;
+  Promise.resolve(onRuntimeEvent(event)).catch(() => {});
+}
+
+function runProcess({ command, args = [], cwd, timeoutMs = 600000, stdinText = "", onRuntimeEvent = null }) {
   return new Promise((resolve) => {
     console.log(`[opencode] Executing: ${command} ${args.join(" ")} (timeout: ${timeoutMs}ms)`);
     const child = spawn(command, args, {
@@ -508,10 +513,22 @@ function runProcess({ command, args = [], cwd, timeoutMs = 600000, stdinText = "
     }, timeoutMs);
 
     child.stdout.on("data", (d) => {
-      stdout += d.toString();
+      const chunk = d.toString();
+      stdout += chunk;
+      emitRuntimeEvent(onRuntimeEvent, {
+        type: "text_delta",
+        tag: "agent_message_chunk",
+        text: chunk,
+      });
     });
     child.stderr.on("data", (d) => {
-      stderr += d.toString();
+      const chunk = d.toString();
+      stderr += chunk;
+      emitRuntimeEvent(onRuntimeEvent, {
+        type: "status",
+        tag: "tool_call_update",
+        text: chunk,
+      });
     });
 
     child.on("error", (err) => {
@@ -527,6 +544,13 @@ function runProcess({ command, args = [], cwd, timeoutMs = 600000, stdinText = "
 
     child.on("close", (code) => {
       clearTimeout(timer);
+      emitRuntimeEvent(onRuntimeEvent, {
+        type: "status",
+        tag: "tool_call_update",
+        text: timedOut
+          ? `process timed out after ${timeoutMs}ms`
+          : `process exited with code ${code ?? "unknown"}`,
+      });
       resolve({
         ok: !timedOut && code === 0,
         exitCode: code,
@@ -534,6 +558,13 @@ function runProcess({ command, args = [], cwd, timeoutMs = 600000, stdinText = "
         stderr,
         timedOut,
       });
+    });
+
+    emitRuntimeEvent(onRuntimeEvent, {
+      type: "tool_call",
+      tag: "tool_call",
+      title: `${command} ${args.join(" ")}`.trim(),
+      text: command,
     });
 
     if (stdinText) {
@@ -697,6 +728,7 @@ export async function runOpenCodeTask({
   model,
   maxRuntimeS = 600,
   opencodeCommand,
+  onRuntimeEvent = null,
 }) {
   try {
     const superpowersPlugin = detectSuperpowersPlugin({ cwd: workspaceRoot });
@@ -764,6 +796,7 @@ export async function runOpenCodeTask({
         cwd: workspaceRoot,
         timeoutMs: Math.max(1, Number(maxRuntimeS || 600)) * 1000,
         stdinText: invocation.stdinText,
+        onRuntimeEvent,
       });
 
     const { errorCode, providerErrorClass } = mapErrorCode({ proc: effectiveProc, command: invocation.command });

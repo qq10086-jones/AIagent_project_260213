@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
 
 export const TASK_INTENTS = ["chat", "coding", "quant", "docs", "research", "ops", "unknown"];
@@ -25,11 +26,30 @@ export function validateTaskEnvelope(envelope) {
   if (envelope.decision && !TASK_DECISIONS.includes(String(envelope.decision || ""))) {
     errors.push(`decision must be one of: ${TASK_DECISIONS.join(", ")}`);
   }
+  if (envelope.evidence_id !== undefined && !String(envelope.evidence_id || "").trim()) {
+    errors.push("evidence_id must be non-empty when provided");
+  }
+  if (envelope.replay_tag !== undefined && !String(envelope.replay_tag || "").trim()) {
+    errors.push("replay_tag must be non-empty when provided");
+  }
 
   return { ok: errors.length === 0, errors };
 }
 
+function buildReplayTag({ raw_input = "", normalized_input = {}, intent = "", decision = "", execution_plan = {} }) {
+  const canonical = JSON.stringify({
+    raw_input: String(raw_input || ""),
+    normalized_input: isPlainObject(normalized_input) ? normalized_input : {},
+    intent: String(intent || ""),
+    decision: String(decision || ""),
+    execution_plan: isPlainObject(execution_plan) ? execution_plan : {},
+  });
+  return crypto.createHash("sha256").update(canonical).digest("hex");
+}
+
 export function createTaskEnvelope(input = {}) {
+  const decision = input.decision ? String(input.decision) : undefined;
+  const executionPlan = isPlainObject(input.execution_plan) ? input.execution_plan : undefined;
   const envelope = {
     task_id: String(input.task_id || uuidv4()),
     source: String(input.source || "api"),
@@ -42,8 +62,22 @@ export function createTaskEnvelope(input = {}) {
     expected_outputs: Array.isArray(input.expected_outputs) ? input.expected_outputs : [],
     constraints: isPlainObject(input.constraints) ? input.constraints : {},
     context: isPlainObject(input.context) ? input.context : {},
-    decision: input.decision ? String(input.decision) : undefined,
-    execution_plan: isPlainObject(input.execution_plan) ? input.execution_plan : undefined,
+    decision,
+    execution_plan: executionPlan,
+    evidence_id:
+      decision === "single_agent"
+        ? String(input.evidence_id || uuidv4().replace(/-/g, ""))
+        : (input.evidence_id ? String(input.evidence_id) : undefined),
+    replay_tag:
+      decision === "single_agent"
+        ? String(input.replay_tag || buildReplayTag({
+          raw_input: input.raw_input,
+          normalized_input: input.normalized_input,
+          intent: input.intent,
+          decision,
+          execution_plan: executionPlan,
+        }))
+        : (input.replay_tag ? String(input.replay_tag) : undefined),
   };
 
   const validation = validateTaskEnvelope(envelope);

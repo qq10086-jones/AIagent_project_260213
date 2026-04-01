@@ -47,6 +47,44 @@ async function testRunCodexTaskWithMockCommand() {
   }
 }
 
+async function testRunCodexTaskEmitsRuntimeEvents() {
+  const cmd = [
+    process.execPath,
+    "-e",
+    "console.log('chunk one'); console.error('progress stderr');",
+  ];
+
+  const events = [];
+  const prevKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || "test-key";
+  try {
+    const result = await runCodexTask({
+      workspaceRoot: process.cwd(),
+      taskPrompt: "emit runtime events",
+      model: "mock-model",
+      codexCommand: cmd,
+      maxRuntimeS: 10,
+      onRuntimeEvent: async (event) => {
+        events.push(event);
+      },
+    });
+
+    assert.strictEqual(result.ok, true, `expected ok=true, got ${JSON.stringify(result)}`);
+    assert.ok(events.some((event) => event?.type === "tool_call" && event?.tag === "tool_call"));
+    assert.ok(events.some((event) => event?.type === "text_delta" && event?.tag === "agent_message_chunk"));
+    assert.ok(events.some((event) => event?.type === "status" && event?.tag === "tool_call_update"));
+  } catch (err) {
+    if (String(err?.code || "") === "EPERM") {
+      console.log("codex adapter runtime-event test skipped due sandbox EPERM");
+      return;
+    }
+    throw err;
+  } finally {
+    if (prevKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = prevKey;
+  }
+}
+
 async function testRunCodexTaskMissingPrompt() {
   const result = await runCodexTask({
     workspaceRoot: process.cwd(),
@@ -75,6 +113,7 @@ async function testRunCodexTaskMissingAuth() {
 async function main() {
   await testBuildInvocation();
   await testRunCodexTaskWithMockCommand();
+  await testRunCodexTaskEmitsRuntimeEvents();
   await testRunCodexTaskMissingPrompt();
   await testRunCodexTaskMissingAuth();
   console.log("codex_adapter.test.js: all tests passed");

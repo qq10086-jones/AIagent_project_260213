@@ -54,15 +54,15 @@
       },
       "stable_dashscope_lane": {
         "provider": "opencode",
-        "model": "minimax-coding-plan/MiniMax-M2.7",
-        "provider_class": "opencode-provider",
-        "purpose": "formerly DashScope Qwen Plus — now MiniMax M2.7 (DashScope key not configured)"
-      },
-      "primary_qwen_lane": {
-        "provider": "opencode",
         "model": "dashscope/qwen-plus-2025-04-28",
         "provider_class": "opencode-provider",
-        "purpose": "generic_app impl lane — MiniMax M2.7 (qwen3-coder-plus placeholder until DashScope key is configured)"
+        "purpose": "DashScope Qwen Plus lane (16K output cap)"
+      },
+      "primary_minimax_lane": {
+        "provider": "opencode",
+        "model": "minimax-coding-plan/MiniMax-M2.7",
+        "provider_class": "opencode-provider",
+        "purpose": "primary MiniMax lane retained for release/deploy and generic_app implementation"
       }
     }
   },

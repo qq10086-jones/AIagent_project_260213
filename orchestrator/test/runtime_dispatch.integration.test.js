@@ -122,6 +122,10 @@ test("runtime dispatch single-agent path preserves approval_request behavior", a
   assert.equal(calls.enqueueTask[0].context.channelId, "chan-1");
   assert.equal(calls.enqueueTask[0].payload.task_prompt, "删除生产环境旧文件");
   assert.equal(calls.enqueueTask[0].payload.destructive, true);
+  assert.match(String(calls.enqueueTask[0].payload.evidence_id || ""), /^[a-f0-9]{32}$/);
+  assert.match(String(calls.enqueueTask[0].payload.replay_tag || ""), /^[a-f0-9]{64}$/);
+  assert.equal(calls.enqueueTask[0].payload.task_envelope.evidence_id, calls.enqueueTask[0].payload.evidence_id);
+  assert.equal(calls.enqueueTask[0].payload.task_envelope.replay_tag, calls.enqueueTask[0].payload.replay_tag);
 });
 
 test("runtime dispatch workflow path passes context into workflow engine", async () => {

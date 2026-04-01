@@ -1,0 +1,12 @@
+{
+  "workflow_run_id": "wf-runtime-summary",
+  "status": "succeeded",
+  "runtime_evidence_summary": {
+    "smoke_verdict": "pass",
+    "smoke_root_status": 200,
+    "smoke_api_status": 200,
+    "superpowers_configured_steps": 2,
+    "superpowers_available_steps": 2,
+    "superpowers_steps_used": 2
+  }
+}

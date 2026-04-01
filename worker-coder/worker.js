@@ -8,6 +8,9 @@ import { validateSafeCommand } from "./verification_runner.js";
 import { loadRuntimeConfig } from "./runtime_config.js";
 import { validateRuntimePreflight } from "./provider_preflight.js";
 import { pushBranchToGitHub } from "./git_side_effects.js";
+import { validateWorkerResult } from "../shared/contracts/worker_result.js";
+import { createAuditHooks } from "../shared/contracts/audit_hooks.js";
+import { isSingleAgentPayload, validateSingleAgentPayloadGuardrails, validateSingleAgentWorkerResultGuardrails } from "../shared/contracts/single_agent_guardrails.js";
 
 const {
   REDIS_URL = "redis://localhost:6379",
@@ -77,12 +80,21 @@ const pool = new pg.Pool({
   password: PGPASSWORD,
   database: PGDATABASE,
 });
+const AUDIT_HOOKS = createAuditHooks({ pool, logger: console });
 
 async function emitResult(task_id, status, output, error) {
   const msg = { task_id, status };
   if (output) msg.output = serializeResultOutput(output);
   if (error) msg.error = String(error);
   await redis.xadd(STREAM_RESULT, "*", ...Object.entries(msg).flat());
+}
+
+async function emitPiSessionUpdate(task_id, tool_name, event) {
+  if (!event || typeof event !== "object") return;
+  await emitResult(task_id, "pi_session_update", {
+    tool_name,
+    event,
+  });
 }
 
 function truncateString(value, maxLen = 2000) {
@@ -111,6 +123,7 @@ function compactResultOutput(output) {
     diff_stats: output.diff_stats || null,
     test_result: output.test_result || null,
     artifacts: output.artifacts || null,
+    worker_result: output.worker_result || null,
     diagnostics: {
       error_code: diagnostics.error_code || null,
       provider_error_class: diagnostics.provider_error_class || null,
@@ -125,6 +138,36 @@ function compactResultOutput(output) {
       final_failure_summary: diagnostics.final_failure_summary || null,
     },
   };
+}
+
+function buildWorkerResultEnvelope({ runId, toolName, ok, output, error, payload = {} }) {
+  const boundedValidation = Array.isArray(output?.metadata?.bounded_validation) && output.metadata.bounded_validation.length > 0
+    ? output.metadata.bounded_validation
+    : [{
+      name: "result_shape",
+      ok: Boolean(output && typeof output === "object"),
+      detail: output && typeof output === "object" ? "object_result_emitted" : "non_object_result",
+    }];
+  const validation = validateWorkerResult({
+    run_id: runId,
+    worker_name: "worker-coder",
+    status: ok ? "succeeded" : "failed",
+    ok,
+    output,
+    error,
+    metadata: {
+      duration_ms: Number(output?.duration_ms || 0),
+      tool_calls: Number(output?.diagnostics?.tool_calls || output?.tool_calls || 0),
+      permission_decisions: Array.isArray(output?.metadata?.permission_decisions)
+        ? output.metadata.permission_decisions
+        : [],
+      evidence_id: output?.metadata?.evidence_id || payload?.evidence_id || payload?.task_envelope?.evidence_id || "",
+      replay_tag: output?.metadata?.replay_tag || payload?.replay_tag || payload?.task_envelope?.replay_tag || "",
+      bounded_validation: boundedValidation,
+      source_tool: toolName,
+    },
+  });
+  return validation.value;
 }
 
 function serializeResultOutput(output) {
@@ -179,14 +222,26 @@ async function processTask(msgId, task, lifecycle) {
     payload = JSON.parse(rawPayload || "{}");
   } catch {}
 
-  console.log(`[worker] Claimed task ${task_id} [${tool_name}]`);
-  await lifecycle.emitClaimed();
-
   let output = {};
   let error = null;
   let isSuccess = false;
 
   try {
+    const payloadGuardrails = validateSingleAgentPayloadGuardrails(payload);
+    if (!payloadGuardrails.ok) {
+      throw new Error(`SINGLE_AGENT_GUARDRAILS_INVALID: ${payloadGuardrails.errors.join("; ")}`);
+    }
+    console.log(`[worker] Claimed task ${task_id} [${tool_name}]`);
+    await lifecycle.emitClaimed();
+    await emitResult(task_id, "tool_call", {
+      tool_name,
+      input_summary: truncateString(payload?.task_prompt || payload?.prompt || payload?.command || "", 240),
+    });
+    await AUDIT_HOOKS.onToolCall(run_id, tool_name, payload, {
+      taskId: task_id,
+      workerName: "worker-coder",
+      toolName: tool_name,
+    });
     if (tool_name === "coding.patch") {
       const result = await CodingService.applyPatch({
         workspaceRoot: WORKSPACE_ROOT,
@@ -250,6 +305,9 @@ async function processTask(msgId, task, lifecycle) {
         task_class: payload.task_class || null,
         beta_template_id: payload.beta_template_id || null,
         context_envelope: payload.context_envelope || null,
+        on_runtime_event: async (event) => {
+          await emitPiSessionUpdate(task_id, tool_name, event);
+        },
       });
       output = result;
       isSuccess = !!result.ok;
@@ -269,6 +327,49 @@ async function processTask(msgId, task, lifecycle) {
     } else {
       throw new Error(`Unknown tool: ${tool_name}`);
     }
+
+    if (output && typeof output === "object" && !output.worker_result) {
+      output = {
+        ...output,
+        worker_result: buildWorkerResultEnvelope({
+          runId: run_id,
+          toolName: tool_name,
+          ok: isSuccess,
+          output,
+          error,
+          payload,
+        }),
+      };
+    }
+    if (isSingleAgentPayload(payload)) {
+      const workerResultGuardrails = validateSingleAgentWorkerResultGuardrails(output?.worker_result, { requireSingleAgent: true });
+      if (!workerResultGuardrails.ok) {
+        throw new Error(`SINGLE_AGENT_GUARDRAILS_INVALID: ${workerResultGuardrails.errors.join("; ")}`);
+      }
+    }
+
+    await AUDIT_HOOKS.onToolResult(run_id, tool_name, {
+      ok: isSuccess,
+      error,
+      worker_result: output?.worker_result || null,
+    }, {
+      taskId: task_id,
+      workerName: "worker-coder",
+      toolName: tool_name,
+    });
+    await emitResult(task_id, "tool_result", {
+      tool_name,
+      ok: isSuccess,
+      summary: truncateString(
+        output?.summary
+        || output?.error
+        || output?.diagnostics?.final_failure_summary
+        || output?.command_source
+        || "",
+        240,
+      ),
+      result_summary: output?.worker_result?.metadata?.bounded_validation?.[0]?.detail || "",
+    });
 
     await lifecycle.finalizeResult({
       ok: isSuccess,
@@ -292,11 +393,17 @@ export async function main() {
     if (!e.message.includes("BUSYGROUP")) throw e;
   }
 
-  async function processMessages(messages) {
+async function processMessages(messages) {
     const promises = messages.map(async ([id, fieldValues]) => {
       const task = {};
       for (let i = 0; i < fieldValues.length; i += 2) {
         task[fieldValues[i]] = fieldValues[i + 1];
+      }
+      let parsedPayload = {};
+      try {
+        parsedPayload = JSON.parse(task.payload || "{}");
+      } catch {
+        parsedPayload = {};
       }
       
       const WORKER_HANDLED = task.tool_name && (
@@ -313,6 +420,16 @@ export async function main() {
           writeFact,
           ackMessage: async (messageId) => {
             await redis.xack(STREAM_TASK, GROUP, messageId);
+          },
+          auditHooks: AUDIT_HOOKS,
+          workerName: "worker-coder",
+          taskEnvelope: {
+            task_id: task.task_id,
+            tool_name: task.tool_name,
+            evidence_id: parsedPayload.evidence_id || parsedPayload.task_envelope?.evidence_id || null,
+            replay_tag: parsedPayload.replay_tag || parsedPayload.task_envelope?.replay_tag || null,
+            task_envelope: parsedPayload.task_envelope || null,
+            payload: parsedPayload,
           },
         });
         try {

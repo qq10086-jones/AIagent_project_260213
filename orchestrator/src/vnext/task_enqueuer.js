@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from "uuid";
  * @param {{ pool, redis, registry, analyzeTaskRisk, validateTaskInputAgainstRegistry,
  *           getToolSpec, upsertTask, getTaskStream, findTaskIdByIdempotencyKey,
  *           enqueueToStream, bindTaskToContext, recordEvent, insertWorkflowDefinition,
- *           makeIdempotencyKey, groupTask }} deps
+ *           makeIdempotencyKey, groupTask, evaluatePermissionAdvisory, insertPermissionAuditRecord }} deps
  */
 export function createTaskEnqueuer({
   pool,
@@ -31,6 +31,8 @@ export function createTaskEnqueuer({
   insertWorkflowDefinition,
   makeIdempotencyKey,
   groupTask,
+  evaluatePermissionAdvisory = null,
+  insertPermissionAuditRecord = null,
 }) {
   async function enqueueTask({ tool_name, payload, run_id, risk_level = null, idempotency_key, context }) {
     const fullPayload = { ...(payload || {}), run_id };
@@ -47,11 +49,14 @@ export function createTaskEnqueuer({
     const risk = analyzeTaskRisk(tool_name, fullPayload);
     const finalRisk = risk_level || risk.risk_level || spec?.default_risk || "low";
     const requiresApproval = Boolean(risk.requires_approval);
+    const advisory = typeof evaluatePermissionAdvisory === "function"
+      ? evaluatePermissionAdvisory({ tool_name, payload: fullPayload, risk: { ...risk, risk_level: finalRisk } })
+      : null;
 
     const existingTaskId = await findTaskIdByIdempotencyKey(pool, idem);
     if (existingTaskId) {
       bindTaskToContext(existingTaskId, context, tool_name);
-      return { task_id: existingTaskId, deduplicated: true };
+      return { task_id: existingTaskId, deduplicated: true, advisory };
     }
 
     const task_id = uuidv4();
@@ -73,6 +78,18 @@ export function createTaskEnqueuer({
       risk_level: finalRisk,
       approval_reasons: risk.reasons || [],
     });
+    if (advisory) {
+      await recordEvent(task_id, "permission.council.advisory", advisory);
+      if (typeof insertPermissionAuditRecord === "function") {
+        await insertPermissionAuditRecord(pool, {
+          run_id,
+          task_id,
+          tool_name,
+          risk_level: finalRisk,
+          ...advisory,
+        });
+      }
+    }
 
     if (requiresApproval) {
       await recordEvent(task_id, "approval.requested", { tool_name, run_id, reasons: risk.reasons || [] });
@@ -89,7 +106,7 @@ export function createTaskEnqueuer({
     }
 
     bindTaskToContext(task_id, context, tool_name);
-    return { task_id, deduplicated: false, waiting_approval: requiresApproval };
+    return { task_id, deduplicated: false, waiting_approval: requiresApproval, advisory };
   }
 
   async function enqueueWorkflow({ name, steps, run_id, context = null }) {

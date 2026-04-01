@@ -31,7 +31,10 @@
           "name": "qwen-flash-2025-07-28"
         },
         "qwen-plus-2025-04-28": {
-          "name": "qwen-plus-2025-04-28"
+          "name": "qwen-plus-2025-04-28",
+          "options": {
+            "maxTokens": 16000
+          }
         }
       }
     },
@@ -60,7 +63,10 @@
       },
       "models": {
         "qwen-plus-2025-04-28": {
-          "name": "qwen-plus-2025-04-28"
+          "name": "qwen-plus-2025-04-28",
+          "options": {
+            "maxTokens": 16000
+          }
         },
         "qwen3-coder-plus": {
           "name": "qwen3-coder-plus"

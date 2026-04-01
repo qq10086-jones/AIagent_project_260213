@@ -296,6 +296,7 @@ export const CodingService = {
             task_class = null,
             beta_template_id = null,
             context_envelope = null,
+            on_runtime_event = null,
         } = params;
         const taskContract = buildTaskContractMetadata({
             taskClass: task_class,
@@ -527,6 +528,7 @@ export const CodingService = {
                 opencodeCommand: opencode_command,
                 allowProviderFallback: allow_provider_fallback,
                 runtimeCoderConfig: runtime_coder_config || {},
+                onRuntimeEvent: on_runtime_event,
             });
             finalFallbackFrom = finalFallbackFrom || result?.diagnostics?.fallback_from || null;
 

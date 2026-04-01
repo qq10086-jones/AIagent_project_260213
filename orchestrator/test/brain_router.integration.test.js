@@ -83,6 +83,34 @@ test("brain router returns orchestrated workflow for complex coding input", () =
   assert.equal(routed.task_envelope.execution_plan.workflow_id, "coding_team_v0");
 });
 
+test("brain router routes simple coding fix to single_agent", () => {
+  const routed = routeTaskRequest({
+    source: "discord",
+    raw_input: "fix navbar bug",
+    normalized_input: { text: "fix navbar bug" },
+    context: { channel_id: "code-simple-1" },
+    registry,
+  });
+
+  assert.equal(routed.decision, "single_agent");
+  assert.equal(routed.task_envelope.intent, "coding");
+  assert.equal(routed.task_envelope.execution_plan.tool_name, "coding.delegate");
+});
+
+test("brain router routes quant analysis to single_agent", () => {
+  const routed = routeTaskRequest({
+    source: "discord",
+    raw_input: "analyze this stock portfolio and market signals",
+    normalized_input: { text: "analyze this stock portfolio and market signals" },
+    context: { channel_id: "quant-1" },
+    registry,
+  });
+
+  assert.equal(routed.decision, "single_agent");
+  assert.equal(routed.task_envelope.intent, "quant");
+  assert.equal(routed.task_envelope.execution_plan.tool_name, "quant.deep_analysis");
+});
+
 // WS-13-03: Policy override integration tests
 
 test("policy P-01: /coder prefix forces orchestrated_workflow regardless of analyzerResult", () => {

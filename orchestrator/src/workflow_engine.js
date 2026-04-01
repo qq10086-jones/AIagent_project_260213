@@ -221,6 +221,7 @@ export function createWorkflowEngine({
           `api=${String(runtimeEvidence.smoke_api_status ?? "n/a")}`,
           `superpowers_configured_steps=${Number(runtimeEvidence.superpowers_configured_steps || 0)}`,
           `superpowers_available_steps=${Number(runtimeEvidence.superpowers_available_steps || 0)}`,
+          `superpowers_steps_used=${Number(runtimeEvidence.superpowers_steps_used || 0)}`,
         ];
         runSummary = summaryLines.join("\n").trim();
       }
@@ -409,6 +410,7 @@ export function createWorkflowEngine({
         ok: true,
         task_id: enq.task_id,
         waiting_approval: Boolean(enq.waiting_approval),
+        advisory: enq.advisory || null,
         step_id: stepDef.id,
         step_index: stepIndex,
       };

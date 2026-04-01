@@ -50,7 +50,7 @@ function main() {
     execution_adapter_packet: { key: "val" },
     context_packet: { ctx: true },
     repo_map: { files: [] },
-    model: "qwen3-coder-plus",
+    model: "minimax-coding-plan/MiniMax-M2.7",
     execution_lane: "stable_cloud_lane",
     allow_provider_fallback: true,
     runtime_coder_config: { provider_default: "opencode" },
@@ -73,7 +73,7 @@ function main() {
   assert.deepEqual(full.payload.execution_adapter_packet, { key: "val" });
   assert.deepEqual(full.payload.context_packet, { ctx: true });
   assert.deepEqual(full.payload.repo_map, { files: [] });
-  assert.equal(full.payload.model_hint, "qwen3-coder-plus");
+  assert.equal(full.payload.model_hint, "minimax-coding-plan/MiniMax-M2.7");
   assert.equal(full.payload.execution_lane, "stable_cloud_lane");
   assert.equal(full.payload.allow_provider_fallback, true);
   assert.deepEqual(full.payload.runtime_coder_config, { provider_default: "opencode" });

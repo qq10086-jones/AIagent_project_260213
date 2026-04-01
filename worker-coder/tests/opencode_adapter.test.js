@@ -387,6 +387,8 @@ async function main() {
   await testRunOpenCodeTaskAcceptsDashScopeCredential();
   await testRunOpenCodeTaskRequiresOpenCodeCredential();
   await testRunOpenCodeTaskRequiresMiniMaxCredential();
+  await testRunOpenCodeTaskReportsConfiguredSuperpowersPlugin();
+  await testRunOpenCodeTaskReportsMissingSuperpowersPlugin();
   console.log("opencode_adapter.test.js: all tests passed");
 }
 

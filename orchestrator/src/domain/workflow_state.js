@@ -25,11 +25,12 @@ export const STEP_CONTRACTS = {
   },
   arch_design: {
     title: "Architecture Design",
-    required_artifacts: ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md"],
+    required_artifacts: ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md", "plan/workplan.json"],
     instructions: [
       "Provide architecture decisions with tradeoffs and module boundaries.",
       "Publish top risks and mitigations in risk/risk_report.json.",
       "Split implementation work for FE/BE/QA in plan/workplan.md using the structured task list format: '## BE Tasks' and '## FE Tasks' sections, each task as '- [ ] T-BE-N: <description> | verify: <concrete assertion>', max 8 tasks per team, ordered by dependency.",
+      "Also write plan/workplan.json with structured be_tasks and fe_tasks arrays so implementation steps can consume the workplan without markdown parsing.",
       "Define all API endpoints or internal interfaces in plan/interfaces.md as concrete markdown headings like '## GET /api/books' or '## Event: record.created' (adapt names to the actual domain).",
       "Under each plan/interfaces.md heading, include request shape, response shape or payload shape, and auth requirement.",
       "Keep the Interfaces section in plan/arch.md brief and point it to plan/interfaces.md for the concrete contract list.",
@@ -41,6 +42,7 @@ export const STEP_CONTRACTS = {
     required_artifacts: ["impl/fe_changes/public/index.html", "impl/fe_changes/public/app.js", "impl/fe_notes.md"],
     instructions: [
       "If plan/workplan.md exists, read the '## FE Tasks' section and execute tasks in listed order, checking each task's verify condition before proceeding to the next.",
+      "Prefer plan/workplan.json when present; use its structured FE task list before falling back to plan/workplan.md.",
       "Implement frontend outputs as complete files under impl/fe_changes/public/.",
       "Consume handoff/be_to_fe.json as the backend contract source for API usage.",
       "Use same-origin relative API paths only. Do not hardcode localhost URLs.",
@@ -54,6 +56,7 @@ export const STEP_CONTRACTS = {
     required_artifacts: ["impl/be_changes/server.js", "impl/be_changes/package.json", "impl/be_notes.md", "handoff/be_to_fe.json"],
     instructions: [
       "If plan/workplan.md exists, read the '## BE Tasks' section and execute tasks in listed order, checking each task's verify condition before proceeding to the next.",
+      "Prefer plan/workplan.json when present; use its structured BE task list before falling back to plan/workplan.md.",
       "Implement backend/API/data layer outputs as complete files under impl/be_changes/.",
       "Write impl/be_changes/package.json with all runtime dependencies required by server.js.",
       "Configure server.js to serve static files from impl/be_changes/public/ and return public/index.html from GET /.",

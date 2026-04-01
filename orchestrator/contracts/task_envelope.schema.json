@@ -50,6 +50,8 @@
       "type": "string",
       "enum": ["direct_reply", "single_agent", "orchestrated_workflow", "human_review_required"]
     },
+    "evidence_id": { "type": "string" },
+    "replay_tag": { "type": "string" },
     "execution_plan": {
       "type": "object",
       "additionalProperties": true,

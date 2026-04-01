@@ -36,7 +36,7 @@ function makeBuilder(workspaceRoot) {
         execution_lanes: {
           stable_cloud_lane: {
             provider: "opencode",
-            model: "dashscope/qwen-plus-2025-04-28",
+            model: "minimax-coding-plan/MiniMax-M2.7",
           },
         },
         max_attempts_default: 2,
@@ -60,7 +60,7 @@ test("impl_be payload includes context packet, repo map, and coding context bloc
       workflow_run_id: "wf-run-ctx",
       workflow_id: "coding_team_v0",
       project_type: "webapp_crm",
-      input_json: JSON.stringify({ goal: "Implement backend API", provider: "opencode", model: "qwen-coder-next" }),
+      input_json: JSON.stringify({ goal: "Implement backend API", provider: "opencode", model: "minimax-coding-plan/MiniMax-M2.7" }),
     },
     stepDef: {
       id: "impl_be",
@@ -76,7 +76,7 @@ test("impl_be payload includes context packet, repo map, and coding context bloc
   assert.equal(payload.context_packet.role, "backend");
   assert.equal(payload.execution_lane, "stable_cloud_lane");
   assert.equal(payload.provider, "opencode");
-  assert.equal(payload.model, "dashscope/qwen-plus-2025-04-28");
+  assert.equal(payload.model, "minimax-coding-plan/MiniMax-M2.7");
   assert.match(JSON.stringify(payload.repo_map.candidate_files), /sandbox\/crm_site\/server\.js/);
   assert.match(payload.task_prompt, /\[Coding Context Packet\]/);
   assert.match(payload.task_prompt, /Target Paths:/);
@@ -202,7 +202,8 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
       worker_coder: {
         execution_lane_default: "stable_cloud_lane",
         execution_lanes: {
-          stable_cloud_lane: { provider: "opencode", model: "dashscope/qwen-plus-2025-04-28" },
+          stable_cloud_lane: { provider: "opencode", model: "minimax-coding-plan/MiniMax-M2.7" },
+          
         },
         wall_clock_timeout_s_default: 900,
         max_attempts_default: 2,
@@ -217,7 +218,7 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
       workflow_run_id: "mini-cloud-wf",
       workflow_id: "coding_team_v0",
       project_type: "webapp_crm",
-      input_json: JSON.stringify({ goal: "Implement backend API", provider: "opencode", model: "dashscope/qwen-plus-2025-04-28", execution_lane: "stable_cloud_lane" }),
+      input_json: JSON.stringify({ goal: "Implement backend API", provider: "opencode", model: "minimax-coding-plan/MiniMax-M2.7", execution_lane: "stable_cloud_lane" }),
     },
     stepDef: {
       id: "impl_be",
@@ -235,7 +236,7 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
   assert.deepEqual(payload.expected_artifacts, ["impl/be_changes/server.js", "impl/be_changes/package.json", "impl/be_notes.md", "handoff/be_to_fe.json"]);
 });
 
-test("generic_app impl_be injects primary_qwen_lane and uses full_file_fallback", () => {
+test("generic_app impl_be injects primary_minimax_lane and uses full_file_fallback", () => {
   const workspaceRoot = makeWorkspace();
   // sandbox/app is empty — no target files — natural full_file_fallback
   fs.mkdirSync(path.join(workspaceRoot, "sandbox/app"), { recursive: true });
@@ -255,7 +256,7 @@ test("generic_app impl_be injects primary_qwen_lane and uses full_file_fallback"
         execution_lane_default: "stable_cloud_lane",
         execution_lanes: {
           stable_cloud_lane: { provider: "opencode", model: "minimax-coding-plan/MiniMax-M2.7" },
-          primary_qwen_lane: { provider: "opencode", model: "minimax-coding-plan/MiniMax-M2.7" },
+          primary_minimax_lane: { provider: "opencode", model: "minimax-coding-plan/MiniMax-M2.7" },
         },
         wall_clock_timeout_s_default: 900,
         max_attempts_default: 2,
@@ -282,9 +283,9 @@ test("generic_app impl_be injects primary_qwen_lane and uses full_file_fallback"
     stepIndex: 2,
   });
 
-  assert.equal(payload.execution_lane, "primary_qwen_lane", "generic_app impl_be should use primary_qwen_lane");
-  assert.equal(payload.model, "minimax-coding-plan/MiniMax-M2.7", "model should match primary_qwen_lane");
-  assert.equal(payload.execution_mode_requested, "full_file_fallback", "primary_qwen_lane forced to full_file_fallback");
+  assert.equal(payload.execution_lane, "primary_minimax_lane", "generic_app impl_be should use primary_minimax_lane");
+  assert.equal(payload.model, "minimax-coding-plan/MiniMax-M2.7", "model should match primary_minimax_lane");
+  assert.equal(payload.execution_mode_requested, "full_file_fallback", "primary_minimax_lane forced to full_file_fallback");
 });
 
 test("deploy_preview payload includes release metadata and preview defaults", () => {
@@ -327,6 +328,44 @@ test("deploy_preview payload includes release metadata and preview defaults", ()
     "sandbox/crm_site/",
   ]);
   assert.equal(payload.render_service_id, "");
+  assert.equal(payload.model_override, "minimax-coding-plan/MiniMax-M2.7");
+});
+
+test("release_pack payload pins fast model lane for webapp_crm", () => {
+  const workspaceRoot = makeWorkspace();
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: {
+      scripts: {
+        "release.pack.v1": { script_id: "release.pack.v1", role: "release", llm_role: "release", validation: {} },
+      },
+    },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {},
+  });
+
+  const payload = builder.buildStepPayload({
+    run: {
+      run_id: "release-run",
+      workflow_run_id: "release-wf",
+      workflow_id: "coding_team_v0",
+      project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "Ship release pack" }),
+    },
+    stepDef: {
+      id: "release_pack",
+      role: "release",
+      tool: "coding.delegate",
+      gate: "finalize",
+      prompt_script_id: "release.pack.v1",
+    },
+    stepIndex: 5,
+  });
+
+  assert.equal(payload.execution_lane, "primary_minimax_lane");
+  assert.equal(payload.model, "minimax-coding-plan/MiniMax-M2.7");
+  assert.equal(payload.model_override, "minimax-coding-plan/MiniMax-M2.7");
 });
 
 test("smoke_test payload includes executable command and smoke artifact", () => {
@@ -365,5 +404,94 @@ test("smoke_test payload includes executable command and smoke artifact", () => 
   assert.match(payload.command, /--api-endpoint "\/api\/books"/);
   assert.equal(payload.max_runtime_s, 120);
   assert.deepEqual(payload.expected_artifacts, ["smoke/smoke_result.json"]);
+});
+
+test("impl_be prefers structured workplan json over markdown fallback", () => {
+  const workspaceRoot = makeWorkspace();
+  writeFile(workspaceRoot, "artifacts/release/run-workplan/plan/workplan.json", JSON.stringify({
+    be_tasks: [
+      { id: "T-BE-1", description: "Implement auth route", verify: "GET /api/health returns 200" },
+    ],
+    fe_tasks: [],
+  }, null, 2));
+
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: {
+      scripts: {
+        "backend.impl.v1": { script_id: "backend.impl.v1", role: "backend", llm_role: "backend", validation: {} },
+      },
+    },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {},
+  });
+
+  const payload = builder.buildStepPayload({
+    run: {
+      run_id: "run-workplan",
+      workflow_run_id: "wf-workplan",
+      workflow_id: "coding_team_v0",
+      project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "Build CRM backend" }),
+    },
+    stepDef: {
+      id: "impl_be",
+      role: "backend",
+      tool: "coding.delegate",
+      gate: "policy",
+      prompt_script_id: "backend.impl.v1",
+    },
+    stepIndex: 2,
+  });
+
+  assert.match(payload.task_prompt, /\[Structured Workplan — BE Tasks\]/);
+  assert.match(payload.task_prompt, /T-BE-1: Implement auth route/);
+  assert.match(payload.task_prompt, /verify: GET \/api\/health returns 200/);
+  assert.equal(payload.workplan_validation.ok, true);
+});
+
+test("impl_be falls back to markdown when structured workplan json is invalid", () => {
+  const workspaceRoot = makeWorkspace();
+  writeFile(workspaceRoot, "artifacts/release/run-workplan-bad/plan/workplan.json", JSON.stringify({
+    be_tasks: [{ id: "T-BE-1", description: "Missing verify field" }],
+    fe_tasks: [],
+  }, null, 2));
+  writeFile(workspaceRoot, "artifacts/release/run-workplan-bad/plan/workplan.md", "## BE Tasks\n- [ ] T-BE-9: Fallback task | verify: node --check server.js\n");
+
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: {
+      scripts: {
+        "backend.impl.v1": { script_id: "backend.impl.v1", role: "backend", llm_role: "backend", validation: {} },
+      },
+    },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {},
+  });
+
+  const payload = builder.buildStepPayload({
+    run: {
+      run_id: "run-workplan-bad",
+      workflow_run_id: "wf-workplan-bad",
+      workflow_id: "coding_team_v0",
+      project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "Build CRM backend" }),
+    },
+    stepDef: {
+      id: "impl_be",
+      role: "backend",
+      tool: "coding.delegate",
+      gate: "policy",
+      prompt_script_id: "backend.impl.v1",
+    },
+    stepIndex: 2,
+  });
+
+  assert.equal(payload.workplan_validation.ok, false);
+  assert.equal(payload.workplan_validation.code, "WORKPLAN_JSON_INVALID");
+  assert.match(payload.task_prompt, /\[Workplan JSON Fallback\]/);
+  assert.match(payload.task_prompt, /T-BE-9: Fallback task/);
 });
 

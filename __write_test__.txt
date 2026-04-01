@@ -1,2 +1,0 @@
-Hello Coding Agent
-This is a test file.

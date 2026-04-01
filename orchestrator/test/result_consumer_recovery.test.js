@@ -113,3 +113,93 @@ test("result consumer processes fresh succeeded messages and updates task status
   assert.equal(calls.xack.length, 1);
   assert.equal(calls.runStatus.length, 1);
 });
+
+test("result consumer routes pi session updates through progress path without terminal status update", async () => {
+  const taskToContext = new Map([
+    ["task-pi", { channelId: "c-pi", lang: "zh", tool_name: "coding.delegate" }],
+  ]);
+  const sent = [];
+  const calls = {
+    recordEvent: [],
+    terminal: [],
+  };
+
+  const consumer = createResultConsumer({
+    pool: {},
+    redis: {
+      xautoclaim: async () => ["0-0", []],
+      xreadgroup: async () => [[
+        "stream:result",
+        [[
+          "199-0",
+          [
+            "task_id", "task-pi",
+            "status", "pi_session_update",
+            "output", JSON.stringify({
+              tool_name: "coding.delegate",
+              event: {
+                type: "text_delta",
+                tag: "agent_message_chunk",
+                text: "streamed delegate update",
+              },
+            }),
+          ],
+        ]],
+      ]],
+      xack: async () => {},
+    },
+    workflowEngine: {
+      handleTaskClaimed: async () => {},
+      handleTaskTerminal: async () => null,
+    },
+    normalizeResultPayload: (status, output, errorCode) => ({ status, output, error_code: errorCode }),
+    normalizeErrorCode: () => null,
+    getRunInputText: async () => "",
+    findRunIdByTaskId: async () => "run-pi",
+    countPendingTasksForRun: async () => 0,
+    countFailedWorkflowRunsForRun: async () => 0,
+    countFailedTasksForRun: async () => 0,
+    updateRunStatusIfNotFailed: async () => {},
+    updateTaskTerminalResult: async (...args) => {
+      calls.terminal.push(args);
+    },
+    forceTaskFailed: async () => {},
+    markTaskRunning: async () => {},
+    recordEvent: async (...args) => {
+      calls.recordEvent.push(args);
+    },
+    taskToContext,
+    runToContext: new Map(),
+    discord: {
+      channels: {
+        fetch: async () => ({
+          send: async (text) => {
+            sent.push(text);
+            return { id: `m-${sent.length}` };
+          },
+        }),
+      },
+    },
+    replyChunked: async () => [],
+    safeTranslate: async (text) => text,
+    createResultEmbed: () => ({}),
+    createBinaryAttachment: () => ({}),
+    insertTrace: async () => {},
+    s3: { send: async () => ({}) },
+    callLocalOllamaReply: async () => "",
+    detectProject: () => "general",
+    formatCodingDelegateResult: () => "ok",
+    summarizeOutputBrief: () => "ok",
+    deliverWorkflowRuntimeNotification: async () => ({ delivered: false }),
+    streamResult: "stream:result",
+    groupResult: "cg:orchestrator",
+  });
+
+  const result = await consumer.tick();
+  assert.deepEqual(result, { processed: 1 });
+  assert.equal(calls.terminal.length, 0);
+  assert.equal(calls.recordEvent.length, 1);
+  assert.match(String(calls.recordEvent[0][1]), /task\.pi_session_update/);
+  assert.equal(sent.length, 1);
+  assert.match(String(sent[0]), /agent update/);
+});

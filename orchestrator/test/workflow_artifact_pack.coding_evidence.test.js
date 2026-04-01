@@ -23,6 +23,7 @@ async function main() {
   fs.mkdirSync(path.join(releaseRoot, "smoke"), { recursive: true });
   fs.mkdirSync(path.join(releaseRoot, "impl", "fe_changes", "public"), { recursive: true });
   fs.mkdirSync(path.join(releaseRoot, "impl", "be_changes", "public"), { recursive: true });
+  fs.mkdirSync(path.join(releaseRoot, "release"), { recursive: true });
 
   fs.writeFileSync(
     path.join(releaseRoot, "impl", "fe_changes", "app.js"),
@@ -50,6 +51,11 @@ async function main() {
       verdict: "pass",
       evidence_level: "l1_l2",
     }, null, 2),
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(releaseRoot, "release", "release_notes.md"),
+    "# Release Notes\n\nInitial package summary.\n",
     "utf8"
   );
 
@@ -136,6 +142,7 @@ async function main() {
   const result = await service.generateArtifactPack(run);
   const manifest = JSON.parse(fs.readFileSync(result.run_manifest_path, "utf8"));
   const summary = fs.readFileSync(result.summary_path, "utf8");
+  const releaseNotes = fs.readFileSync(path.join(releaseRoot, "release", "release_notes.md"), "utf8");
 
   assert.ok(Array.isArray(manifest.coding_execution_evidence));
   assert.equal(manifest.coding_execution_evidence.length, 1);
@@ -151,12 +158,17 @@ async function main() {
   assert.equal(manifest.coding_execution_summary.failure_memory_entries, 1);
   assert.equal(manifest.runtime_evidence_summary.superpowers_configured_steps, 1);
   assert.equal(manifest.runtime_evidence_summary.superpowers_available_steps, 1);
+  assert.equal(manifest.runtime_evidence_summary.superpowers_steps_used, 1);
+  assert.equal(manifest.release_notes_runtime_evidence_appended, true);
   assert.equal(manifest.runtime_evidence_summary.smoke_verdict, "pass");
   assert.equal(manifest.runtime_evidence_summary.smoke_root_status, 200);
   assert.equal(manifest.runtime_evidence_summary.smoke_api_status, 200);
   assert.equal(manifest.runtime_evidence.smoke.path, `artifacts/release/${run.run_id}/smoke/smoke_result.json`);
   assert.match(summary, /Runtime Evidence/);
   assert.match(summary, /superpowers_configured_steps: 1/);
+  assert.match(summary, /superpowers_steps_used: 1/);
+  assert.match(releaseNotes, /## Runtime Evidence/);
+  assert.match(releaseNotes, /superpowers_steps_used: 1/);
   assert.match(summary, /smoke_verdict: pass/);
   assert.match(summary, /smoke_root_status: 200/);
   assert.ok(archivedExtraPaths.some((item) => item.endsWith(testLogRel.replace(/\\/g, "/"))));

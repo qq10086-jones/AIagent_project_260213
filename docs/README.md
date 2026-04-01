@@ -1,24 +1,26 @@
-﻿# Docs Index
+﻿# Docs
 
-This `docs` directory has been reorganized for maintainability.
+> **新员工请直接打开 [CURRENT.md](CURRENT.md)**，里面有所有当前有效文档的直接链接。
 
-## Structure
-- `00_overview/`: reorganization notes and migration map
-- `01_design/`: latest design documentation (authoritative)
-- `02_patch/`: patch-focused documents and patch index
-- `03_feature_development/`: feature progress indexes and reports
-- `90_archive/`: historical/legacy docs and old workspace material
+---
 
-## Start Here
-- System design: `docs/01_design/system/system_design_latest.md`
-- Coding design (latest): `docs/01_design/coding/coding_agent_design_latest.md`
-- Quant design (latest): `docs/01_design/quant/quant_design_latest.md`
-- Learning design (latest): `docs/01_design/learning/learning_design_latest.md`
-- Web-augmented chat design (latest): `docs/01_design/web/web_augmented_chat_design_latest.md`
-- Task protocol: `docs/01_design/system/task_queue_protocol.md`
+## 目录结构
 
-## Notes
-- Multiple-version docs were consolidated into `*_latest.md` where applicable.
-- Older versions were moved to `docs/90_archive`.
-- Migration map: `docs/00_overview/docs_migration_map_20260301.md`.
-- One high-noise legacy progress file (2026-02-24) was archived and replaced by a readable placeholder.
+```
+docs/
+  CURRENT.md               ← 所有最新文档的导航入口（从这里开始）
+  01_design/
+    system/260401/         ← 最新系统设计、任务清单、治理文档（v3，2026-04-01）
+    system/260306/         ← 当前有效的接口合同文档
+    system/260301~260324/  ← 历史设计版本（仅供溯源）
+    coding/                ← worker-coder 设计
+    quant/                 ← worker-quant 设计
+    learning/              ← 学习层设计
+    web/                   ← Web 增强对话设计
+  02_patch/                ← patch 文档索引
+  03_feature_development/  ← 功能开发进度报告
+  governance/              ← 历史里程碑 Go/No-Go 记录
+  contracts/               ← 补充合同文档
+  runbooks/                ← 运维操作手册
+  90_archive/              ← 历史/遗留文档（不需要阅读）
+```

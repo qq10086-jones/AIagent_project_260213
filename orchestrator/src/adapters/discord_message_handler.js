@@ -62,6 +62,19 @@ export function createDiscordMessageHandler({
     }
   };
 
+  const formatApprovalAdvisoryText = (advisory) => {
+    if (!advisory || typeof advisory !== "object") return "";
+    const advice = String(advisory.council_advice || "").trim();
+    const summary = String(advisory.advisory_summary || "").trim();
+    const score = Number.isFinite(Number(advisory.risk_score)) ? Number(advisory.risk_score).toFixed(2) : "";
+    if (!advice && !summary) return "";
+    const parts = ["[Council Advisory]"];
+    if (advice) parts.push(`advice=${advice}`);
+    if (score) parts.push(`risk_score=${score}`);
+    if (summary) parts.push(summary);
+    return `\n${parts.join(" | ")}`;
+  };
+
   async function handleDiscordMessage(msg) {
     if (msg.author.bot) return;
     try {
@@ -154,7 +167,7 @@ export function createDiscordMessageHandler({
           idempotency_key: makeIdempotencyKey(run_id, parsedRun.tool_name, parsedRun.payload || {}), context,
         });
         if (queued?.waiting_approval) {
-          await msg.reply(`[NEXUS] \u4efb\u52a1\u7b49\u5f85\u5ba1\u6279\uff1atask_id=${queued.task_id}\n\u6279\u51c6\uff1a\`/approve: ${queued.task_id}\`\n\u62d2\u7edd\uff1a\`/reject: ${queued.task_id}\``);
+          await msg.reply(`[NEXUS] \u4efb\u52a1\u7b49\u5f85\u5ba1\u6279\uff1atask_id=${queued.task_id}\n\u6279\u51c6\uff1a\`/approve: ${queued.task_id}\`\n\u62d2\u7edd\uff1a\`/reject: ${queued.task_id}\`${formatApprovalAdvisoryText(queued.advisory)}`);
         }
       } catch (err) {
         runToContext.delete(run_id);
@@ -242,7 +255,7 @@ export function createDiscordMessageHandler({
           runId: run_id
         });
         if (result.execution?.first_step?.waiting_approval && result.execution?.first_step?.task_id) {
-          await msg.reply(`[NEXUS] \u4efb\u52a1\u7b49\u5f85\u5ba1\u6279\uff1atask_id=${result.execution.first_step.task_id}\n\u6279\u51c6\uff1a\`/approve: ${result.execution.first_step.task_id}\`\n\u62d2\u7edd\uff1a\`/reject: ${result.execution.first_step.task_id}\``);
+          await msg.reply(`[NEXUS] \u4efb\u52a1\u7b49\u5f85\u5ba1\u6279\uff1atask_id=${result.execution.first_step.task_id}\n\u6279\u51c6\uff1a\`/approve: ${result.execution.first_step.task_id}\`\n\u62d2\u7edd\uff1a\`/reject: ${result.execution.first_step.task_id}\`${formatApprovalAdvisoryText(result.execution.first_step.advisory)}`);
         }
         return;
       }
@@ -251,7 +264,7 @@ export function createDiscordMessageHandler({
         const queuedText = await safeTranslate(`\u4efb\u52a1\u5df2\u8fdb\u5165\u6267\u884c\u961f\u5217\u3002run_id=${run_id}\uff0ctask_id=${result.execution.task_id}\uff0ctool=${result.execution.tool_name || "unknown"}\u3002`, lang);
         await msg.reply(`[NEXUS] ${queuedText}`);
         if (result.execution.waiting_approval) {
-          await msg.reply(`[NEXUS] \u4efb\u52a1\u7b49\u5f85\u5ba1\u6279\uff1atask_id=${result.execution.task_id}\n\u6279\u51c6\uff1a\`/approve: ${result.execution.task_id}\`\n\u62d2\u7edd\uff1a\`/reject: ${result.execution.task_id}\``);
+          await msg.reply(`[NEXUS] \u4efb\u52a1\u7b49\u5f85\u5ba1\u6279\uff1atask_id=${result.execution.task_id}\n\u6279\u51c6\uff1a\`/approve: ${result.execution.task_id}\`\n\u62d2\u7edd\uff1a\`/reject: ${result.execution.task_id}\`${formatApprovalAdvisoryText(result.execution.advisory)}`);
         }
         return;
       }

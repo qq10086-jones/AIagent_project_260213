@@ -10,6 +10,7 @@ import {
   assertDispatchErrorResponse,
   assertDispatchSuccessResponse,
 } from "./contract_validator.js";
+import { validateSingleAgentPayloadGuardrails } from "../../../shared/contracts/single_agent_guardrails.js";
 
 export function createExecuteVNextDispatch({
   ensureRun,
@@ -116,7 +117,21 @@ export function createExecuteVNextDispatch({
         task_prompt: requestBody?.task_prompt || normalized.raw_input,
         prompt: requestBody?.prompt || normalized.raw_input,
         project_type: plan.project_type || undefined,
+        evidence_id: routed.task_envelope.evidence_id || "",
+        replay_tag: routed.task_envelope.replay_tag || "",
       };
+      const guardrails = validateSingleAgentPayloadGuardrails(payload);
+      if (!guardrails.ok) {
+        await updateRunStatus(pool, run_id, "failed").catch(() => {});
+        return assertDispatchErrorResponse(
+          makeErrorResponse({
+            run_id,
+            error: guardrails.errors.join("; "),
+            error_code: "SINGLE_AGENT_GUARDRAILS_INVALID",
+            task_envelope: routed.task_envelope,
+          }),
+        );
+      }
       const queued = await enqueueTask({
         tool_name: String(plan.tool_name || "coding.delegate"),
         payload,
@@ -130,6 +145,7 @@ export function createExecuteVNextDispatch({
           task_id: queued.task_id,
           tool_name: String(plan.tool_name || "coding.delegate"),
           waiting_approval: Boolean(queued.waiting_approval),
+          advisory: queued.advisory || null,
         }),
       );
     }

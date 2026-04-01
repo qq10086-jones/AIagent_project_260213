@@ -59,6 +59,7 @@ export function buildApiDispatchJson(result) {
       task_id: result.execution.task_id,
       tool_name: result.execution.tool_name || "",
       waiting_approval: Boolean(result.execution.waiting_approval),
+      advisory: result.execution.advisory || null,
       task_envelope: result.task_envelope || null,
     };
   }

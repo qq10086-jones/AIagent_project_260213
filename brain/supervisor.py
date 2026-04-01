@@ -346,13 +346,36 @@ def coder_agent_node(state: AgentState):
         print(f"[Brain] Coder agent failed: {e}")
         return {"facts": state.get("facts", []) + [{"agent": "coder", "data": {"error": str(e)}}]}
 
+def _is_single_agent_mode(state: AgentState) -> bool:
+    """
+    判断是否走 single_agent 路径。
+    满足以下任一条件即路由到 single_agent：
+      1. state.mode == "single_agent"（显式指定）
+      2. task_envelope.decision == "single_agent"（来自 OpenClaw 路由决策）
+    适用场景（参见设计文档 7.1）：
+      - coding bug fix（预估影响 < 3 个文件）
+      - quant 查询分析（非批量 pipeline）
+      - 简单 web 研究
+    """
+    if str(state.get("mode", "")).strip() == "single_agent":
+        return True
+    task_envelope = state.get("task_envelope")
+    if isinstance(task_envelope, dict) and str(task_envelope.get("decision", "")).strip() == "single_agent":
+        return True
+    return False
+
+
 def supervisor_node(state: AgentState):
     """
     Core Logic: Task Decomposition & Routing.
     """
+    # single_agent 路径：轻量微工作流，绕过完整 DAG pipeline
+    if _is_single_agent_mode(state):
+        return {"next_step": "single_agent_dispatch"}
+
     mode = state.get("mode", "analysis")
     existing = [f['agent'] for f in state.get('facts', [])]
-    
+
     if mode == "coding":
         if "coder" not in existing:
             return {"next_step": "coder"}
@@ -541,6 +564,64 @@ def writer_agent_node(state: AgentState):
     return out
 
 
+def single_agent_dispatch_node(state: AgentState):
+    """
+    single_agent 微工作流分发节点（BR-01 / SA-01）。
+
+    设计原则（参见设计文档 7.1–7.3）：
+    - single_agent 不是 DAG bypass，是轻量但有质量门控的执行路径
+    - 适用场景：coding bug fix（< 3 文件）、quant 查询、简单 web 研究
+    - 必须携带 evidence_id + replay_tag（来自 task_envelope 或 run_id 衍生）
+    - 输出 decision: single_agent，由 OpenClaw 负责验证四项门控后执行
+
+    注意：该节点不直接执行任务，只做路由分发决策输出，
+    实际执行由 worker-coder / worker-quant 完成，审计由 AuditHooks 覆盖。
+    """
+    run_id = str(state.get("run_id") or "")
+    task_envelope = state.get("task_envelope") if isinstance(state.get("task_envelope"), dict) else {}
+
+    # evidence_id 优先从 task_envelope 取；兜底从 run_id 衍生
+    evidence_id = str(task_envelope.get("evidence_id") or "").strip()
+    if not evidence_id and run_id:
+        evidence_id = f"sa-{run_id[:16]}"
+
+    # replay_tag：任务输入参数快照摘要，用于重放
+    replay_tag = str(task_envelope.get("replay_tag") or "").strip()
+    if not replay_tag:
+        import hashlib
+        tag_source = json.dumps({
+            "run_id": run_id,
+            "mode": state.get("mode", ""),
+            "tool_name": task_envelope.get("tool_name", ""),
+        }, sort_keys=True, ensure_ascii=False)
+        replay_tag = hashlib.sha256(tag_source.encode()).hexdigest()[:16]
+
+    # 根据 mode/task_envelope 判断路由目标 worker
+    mode = str(state.get("mode", "")).strip()
+    tool_name = str(task_envelope.get("tool_name", "")).strip()
+    if mode in ("coding", "coding_single") or tool_name.startswith("coding."):
+        target_worker = "worker-coder"
+    elif mode in ("quant", "quant_single") or tool_name.startswith("quant."):
+        target_worker = "worker-quant"
+    else:
+        target_worker = "worker-coder"  # 默认 coding
+
+    print(f"[Brain:single_agent_dispatch] run_id={run_id} evidence_id={evidence_id} "
+          f"target_worker={target_worker} tool_name={tool_name or '(none)'}")
+
+    return {
+        "narrative": "",
+        "decision": "single_agent",
+        "single_agent_meta": {
+            "evidence_id": evidence_id,
+            "replay_tag": replay_tag,
+            "target_worker": target_worker,
+            "tool_name": tool_name,
+            "run_id": run_id,
+        },
+    }
+
+
 # Re-build Graph
 builder = StateGraph(AgentState)
 builder.add_node("supervisor", supervisor_node)
@@ -550,6 +631,7 @@ builder.add_node("screening", screening_agent_node)
 builder.add_node("quant", quant_agent_node)
 builder.add_node("browser", browser_agent_node)
 builder.add_node("writer", writer_agent_node)
+builder.add_node("single_agent_dispatch", single_agent_dispatch_node)
 
 builder.set_entry_point("supervisor")
 
@@ -560,7 +642,8 @@ builder.add_conditional_edges("supervisor", lambda x: x["next_step"], {
     "screening": "screening",
     "quant": "quant",
     "browser": "browser",
-    "writer": "writer"
+    "writer": "writer",
+    "single_agent_dispatch": "single_agent_dispatch",
 })
 
 builder.add_edge("coder", "supervisor")
@@ -569,4 +652,5 @@ builder.add_edge("screening", "supervisor")
 builder.add_edge("quant", "supervisor")
 builder.add_edge("browser", "supervisor")
 builder.add_edge("writer", END)
+builder.add_edge("single_agent_dispatch", END)
 brain_graph = builder.compile()

@@ -26,7 +26,7 @@ export function makeErrorResponse({ run_id = "", error = "", error_code = "UNKNO
   };
 }
 
-export function makeTaskQueuedResponse({ run_id, task_envelope, task_id, tool_name, waiting_approval = false }) {
+export function makeTaskQueuedResponse({ run_id, task_envelope, task_id, tool_name, waiting_approval = false, advisory = null }) {
   return {
     ok: true,
     response_mode: waiting_approval ? "approval_request" : "progress_update",
@@ -36,6 +36,7 @@ export function makeTaskQueuedResponse({ run_id, task_envelope, task_id, tool_na
       task_id,
       tool_name,
       waiting_approval,
+      advisory: advisory || null,
     },
   };
 }

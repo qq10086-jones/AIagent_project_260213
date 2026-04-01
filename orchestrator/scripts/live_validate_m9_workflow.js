@@ -238,7 +238,7 @@ function validateStepModelRouting(steps = []) {
   const releasePackResult = parseStepResultJson(releasePack);
   const releasePackLane = String(releasePackResult?.execution_lane || "");
   const releasePackModel = String(releasePackResult?.model_used || "");
-  assert(releasePackLane === "primary_qwen_lane", `release_pack execution_lane expected primary_qwen_lane, got ${releasePackLane || "none"}`);
+  assert(releasePackLane === "primary_minimax_lane", `release_pack execution_lane expected primary_minimax_lane, got ${releasePackLane || "none"}`);
   assert(
     /qwen-plus-2025-04-28/i.test(releasePackModel),
     `release_pack model_used expected qwen-plus-2025-04-28, got ${releasePackModel || "none"}`,

@@ -23,6 +23,8 @@ test("buildStepPrompt includes concrete arch interface contract guidance", () =>
   assert.match(prompt, /## GET \/api\/customers/);
   assert.match(prompt, /request shape, response shape or payload shape, and auth requirement/i);
   assert.match(prompt, /plan\/arch\.md, keep the Interfaces section as a short summary that points to plan\/interfaces\.md/i);
+  assert.match(prompt, /plan\/workplan\.json/);
+  assert.match(prompt, /structured be_tasks and fe_tasks arrays/i);
 });
 
 test("buildStepPrompt adds static-site guardrails for single_file_html arch step", () => {

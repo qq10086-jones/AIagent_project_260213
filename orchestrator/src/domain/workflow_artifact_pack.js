@@ -153,11 +153,14 @@ function collectCodingExecutionEvidence(steps = []) {
       return {
         step_index: Number(step?.step_index),
         step_id: String(step?.step_id || ""),
+        tool_name: String(step?.tool_name || ""),
+        status: String(step?.status || ""),
         configured: Boolean(plugin?.configured),
         available: Boolean(plugin?.available),
         config_path: String(plugin?.config_path || "").trim().replace(/\\/g, "/") || null,
         configured_entries: Array.isArray(plugin?.configured_entries) ? plugin.configured_entries : [],
         detected_paths: Array.isArray(plugin?.detected_paths) ? plugin.detected_paths.map((item) => String(item || "").replace(/\\/g, "/")) : [],
+        used: Boolean(plugin?.configured) && String(step?.status || "") === "succeeded",
       };
     }).filter((item) => item.configured || item.available || item.config_path || item.detected_paths.length > 0);
 
@@ -179,6 +182,7 @@ function collectCodingExecutionEvidence(steps = []) {
       superpowers_detected_steps: superpowers.length,
       superpowers_configured_steps: superpowers.filter((item) => item.configured).length,
       superpowers_available_steps: superpowers.filter((item) => item.available).length,
+      superpowers_steps_used: superpowers.filter((item) => item.used).length,
       smoke_present: Boolean(smoke),
       smoke_verdict: smoke?.verdict || null,
       smoke_evidence_level: smoke?.evidence_level || null,
@@ -205,6 +209,29 @@ function collectCodingExecutionEvidence(steps = []) {
   function writeTextSafe(filePath, text) {
     ensureDir(path.dirname(filePath));
     fs.writeFileSync(filePath, text, "utf8");
+  }
+
+  function appendRuntimeEvidenceToReleaseNotes(releaseRoot, runtimeEvidence) {
+    const releaseNotesPath = path.join(releaseRoot, "release", "release_notes.md");
+    if (!fs.existsSync(releaseNotesPath)) return false;
+    const original = readTextSafe(releaseNotesPath);
+    const marker = "## Runtime Evidence";
+    if (original.includes(marker)) return false;
+    const summary = runtimeEvidence?.summary && typeof runtimeEvidence.summary === "object"
+      ? runtimeEvidence.summary
+      : {};
+    const lines = [
+      original.trimEnd(),
+      "",
+      marker,
+      "",
+      `- superpowers_configured_steps: ${Number(summary.superpowers_configured_steps || 0)}`,
+      `- superpowers_available_steps: ${Number(summary.superpowers_available_steps || 0)}`,
+      `- superpowers_steps_used: ${Number(summary.superpowers_steps_used || 0)}`,
+      `- smoke_verdict: ${String(summary.smoke_verdict || "not_found")}`,
+    ];
+    writeTextSafe(releaseNotesPath, lines.join("\n").trimStart());
+    return true;
   }
 
   function isFrontendScaffold(text = "") {
@@ -282,6 +309,7 @@ function collectCodingExecutionEvidence(steps = []) {
     const productFidelityReport = buildProductFidelityReport({ run, releaseRoot: releasePaths.release_root });
     const productFidelityReportRel = path.relative(workspaceRoot, productFidelityReportPath).replace(/\\/g, "/");
     const runtimeEvidence = collectRuntimeEvidence(steps, releasePaths.release_root);
+    const releaseNotesAnnotated = appendRuntimeEvidenceToReleaseNotes(releasePaths.release_root, runtimeEvidence);
     if (String(canaryReport.verdict) !== "pass") reasons.push("strict canary report failed");
 
     const manifest = {
@@ -301,6 +329,7 @@ function collectCodingExecutionEvidence(steps = []) {
       coding_execution_summary: codingExecutionEvidence.summary,
       runtime_evidence: runtimeEvidence,
       runtime_evidence_summary: runtimeEvidence.summary,
+      release_notes_runtime_evidence_appended: releaseNotesAnnotated,
       frontend_assembly_repair: frontendAssemblyRepair,
       steps: steps.map((s) => ({
         step_index: Number(s.step_index),
@@ -355,6 +384,7 @@ function collectCodingExecutionEvidence(steps = []) {
         `- superpowers_detected_steps: ${Number(runtimeEvidence.summary.superpowers_detected_steps || 0)}`,
         `- superpowers_configured_steps: ${Number(runtimeEvidence.summary.superpowers_configured_steps || 0)}`,
         `- superpowers_available_steps: ${Number(runtimeEvidence.summary.superpowers_available_steps || 0)}`,
+        `- superpowers_steps_used: ${Number(runtimeEvidence.summary.superpowers_steps_used || 0)}`,
         `- smoke_present: ${Boolean(runtimeEvidence.summary.smoke_present)}`,
         `- smoke_verdict: ${String(runtimeEvidence.summary.smoke_verdict || "not_found")}`,
         `- smoke_evidence_level: ${String(runtimeEvidence.summary.smoke_evidence_level || "n/a")}`,

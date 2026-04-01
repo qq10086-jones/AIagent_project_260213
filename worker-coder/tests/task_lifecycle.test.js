@@ -4,6 +4,18 @@ import { createTaskLifecycle } from "../task_lifecycle.js";
 
 async function testTimeoutWinsSingleFinalization() {
   const events = [];
+  const audits = [];
+  const taskEnvelope = {
+    task_id: "task-1",
+    tool_name: "coding.delegate",
+    evidence_id: "evidence-1",
+    replay_tag: "replay-1",
+    task_envelope: {
+      task_id: "task-1",
+      evidence_id: "evidence-1",
+      replay_tag: "replay-1",
+    },
+  };
   const lifecycle = createTaskLifecycle({
     taskId: "task-1",
     msgId: "msg-1",
@@ -12,10 +24,18 @@ async function testTimeoutWinsSingleFinalization() {
     emitResult: async (...args) => events.push(["emit", ...args]),
     writeFact: async (...args) => events.push(["fact", ...args]),
     ackMessage: async (...args) => events.push(["ack", ...args]),
+    auditHooks: {
+      onTaskStart: async (...args) => audits.push(["start", ...args]),
+      onTaskError: async (...args) => audits.push(["error", ...args]),
+    },
+    taskEnvelope,
   });
 
   await lifecycle.emitClaimed();
   assert.equal(lifecycle.isAborted(), false);
+  assert.equal(audits[0][2].evidence_id, "evidence-1");
+  assert.equal(audits[0][2].replay_tag, "replay-1");
+  assert.equal(audits[0][2].task_envelope?.evidence_id, "evidence-1");
 
   const timeoutApplied = await lifecycle.finalizeTimeout(new Error("GLOBAL_TASK_TIMEOUT"));
   const resultApplied = await lifecycle.finalizeResult({
@@ -27,6 +47,7 @@ async function testTimeoutWinsSingleFinalization() {
   assert.equal(timeoutApplied, true);
   assert.equal(resultApplied, false);
   assert.equal(lifecycle.isAborted(), true);
+  assert.equal(audits.length, 2);
   assert.deepEqual(events, [
     ["emit", "task-1", "claimed"],
     ["fact", "run-1", "coder", { tool_name: "coding.delegate", error: "GLOBAL_TASK_TIMEOUT", success: false, timed_out: true }],
@@ -37,6 +58,7 @@ async function testTimeoutWinsSingleFinalization() {
 
 async function testSuccessWinsSingleFinalization() {
   const events = [];
+  const audits = [];
   const lifecycle = createTaskLifecycle({
     taskId: "task-2",
     msgId: "msg-2",
@@ -45,6 +67,9 @@ async function testSuccessWinsSingleFinalization() {
     emitResult: async (...args) => events.push(["emit", ...args]),
     writeFact: async (...args) => events.push(["fact", ...args]),
     ackMessage: async (...args) => events.push(["ack", ...args]),
+    auditHooks: {
+      onTaskComplete: async (...args) => audits.push(["complete", ...args]),
+    },
   });
 
   const successApplied = await lifecycle.finalizeResult({
@@ -56,6 +81,7 @@ async function testSuccessWinsSingleFinalization() {
 
   assert.equal(successApplied, true);
   assert.equal(failureApplied, false);
+  assert.equal(audits.length, 1);
   assert.deepEqual(events, [
     ["fact", "run-2", "coder", { tool_name: "coding.execute", output: { exit_code: 0 }, success: true }],
     ["emit", "task-2", "succeeded", { exit_code: 0 }, null],
@@ -65,6 +91,7 @@ async function testSuccessWinsSingleFinalization() {
 
 async function testFinalizeFallsBackWhenPrimaryEmitFails() {
   const events = [];
+  const audits = [];
   let emitCalls = 0;
   const lifecycle = createTaskLifecycle({
     taskId: "task-3",
@@ -80,6 +107,9 @@ async function testFinalizeFallsBackWhenPrimaryEmitFails() {
     },
     writeFact: async (...args) => events.push(["fact", ...args]),
     ackMessage: async (...args) => events.push(["ack", ...args]),
+    auditHooks: {
+      onTaskComplete: async (...args) => audits.push(["complete", ...args]),
+    },
   });
 
   const applied = await lifecycle.finalizeResult({
@@ -89,6 +119,7 @@ async function testFinalizeFallsBackWhenPrimaryEmitFails() {
   });
 
   assert.equal(applied, true);
+  assert.equal(audits.length, 1);
   assert.deepEqual(events, [
     ["fact", "run-3", "coder", { tool_name: "coding.delegate", output: { summary: "oversized result" }, success: false }],
     ["emit", "task-3", "failed", { error: "stream result payload too large", plan: "failed_during_result_emit", original_status: "failed" }, "stream result payload too large"],

@@ -1,5 +1,8 @@
 ﻿import assert from "assert";
+import fs from "fs";
+import os from "os";
 import { validateRuntimePreflight } from "../provider_preflight.js";
+import path from "path";
 
 function testPassesWhenDashScopeCredentialPresent() {
   const result = validateRuntimePreflight({
@@ -124,22 +127,32 @@ function testPassesForConfiguredLocalOllamaLane() {
 }
 
 function testRequiresMiniMaxCredential() {
-  const result = validateRuntimePreflight({
-    defaultProvider: "opencode",
-    defaultModel: "minimax/MiniMax-M2.5",
-    defaultExecutionLane: "stable_cloud_lane",
-    runtimeCoderConfig: {
-      execution_lanes: {
-        stable_cloud_lane: {
-          provider: "opencode",
-          model: "minimax/MiniMax-M2.5",
+  const prevCwd = process.cwd();
+  const isolatedCwd = fs.mkdtempSync(path.join(os.tmpdir(), "provider-preflight-minimax-"));
+  process.chdir(isolatedCwd);
+  try {
+    const result = validateRuntimePreflight({
+      defaultProvider: "opencode",
+      defaultModel: "minimax/MiniMax-M2.5",
+      defaultExecutionLane: "stable_cloud_lane",
+      runtimeCoderConfig: {
+        execution_lanes: {
+          stable_cloud_lane: {
+            provider: "opencode",
+            model: "minimax/MiniMax-M2.5",
+          },
         },
       },
-    },
-    env: {},
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.issues[0].code, "MINIMAX_AUTH_MISSING");
+      env: {
+        OPENCODE_JSON_PATH: path.join(isolatedCwd, "__missing_minimax_auth__.json"),
+      },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.issues[0].code, "MINIMAX_AUTH_MISSING");
+  } finally {
+    process.chdir(prevCwd);
+    fs.rmSync(isolatedCwd, { recursive: true, force: true });
+  }
 }
 
 function testPassesWhenMiniMaxCredentialPresent() {
@@ -155,7 +168,10 @@ function testPassesWhenMiniMaxCredentialPresent() {
         },
       },
     },
-    env: { MINIMAX_API_KEY: "test-key" },
+    env: {
+      MINIMAX_API_KEY: "test-key",
+      OPENCODE_JSON_PATH: path.join(process.cwd(), "__missing_minimax_auth__.json"),
+    },
   });
   assert.equal(result.ok, true);
   assert.equal(result.issues.length, 0);
@@ -174,7 +190,10 @@ function testPassesWhenMiniMaxCodingPlanCredentialPresent() {
         },
       },
     },
-    env: { MINIMAX_API_KEY: "test-key" },
+    env: {
+      MINIMAX_API_KEY: "test-key",
+      OPENCODE_JSON_PATH: path.join(process.cwd(), "__missing_minimax_auth__.json"),
+    },
   });
   assert.equal(result.ok, true);
   assert.equal(result.issues.length, 0);

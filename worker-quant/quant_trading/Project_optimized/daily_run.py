@@ -124,6 +124,20 @@ def run_and_capture(cmd: list[str]) -> str:
     return p.stdout
 
 
+def expire_stale_orders(db_path: str, today: str) -> int:
+    """将非今日的 proposed/open 挂单自动过期（DAY 订单隔夜失效）。"""
+    with sqlite3.connect(db_path) as conn:
+        cur = conn.execute(
+            """UPDATE orders SET status='expired'
+               WHERE status IN ('proposed','open') AND asof < ?""",
+            (today,),
+        )
+        n = cur.rowcount
+    if n:
+        print(f"[daily_run] 自动过期 {n} 笔前日挂单 (asof < {today})")
+    return n
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.yaml")
@@ -131,6 +145,11 @@ def main():
 
     cfg = load_cfg(args.config)
     db_path = cfg.get("db_path", "japan_market.db")
+
+    # 0) 自动过期前日未成交挂单
+    import datetime
+    today_str = datetime.date.today().isoformat()
+    expire_stale_orders(db_path, today_str)
 
     # 1) Update DB
     dbu = cfg.get("db_update", {})

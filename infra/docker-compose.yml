@@ -57,6 +57,7 @@ services:
       - ../orchestrator/contracts:/app/contracts:ro
       - ../orchestrator/scripts:/app/scripts
       - ../orchestrator/src:/app/src
+      - ../shared:/shared:ro
       - ..:/workspace
     depends_on:
       - redis
@@ -91,6 +92,7 @@ services:
     volumes:
       - ../worker-coder:/app
       - /app/node_modules
+      - ../shared:/shared:ro
       - ..:/workspace
       - ../opencode.json.tpl:/app/opencode.json.tpl:ro
       - ../configs/runtime:/app/configs/runtime:ro

@@ -133,10 +133,45 @@ async function testExplicitFallback() {
   }
 }
 
+async function testRuntimeEventsPassThroughToProvider() {
+  const prevApiKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key";
+  const events = [];
+  try {
+    const result = await executeCodingAdapter({
+      workspaceRoot: process.cwd(),
+      adapterRequest: buildRequest(""),
+      provider: "codex",
+      model: "mock-model",
+      runtimeCoderConfig: {},
+      codexCommand: [process.execPath, "-e", "console.log('runtime pass-through ok'); console.error('runtime progress');"],
+      allowProviderFallback: false,
+      maxRuntimeS: 10,
+      onRuntimeEvent: async (event) => {
+        events.push(event);
+      },
+    });
+    assert.strictEqual(result.ok, true, JSON.stringify(result));
+    assert.ok(events.some((event) => event?.type === "tool_call"));
+    assert.ok(events.some((event) => event?.type === "text_delta"));
+    assert.ok(events.some((event) => event?.type === "status"));
+  } catch (err) {
+    if (String(err?.code || "") === "EPERM" || String(err?.message || "").includes("spawn EPERM")) {
+      console.log("coding executor runtime-event test skipped due sandbox EPERM");
+      return;
+    }
+    throw err;
+  } finally {
+    if (prevApiKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = prevApiKey;
+  }
+}
+
 async function main() {
   await testStableLaneResolution();
   await testNoSilentFallback();
   await testExplicitFallback();
+  await testRuntimeEventsPassThroughToProvider();
   console.log("coding_executor_runtime.test.js: all tests passed");
 }
 

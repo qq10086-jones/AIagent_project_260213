@@ -20,6 +20,12 @@ import sqlite3
 from typing import Dict, List, Tuple, Any, Optional
 from collections import Counter
 from email.utils import parsedate_to_datetime
+from worker_result_helpers import (
+    build_worker_result_envelope,
+    is_single_agent_payload,
+    validate_single_agent_payload_guardrails,
+    validate_single_agent_worker_result_guardrails,
+)
 
 try:
     import matplotlib
@@ -62,6 +68,7 @@ CONSUMER = os.getenv("CONSUMER", "worker-quant-1")
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
 VISIBILITY_TIMEOUT_S = int(os.getenv("VISIBILITY_TIMEOUT_S", "300"))
 RECLAIM_INTERVAL_S = int(os.getenv("RECLAIM_INTERVAL_S", "30"))
+EXECUTION_AUDIT_SCHEMA_READY = False
 
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "nexus")
@@ -2765,6 +2772,50 @@ def record_event(task_id: str, event_type: str, payload: dict | None = None):
         conn.commit()
     except Exception as e:
         print(f"[worker] event_log error: {e}")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+def record_execution_audit(run_id: str, task_id: str, worker_name: str, event_type: str, payload: dict | None = None):
+    if not run_id:
+        return
+    global EXECUTION_AUDIT_SCHEMA_READY
+    conn = None
+    cur = None
+    try:
+        ensure_run_exists(run_id)
+        conn = _db_connect()
+        cur = conn.cursor()
+        if not EXECUTION_AUDIT_SCHEMA_READY:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS execution_audit_log (
+                  id BIGSERIAL PRIMARY KEY,
+                  run_id TEXT NOT NULL,
+                  task_id TEXT,
+                  worker_name TEXT NOT NULL,
+                  event_type TEXT NOT NULL,
+                  payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_execution_audit_log_run_id ON execution_audit_log(run_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_execution_audit_log_task_id ON execution_audit_log(task_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_execution_audit_log_event_type ON execution_audit_log(event_type)")
+            EXECUTION_AUDIT_SCHEMA_READY = True
+        cur.execute(
+            """
+            INSERT INTO execution_audit_log (run_id, task_id, worker_name, event_type, payload_json)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (run_id, task_id or None, worker_name, event_type, json.dumps(payload or {})),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"[worker] execution_audit_log error: {e}")
     finally:
         if cur:
             cur.close()
@@ -6186,20 +6237,83 @@ def main():
         if reclaimed:
             record_event(task_id, "task.reclaimed", {"task_id": task_id, "consumer": CONSUMER, "message_id": msg_id})
 
+        record_execution_audit(run_id, task_id, "worker-quant", "task_start", {
+            "tool_name": tool_name,
+            "workflow_id": wf_id,
+            "step_index": step_idx,
+        })
         _emit_result(task_id, "claimed", wf_id=wf_id, step_idx=step_idx)
 
         try:
+            payload_ok, payload_errors = validate_single_agent_payload_guardrails(payload)
+            if not payload_ok:
+                raise RuntimeError(f"SINGLE_AGENT_GUARDRAILS_INVALID: {'; '.join(payload_errors)}")
             handler = TOOLS.get(tool_name)
             if not handler:
                 raise RuntimeError(f"Unknown tool: {tool_name}")
+            _emit_result(task_id, "tool_call", output={
+                "tool_name": tool_name,
+                "input_summary": str(payload.get("task_prompt") or payload.get("prompt") or payload.get("symbol") or "")[:240],
+            }, wf_id=wf_id, step_idx=step_idx)
+            record_execution_audit(run_id, task_id, "worker-quant", "tool_call", {
+                "tool_name": tool_name,
+                "input": payload,
+            })
+            started_at = time.time()
             output = handler(payload)
             if not isinstance(output, dict):
                 output = {"ok": True, "raw": output}
             status = "succeeded" if output.get("ok", True) else "failed"
+            output = {
+                **output,
+                "worker_result": build_worker_result_envelope(
+                    run_id=run_id,
+                    worker_name="worker-quant",
+                    ok=output.get("ok", True),
+                    status=status,
+                    output=output,
+                    error=output.get("error"),
+                    duration_ms=int((time.time() - started_at) * 1000),
+                    tool_calls=int(output.get("tool_calls", 0) or 0),
+                    permission_decisions=output.get("permission_decisions") if isinstance(output.get("permission_decisions"), list) else [],
+                    bounded_validation=output.get("bounded_validation") if isinstance(output.get("bounded_validation"), list) and len(output.get("bounded_validation")) > 0 else [{
+                        "name": "result_shape",
+                        "ok": isinstance(output, dict),
+                        "detail": "dict_result_emitted" if isinstance(output, dict) else "non_dict_result",
+                    }],
+                    evidence_id=str(payload.get("evidence_id", "") or ""),
+                    replay_tag=str(payload.get("replay_tag", "") or ""),
+                ),
+            }
+            if is_single_agent_payload(payload):
+                result_ok, result_errors = validate_single_agent_worker_result_guardrails(
+                    output.get("worker_result"),
+                    require_single_agent=True,
+                )
+                if not result_ok:
+                    raise RuntimeError(f"SINGLE_AGENT_GUARDRAILS_INVALID: {'; '.join(result_errors)}")
+            record_execution_audit(run_id, task_id, "worker-quant", "tool_result", {
+                "tool_name": tool_name,
+                "ok": output.get("ok", True),
+                "worker_result": output.get("worker_result"),
+            })
+            _emit_result(task_id, "tool_result", output={
+                "tool_name": tool_name,
+                "ok": output.get("ok", True),
+                "summary": str(output.get("briefing") or output.get("analysis") or output.get("summary") or output.get("error") or "")[:240],
+            }, wf_id=wf_id, step_idx=step_idx)
+            record_execution_audit(run_id, task_id, "worker-quant", "task_complete", {
+                "worker_result": output.get("worker_result"),
+            })
             _emit_result(task_id, status, output=output, wf_id=wf_id, step_idx=step_idx)
             r.xack(STREAM_TASK, GROUP, msg_id)
         except Exception as e:
             err_text = str(e)
+            record_execution_audit(run_id, task_id, "worker-quant", "task_error", {
+                "tool_name": tool_name,
+                "error": err_text,
+                "retry_count": retry_count,
+            })
             if retry_count < MAX_RETRIES:
                 _enqueue_retry(task_id, tool_name, run_id, payload, wf_id, step_idx, retry_count + 1)
                 record_event(task_id, "task.retrying", {"error": err_text, "retry_count": retry_count + 1})

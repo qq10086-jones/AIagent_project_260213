@@ -432,6 +432,7 @@ test("workflow completion notification uses manifest runtime evidence summary wh
       smoke_api_status: 200,
       superpowers_configured_steps: 2,
       superpowers_available_steps: 2,
+      superpowers_steps_used: 2,
     },
   });
   writeText(summaryPath, "# Run Summary\n\n- smoke_verdict: pass\n");
@@ -470,4 +471,5 @@ test("workflow completion notification uses manifest runtime evidence summary wh
   assert.match(String(completed.run_summary || ""), /root=200/);
   assert.match(String(completed.run_summary || ""), /api=200/);
   assert.match(String(completed.run_summary || ""), /superpowers_configured_steps=2/);
+  assert.match(String(completed.run_summary || ""), /superpowers_steps_used=2/);
 });

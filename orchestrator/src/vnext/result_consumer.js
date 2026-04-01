@@ -6,6 +6,7 @@
  */
 
 import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { createStreamAdapter } from "../../../shared/stream_adapter.js";
 
 export function createResultConsumer({
   pool,
@@ -43,6 +44,7 @@ export function createResultConsumer({
   const consumer = "orchestrator-1";
   const staleResultMinIdleMs = 30000;
   const staleResultBatchSize = 20;
+  const streamAdapter = createStreamAdapter({ discord, safeTranslate, replyChunked, logger: console });
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -67,11 +69,42 @@ export function createResultConsumer({
     let streamError = obj.error ? String(obj.error) : "";
     console.log(`[result-consumer] Processing task ${task_id} with status ${status}`);
 
-    if (status === "claimed") {
+    if (status === "claimed" || status === "tool_call" || status === "tool_result") {
+      const ctx = taskToContext.get(task_id);
+      const toolName = output?.tool_name || ctx?.tool_name || "";
       await markTaskRunning(pool, task_id);
-      await recordEvent(task_id, "task.claimed", { task_id });
-      await workflowEngine.handleTaskClaimed(task_id).catch((err) => {
-        console.warn(`[workflow] handleTaskClaimed failed: ${err.message}`);
+      if (status === "claimed") {
+        await recordEvent(task_id, "task.claimed", { task_id });
+        await workflowEngine.handleTaskClaimed(task_id).catch((err) => {
+          console.warn(`[workflow] handleTaskClaimed failed: ${err.message}`);
+        });
+      } else {
+        await recordEvent(task_id, `task.${status}`, {
+          task_id,
+          tool_name: toolName,
+        });
+      }
+      await streamAdapter.sendTaskUpdate({
+        ctx,
+        taskId: task_id,
+        status,
+        toolName,
+        output: output || {},
+        streamError,
+      });
+    } else if (status === "pi_session_update") {
+      const ctx = taskToContext.get(task_id);
+      const toolName = output?.tool_name || ctx?.tool_name || "";
+      await recordEvent(task_id, "task.pi_session_update", {
+        task_id,
+        tool_name: toolName,
+        event_type: output?.event?.type || "",
+        event_tag: output?.event?.tag || "",
+      });
+      await streamAdapter.sendPiSessionUpdate({
+        ctx,
+        taskId: task_id,
+        event: output?.event || {},
       });
     } else {
       const normalizedErrorCode = normalizeErrorCode(status, streamError || null, output || {});
@@ -145,6 +178,14 @@ export function createResultConsumer({
       if (ctx) {
         const channel = await discord.channels.fetch(ctx.channelId).catch(() => null);
         if (!Array.isArray(ctx.resultItems)) ctx.resultItems = [];
+        const streamUpdate = await streamAdapter.sendTaskUpdate({
+          ctx,
+          taskId: task_id,
+          status,
+          toolName: ctx.tool_name,
+          output: output || {},
+          streamError,
+        });
         if (channel && typeof channel.send === "function") {
           if (ctx.tool_name === "web.search_and_browse" && status === "succeeded") {
             try {
@@ -169,7 +210,7 @@ export function createResultConsumer({
               console.error("[learning] Web search ReAct failed:", e);
               await channel.send("[NEXUS] \u7f51\u7edc\u641c\u7d22\u5b8c\u6210\uff0c\u4f46\u603b\u7ed3\u5931\u8d25\u3002");
             }
-          } else {
+          } else if (!streamUpdate.shouldSkipDefault) {
             const duration = ((Date.now() - ctx.startTime) / 1000).toFixed(1);
             const lang = ctx.lang || "zh";
             const titleRaw =

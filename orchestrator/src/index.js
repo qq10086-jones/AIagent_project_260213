@@ -27,9 +27,11 @@ import { createResultConsumer } from "./vnext/result_consumer.js";
 import { createTaskWatchdog } from "./vnext/task_watchdog.js";
 import { registerCronSchedules } from "./vnext/cron_scheduler.js";
 import { createTaskEnqueuer } from "./vnext/task_enqueuer.js";
+import { renderPermissionAuditWeeklyReport } from "./vnext/permission_audit_report.js";
 import { createRuntimeConnections } from "./infra/runtime_connections.js";
 import { createWaterfallTraceService } from "./domain/waterfall_trace_service.js";
 import { assertConfigPreflight } from "./config_preflight.js";
+import { evaluatePermissionAdvisory } from "../../shared/permission_council.js";
 import {
   upsertTask as _upsertTask, countPendingTasksForRun as _countPendingTasksForRun,
   countFailedTasksForRun as _countFailedTasksForRun, findRunIdByTaskId as _findRunIdByTaskId,
@@ -45,6 +47,13 @@ import {
 } from "./data/task_repository.js";
 import { listEventsForTaskIds as _listEventsForTaskIds } from "./data/event_repository.js";
 import { findLatestFactForRun as _findLatestFactForRun } from "./data/fact_repository.js";
+import { listExecutionAuditEventsByEvidenceId as _listExecutionAuditEventsByEvidenceId } from "./data/execution_audit_repository.js";
+import {
+  getPermissionAuditSummary as _getPermissionAuditSummary,
+  insertPermissionAuditRecord as _insertPermissionAuditRecord,
+  listPermissionAuditRecords as _listPermissionAuditRecords,
+  updatePermissionAuditHumanDecision as _updatePermissionAuditHumanDecision,
+} from "./data/permission_audit_repository.js";
 import { ensureOrchestratorSchema as _ensureOrchestratorSchema } from "./data/schema_repository.js";
 import { listRecentMemoryItemsForProject as _listRecentMemoryItemsForProject, insertMemoryItem as _insertMemoryItem } from "./data/memory_store_repository.js";
 import { completeRunWithCostLedger as _completeRunWithCostLedger, ensureRun as _ensureRun, findRunIdByClientMsgId as _findRunIdByClientMsgId, getRunById as _getRunById, getRunInputText as _getRunInputText, updateRunStatus as _updateRunStatus, updateRunStatusIfNotFailed as _updateRunStatusIfNotFailed } from "./data/run_repository.js";
@@ -270,6 +279,8 @@ const taskEnqueuer = createTaskEnqueuer({
   enqueueToStream: _enqueueToStream, bindTaskToContext, recordEvent,
   insertWorkflowDefinition: _insertWorkflowDefinition, makeIdempotencyKey,
   groupTask: GROUP_TASK,
+  evaluatePermissionAdvisory,
+  insertPermissionAuditRecord: _insertPermissionAuditRecord,
 });
 const { enqueueTask, enqueueWorkflow } = taskEnqueuer;
 
@@ -328,6 +339,7 @@ const handleApproveTask = createHandleApproveTask({
   approvalToken: APPROVAL_TOKEN, pool,
   getTaskForApproval: async (_pool, task_id) => _getTaskForApproval(pool, task_id),
   markTaskQueued: async (_pool, task_id) => _markTaskQueued(pool, task_id),
+  updatePermissionAuditHumanDecision: async (_pool, args) => _updatePermissionAuditHumanDecision(pool, args),
   recordEvent, workflowEngine, getTaskStream, redis,
 });
 
@@ -337,6 +349,7 @@ const handleRejectTask = createHandleRejectTask({
   getTaskForRejection: async (_pool, task_id) => _getTaskForRejection(pool, task_id),
   markTaskApprovalRejected: async (_pool, task_id, resultPayload) => _markTaskApprovalRejected(pool, task_id, resultPayload),
   countPendingTasksForRun: async (_pool, run_id) => _countPendingTasksForRun(pool, run_id),
+  updatePermissionAuditHumanDecision: async (_pool, args) => _updatePermissionAuditHumanDecision(pool, args),
   recordEvent, workflowEngine, normalizeResultPayload, taskToContext, runToContext,
 });
 
@@ -541,6 +554,49 @@ app.get("/runs/:run_id/artifacts", async (req, res) => {
     const runtimeDir = path.join(RESOLVED_WORKSPACE_ROOT, "artifacts", "runs", run_id);
     return res.json({ ok: true, run_id, roots: { release: releaseDir.replace(/\\/g, "/"), runtime: runtimeDir.replace(/\\/g, "/") }, release_files: listFilesRecursive(releaseDir), runtime_files: listFilesRecursive(runtimeDir) });
   } catch (err) { return res.status(500).json({ ok: false, error: err.message || "artifacts query failed" }); }
+});
+
+app.get("/execution-audit/evidence/:evidence_id", async (req, res) => {
+  try {
+    const evidence_id = String(req.params.evidence_id || "").trim();
+    if (!evidence_id) return res.status(400).json({ ok: false, error: "evidence_id required" });
+    const events = await _listExecutionAuditEventsByEvidenceId(pool, evidence_id);
+    if (events.length === 0) return res.status(404).json({ ok: false, error: "evidence not found", evidence_id });
+    return res.json({ ok: true, evidence_id, count: events.length, events });
+  } catch (err) { return res.status(500).json({ ok: false, error: err.message || "execution audit query failed" }); }
+});
+
+app.get("/permission-audit", async (req, res) => {
+  try {
+    const rows = await _listPermissionAuditRecords(pool, {
+      run_id: String(req.query.run_id || ""),
+      risk_level: String(req.query.risk_level || ""),
+      final_human_decision: String(req.query.final_human_decision || ""),
+      limit: Number(req.query.limit || 50),
+    });
+    return res.json({ ok: true, count: rows.length, records: rows });
+  } catch (err) { return res.status(500).json({ ok: false, error: err.message || "permission audit query failed" }); }
+});
+
+app.get("/permission-audit/summary", async (req, res) => {
+  try {
+    const summary = await _getPermissionAuditSummary(pool, {
+      days: Number(req.query.days || 30),
+      risk_level: String(req.query.risk_level || ""),
+    });
+    return res.json({ ok: true, summary });
+  } catch (err) { return res.status(500).json({ ok: false, error: err.message || "permission audit summary failed" }); }
+});
+
+app.get("/permission-audit/report", async (req, res) => {
+  try {
+    const summary = await _getPermissionAuditSummary(pool, {
+      days: Number(req.query.days || 30),
+      risk_level: String(req.query.risk_level || ""),
+    });
+    const report = renderPermissionAuditWeeklyReport(summary);
+    return res.json({ ok: true, summary, report_markdown: report.markdown, report });
+  } catch (err) { return res.status(500).json({ ok: false, error: err.message || "permission audit report failed" }); }
 });
 
 app.get("/brain/facts/latest", handleLatestFact);

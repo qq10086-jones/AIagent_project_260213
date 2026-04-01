@@ -1,8 +1,14 @@
 # Nexus v3.1 — 完整任务清单
 
 **版本**: 3.1（v3.0 同行评审后修订）
-**日期**: 2026-04-01
-**主要变更**: ARS 重新定位为 contracts + observability；删除自建 AgentSession；修复 ARS-03/04 循环依赖；SP-01 验收以 detectSuperpowersPlugin() 为准；M4 目标改为 schema + audit hooks 统一
+**日期**: 2026-04-02
+**主要变更**: SP-01/SP-02 已通过 live canary；ARS 重新定位为 contracts + observability；删除自建 AgentSession；修复 ARS-03/04 循环依赖；M4 目标改为 schema + audit hooks 统一
+
+## 2026-04-02 Status Update
+
+- `SP-01`：已通过。latest live run shows `superpowers_configured_steps = 6` and `detectSuperpowersPlugin()` is active in the real worker runtime.
+- `SP-02`：已通过。`release_pack` / `deploy_preview` run on `MiniMax-M2.7` and the live workflow verdict is back to `GO/PASS`.
+- 当前主线优先项转为 `SP-03`，目标是把 `plan/workplan.json` 和 `injected_workplan` 彻底接进 `impl_be` / `impl_fe` 执行上下文。
 
 ---
 
@@ -311,4 +317,4 @@ write/exec/network 敏感操作的人工审批机制**保持不变**。
 
 ---
 
-*任务清单版本：v3.1 | 2026-04-01*
+*任务清单版本：v3.1 | 2026-04-02*

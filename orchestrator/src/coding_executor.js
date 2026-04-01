@@ -28,6 +28,7 @@ export function buildCodingExecutorRequest({
       wall_clock_timeout_s: Number(payload?.wall_clock_timeout_s || 0),
       context_packet: payload?.context_packet || null,
       repo_map: payload?.repo_map || null,
+      injected_workplan: payload?.injected_workplan || null,
       task_class: String(payload?.task_class || "").trim() || null,
       beta_template_id: String(payload?.beta_template_id || "").trim() || null,
       context_envelope: payload?.context_envelope || null,

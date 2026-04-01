@@ -14,7 +14,7 @@
     "architect_to_backend_frontend": {
       "from_step": "arch_design",
       "to_steps": ["impl_be", "impl_fe", "qa_verify"],
-      "required_artifacts": ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md", "handoff/architect_to_impl.json"],
+      "required_artifacts": ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md", "plan/workplan.json", "handoff/architect_to_impl.json"],
       "required_sections": ["module_breakdown", "interfaces", "dependency_choices", "risk_notes"],
       "typed_handoff": {
         "file": "handoff/architect_to_impl.json",

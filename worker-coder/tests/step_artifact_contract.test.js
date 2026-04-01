@@ -21,6 +21,7 @@ function main() {
   const archHandoff = getWorkflowStepHandoff("arch_design");
   assert.ok(archHandoff, "arch_design should return a handoff");
   assert.equal(archHandoff.from_step, "arch_design");
+  assert.ok(archHandoff.required_artifacts.includes("plan/workplan.json"), "arch handoff must require structured workplan json");
   assert.ok(archHandoff.typed_handoff.required_fields.includes("decisions"), "arch handoff must require decisions array");
   assert.ok(archHandoff.typed_handoff.required_fields.includes("risks"), "arch handoff must require risks array");
 

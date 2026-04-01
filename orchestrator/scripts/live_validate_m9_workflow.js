@@ -240,8 +240,8 @@ function validateStepModelRouting(steps = []) {
   const releasePackModel = String(releasePackResult?.model_used || "");
   assert(releasePackLane === "primary_minimax_lane", `release_pack execution_lane expected primary_minimax_lane, got ${releasePackLane || "none"}`);
   assert(
-    /qwen-plus-2025-04-28/i.test(releasePackModel),
-    `release_pack model_used expected qwen-plus-2025-04-28, got ${releasePackModel || "none"}`,
+    /minimax-coding-plan\/minimax-m2\.7|minimax-m2\.7/i.test(releasePackModel),
+    `release_pack model_used expected MiniMax-M2.7, got ${releasePackModel || "none"}`,
   );
 }
 
@@ -266,8 +266,8 @@ function resolveManifestPath({ workspaceRoot, runId, packValidation }) {
     }
   }
   const candidates = workspaceCandidates.flatMap((candidateRoot) => ([
-    path.join(candidateRoot, "artifacts", "release", runId, "meta", "run_manifest.json"),
-    path.join(candidateRoot, "artifacts", "release", runId, "release", "run_manifest.json"),
+    path.join(candidateRoot, "runtime", "artifacts", "release", runId, "meta", "run_manifest.json"),
+    path.join(candidateRoot, "runtime", "artifacts", "release", runId, "release", "run_manifest.json"),
   ]));
   return candidates.find((item) => fs.existsSync(item)) || candidates[0];
 }
@@ -291,7 +291,7 @@ function resolveSummaryPath(manifestPath, runId = "") {
     const workspaceRoot = path.resolve(process.cwd());
     const workspaceCandidates = [path.resolve(workspaceRoot), path.resolve(workspaceRoot, "..")];
     const candidates = workspaceCandidates.map((candidateRoot) =>
-      path.join(candidateRoot, "artifacts", "release", runId, "summary", "run_summary.md")
+      path.join(candidateRoot, "runtime", "artifacts", "release", runId, "summary", "run_summary.md")
     );
     return candidates.find((item) => fs.existsSync(item)) || candidates[0];
   }

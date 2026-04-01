@@ -62,7 +62,7 @@ export function getWorkflowStepHandoff(stepId) {
         case "arch_design":
             return {
                 from_step: "arch_design",
-                required_artifacts: ["handoff/architect_to_impl.json"],
+                required_artifacts: ["plan/workplan.json", "handoff/architect_to_impl.json"],
                 required_sections: [],
                 typed_handoff: {
                     file: "handoff/architect_to_impl.json",

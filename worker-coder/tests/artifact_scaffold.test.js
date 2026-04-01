@@ -60,9 +60,19 @@ function main() {
     stepId: "impl_be",
     taskPrompt: "Workflow: coding_team_v0\nProject Type: webapp_crm\nGoal: Build a minimal CRM web app",
   });
+  assert.match(crmServerText, /const express = require\('express'\);/);
   assert.match(crmServerText, /app\.get\('\/api\/customers'/);
   assert.match(crmServerText, /express\.static\(publicDir\)/);
   assert.match(crmServerText, /process\.env\.PORT/);
+  const crmPackageJson = JSON.parse(buildArtifactTemplate({
+    relPath: "impl/be_changes/package.json",
+    rootAbs,
+    stepId: "impl_be",
+    taskPrompt: "Workflow: coding_team_v0\nProject Type: webapp_crm\nGoal: Build a minimal CRM web app",
+  }));
+  assert.equal(crmPackageJson.main, "server.js");
+  assert.equal(crmPackageJson.type, undefined);
+  assert.deepEqual(Object.keys(crmPackageJson.dependencies).sort(), ["express"]);
 
   const handoff = JSON.parse(fs.readFileSync(path.join(rootAbs, "handoff", "be_to_fe.json"), "utf8"));
   assert.equal(handoff.from_step, "impl_be");
@@ -125,6 +135,30 @@ function main() {
   const repairedServerText = fs.readFileSync(path.join(rootAbs, "impl", "be_changes", "server.js"), "utf8");
   assert.match(repairedServerText, /app\.get\('\/api\/customers'/);
   assert.doesNotMatch(repairedServerText, /app\.get\('\*'/);
+  fs.writeFileSync(path.join(rootAbs, "impl", "be_changes", "server.js"), [
+    "const express = require('express');",
+    "const path = require('path');",
+    "const app = express();",
+    "app.use(express.json());",
+    "app.use(express.static(path.join(__dirname, 'public')));",
+    "const customers = [{ id: 'c1', name: 'Ada', email: 'ada@example.com' }];",
+    "app.get('/api/customers', (_req, res) => res.json({ customers }));",
+    "app.get('/api/customers/:id', (req, res) => res.json(customers[0]));",
+    "app.post('/api/customers', (_req, res) => res.status(201).json(customers[0]));",
+    "app.put('/api/customers/:id', (_req, res) => res.json(customers[0]));",
+    "app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));",
+    "app.listen(process.env.PORT || 3000);",
+  ].join("\n"));
+  const preservedCrmBackend = ensureExpectedArtifacts({
+    workspaceRoot,
+    artifactRoot,
+    expectedArtifacts: ["impl/be_changes/server.js"],
+    stepId: "impl_be",
+    taskPrompt: "Workflow: coding_team_v0\nProject Type: webapp_crm\nGoal: Build a minimal CRM web app",
+  });
+  assert.deepEqual(preservedCrmBackend.repaired, []);
+  const preservedServerText = fs.readFileSync(path.join(rootAbs, "impl", "be_changes", "server.js"), "utf8");
+  assert.match(preservedServerText, /const express = require\('express'\);/);
 
   const staticArchHandoff = JSON.parse(buildArtifactTemplate({
     relPath: "handoff/architect_to_impl.json",
@@ -151,6 +185,16 @@ function main() {
   assert.match(staticWorkplanText, /## BE Tasks/);
   assert.match(staticWorkplanText, /## FE Tasks/);
   assert.match(staticWorkplanText, /\|\s*verify:/);
+  const staticWorkplanJson = JSON.parse(buildArtifactTemplate({
+    relPath: "plan/workplan.json",
+    rootAbs,
+    stepId: "arch_design",
+    taskPrompt: "Workflow: coding_team_v0\nProject Type: single_file_html\nGoal: Build a landing page",
+  }));
+  assert.equal(Array.isArray(staticWorkplanJson.be_tasks), true);
+  assert.equal(Array.isArray(staticWorkplanJson.fe_tasks), true);
+  assert.equal(staticWorkplanJson.be_tasks[0].id, "T-BE-1");
+  assert.equal(staticWorkplanJson.fe_tasks[0].id, "T-FE-1");
 
   console.log("artifact_scaffold.test.js: all tests passed");
 }

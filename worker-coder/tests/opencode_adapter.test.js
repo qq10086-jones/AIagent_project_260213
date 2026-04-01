@@ -316,8 +316,11 @@ async function testRunOpenCodeTaskReportsConfiguredSuperpowersPlugin() {
   const prevOpenCodeJsonPath = process.env.OPENCODE_JSON_PATH;
   const isolatedCwd = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-superpowers-"));
   const configPath = path.join(isolatedCwd, "opencode.json");
+  const packageJsonPath = path.join(isolatedCwd, "external", "vendor", "superpowers", "package.json");
+  fs.mkdirSync(path.dirname(packageJsonPath), { recursive: true });
+  fs.writeFileSync(packageJsonPath, JSON.stringify({ name: "superpowers", version: "test" }, null, 2));
   fs.writeFileSync(configPath, JSON.stringify({
-    plugins: ["/root/.config/opencode/plugins/superpowers.js"],
+    plugin: ["superpowers@git+https://github.com/obra/superpowers.git"],
     provider: {},
   }, null, 2));
   process.env.OPENCODE_JSON_PATH = configPath;
@@ -335,8 +338,14 @@ async function testRunOpenCodeTaskReportsConfiguredSuperpowersPlugin() {
     }
     assert.strictEqual(result.ok, true, JSON.stringify(result));
     assert.strictEqual(result.diagnostics.superpowers_plugin.configured, true);
+    assert.strictEqual(result.diagnostics.superpowers_plugin.available, true);
     assert.ok(Array.isArray(result.diagnostics.superpowers_plugin.configured_entries));
     assert.ok(result.diagnostics.superpowers_plugin.configured_entries.some((item) => /superpowers/i.test(String(item))));
+    assert.ok(
+      Array.isArray(result.diagnostics.superpowers_plugin.detected_paths)
+      && result.diagnostics.superpowers_plugin.detected_paths.some((item) => String(item).replace(/\\/g, "/").endsWith("external/vendor/superpowers/package.json")),
+      JSON.stringify(result.diagnostics.superpowers_plugin),
+    );
   } finally {
     if (prevOpenCodeJsonPath === undefined) delete process.env.OPENCODE_JSON_PATH;
     else process.env.OPENCODE_JSON_PATH = prevOpenCodeJsonPath;

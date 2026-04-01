@@ -14,7 +14,11 @@ async function testAuditHooksInsertEvents() {
   });
 
   await hooks.onTaskStart("run-1", { task_id: "task-1", tool_name: "coding.delegate" }, { taskId: "task-1", workerName: "worker-coder" });
-  await hooks.onToolCall("run-1", "coding.delegate", { prompt: "x" }, { taskId: "task-1", workerName: "worker-coder" });
+  await hooks.onToolCall("run-1", "coding.delegate", { prompt: "x" }, {
+    taskId: "task-1",
+    workerName: "worker-coder",
+    permissionAdvice: { council_advice: "allow", advisory_summary: "safe" },
+  });
   await hooks.onToolResult("run-1", "coding.delegate", { ok: true }, { taskId: "task-1", workerName: "worker-coder" });
   await hooks.onTaskComplete("run-1", { ok: true }, { taskId: "task-1", workerName: "worker-coder" });
   await hooks.onTaskError("run-1", { message: "boom" }, { taskId: "task-1", workerName: "worker-coder" });
@@ -24,6 +28,8 @@ async function testAuditHooksInsertEvents() {
   assert.match(calls[1].sql, /INSERT INTO execution_audit_log/);
   assert.equal(calls[1].params[0], "run-1");
   assert.equal(calls[1].params[1], "task-1");
+  const toolCallPayload = JSON.parse(calls[2].params[4]);
+  assert.equal(toolCallPayload.permission_advice.council_advice, "allow");
 }
 
 await testAuditHooksInsertEvents();

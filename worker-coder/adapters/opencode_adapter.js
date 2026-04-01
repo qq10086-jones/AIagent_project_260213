@@ -48,13 +48,32 @@ function getOpenCodeConfigCandidates(cwd) {
   ].filter(Boolean);
 }
 
+function getWorkspaceCandidates(cwd) {
+  const out = new Set();
+  const cwdResolved = path.resolve(String(cwd || process.cwd()));
+  out.add(cwdResolved);
+  const envWorkspaceRoot = String(process.env.WORKSPACE_ROOT || "").trim();
+  if (envWorkspaceRoot) out.add(path.resolve(envWorkspaceRoot));
+  if (cwdResolved.includes(`${path.sep}artifacts${path.sep}runs${path.sep}`)) {
+    out.add("/workspace");
+  }
+  return Array.from(out);
+}
+
 function detectSuperpowersPlugin({ cwd }) {
   const pluginHints = [];
   const pluginPathCandidates = [
     "/root/.config/opencode/plugins/superpowers.js",
     "/root/.config/opencode/superpowers/.opencode/plugins/superpowers.js",
-    path.join(cwd, "vendor", "superpowers", ".opencode", "plugins", "superpowers.js"),
   ];
+  for (const workspaceRoot of getWorkspaceCandidates(cwd)) {
+    const superpowersRepoRoot = path.join(workspaceRoot, "external", "vendor", "superpowers");
+    pluginPathCandidates.push(
+      path.join(superpowersRepoRoot, ".opencode", "plugins", "superpowers.js"),
+      path.join(superpowersRepoRoot, "package.json"),
+      superpowersRepoRoot,
+    );
+  }
   for (const candidate of pluginPathCandidates) {
     try {
       if (fs.existsSync(candidate)) pluginHints.push(candidate);
@@ -64,8 +83,11 @@ function detectSuperpowersPlugin({ cwd }) {
   for (const configPath of getOpenCodeConfigCandidates(cwd)) {
     try {
       const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
-      const plugins = Array.isArray(cfg?.plugins) ? cfg.plugins.map((item) => String(item || "").trim()).filter(Boolean) : [];
-      const matched = plugins.filter((item) => /superpowers/i.test(item));
+      const configuredItems = [
+        ...(Array.isArray(cfg?.plugin) ? cfg.plugin : []),
+        ...(Array.isArray(cfg?.plugins) ? cfg.plugins : []),
+      ].map((item) => String(item || "").trim()).filter(Boolean);
+      const matched = configuredItems.filter((item) => /superpowers/i.test(item));
       if (matched.length > 0) {
         return {
           configured: true,
@@ -317,6 +339,20 @@ function createArchArtifacts({ cwd, prompt, artifactWorkspaceRoot }) {
     "- dependency choices limited to existing runtime stack",
     "- risk notes reviewed before QA verification",
   ].join("\n"));
+  writeJson(path.join(artifactRoot, "plan", "workplan.json"), {
+    be_tasks: [
+      { id: "T-BE-1", description: "Implement GET /api/customers with stable JSON list output", verify: "GET /api/customers returns HTTP 200 with an array payload" },
+      { id: "T-BE-2", description: "Implement GET /api/customers/:id with not-found handling", verify: "GET /api/customers/:id returns HTTP 200 for a seeded record and 404 for an unknown id" },
+      { id: "T-BE-3", description: "Implement POST and PUT handlers with request validation", verify: "invalid payload returns 400 and valid create/update returns persisted customer JSON" },
+      { id: "T-BE-4", description: "Wire static hosting for impl/be_changes/public and root route delivery", verify: "start with PORT=13099 node server.js and GET / returns HTTP 200 with HTML" },
+    ],
+    fe_tasks: [
+      { id: "T-FE-1", description: "Build customer list view wired to GET /api/customers", verify: "customer list renders records returned by GET /api/customers" },
+      { id: "T-FE-2", description: "Build detail view for the selected customer record", verify: "selecting a customer loads detail data without a full page reload" },
+      { id: "T-FE-3", description: "Build create/edit form using same-origin API requests only", verify: "form submit sends POST or PUT to /api/customers using relative paths" },
+      { id: "T-FE-4", description: "Add validation and error-state rendering for failed API responses", verify: "invalid form input or failed request shows a visible error message" },
+    ],
+  });
   writeJson(path.join(artifactRoot, "handoff", "architect_to_impl.json"), {
     from_step: "arch_design",
     to_steps: ["impl_be", "impl_fe", "qa_verify"],

@@ -1,4 +1,4 @@
-# Nexus Project Progress Report - 2026-04-01
+# Nexus Project Progress Report - 2026-04-02
 
 ## Current Status
 
@@ -49,27 +49,25 @@ Outcome:
 
 Primary evidence:
 
-- latest validation report:
-  `orchestrator/artifacts/validation/discord_coding_load_test/2026-03-31T16-57-51-312Z/discord_coding_load_test_report.json`
+- latest live workflow report:
+  `runtime/artifacts/orchestrator/canary/live_m9_workflow/live_m9_workflow_report.json`
 - successful release summary:
-  `artifacts/release/960b2526-54a3-4313-a036-3c505b665578/summary/run_summary.md`
+  `runtime/artifacts/release/9e9f2d35-c1ac-4705-8861-9c92781ebcf6/summary/run_summary.md`
 - successful smoke report:
-  `artifacts/release/960b2526-54a3-4313-a036-3c505b665578/smoke/smoke_result.json`
+  `runtime/artifacts/release/9e9f2d35-c1ac-4705-8861-9c92781ebcf6/smoke/smoke_result.json`
 - successful product fidelity report:
-  `artifacts/release/960b2526-54a3-4313-a036-3c505b665578/qa/product_fidelity_report.json`
+  `runtime/artifacts/release/9e9f2d35-c1ac-4705-8861-9c92781ebcf6/qa/product_fidelity_report.json`
 
-## Remaining Gap
+Additional runtime evidence from the latest successful run:
 
-The main remaining design gap is `superpowers` live evidence on the Discord-supported beta path. The chain is now green, but the successful run still reports:
-
-- `superpowers_configured_steps = 0`
-- `superpowers_available_steps = 0`
-
-So the next closure item is not workflow correctness. It is runtime evidence visibility for the `superpowers` integration in the real Discord/live execution path.
+- `strict_canary_verdict = PASS`
+- `preview_validation = PREVIEW_MATCHED`
+- `superpowers_detected_steps = 6`
+- `superpowers_configured_steps = 6`
+- `superpowers_available_steps = 4`
+- `superpowers_steps_used = 6`
 
 ## Recommended Next Step
 
-1. Surface real `superpowers` plugin evidence into the successful live Discord run summary and manifest.
-2. After that, run one more live Discord validation and confirm the final summary contains both:
-   - smoke evidence
-   - superpowers evidence
+1. Return to the v3.1 mainline and finish `SP-03` so architect workplan output is consumed as structured execution context by `impl_be` and `impl_fe`.
+2. Keep the governance stream moving by finishing the remaining `SCO-05 / GOV-01` reporting and operator surfaces around Permission Council decisions.

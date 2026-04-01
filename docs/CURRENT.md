@@ -5,6 +5,9 @@
 
 **最后更新**: 2026-04-01
 
+  - latest live workflow: `runtime/artifacts/orchestrator/canary/live_m9_workflow/live_m9_workflow_report.json`
+  - latest verified status: `PASS / GO`, `superpowers_configured_steps = 6`, `superpowers_steps_used = 6`
+
 ---
 
 ## 立即需要读的三份文档

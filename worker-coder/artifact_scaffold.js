@@ -12,19 +12,14 @@ function inferProjectType(taskPrompt = "") {
 
 function buildCrmBackendTemplate() {
   return [
-    "import express from 'express';",
-    "import cors from 'cors';",
-    "import path from 'path';",
-    "import { fileURLToPath } from 'url';",
-    "import { randomUUID } from 'crypto';",
+    "const express = require('express');",
+    "const path = require('path');",
+    "const { randomUUID } = require('crypto');",
     "",
-    "const __filename = fileURLToPath(import.meta.url);",
-    "const __dirname = path.dirname(__filename);",
     "const app = express();",
     "const PORT = Number(process.env.PORT || 3000);",
     "const publicDir = path.join(__dirname, 'public');",
     "",
-    "app.use(cors());",
     "app.use(express.json());",
     "app.use(express.static(publicDir));",
     "",
@@ -83,7 +78,7 @@ function buildCrmBackendTemplate() {
     "app.get('/health', (_req, res) => res.json({ success: true, status: 'ok' }));",
     "app.get('/', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));",
     "app.listen(PORT, () => console.log('Customer API server listening on http://localhost:' + PORT));",
-    "export default app;",
+    "module.exports = app;",
     "",
   ].join('\n');
 }
@@ -414,6 +409,36 @@ Task prompt snippet:
 ${prompt}
 `;
   }
+  if (rel === "plan/workplan.json") {
+    if (projectType === "single_file_html") {
+      return JSON.stringify({
+        be_tasks: [
+          { id: "T-BE-1", description: "Wire Express static hosting for public/ and return index.html from GET /", verify: "start with PORT=13099 node server.js and GET / returns HTTP 200 with HTML" },
+          { id: "T-BE-2", description: "Ensure static assets such as /styles.css and /app.js resolve from public/", verify: "GET /styles.css and GET /app.js return HTTP 200 when files exist" },
+          { id: "T-BE-3", description: "Add repeatable startup packaging for preview and smoke validation", verify: "npm start boots on PORT=13099 without using ps/pkill/lsof" },
+        ],
+        fe_tasks: [
+          { id: "T-FE-1", description: "Build hero section with headline, supporting copy, and CTA button", verify: "hero and CTA render above the fold" },
+          { id: "T-FE-2", description: "Build three feature cards with responsive layout", verify: "cards stack on mobile and align in columns on desktop" },
+          { id: "T-FE-3", description: "Build FAQ accordion interaction and keyboard support", verify: "faq.toggle interaction works with click and keyboard" },
+        ],
+      }, null, 2);
+    }
+    return JSON.stringify({
+      be_tasks: [
+        { id: "T-BE-1", description: "Implement GET /api/customers with stable JSON list output", verify: "GET /api/customers returns HTTP 200 with an array payload" },
+        { id: "T-BE-2", description: "Implement GET /api/customers/:id with not-found handling", verify: "GET /api/customers/:id returns HTTP 200 for a seeded record and 404 for an unknown id" },
+        { id: "T-BE-3", description: "Implement POST and PUT handlers with request validation", verify: "invalid payload returns 400 and valid create/update returns persisted customer JSON" },
+        { id: "T-BE-4", description: "Wire static hosting for impl/be_changes/public and root route delivery", verify: "start with PORT=13099 node server.js and GET / returns HTTP 200 with HTML" },
+      ],
+      fe_tasks: [
+        { id: "T-FE-1", description: "Build customer list view wired to GET /api/customers", verify: "customer list renders records returned by GET /api/customers" },
+        { id: "T-FE-2", description: "Build detail view for the selected customer record", verify: "selecting a customer loads detail data without a full page reload" },
+        { id: "T-FE-3", description: "Build create/edit form using same-origin API requests only", verify: "form submit sends POST or PUT to /api/customers using relative paths" },
+        { id: "T-FE-4", description: "Add validation and error-state rendering for failed API responses", verify: "invalid form input or failed request shows a visible error message" },
+      ],
+    }, null, 2);
+  }
   if (rel === "impl/be_notes.md") {
     if (projectType === "single_file_html") {
       return `# Backend Implementation Notes
@@ -551,9 +576,7 @@ ${prompt}
       name: projectType === "webapp_crm" ? "customer-workspace" : "generated-app",
       version: "1.0.0",
       main: "server.js",
-      type: "module",
       dependencies: {
-        cors: "^2.8.5",
         express: "^4.19.2"
       }
     }, null, 2);
@@ -798,7 +821,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
       const servesPublicDir = /express\.static\(/i.test(raw) && /public/i.test(raw);
       const rootRouteUsesIndex = /app\.get\(['"]\/['"]/i.test(raw) && /index\.html/i.test(raw);
       const catchAllBeforeApi = /app\.get\(["']\*["'][\s\S]*app\.get\(['"]\/api\/customers['"]/i.test(raw);
-      const hasMojibake = /[???]/.test(raw) || /Êú|Âè|È¶|‚ö|Áõ|Âà|ËÆ/i.test(raw);
+      const hasMojibake = /[???]/.test(raw) || /ÔøΩ|ÔøΩ|ÔøΩ|ÔøΩ|ÔøΩ|ÔøΩ|ÔøΩ/i.test(raw);
       if (!hasCustomerRoutes || !servesPublicDir || !rootRouteUsesIndex || catchAllBeforeApi || hasMojibake) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "crm_backend_contract_repaired" };

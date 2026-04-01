@@ -39,6 +39,9 @@ function normalizeContractPath(rel) {
 function resolveArtifactPath(releaseRoot, relPath) {
   const rel = normalizeContractPath(relPath);
   if (!rel) return null;
+  const workspaceRoot = path.resolve(releaseRoot, "..", "..", "..", "..");
+  const workspaceRelativeDirect = path.resolve(workspaceRoot, rel);
+  if (fs.existsSync(workspaceRelativeDirect)) return workspaceRelativeDirect;
   const releaseRelative = path.resolve(releaseRoot, rel);
   if (fs.existsSync(releaseRelative)) return releaseRelative;
 
@@ -46,8 +49,8 @@ function resolveArtifactPath(releaseRoot, relPath) {
   const normalizedReleaseRoot = path.resolve(releaseRoot);
   const markerIndex = normalizedReleaseRoot.lastIndexOf(marker);
   if (markerIndex !== -1) {
-    const workspaceRoot = normalizedReleaseRoot.slice(0, markerIndex);
-    const workspaceRelative = path.resolve(workspaceRoot, rel);
+    const legacyWorkspaceRoot = normalizedReleaseRoot.slice(0, markerIndex);
+    const workspaceRelative = path.resolve(legacyWorkspaceRoot, rel);
     if (fs.existsSync(workspaceRelative)) return workspaceRelative;
   }
   return releaseRelative;

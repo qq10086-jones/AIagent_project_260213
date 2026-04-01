@@ -125,10 +125,29 @@ function buildStructuredWorkplanBlock(tasks = [], sectionLabel = "") {
   return lines.join("\n");
 }
 
+function normalizeInjectedWorkplan(tasks = [], sectionLabel = "", sourcePath = "plan/workplan.json") {
+  const safeTasks = Array.isArray(tasks)
+    ? tasks
+        .filter((item) => item && typeof item === "object")
+        .map((item) => ({
+          id: String(item.id || "").trim(),
+          description: String(item.description || "").trim(),
+          verify: String(item.verify || "").trim(),
+        }))
+        .filter((item) => item.id || item.description)
+    : [];
+  if (safeTasks.length === 0) return null;
+  return {
+    section: sectionLabel,
+    source: String(sourcePath || "plan/workplan.json"),
+    tasks: safeTasks,
+  };
+}
+
 function readStructuredWorkplan({ workspaceRoot, artifactRoot, stepId }) {
   const workplanJsonPath = path.resolve(workspaceRoot, artifactRoot, "plan/workplan.json");
   if (!fs.existsSync(workplanJsonPath)) {
-    return { block: "", validation: { checked: false, ok: true, code: null, errors: [] } };
+    return { block: "", injected: null, validation: { checked: false, ok: true, code: null, errors: [] } };
   }
   try {
     const parsed = JSON.parse(fs.readFileSync(workplanJsonPath, "utf8"));
@@ -136,6 +155,7 @@ function readStructuredWorkplan({ workspaceRoot, artifactRoot, stepId }) {
     if (errors.length > 0) {
       return {
         block: "",
+        injected: null,
         validation: {
           checked: true,
           ok: false,
@@ -149,6 +169,11 @@ function readStructuredWorkplan({ workspaceRoot, artifactRoot, stepId }) {
     const sectionLabel = String(stepId || "") === "impl_be" ? "BE Tasks" : "FE Tasks";
     return {
       block: buildStructuredWorkplanBlock(tasks, sectionLabel),
+      injected: normalizeInjectedWorkplan(
+        tasks,
+        sectionLabel,
+        path.relative(workspaceRoot, workplanJsonPath).replace(/\\/g, "/"),
+      ),
       validation: {
         checked: true,
         ok: true,
@@ -160,6 +185,7 @@ function readStructuredWorkplan({ workspaceRoot, artifactRoot, stepId }) {
   } catch {
     return {
       block: "",
+      injected: null,
       validation: {
         checked: true,
         ok: false,
@@ -655,6 +681,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     payload.context_packet = null;
     payload.repo_map = null;
     payload.workplan_validation = { checked: false, ok: true, code: null, errors: [] };
+    payload.injected_workplan = null;
 
     if (String(stepDef.id || "") === "impl_be" && payload.execution_mode_requested === "structured_patch") {
       payload.expected_artifacts = ["impl/be_patch_bundle.json", "impl/be_notes.md", "handoff/be_to_fe.json"];
@@ -868,6 +895,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
         const structuredWorkplan = readStructuredWorkplan({ workspaceRoot, artifactRoot, stepId: stepDef.id });
         payload.workplan_validation = structuredWorkplan.validation;
+        payload.injected_workplan = structuredWorkplan.injected || null;
         if (structuredWorkplan.block) {
           payload.task_prompt = `${payload.task_prompt}${structuredWorkplan.block}`;
         } else {

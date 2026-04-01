@@ -43,11 +43,22 @@ export function createArtifactPackService({
   getSteps,
   runtimeConfig = {},
 }) {
-  function collectContextBudgetReports(steps = []) {
+  function normalizeReleaseRelativePath(releaseRoot, candidatePath = "") {
+    const rel = String(candidatePath || "").trim().replace(/\\/g, "/");
+    if (!rel) return "";
+    const releaseRootNorm = path.resolve(releaseRoot);
+    const candidateAbs = path.resolve(workspaceRoot, rel);
+    if (candidateAbs.startsWith(releaseRootNorm)) {
+      return path.relative(releaseRootNorm, candidateAbs).replace(/\\/g, "/");
+    }
+    return rel;
+  }
+
+  function collectContextBudgetReports(steps = [], releaseRoot = "") {
     const reports = [];
     for (const step of steps || []) {
       const result = parseJsonSafe(step?.result_json, {});
-      const reportPath = String(result?.context_budget_report_path || "").trim().replace(/\\/g, "/");
+      const reportPath = normalizeReleaseRelativePath(releaseRoot, result?.context_budget_report_path || "");
       const report = result?.context_budget_report && typeof result.context_budget_report === "object"
         ? result.context_budget_report
         : null;
@@ -289,11 +300,11 @@ function collectCodingExecutionEvidence(steps = []) {
       if (!coverage[req]) reasons.push(`required artifact missing: ${req}`);
     }
 
+    const releasePaths = buildReleasePackPaths(workspaceRoot, run);
     const stepArtifacts = buildStepArtifactsFromCheckpoints(steps, checkpoints, parseJsonSafe);
-    const contextBudget = collectContextBudgetReports(steps);
+    const contextBudget = collectContextBudgetReports(steps, releasePaths.release_root);
     const contextArtifacts = collectContextArtifacts(steps);
     const codingExecutionEvidence = collectCodingExecutionEvidence(steps);
-    const releasePaths = buildReleasePackPaths(workspaceRoot, run);
     const { manifest_path: manifestPath, summary_path: summaryPath,
             strict_canary_json_path: canaryJsonPath, strict_canary_report_path: canaryMdPath,
             go_no_go_result_path: goNoGoJsonPath,

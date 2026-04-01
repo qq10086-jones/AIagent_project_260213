@@ -2,7 +2,7 @@
 ## Brain-Routed Multi-Agent Execution Platform
 
 **版本**: 3.1（v3.0 同行评审后修订）
-**日期**: 2026-04-01
+**日期**: 2026-04-02
 **状态**: 正式设计稿
 **主要变更**: 重新定位 Shared Layer（contracts + observability，非新执行内核）；Permission Council 降为 advisory；single_agent 加 micro-workflow spec；worker-quant 排除在 AgentSession 统一之外
 
@@ -336,4 +336,10 @@ SP-01 的实施必须以这两个路径为准，不要以文档中的路径字�
 
 ---
 
-*文档版本：v3.1 | 2026-04-01 | 基于同行评审修订*
+## 2026-04-02 Status Update
+
+- `SP-01` 已闭环：worker runtime 已加载 superpowers plugin，latest live run reports `superpowers_configured_steps = 6`.
+- `SP-02` 已闭环：`release_pack` / `deploy_preview` now run on `MiniMax-M2.7` in the live workflow and the canary verdict is `PASS`.
+- 下一步焦点转到 `SP-03`：让 architect 输出的 structured workplan 被实现步骤作为 first-class execution context 使用，而不只依赖 markdown fallback。
+
+*文档版本：v3.1 | 2026-04-02 | 基于同行评审修订*

@@ -11,6 +11,9 @@ const PM_ACCEPTANCE_SCHEMA = JSON.parse(
 const ARCH_RISK_REPORT_SCHEMA = JSON.parse(
   fs.readFileSync(path.resolve(CONTRACTS_DIR, "coding_team_arch_risk_report.schema.json"), "utf8")
 );
+const CODING_TEAM_WORKPLAN_SCHEMA = JSON.parse(
+  fs.readFileSync(path.resolve(CONTRACTS_DIR, "coding_team_workplan.schema.json"), "utf8")
+);
 const RELEASE_ARTIFACT_MANIFEST_SCHEMA = JSON.parse(
   fs.readFileSync(path.resolve(CONTRACTS_DIR, "coding_team_release_artifact_manifest.schema.json"), "utf8")
 );
@@ -24,7 +27,7 @@ export const PM_REQUIRED_SECTION_MATCHERS = [
   { id: "artifact_list", patterns: ["artifact list", "artifacts"] },
 ];
 
-export const ARCH_REQUIRED_FILES = ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md"];
+export const ARCH_REQUIRED_FILES = ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md", "plan/workplan.json"];
 export const ARCH_REQUIRED_SECTION_MATCHERS = [
   { id: "module_breakdown", patterns: ["module"] },
   { id: "interfaces", patterns: ["interface"] },
@@ -186,8 +189,9 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
   const interfacesPath = path.resolve(rootAbs, ARCH_REQUIRED_FILES[1]);
   const riskPath = path.resolve(rootAbs, ARCH_REQUIRED_FILES[2]);
   const workplanPath = path.resolve(rootAbs, ARCH_REQUIRED_FILES[3]);
+  const workplanJsonPath = path.resolve(rootAbs, ARCH_REQUIRED_FILES[4]);
 
-  const missingFiles = [archPath, interfacesPath, riskPath, workplanPath].filter((item) => !fs.existsSync(item));
+  const missingFiles = [archPath, interfacesPath, riskPath, workplanPath, workplanJsonPath].filter((item) => !fs.existsSync(item));
   if (missingFiles.length > 0) {
     return {
       checked: true,
@@ -202,6 +206,7 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
   const rawInterfacesText = readTextFile(interfacesPath);
   const workplanText = readTextFile(workplanPath).toLowerCase();
   const riskJson = readJsonFile(riskPath);
+  const workplanJson = readJsonFile(workplanJsonPath);
   const missingSections = [];
   const missingHeadings = findMissingHeadings(rawArchText, ARCH_REQUIRED_HEADINGS);
   missingSections.push(...missingHeadings);
@@ -214,6 +219,10 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
   const riskErrors = validateJsonSchemaLite(ARCH_RISK_REPORT_SCHEMA, riskJson, "$");
   if (riskErrors.length > 0) {
     missingSections.push(...riskErrors.map((item) => `risk_report.json:${item}`));
+  }
+  const workplanErrors = validateJsonSchemaLite(CODING_TEAM_WORKPLAN_SCHEMA, workplanJson, "$");
+  if (workplanErrors.length > 0) {
+    missingSections.push(...workplanErrors.map((item) => `workplan.json:${item}`));
   }
   const interfacesValidation = validateInterfacesDocument(rawInterfacesText);
   if (!interfacesValidation.ok) {
@@ -236,6 +245,7 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
     headings_checked: ARCH_REQUIRED_HEADINGS.map((item) => item.id),
     interfaces_checked: interfacesValidation.interface_headings,
     schema_checked: ARCH_RISK_REPORT_SCHEMA.$id,
+    workplan_schema_checked: CODING_TEAM_WORKPLAN_SCHEMA.$id,
   };
 }
 

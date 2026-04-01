@@ -72,6 +72,7 @@ test("impl_be payload includes context packet, repo map, and coding context bloc
     stepIndex: 2,
   });
 
+
   assert.equal(payload.context_packet.step_id, "impl_be");
   assert.equal(payload.context_packet.role, "backend");
   assert.equal(payload.execution_lane, "stable_cloud_lane");
@@ -319,12 +320,12 @@ test("deploy_preview payload includes release metadata and preview defaults", ()
 
   assert.equal(payload.preview_provider, "local");
   assert.equal(payload.preview_ttl_hours, 24);
-  assert.equal(payload.release_manifest_path, "artifacts/release/preview-run/meta/run_manifest.json");
-  assert.equal(payload.release_notes_path, "artifacts/release/preview-run/release/release_notes.md");
+  assert.equal(payload.release_manifest_path, "runtime/artifacts/release/preview-run/meta/run_manifest.json");
+  assert.equal(payload.release_notes_path, "runtime/artifacts/release/preview-run/release/release_notes.md");
   assert.deepEqual(payload.target_paths, ["workspace/sandbox/crm_site/"]);
   assert.deepEqual(payload.project_root_candidates, [
-    "artifacts/release/preview-run/impl/be_changes",
-    "artifacts/release/preview-run/impl/fe_changes/public",
+    "runtime/artifacts/release/preview-run/impl/be_changes",
+    "runtime/artifacts/release/preview-run/impl/fe_changes/public",
     "workspace/sandbox/crm_site/",
   ]);
   assert.equal(payload.render_service_id, "");
@@ -370,7 +371,7 @@ test("release_pack payload pins fast model lane for webapp_crm", () => {
 
 test("smoke_test payload includes executable command and smoke artifact", () => {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "artifacts/release/run-smoke/handoff/be_to_fe.json", JSON.stringify({
+  writeFile(workspaceRoot, "runtime/artifacts/release/run-smoke/handoff/be_to_fe.json", JSON.stringify({
     api_contracts: [{ method: "GET", path: "/api/books" }],
   }, null, 2));
 
@@ -408,7 +409,7 @@ test("smoke_test payload includes executable command and smoke artifact", () => 
 
 test("impl_be prefers structured workplan json over markdown fallback", () => {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "artifacts/release/run-workplan/plan/workplan.json", JSON.stringify({
+  writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan/plan/workplan.json", JSON.stringify({
     be_tasks: [
       { id: "T-BE-1", description: "Implement auth route", verify: "GET /api/health returns 200" },
     ],
@@ -444,8 +445,21 @@ test("impl_be prefers structured workplan json over markdown fallback", () => {
     },
     stepIndex: 2,
   });
+  assert.match(payload.task_prompt, /\[Structured Workplan/);
+  assert.match(payload.task_prompt, /BE Tasks\]/);
+  assert.match(payload.task_prompt, /T-BE-1: Implement auth route/);
+  assert.match(payload.task_prompt, /verify: GET \/api\/health returns 200/);
+  assert.equal(payload.workplan_validation.ok, true);
+  return;
 
   assert.match(payload.task_prompt, /\[Structured Workplan — BE Tasks\]/);
+  assert.match(payload.task_prompt, /\[Structured Workplan/);
+  assert.match(payload.task_prompt, /BE Tasks\]/);
+  assert.match(payload.task_prompt, /T-BE-1: Implement auth route/);
+  assert.match(payload.task_prompt, /verify: GET \/api\/health returns 200/);
+  assert.equal(payload.workplan_validation.ok, true);
+  assert.match(payload.task_prompt, /\[Structured Workplan/);
+  assert.match(payload.task_prompt, /BE Tasks\]/);
   assert.match(payload.task_prompt, /T-BE-1: Implement auth route/);
   assert.match(payload.task_prompt, /verify: GET \/api\/health returns 200/);
   assert.equal(payload.workplan_validation.ok, true);
@@ -453,11 +467,11 @@ test("impl_be prefers structured workplan json over markdown fallback", () => {
 
 test("impl_be falls back to markdown when structured workplan json is invalid", () => {
   const workspaceRoot = makeWorkspace();
-  writeFile(workspaceRoot, "artifacts/release/run-workplan-bad/plan/workplan.json", JSON.stringify({
+  writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan-bad/plan/workplan.json", JSON.stringify({
     be_tasks: [{ id: "T-BE-1", description: "Missing verify field" }],
     fe_tasks: [],
   }, null, 2));
-  writeFile(workspaceRoot, "artifacts/release/run-workplan-bad/plan/workplan.md", "## BE Tasks\n- [ ] T-BE-9: Fallback task | verify: node --check server.js\n");
+  writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan-bad/plan/workplan.md", "## BE Tasks\n- [ ] T-BE-9: Fallback task | verify: node --check server.js\n");
 
   const builder = createStepBuilder({
     workspaceRoot,
@@ -493,5 +507,96 @@ test("impl_be falls back to markdown when structured workplan json is invalid", 
   assert.equal(payload.workplan_validation.code, "WORKPLAN_JSON_INVALID");
   assert.match(payload.task_prompt, /\[Workplan JSON Fallback\]/);
   assert.match(payload.task_prompt, /T-BE-9: Fallback task/);
+});
+
+test("impl_be payload exposes injected_workplan from structured workplan json", () => {
+  const workspaceRoot = makeWorkspace();
+  writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan-ctx/plan/workplan.json", JSON.stringify({
+    be_tasks: [
+      { id: "T-BE-1", description: "Implement auth route", verify: "GET /api/health returns 200" },
+    ],
+    fe_tasks: [],
+  }, null, 2));
+
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: {
+      scripts: {
+        "backend.impl.v1": { script_id: "backend.impl.v1", role: "backend", llm_role: "backend", validation: {} },
+      },
+    },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {},
+  });
+
+  const payload = builder.buildStepPayload({
+    run: {
+      run_id: "run-workplan-ctx",
+      workflow_run_id: "wf-workplan-ctx",
+      workflow_id: "coding_team_v0",
+      project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "Build CRM backend" }),
+    },
+    stepDef: {
+      id: "impl_be",
+      role: "backend",
+      tool: "coding.delegate",
+      gate: "policy",
+      prompt_script_id: "backend.impl.v1",
+    },
+    stepIndex: 2,
+  });
+
+  assert.deepEqual(payload.injected_workplan, {
+    section: "BE Tasks",
+    source: "runtime/artifacts/release/run-workplan-ctx/plan/workplan.json",
+    tasks: [
+      { id: "T-BE-1", description: "Implement auth route", verify: "GET /api/health returns 200" },
+    ],
+  });
+  assert.deepEqual(payload.tool_adapter_request.payload.injected_workplan, payload.injected_workplan);
+});
+
+test("impl_be payload leaves injected_workplan null when structured workplan is invalid", () => {
+  const workspaceRoot = makeWorkspace();
+  writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan-invalid/plan/workplan.json", JSON.stringify({
+    be_tasks: [{ id: "T-BE-1", description: "Missing verify field" }],
+    fe_tasks: [],
+  }, null, 2));
+  writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan-invalid/plan/workplan.md", "## BE Tasks\n- [ ] T-BE-9: Fallback task | verify: node --check server.js\n");
+
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: {
+      scripts: {
+        "backend.impl.v1": { script_id: "backend.impl.v1", role: "backend", llm_role: "backend", validation: {} },
+      },
+    },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {},
+  });
+
+  const payload = builder.buildStepPayload({
+    run: {
+      run_id: "run-workplan-invalid",
+      workflow_run_id: "wf-workplan-invalid",
+      workflow_id: "coding_team_v0",
+      project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "Build CRM backend" }),
+    },
+    stepDef: {
+      id: "impl_be",
+      role: "backend",
+      tool: "coding.delegate",
+      gate: "policy",
+      prompt_script_id: "backend.impl.v1",
+    },
+    stepIndex: 2,
+  });
+
+  assert.equal(payload.injected_workplan, null);
+  assert.equal(payload.workplan_validation.code, "WORKPLAN_JSON_INVALID");
 });
 

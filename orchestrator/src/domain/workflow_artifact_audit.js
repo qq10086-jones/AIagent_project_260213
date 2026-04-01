@@ -297,9 +297,17 @@ function detectPreviewMismatch({ projectType = "", previewRoot = "" }) {
 
 export function buildPreviewValidationReport({ run, releaseRoot }) {
   const previewPath = path.join(releaseRoot, "preview", "preview_runtime.json");
+  const deploymentResultPath = path.join(releaseRoot, "preview", "deployment_result.json");
   const previewRuntime = safeReadJson(previewPath) || {};
+  const deploymentResult = safeReadJson(deploymentResultPath) || {};
   const previewRoot = String(previewRuntime?.project_root || "").replace(/\\/g, "/");
-  const previewUrl = String(previewRuntime?.preview_url || previewRuntime?.url || "").trim();
+  const previewUrl = String(
+    previewRuntime?.preview_url ||
+    previewRuntime?.url ||
+    deploymentResult?.preview_url ||
+    deploymentResult?.deployment?.preview_url ||
+    ""
+  ).trim();
   const previewMode = String(previewRuntime?.mode || "").trim() || null;
   const commandSource = String(previewRuntime?.command_source || "").trim() || null;
   const detection = detectPreviewMismatch({
@@ -333,7 +341,7 @@ export function buildPreviewValidationReport({ run, releaseRoot }) {
     });
   }
 
-  if (domainPack && previewRoot) {
+  if (domainPack && previewRoot && detection.source === "shared_crm_sandbox") {
     const packPattern = String(domainPack.preview_expectations?.preview_root_pattern || "");
     if (packPattern) {
       const patternMatch = new RegExp(packPattern, "i").test(previewRoot);

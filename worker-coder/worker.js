@@ -140,6 +140,21 @@ function compactResultOutput(output) {
   };
 }
 
+function normalizePermissionDecision(permissionAdvice = {}, { toolName = "", source = "permission_council" } = {}) {
+  if (!permissionAdvice || typeof permissionAdvice !== "object") return null;
+  const riskScoreRaw = Number(permissionAdvice.risk_score);
+  return {
+    source,
+    tool_name: toolName || null,
+    recommendation: String(permissionAdvice.council_advice || "review"),
+    safety_verdict: permissionAdvice.safety_verdict ? String(permissionAdvice.safety_verdict) : null,
+    context_verdict: permissionAdvice.context_verdict ? String(permissionAdvice.context_verdict) : null,
+    risk_level: permissionAdvice.risk_level ? String(permissionAdvice.risk_level) : null,
+    risk_score: Number.isFinite(riskScoreRaw) ? riskScoreRaw : null,
+    summary: permissionAdvice.advisory_summary ? String(permissionAdvice.advisory_summary) : null,
+  };
+}
+
 function buildWorkerResultEnvelope({ runId, toolName, ok, output, error, payload = {} }) {
   const boundedValidation = Array.isArray(output?.metadata?.bounded_validation) && output.metadata.bounded_validation.length > 0
     ? output.metadata.bounded_validation
@@ -148,6 +163,14 @@ function buildWorkerResultEnvelope({ runId, toolName, ok, output, error, payload
       ok: Boolean(output && typeof output === "object"),
       detail: output && typeof output === "object" ? "object_result_emitted" : "non_object_result",
     }];
+  const advisoryDecision = normalizePermissionDecision(payload?.permission_advisory, { toolName });
+  const permissionDecisions = Array.isArray(output?.metadata?.permission_decisions)
+    ? output.metadata.permission_decisions
+    : Array.isArray(output?.permission_decisions)
+      ? output.permission_decisions
+      : advisoryDecision
+        ? [advisoryDecision]
+        : [];
   const validation = validateWorkerResult({
     run_id: runId,
     worker_name: "worker-coder",
@@ -158,9 +181,7 @@ function buildWorkerResultEnvelope({ runId, toolName, ok, output, error, payload
     metadata: {
       duration_ms: Number(output?.duration_ms || 0),
       tool_calls: Number(output?.diagnostics?.tool_calls || output?.tool_calls || 0),
-      permission_decisions: Array.isArray(output?.metadata?.permission_decisions)
-        ? output.metadata.permission_decisions
-        : [],
+      permission_decisions: permissionDecisions,
       evidence_id: output?.metadata?.evidence_id || payload?.evidence_id || payload?.task_envelope?.evidence_id || "",
       replay_tag: output?.metadata?.replay_tag || payload?.replay_tag || payload?.task_envelope?.replay_tag || "",
       bounded_validation: boundedValidation,
@@ -231,6 +252,9 @@ async function processTask(msgId, task, lifecycle) {
     if (!payloadGuardrails.ok) {
       throw new Error(`SINGLE_AGENT_GUARDRAILS_INVALID: ${payloadGuardrails.errors.join("; ")}`);
     }
+    const permissionAdvice = payload?.permission_advisory && typeof payload.permission_advisory === "object"
+      ? payload.permission_advisory
+      : null;
     console.log(`[worker] Claimed task ${task_id} [${tool_name}]`);
     await lifecycle.emitClaimed();
     await emitResult(task_id, "tool_call", {
@@ -241,6 +265,7 @@ async function processTask(msgId, task, lifecycle) {
       taskId: task_id,
       workerName: "worker-coder",
       toolName: tool_name,
+      permissionAdvice,
     });
     if (tool_name === "coding.patch") {
       const result = await CodingService.applyPatch({

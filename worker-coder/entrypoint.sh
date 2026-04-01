@@ -9,24 +9,23 @@ fi
 # Resolve provider API key placeholders into the runtime OpenCode config.
 if [ -f /app/opencode.json.tpl ]; then
   mkdir -p /root/.config/opencode /root/.config/opencode/plugins
-  if [ -d /workspace/external/vendor/superpowers ] && [ -f /workspace/external/vendor/superpowers/.opencode/plugins/superpowers.js ]; then
+  if [ -d /workspace/external/vendor/superpowers ]; then
     ln -snf /workspace/external/vendor/superpowers /root/.config/opencode/superpowers
-    ln -snf /workspace/external/vendor/superpowers/.opencode/plugins/superpowers.js /root/.config/opencode/plugins/superpowers.js
   fi
 
   if [ -z "${DASHSCOPE_API_KEY:-}" ]; then
     export DASHSCOPE_API_KEY="${DASH_SCOPE_API_KEY:-${QWEN_API_KEY:-${ALIBABA_CODING_PLAN_API_KEY:-}}}"
   fi
 
-  if [ -L /root/.config/opencode/plugins/superpowers.js ] || [ -f /root/.config/opencode/plugins/superpowers.js ]; then
-    export OPENCODE_PLUGINS_JSON='[
-    "/root/.config/opencode/plugins/superpowers.js"
+  if [ -d /workspace/external/vendor/superpowers ]; then
+    export OPENCODE_PLUGIN_JSON='[
+    "superpowers@git+https://github.com/obra/superpowers.git"
   ]'
   else
-    export OPENCODE_PLUGINS_JSON='[]'
+    export OPENCODE_PLUGIN_JSON='[]'
   fi
 
-  envsubst '${MINIMAX_API_KEY} ${DASHSCOPE_API_KEY} ${DASH_SCOPE_API_KEY} ${QWEN_API_KEY} ${ALIBABA_CODING_PLAN_API_KEY} ${OPENCODE_PLUGINS_JSON}' \
+  envsubst '${MINIMAX_API_KEY} ${DASHSCOPE_API_KEY} ${DASH_SCOPE_API_KEY} ${QWEN_API_KEY} ${ALIBABA_CODING_PLAN_API_KEY} ${OPENCODE_PLUGIN_JSON}' \
     < /app/opencode.json.tpl \
     > /app/opencode.json
   mkdir -p /root/.config/opencode

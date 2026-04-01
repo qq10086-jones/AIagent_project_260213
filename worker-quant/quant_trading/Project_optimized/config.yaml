@@ -5,8 +5,8 @@ update:
   universe_file: null
 
 fundamental:
-  enabled: true
-  source: "jquants"       # jquants | csv | noop
+  enabled: false
+  source: "noop"          # jquants | csv | noop  (jquantsapi 未安装，暂用 noop)
   csv_path: null
   fail_closed: true
   require_available_ts: true

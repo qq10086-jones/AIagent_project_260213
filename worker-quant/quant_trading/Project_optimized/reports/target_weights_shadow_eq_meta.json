@@ -1,9 +1,9 @@
 {
   "mode": "shadow_eq",
-  "exported_asof": "2026-03-25",
-  "history_last_asof": "2026-03-25",
-  "history_last_row_is_zero": false,
-  "export_row_sum": 1.0,
-  "last_nonzero_asof": "2026-03-25",
-  "last_nonzero_row_sum": 1.0
+  "exported_asof": "2026-04-01",
+  "history_last_asof": "2026-04-01",
+  "history_last_row_is_zero": true,
+  "export_row_sum": 0.0,
+  "last_nonzero_asof": "2026-03-12",
+  "last_nonzero_row_sum": 0.5750000000000001
 }

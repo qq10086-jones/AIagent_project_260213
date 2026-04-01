@@ -1,1 +1,2 @@
-
+symbol,event_date,trade_date,event_type,headline,surprise_score,guidance_delta_eps,eps_yoy,ret_1d_pct,ret_3d_pct,ret_5d_pct
+9432.T,2026-03-01,2026-03-02,earnings,,,0.03,,-0.13131775721253458,-1.3788614979882596,1.1162159646605163

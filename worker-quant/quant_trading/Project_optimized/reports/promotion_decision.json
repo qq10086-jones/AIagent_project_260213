@@ -1,67 +1,74 @@
 {
-  "target_mode": "shadow_ic",
+  "target_mode": "ridge",
   "baseline_mode": "ridge",
   "recommendation": "hold",
   "patch_note": "Sharpe is treated as a governance metric and promotion gate in this patch. It is not used here as a standalone regression target.",
   "target_metrics": {
-    "sharpe": 0.7127439899654185,
-    "sortino": 1.305351624276622,
-    "max_drawdown_pct": -15.473070761534668,
-    "avg_turnover_notional": 18330.493830018124,
-    "turnover_cv": 0.8964181205124931,
-    "total_return_pct": 34.756914634493555,
-    "annual_vol_pct": 16.92563879537088
+    "sharpe": 0.0,
+    "sortino": 0.0,
+    "max_drawdown_pct": 0.0,
+    "avg_turnover_notional": 0.0,
+    "turnover_cv": 0.0,
+    "total_return_pct": 0.0,
+    "annual_vol_pct": 0.0
   },
   "paper_stats": {
-    "mode": "shadow_ic",
-    "decision_run_count": 0,
+    "mode": "ridge",
+    "decision_run_count": 1,
     "paper_days": 0,
     "paper_asofs": [],
-    "recent_runs": []
+    "recent_runs": [
+      {
+        "run_id": "2026-04-01__0cb010ffd8",
+        "asof": "2026-04-01",
+        "status": "proposed",
+        "paper_executed": false
+      }
+    ]
   },
   "learning_stats": {
-    "mode": "shadow_ic",
+    "mode": "ridge",
     "factor_count": 5,
     "family_metrics": {
       "technical": {
         "factor_count": 5,
         "observed_factor_count": 5,
         "mean_ic": 0.023567375097683873,
-        "mean_t_stat": 0.8793946,
+        "mean_t_stat": 0.9757408,
         "positive_ic_ratio": 1.0,
         "factors": [
           {
             "factor_name": "mom_consist",
             "ic_mean": 0.010054339594129958,
-            "t_stat": 1.922728,
+            "t_stat": 2.058778,
             "guard": "PASS",
             "n_observations": 218
           },
           {
             "factor_name": "rsi14",
             "ic_mean": 0.02694153013332967,
-            "t_stat": 0.546136,
+            "t_stat": 0.604236,
             "guard": "FAIL",
             "n_observations": 50
           },
           {
             "factor_name": "vol_adj_mom20",
             "ic_mean": 0.03311356044042312,
-            "t_stat": 0.419072,
+            "t_stat": 0.544001,
             "guard": "FAIL",
             "n_observations": 50
           },
           {
             "factor_name": "ret20",
             "ic_mean": 0.030052345788930374,
-            "t_stat": 0.528476,
+            "t_stat": 0.620537,
             "guard": "FAIL",
             "n_observations": 50
           },
           {
             "factor_name": "slope60",
             "ic_mean": 0.017675099531606245,
-            "t_stat": 0.980561,
+            "t_stat": 1.051152,
             "guard": "FAIL",
             "n_observations": 50
           }
@@ -70,9 +77,9 @@
     },
     "aggregate": {
       "mean_ic": 0.023567375097683873,
-      "mean_t_stat": 0.8793946,
+      "mean_t_stat": 0.9757408,
       "positive_ic_ratio": 1.0,
-      "min_family_t_stat": 0.8793946
+      "min_family_t_stat": 0.9757408
     }
   },
   "gates": {
@@ -83,25 +90,25 @@
     },
     "t_stat": {
       "passed": false,
-      "actual": 0.8793946,
+      "actual": 0.9757408,
       "threshold": 1.5
     },
     "backtest_sharpe": {
       "passed": false,
-      "actual": 0.7127439899654185,
+      "actual": 0.0,
       "threshold": 1.5
     },
     "max_drawdown": {
       "passed": true,
-      "actual": -15.473070761534668,
+      "actual": 0.0,
       "threshold": 20.0
     },
     "sharpe_vs_baseline": {
-      "passed": true,
-      "actual": 0.8128845732798032,
+      "passed": false,
+      "actual": 0.0,
       "threshold": 0.1,
       "baseline_mode": "ridge",
-      "baseline_sharpe": -0.1001405833143847
+      "baseline_sharpe": 0.0
     },
     "paper_days": {
       "passed": false,
@@ -109,10 +116,10 @@
       "threshold": 30
     },
     "turnover_stability": {
-      "passed": true,
-      "actual": 0.8964181205124931,
-      "threshold": null,
-      "note": "No max_turnover_cv configured; reported only."
+      "passed": false,
+      "actual": 0.0,
+      "threshold": 2.5,
+      "avg_turnover_notional": 0.0
     }
   }
 }

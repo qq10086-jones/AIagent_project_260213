@@ -2,10 +2,10 @@
   "target_mode": "ridge",
   "recommendation": "defer_optimizer_sharpe_objective",
   "rationale": {
-    "sharpe": -0.1001405833143847,
-    "mean_ic": 0.02339248520219995,
-    "mean_t_stat": 0.43042420000000003,
-    "turnover_cv": 0.5953800826127464
+    "sharpe": 0.0,
+    "mean_ic": 0.023567375097683873,
+    "mean_t_stat": 0.9757408,
+    "turnover_cv": 0.0
   },
   "decision_rule": {
     "required_sharpe": 1.0,

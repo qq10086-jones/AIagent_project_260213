@@ -12,21 +12,21 @@
     "fundamental": []
   },
   "aggregate_learning": {
-    "mean_ic": 0.02339248520219995,
-    "mean_t_stat": 0.43042420000000003,
+    "mean_ic": 0.023567375097683873,
+    "mean_t_stat": 0.9757408,
     "positive_ic_ratio": 1.0,
-    "min_family_t_stat": 0.43042420000000003
+    "min_family_t_stat": 0.9757408
   },
   "backtest_metrics": {
-    "total_return_pct": -5.195181765771325,
-    "annual_vol_pct": 11.887247674487966,
-    "sharpe": -0.1001405833143847,
-    "sortino": -0.1525072306876509,
-    "max_drawdown_pct": -28.29021942488169,
-    "avg_turnover_notional": 21246.68084484036,
-    "avg_turnover_pct": 5.311670211210089,
-    "turnover_cv": 0.5953800826127464,
-    "avg_cost_paid": 31.875231657865783
+    "total_return_pct": 0.0,
+    "annual_vol_pct": 0.0,
+    "sharpe": 0.0,
+    "sortino": 0.0,
+    "max_drawdown_pct": 0.0,
+    "avg_turnover_notional": 0.0,
+    "avg_turnover_pct": 0.0,
+    "turnover_cv": 0.0,
+    "avg_cost_paid": 0.0
   },
   "promotion_recommendation": "hold"
 }

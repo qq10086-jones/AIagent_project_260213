@@ -316,6 +316,93 @@ def fetch_gdelt(lookback_hours: float = 24.0, max_records: int = 30, name_map: d
 
 
 # ──────────────────────────────────────────────
+# Source 4: Google News RSS — BOJ / 日银宏观情报
+# ──────────────────────────────────────────────
+def fetch_google_news_boj(lookback_hours: float = 24.0) -> list[dict]:
+    """抓取日银/利率/货币政策相关新闻，impact_category = BOJ"""
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=lookback_hours)
+    kw = "日銀 OR BOJ OR 金利 OR 利上げ OR 利下げ OR 量的緩和 OR 金融政策"
+    url = f"https://news.google.com/rss/search?q={urllib.parse.quote(kw)}&hl=ja&gl=JP&ceid=JP:ja"
+    data = _get(url)
+    if not data:
+        return []
+    try:
+        root = ET.fromstring(data)
+    except Exception:
+        return []
+    items = []
+    for item in root.iter("item"):
+        title = (item.findtext("title") or "").strip()
+        link  = (item.findtext("link")  or "").strip()
+        pub   = (item.findtext("pubDate") or "").strip()
+        if not title:
+            continue
+        pub_dt = _parse_pubdate(pub)
+        if pub_dt and pub_dt < cutoff:
+            continue
+        # BOJ 新闻：负面关键词检测
+        neg_kw = ["利上げ", "引き締め", "インフレ", "円安リスク"]
+        pos_kw = ["利下げ", "緩和", "景気支援"]
+        sent = -0.3 if any(k in title for k in neg_kw) else \
+               +0.3 if any(k in title for k in pos_kw) else 0.0
+        items.append({
+            "news_id":         _make_hash(title, link),
+            "symbol":          None,
+            "published_ts":    pub_dt.isoformat() if pub_dt else datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            "source":          "google_news_boj",
+            "title":           title,
+            "url":             link,
+            "category":        "boj_policy",
+            "sentiment":       sent,
+            "urgency":         4.0,
+            "impact_category": "BOJ",
+        })
+    return items
+
+
+# ──────────────────────────────────────────────
+# Source 5: Google News RSS — 美日贸易/关税情报
+# ──────────────────────────────────────────────
+def fetch_google_news_trade(lookback_hours: float = 24.0) -> list[dict]:
+    """抓取美日贸易/关税相关新闻，impact_category = TRADE"""
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=lookback_hours)
+    kw = "関税 OR 貿易摩擦 OR 日米貿易 OR トランプ 関税 OR 輸出規制 OR 半導体規制"
+    url = f"https://news.google.com/rss/search?q={urllib.parse.quote(kw)}&hl=ja&gl=JP&ceid=JP:ja"
+    data = _get(url)
+    if not data:
+        return []
+    try:
+        root = ET.fromstring(data)
+    except Exception:
+        return []
+    items = []
+    for item in root.iter("item"):
+        title = (item.findtext("title") or "").strip()
+        link  = (item.findtext("link")  or "").strip()
+        pub   = (item.findtext("pubDate") or "").strip()
+        if not title:
+            continue
+        pub_dt = _parse_pubdate(pub)
+        if pub_dt and pub_dt < cutoff:
+            continue
+        neg_kw = ["関税", "規制", "制裁", "摩擦", "禁輸"]
+        sent = -0.4 if any(k in title for k in neg_kw) else 0.0
+        items.append({
+            "news_id":         _make_hash(title, link),
+            "symbol":          None,
+            "published_ts":    pub_dt.isoformat() if pub_dt else datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            "source":          "google_news_trade",
+            "title":           title,
+            "url":             link,
+            "category":        "trade_policy",
+            "sentiment":       sent,
+            "urgency":         4.5,
+            "impact_category": "TRADE",
+        })
+    return items
+
+
+# ──────────────────────────────────────────────
 # 可选：Ollama LLM 二次评分（本地免费）
 # ──────────────────────────────────────────────
 def _llm_score_titles(titles: list[str]) -> list[float]:
@@ -412,6 +499,20 @@ def write_to_db(db_path: str, items: list[dict], dry_run: bool = False, model_ve
                 PRIMARY KEY (news_id, model_version)
             )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_news_feed_sym_ts ON news_feed(symbol, published_ts)")
+        # v2 标准化表（供 quant_briefing.py _cross_validate_with_news 使用）
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS news_items (
+                news_id          TEXT PRIMARY KEY,
+                related_tickers  TEXT DEFAULT '[]',
+                impact_category  TEXT NOT NULL DEFAULT 'MARKET_WIDE',
+                sentiment_score  REAL NOT NULL DEFAULT 0.0,
+                summary_cn       TEXT DEFAULT '',
+                published_at     TEXT NOT NULL,
+                source           TEXT NOT NULL,
+                urgency          REAL DEFAULT 1.0
+            )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_news_items_cat_ts ON news_items(impact_category, published_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_news_items_tickers ON news_items(related_tickers)")
 
         written = 0
         for it in items:
@@ -433,6 +534,28 @@ def write_to_db(db_path: str, items: list[dict], dry_run: bool = False, model_ve
                  3.0,   # 默认影响 3 个交易日
                  it["category"], ingested_ts)
             )
+            # news_items（v2 标准化表，供 quant_briefing.py 交叉验证）
+            sym = it.get("symbol")
+            # impact_category 推导逻辑
+            impact_cat = it.get("impact_category")  # 已有字段（BOJ/TRADE 源直接设置）
+            if impact_cat is None:
+                src = it.get("source", "")
+                if sym:
+                    impact_cat = "COMPANY"
+                elif src == "gdelt":
+                    impact_cat = "MARKET_WIDE"
+                else:
+                    impact_cat = "SECTOR"
+            related_tickers = f'["{sym}"]' if sym else "[]"
+            # summary_cn = 标题截断（LLM摘要可选，此处用原标题作为占位）
+            summary_cn = (it.get("title") or "")[:50]
+            conn.execute(
+                "INSERT OR IGNORE INTO news_items "
+                "(news_id, related_tickers, impact_category, sentiment_score, summary_cn, published_at, source, urgency) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (nid, related_tickers, impact_cat, it["sentiment"],
+                 summary_cn, it["published_ts"], it.get("source", ""), it["urgency"])
+            )
             written += 1
         conn.commit()
     finally:
@@ -451,8 +574,8 @@ def main():
                     help="抓取过去多少小时的新闻（默认 24h）")
     ap.add_argument("--dry_run",        action="store_true",
                     help="只打印，不写入数据库")
-    ap.add_argument("--sources",        default="kabutan,google,gdelt",
-                    help="逗号分隔的数据源，顺序即优先级")
+    ap.add_argument("--sources",        default="kabutan,google,boj,trade,gdelt",
+                    help="逗号分隔的数据源: kabutan,google,boj,trade,gdelt")
     args = ap.parse_args()
 
     all_items: list[dict] = []
@@ -470,6 +593,12 @@ def main():
         elif src == "google":
             fetched = fetch_google_news_jp(args.lookback_hours, name_map=name_map)
             print(f"[google_jp]   抓取 {len(fetched)} 条")
+        elif src == "boj":
+            fetched = fetch_google_news_boj(args.lookback_hours)
+            print(f"[google_boj]  抓取 {len(fetched)} 条")
+        elif src == "trade":
+            fetched = fetch_google_news_trade(args.lookback_hours)
+            print(f"[google_trade] 抓取 {len(fetched)} 条")
         elif src == "gdelt":
             fetched = fetch_gdelt(args.lookback_hours, name_map=name_map)
             print(f"[gdelt]       抓取 {len(fetched)} 条")

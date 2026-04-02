@@ -31,7 +31,7 @@ import pytz
 DB_PATH    = "japan_market.db"
 REPORT_DIR = Path("reports")
 JST        = pytz.timezone("Asia/Tokyo")
-NIKKEI_ETF = "1570.T"   # 日经225 2倍ETF，用作大盘代理
+NIKKEI_ETF = "1321.T"   # 日经225 ETF（野村，1:1跟踪指数），用作大盘代理；1570.T为2倍杠杆不适合做基准
 
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────
@@ -176,6 +176,228 @@ def compute_momentum_stats(closes: Dict[str, pd.Series], market_sym: str) -> Dic
     return result
 
 
+# ── 市场状态判断 (Regime Detection) ───────────────────────────────────────
+
+def _detect_market_regime() -> dict:
+    """
+    检测当前市场状态（Regime），基于日经ETF 1570.T 近60日K线。
+    vol_level 使用真实振幅(ATR/Close)：5日均值 vs 60日均值，>1.5倍判定为 HIGH。
+    返回: {trend, vol_level, bias, sma5, sma20, atr_5d_pct, atr_60d_pct, ret_5d_pct, action_bias}
+    """
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(NIKKEI_ETF)
+        df = tk.history(period="70d")  # 多拉几天确保60个交易日
+        if df.empty or len(df) < 20:
+            return {"trend": "UNKNOWN", "vol_level": "UNKNOWN", "bias": "NEUTRAL",
+                    "error": "数据不足"}
+
+        closes = df["Close"]
+        highs  = df["High"]
+        lows   = df["Low"]
+
+        # ── 趋势：SMA5 vs SMA20 ──────────────────────────────────────
+        sma5  = float(closes.rolling(5).mean().iloc[-1])
+        sma20 = float(closes.rolling(20).mean().iloc[-1])
+        cur   = float(closes.iloc[-1])
+        prev5 = float(closes.iloc[-5]) if len(closes) >= 5 else cur
+
+        if sma5 > sma20 and cur > sma20:
+            trend = "UP"
+        elif sma5 < sma20 and cur < sma20:
+            trend = "DOWN"
+        else:
+            trend = "SIDEWAYS"
+
+        # ── 波动率：ATR/Close 相对真实振幅 ─────────────────────────────
+        prev_c = closes.shift(1)
+        tr = pd.concat([
+            highs - lows,
+            (highs - prev_c).abs(),
+            (lows  - prev_c).abs(),
+        ], axis=1).max(axis=1)
+
+        atr_ratio    = tr / closes
+        atr_5d_avg   = float(atr_ratio.iloc[-5:].mean())
+        atr_60d_avg  = float(atr_ratio.iloc[-60:].mean()) if len(atr_ratio) >= 60 \
+                       else float(atr_ratio.mean())
+
+        if atr_5d_avg > atr_60d_avg * 1.5:
+            vol_level = "HIGH"
+        elif atr_5d_avg < atr_60d_avg * 0.7:
+            vol_level = "LOW"
+        else:
+            vol_level = "NORMAL"
+
+        # ── 偏向：综合趋势 + 近5日收益 ───────────────────────────────
+        ret_5d = (cur / prev5 - 1) * 100
+
+        if trend == "UP" and ret_5d >= 0:
+            bias = "BULLISH"
+        elif trend == "DOWN" and ret_5d <= 0:
+            bias = "BEARISH"
+        elif trend == "DOWN" or ret_5d < -1.0:
+            bias = "BEARISH"
+        elif trend == "UP" or ret_5d > 1.0:
+            bias = "BULLISH"
+        else:
+            bias = "NEUTRAL"
+
+        # ── 操作建议文字 ─────────────────────────────────────────────
+        advice_map = {
+            ("UP",       "LOW"):    "趋势向上且低波动，正常仓位，正常限价",
+            ("UP",       "NORMAL"): "趋势向上，正常操作",
+            ("UP",       "HIGH"):   "趋势向上但波动扩大，建议减半仓位，扩大限价距离",
+            ("SIDEWAYS", "LOW"):    "盘整低波动，保守操作，patient档限价",
+            ("SIDEWAYS", "NORMAL"): "盘整行情，保守操作，patient档限价",
+            ("SIDEWAYS", "HIGH"):   "盘整+高波动，防御姿态，暂不新开仓",
+            ("DOWN",     "LOW"):    "下跌趋势，防御，检查各持仓止损距离",
+            ("DOWN",     "NORMAL"): "下跌趋势，暂不新开仓，优先执行止损",
+            ("DOWN",     "HIGH"):   "下跌+高波动，全面防御，立即执行止损",
+        }
+        action_bias = advice_map.get((trend, vol_level), "观望")
+
+        return {
+            "trend":        trend,
+            "vol_level":    vol_level,
+            "bias":         bias,
+            "sma5":         round(sma5, 1),
+            "sma20":        round(sma20, 1),
+            "atr_5d_pct":   round(atr_5d_avg  * 100, 2),
+            "atr_60d_pct":  round(atr_60d_avg * 100, 2),
+            "ret_5d_pct":   round(ret_5d, 2),
+            "action_bias":  action_bias,
+        }
+    except Exception as exc:
+        return {"trend": "UNKNOWN", "vol_level": "UNKNOWN", "bias": "NEUTRAL",
+                "error": str(exc)}
+
+
+# ── 新闻交叉验证 ───────────────────────────────────────────────────────────
+
+def _cross_validate_with_news(db_path: str, symbol: str) -> dict:
+    """
+    对单个候选信号查询过去48h内的【公司级别】负面新闻。
+    只标注 HIGH（公司直接利空），宏观新闻(BOJ/TRADE)由 _get_macro_news 统一处理，
+    不在这里重复挂到每只个股上。
+    """
+    result: dict = {"news_risk": "NONE", "news_notes": []}
+    try:
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute("""
+            SELECT sentiment_score, summary_cn
+            FROM news_items
+            WHERE related_tickers LIKE ?
+              AND impact_category = 'COMPANY'
+              AND sentiment_score < -0.5
+              AND published_at >= datetime('now', '-48 hours')
+            ORDER BY sentiment_score ASC
+            LIMIT 5
+        """, (f"%{symbol}%",)).fetchall()
+        conn.close()
+
+        company_neg = [r[1] or "" for r in rows if r[0] is not None]
+        if company_neg:
+            result["news_risk"]  = "HIGH"
+            result["news_notes"] = company_neg[:2]
+    except Exception:
+        pass  # news_items 表不存在或查询失败，维持 NONE
+    return result
+
+
+def _get_macro_news(db_path: str) -> list[dict]:
+    """
+    获取过去48h内的宏观层面重要新闻（BOJ/TRADE），去重后返回。
+    供报告"二、今日有效情报"统一展示一次，不挂到个股上。
+    """
+    items: list[dict] = []
+    try:
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute("""
+            SELECT DISTINCT impact_category, summary_cn, sentiment_score
+            FROM news_items
+            WHERE impact_category IN ('BOJ', 'TRADE')
+              AND sentiment_score < -0.3
+              AND published_at >= datetime('now', '-48 hours')
+            ORDER BY sentiment_score ASC
+            LIMIT 8
+        """).fetchall()
+        conn.close()
+        seen: set[str] = set()
+        for category, summary_cn, score in rows:
+            note = summary_cn or ""
+            if note not in seen:
+                seen.add(note)
+                items.append({"category": category, "summary": note, "score": score})
+    except Exception:
+        pass
+    return items
+
+
+# ── 持仓 ATR 止损计算 ─────────────────────────────────────────────────────
+
+def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
+    """
+    为每只持仓计算 ATR 动态止损价和止损触发状态。
+    ATR 止损 = avg_cost × (1 - max(ATR14日% × vol_mult, stop_floor))
+    vol_mult=6.0, stop_floor=0.06（与 config.yaml 一致）
+    """
+    try:
+        import yfinance as yf
+    except ImportError:
+        return positions
+
+    VOL_MULT   = 6.0    # 与 config.yaml SS6_STOP_LOSS_VOL_MULT 一致
+    STOP_FLOOR = 0.06   # 6% 最低止损线
+    STOP_CAP   = 0.20   # 20% 最大止损线
+
+    enriched = []
+    for p in positions:
+        sym  = p.get("symbol", "")
+        cost = p.get("avg_cost") or p.get("cost_price")
+        cur  = p.get("market_price") or p.get("current_price")
+
+        stop_price   = None
+        stop_pct     = None
+        stop_triggered = False
+        atr_note     = ""
+
+        if cost and cur and sym:
+            try:
+                df = yf.Ticker(sym).history(period="20d")
+                if len(df) >= 5:
+                    highs = df["High"]
+                    lows  = df["Low"]
+                    prev_c = df["Close"].shift(1)
+                    tr = pd.concat([
+                        highs - lows,
+                        (highs - prev_c).abs(),
+                        (lows  - prev_c).abs(),
+                    ], axis=1).max(axis=1)
+                    atr14 = float(tr.iloc[-14:].mean()) if len(tr) >= 14 else float(tr.mean())
+                    atr_pct = atr14 / float(cost)
+                    stop_pct = min(STOP_CAP, max(STOP_FLOOR, atr_pct * VOL_MULT))
+                    stop_price = round(float(cost) * (1 - stop_pct), 1)
+                    stop_triggered = float(cur) < stop_price
+                    atr_note = f"ATR14={atr14:.1f} → 止损线{stop_pct*100:.1f}%"
+            except Exception:
+                pass
+
+        updated = dict(p)
+        updated["stop_loss_price"]  = stop_price
+        updated["stop_loss_pct"]    = round(stop_pct * 100, 1) if stop_pct else None
+        updated["stop_triggered"]   = stop_triggered
+        updated["stop_note"]        = atr_note
+        # pnl_pct
+        if cost and cur:
+            try:
+                updated["pnl_pct"] = round((float(cur) / float(cost) - 1) * 100, 2)
+            except Exception:
+                pass
+        enriched.append(updated)
+    return enriched
+
+
 # ── DB 数据读取 ────────────────────────────────────────────────────────────
 
 def read_live_state(db_path: str) -> dict:
@@ -257,8 +479,97 @@ def run_screener(db_path: str, asof: str) -> dict:
 
 # ── 个股深析 ──────────────────────────────────────────────────────────────
 
-def fetch_stock_deep(symbol: str) -> dict:
-    """单只股票深度数据：财务指标 + 历史价格 + 新闻标题。"""
+def _writeback_fundamentals(symbol: str, db_path: str, tk) -> str:
+    """
+    将 yfinance 季报数据写回 fundamental_snapshots + feature_daily，
+    使本次深析结果在下次选股时被模型利用。
+    返回写入状态说明。
+    """
+    import subprocess, sys
+    try:
+        import pandas as pd
+        now_ts = pd.Timestamp.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+        def _get(df, keys):
+            if df is None or df.empty: return None
+            for k in keys:
+                if k in df.index:
+                    try: return float(df.loc[k].iloc[0])
+                    except: pass
+            return None
+
+        q_income   = tk.quarterly_income_stmt
+        q_balance  = tk.quarterly_balance_sheet
+        q_cashflow = tk.quarterly_cashflow
+        info       = tk.info or {}
+
+        fiscal_end = str(q_income.columns[0])[:10] if not q_income.empty else now_ts[:10]
+
+        # 日本株式の yfinance: 季報は EPS のみ収録。収益・利益・CF は
+        # info (TTM) と年次 financials を優先して使う
+        ann_income   = tk.financials       if hasattr(tk, "financials")       else pd.DataFrame()
+        ann_cashflow = tk.cashflow         if hasattr(tk, "cashflow")         else pd.DataFrame()
+
+        def _info_or_stmt(info_key, df, keys):
+            """info dict (TTM) を第一優先、年次ステートメントを第二優先"""
+            v = info.get(info_key)
+            if v is not None:
+                try: return float(v)
+                except: pass
+            return _get(df, keys)
+
+        total_rev = _info_or_stmt("totalRevenue",  ann_income,   ["Total Revenue", "Revenue"])
+        op_margin = info.get("operatingMargins")
+        op_income = (total_rev * op_margin) if (total_rev and op_margin) else \
+                    _get(ann_income, ["Operating Income", "EBIT"])
+        net_income = _info_or_stmt("netIncomeToCommon", ann_income,
+                                   ["Net Income", "Net Income Common Stockholders"])
+        op_cf      = _info_or_stmt("operatingCashflow", ann_cashflow, ["Operating Cash Flow"])
+
+        rec = {
+            "symbol": symbol, "fiscal_period_end": fiscal_end,
+            "published_ts": now_ts, "available_ts": now_ts,
+            "source": "yfinance_deep", "currency": "JPY",
+            "revenue":          total_rev,
+            "operating_income": op_income,
+            "net_income":       net_income,
+            "eps":              info.get("trailingEps"),
+            "book_value_per_share": info.get("bookValue"),
+            "dividend_per_share":   (info.get("dividendRate") or 0) / 4 or None,
+            "operating_cf":     op_cf,
+            "free_cf":          None,
+            "total_assets":     _get(q_balance, ["Total Assets"]),
+            "total_equity":     _get(q_balance, ["Stockholders Equity", "Common Stock Equity",
+                                                  "Total Stockholder Equity"]),
+            "total_debt":       _get(q_balance, ["Total Debt"]),
+            "shares_outstanding": info.get("sharesOutstanding"),
+            "guidance_revenue": None, "guidance_operating_income": None,
+            "guidance_eps":     info.get("forwardEps"),
+        }
+
+        import sqlite3 as _sq, csv, io
+        # 借用 import_csv 的写入逻辑：写成临时 CSV 再调 subprocess
+        tmp_path = f"_tmp_deep_{symbol.replace('.','_')}.csv"
+        df_rec = pd.DataFrame([rec])
+        df_rec.to_csv(tmp_path, index=False)
+        r = subprocess.run(
+            [sys.executable, "update_fundamentals.py", "--db", db_path,
+             "--source", "csv", "--csv_path", tmp_path],
+            capture_output=True, text=True, timeout=30
+        )
+        import os; os.unlink(tmp_path)
+        if r.returncode == 0:
+            return "✓ 季报数据已写回 DB（fundamental_snapshots + feature_daily）"
+        return f"⚠️ 写回失败: {r.stderr.strip()[:80]}"
+    except Exception as e:
+        return f"⚠️ 写回异常: {e}"
+
+
+def fetch_stock_deep(symbol: str, db_path: str = None, writeback: bool = True) -> dict:
+    """
+    单只股票深度数据：财务指标 + 历史价格 + EPS趋势。
+    writeback=True 时将季报数据写回 fundamental_snapshots，供模型下次使用。
+    """
     try:
         import yfinance as yf
         tk   = yf.Ticker(symbol)
@@ -272,9 +583,9 @@ def fetch_stock_deep(symbol: str) -> dict:
             "forward_pe":        info.get("forwardPE"),
             "pbr":               info.get("priceToBook"),
             "roe_ttm":           info.get("returnOnEquity"),
-            "operating_margin":  info.get("operatingMargins"),   # 营业利润率（不受一次性扰动）
-            "profit_margin_ttm": info.get("profitMargins"),       # 净利润率（参考）
-            "operating_cf":      info.get("operatingCashflow"),  # 经营现金流
+            "operating_margin":  info.get("operatingMargins"),
+            "profit_margin_ttm": info.get("profitMargins"),
+            "operating_cf":      info.get("operatingCashflow"),
             "revenue_growth":    info.get("revenueGrowth"),
             "earnings_growth":   info.get("earningsGrowth"),
             "debt_to_equity":    info.get("debtToEquity"),
@@ -286,7 +597,7 @@ def fetch_stock_deep(symbol: str) -> dict:
             "52w_low":           info.get("fiftyTwoWeekLow"),
         }
 
-        # 最新季度 EPS（判断盈亏趋势）
+        # 最新4季度 EPS 趋势
         eps_quarters = []
         try:
             qi = tk.quarterly_income_stmt
@@ -306,11 +617,17 @@ def fetch_stock_deep(symbol: str) -> dict:
             for idx, row in hist.iterrows()
         ] if not hist.empty else []
 
+        # 写回 DB（默认开启，使深析数据进入模型反馈环）
+        wb_status = ""
+        if writeback and db_path:
+            wb_status = _writeback_fundamentals(symbol, db_path, tk)
+
         return {
             "symbol":        symbol,
             "financials":    financials,
             "eps_quarters":  eps_quarters,
             "price_history": price_history,
+            "writeback_status": wb_status,
         }
     except Exception as e:
         return {"symbol": symbol, "error": str(e)}
@@ -318,10 +635,47 @@ def fetch_stock_deep(symbol: str) -> dict:
 
 # ── 报告生成 ───────────────────────────────────────────────────────────────
 
-def build_briefing(mode: str, extra_symbols: List[str]) -> dict:
+def _run_preflight(db_path: str) -> None:
+    """
+    报告生成前自动刷新数据：新闻采集 + 基本面更新。
+    任何步骤失败均打印警告并继续，不中断报告生成。
+    """
+    import subprocess, sys
+    steps = [
+        {
+            "name": "新闻采集",
+            "cmd": [sys.executable, "news_to_db.py", "--db", db_path,
+                    "--lookback_hours", "26", "--sources", "kabutan,google,boj,trade,gdelt"],
+        },
+        {
+            "name": "基本面更新",
+            "cmd": [sys.executable, "update_fundamentals.py", "--db", db_path,
+                    "--source", "yfinance"],
+        },
+    ]
+    for step in steps:
+        try:
+            print(f"[preflight] {step['name']}...")
+            r = subprocess.run(step["cmd"], capture_output=True, text=True, timeout=120)
+            if r.returncode != 0:
+                print(f"[preflight] ⚠️ {step['name']} 返回非零 ({r.returncode})，继续")
+            else:
+                # 只打印最后一行有效输出，避免刷屏
+                out = r.stdout.strip().splitlines()
+                if out:
+                    print(f"[preflight] ✓ {out[-1]}")
+        except Exception as e:
+            print(f"[preflight] ⚠️ {step['name']} 失败: {e}，继续")
+
+
+def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = False) -> dict:
     now   = now_jst()
     asof  = date.today().isoformat()
     session = market_session_status(now)
+
+    # ── 自动预刷新（新闻 + 基本面），可用 --no-refresh 跳过 ─────────────────
+    if not skip_preflight:
+        _run_preflight(DB_PATH)
 
     report: dict = {
         "generated_at": now.strftime("%Y-%m-%d %H:%M JST"),
@@ -329,6 +683,9 @@ def build_briefing(mode: str, extra_symbols: List[str]) -> dict:
         "session": session,
         "mode": mode,
     }
+
+    # ── Regime 检测（所有模式都执行）────────────────────────────────────────
+    report["regime"] = _detect_market_regime()
 
     # ── 模式：market（市场行情 + 操作建议）────────────────────────────────
     if mode in ("market", "full"):
@@ -359,6 +716,7 @@ def build_briefing(mode: str, extra_symbols: List[str]) -> dict:
             sym  = r["symbol"]
             px   = prices.get(sym, {})
             mom  = momentum.get(sym, {})
+            news_val = _cross_validate_with_news(DB_PATH, sym)
             enriched.append({
                 "rank":              candidates.index(r) + 1,
                 "symbol":            sym,
@@ -375,16 +733,21 @@ def build_briefing(mode: str, extra_symbols: List[str]) -> dict:
                 "ret_20d":           mom.get("ret_20d"),
                 "excess_vs_market":  mom.get("excess_vs_market"),
                 "vol_5d":            mom.get("vol_5d"),
+                "news_validation":   news_val,
             })
         report["candidates"] = enriched
+        # 宏观新闻（BOJ/TRADE）统一采集一次，不挂个股
+        report["macro_news"] = _get_macro_news(DB_PATH)
         report["screener_meta"] = {
             "count":              screener_result.get("count", 0),
             "hard_vetoed_count":  screener_result.get("fundamental_overlay", {}).get("hard_vetoed_count", 0),
             "downweighted_count": screener_result.get("fundamental_overlay", {}).get("downweighted_count", 0),
         }
 
-        # 仓位 & 挂单
+        # 仓位 & 挂单（含 ATR 止损计算）
         live = read_live_state(DB_PATH)
+        if live.get("positions"):
+            live["positions"] = _enrich_positions_with_stop_loss(live["positions"])
         report["live_state"] = live
 
         # 最新信号（来自 DB）
@@ -392,7 +755,7 @@ def build_briefing(mode: str, extra_symbols: List[str]) -> dict:
 
     # ── 模式：stock（个股深析）───────────────────────────────────────────
     if mode in ("stock", "full") and extra_symbols:
-        report["stock_analysis"] = [fetch_stock_deep(s) for s in extra_symbols]
+        report["stock_analysis"] = [fetch_stock_deep(s, db_path=DB_PATH, writeback=True) for s in extra_symbols]
 
     return report
 
@@ -486,6 +849,250 @@ def write_report(report: dict) -> tuple[Path, Path]:
     return json_path, md_path
 
 
+def write_report_v2(report: dict) -> tuple[Path, Path]:
+    """
+    输出 v2 格式报告（6节固定结构），供 nexus / Discord 链路解析。
+    输出文件：briefing_v2_latest.md / briefing_v2_latest.json
+    """
+    REPORT_DIR.mkdir(exist_ok=True)
+    json_path = REPORT_DIR / "briefing_v2_latest.json"
+    md_path   = REPORT_DIR / "briefing_v2_latest.md"
+
+    # ── JSON：nexus schema ─────────────────────────────────────────────────
+    regime    = report.get("regime", {})
+    live      = report.get("live_state", {})
+    positions = live.get("positions", [])
+    candidates = report.get("candidates", [])
+    account   = live.get("account", {})
+
+    # 持仓对象（v2 规范字段）
+    pos_v2 = []
+    for p in positions:
+        pnl_pct = None
+        try:
+            pnl_pct = round(p["unrealized_pnl"] / (p["avg_cost"] * p["qty"]) * 100, 2) \
+                      if p.get("avg_cost") and p.get("qty") else None
+        except Exception:
+            pass
+        pos_v2.append({
+            "symbol":        p.get("symbol"),
+            "qty":           p.get("qty"),
+            "cost_price":    p.get("avg_cost"),
+            "current_price": p.get("market_price"),
+            "pnl_pct":       pnl_pct,
+            "stop_triggered": False,   # 动态止损由 live_trade_advisor 负责，此处保守默认
+            "action_hint":   "HOLD",
+        })
+
+    # 操作指令：从挂单提取
+    orders_v2 = []
+    for o in live.get("orders", []):
+        orders_v2.append({
+            "symbol": o.get("symbol"),
+            "action": o.get("side", "").upper(),
+            "price":  o.get("limit_price"),
+            "qty":    o.get("qty"),
+            "reason": "来自现有挂单",
+        })
+
+    # 风险提示（宏观新闻只汇总一次，公司级负面按标的列出）
+    risk_alerts = []
+    if regime.get("trend") == "DOWN":
+        risk_alerts.append(f"大盘下行趋势，{regime.get('action_bias','')}")
+    if regime.get("vol_level") == "HIGH":
+        risk_alerts.append(f"波动率异常偏高 (5日ATR {regime.get('atr_5d_pct')}% vs 60日均值 {regime.get('atr_60d_pct')}%)")
+    macro_news = report.get("macro_news", [])
+    if macro_news:
+        cats = list({mn["category"] for mn in macro_news})
+        risk_alerts.append(f"宏观负面：存在 {'/'.join(cats)} 类负面新闻，详见二节情报")
+    for c in candidates:
+        nv = c.get("news_validation", {})
+        if nv.get("news_risk") == "HIGH":
+            risk_alerts.append(f"{c['symbol']} 公司级负面新闻: {'; '.join(nv.get('news_notes', []))}")
+
+    nexus_json = {
+        "date":         report.get("asof"),
+        "generated_at": report.get("generated_at"),
+        "session":      report.get("session", {}),
+        "regime":       regime,
+        "market":       report.get("market", {}),
+        "positions":    pos_v2,
+        "candidates":   candidates,
+        "orders":       orders_v2,
+        "risk_alerts":  risk_alerts,
+        "account":      account,
+    }
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(nexus_json, f, ensure_ascii=False, indent=2, default=str)
+
+    # ── Markdown：固定6节结构 ──────────────────────────────────────────────
+    mkt       = report.get("market", {})
+    etf       = mkt.get("nikkei_etf", {})
+    session   = report.get("session", {})
+
+    # 趋势/偏向中文映射
+    trend_cn  = {"UP": "上涨", "DOWN": "下跌", "SIDEWAYS": "盘整", "UNKNOWN": "未知"}
+    bias_cn   = {"BULLISH": "偏多", "BEARISH": "偏空", "NEUTRAL": "中性"}
+    vol_cn    = {"HIGH": "高波动", "NORMAL": "正常", "LOW": "低波动", "UNKNOWN": "未知"}
+
+    lines = [
+        f"# 每日量化简报  {report.get('generated_at', '')}",
+        f"> 交易时段: **{session.get('session','N/A')}**  |  距收盘: {session.get('mins_to_close','N/A')} 分钟",
+        "",
+        "---",
+        "",
+        "## 一、市场状态",
+        f"- 日经ETF ({NIKKEI_ETF}): **{etf.get('cur','N/A')}**  "
+        f"({'+' if (etf.get('chg_pct') or 0) >= 0 else ''}{etf.get('chg_pct','N/A')}%)",
+        f"- 日内区间: H {etf.get('high','N/A')} / L {etf.get('low','N/A')}  |  量能异常倍数: {etf.get('volume_spike_ratio','N/A')}x",
+        f"- 趋势: **{trend_cn.get(regime.get('trend',''), regime.get('trend',''))}**  "
+        f"偏向: **{bias_cn.get(regime.get('bias',''), regime.get('bias',''))}**  "
+        f"波动: **{vol_cn.get(regime.get('vol_level',''), regime.get('vol_level',''))}**",
+        f"- SMA5={regime.get('sma5','N/A')} / SMA20={regime.get('sma20','N/A')}  "
+        f"ATR5日={regime.get('atr_5d_pct','N/A')}% vs ATR60日均={regime.get('atr_60d_pct','N/A')}%",
+        f"- **操作基调**: {regime.get('action_bias', '观望')}",
+        "",
+    ]
+
+    # ── 二、今日有效情报 ──────────────────────────────────────────────────
+    lines += ["## 二、今日有效情报", ""]
+    news_shown = False
+    # 宏观新闻（BOJ/TRADE）— 展示一次，不重复挂个股
+    macro_news = report.get("macro_news", [])
+    cat_cn = {"BOJ": "日银/货币政策", "TRADE": "贸易/关税"}
+    for mn in macro_news:
+        cat_label = cat_cn.get(mn["category"], mn["category"])
+        lines.append(f"- [🟡 {cat_label}] {mn['summary']}")
+        news_shown = True
+    # 公司级负面新闻（HIGH risk，针对特定标的）
+    for c in candidates:
+        nv = c.get("news_validation", {})
+        if nv.get("news_risk") == "HIGH":
+            for note in nv.get("news_notes", []):
+                lines.append(f"- [🔴 公司负面] **{c['symbol']}**: {note}")
+                news_shown = True
+    if not news_shown:
+        lines.append("- 过去48h内无重要负面新闻（仅限数据库已采集新闻）")
+    lines.append("")
+
+    # ── 三、持仓健康度 ────────────────────────────────────────────────────
+    lines += ["## 三、持仓健康度", ""]
+    if pos_v2:
+        lines.append("| 代码 | 持股数 | 成本价 | 当前价 | 浮盈亏% | 止损线 |")
+        lines.append("|------|--------|--------|--------|---------|--------|")
+        for p in pos_v2:
+            pnl_str = f"{p['pnl_pct']:+.2f}%" if p["pnl_pct"] is not None else "N/A"
+            stop_str = f"¥{p.get('stop_loss_price','N/A')}" if p.get('stop_loss_price') else "N/A"
+            triggered_icon = " ⚠️止损" if p.get('stop_triggered') else ""
+            lines.append(
+                f"| {p['symbol']} | {p['qty']} | {p['cost_price']} "
+                f"| {p['current_price']} | {pnl_str} | {stop_str}{triggered_icon} |"
+            )
+    else:
+        lines.append("- 当前空仓")
+    cash = account.get("cash_balance") or account.get("cash")
+    nav  = account.get("nav")
+    if cash or nav:
+        lines.append(f"\n现金余额: ¥{cash:,.0f}" if cash else "")
+        lines.append(f"组合 NAV: ¥{nav:,.0f}" if nav else "")
+    lines.append("")
+
+    # ── 四、候选信号全量 ──────────────────────────────────────────────────
+    lines += [f"## 四、候选信号（共{len(candidates)}只）", ""]
+    lines.append("| 排名 | 代码 | 调整分 | 基本面× | 今日% | 超额% | 20日% | 新闻风险 | 基本面注记 |")
+    lines.append("|------|------|--------|---------|-------|-------|-------|---------|------------|")
+    risk_icons = {"NONE": "—", "SECTOR": "🟡宏观", "HIGH": "🔴负面"}
+    for r in candidates:
+        nv = r.get("news_validation", {})
+        nr = risk_icons.get(nv.get("news_risk", "NONE"), "—")
+        lines.append(
+            f"| {r['rank']} | {r['symbol']} | {r['score_adjusted']} "
+            f"| {r['fundamental_score']} | {r.get('chg_pct','—')}% "
+            f"| {r.get('excess_vs_market','—')}% | {r.get('ret_20d','—')}% "
+            f"| {nr} | {r.get('fundamental_note','') or '正常'} |"
+        )
+    lines.append("")
+
+    # ── 五、今日操作指令 ──────────────────────────────────────────────────
+    lines += ["## 五、今日操作指令", ""]
+    if orders_v2:
+        for o in orders_v2:
+            lines.append(f"- **{o['action']}** {o['symbol']}  {o['qty']}股 @ ¥{o['price']}  "
+                         f"（{o['reason']}）")
+    else:
+        lines.append("- 当前无挂单，维持观望")
+    lines.append("")
+
+    # ── 六、风险提示 ──────────────────────────────────────────────────────
+    lines += ["## 六、风险提示", ""]
+    if risk_alerts:
+        for alert in risk_alerts:
+            lines.append(f"- ⚠️ {alert}")
+    else:
+        lines.append("- 暂无特殊风险提示")
+    lines.append("")
+    # ── 七、个股深析（仅当 --symbols 指定时出现）────────────────────────────
+    stock_analysis = report.get("stock_analysis", [])
+    if stock_analysis:
+        lines += ["", "---", "## 七、个股深析", ""]
+        for s in stock_analysis:
+            if "error" in s:
+                lines.append(f"### {s['symbol']}  ⚠️ 数据获取失败: {s['error']}")
+                continue
+            f = s.get("financials", {})
+            wb = s.get("writeback_status", "")
+            lines += [
+                f"### {s['symbol']}  {f.get('name','')}  [{f.get('sector','')}]",
+                f"- 营业利润率: **{f.get('operating_margin','N/A')}**  "
+                f"净利润率: {f.get('profit_margin_ttm','N/A')}  "
+                f"OCF: {f.get('operating_cf','N/A')}",
+                f"- Forward PE: {f.get('forward_pe','N/A')}  "
+                f"PBR: {f.get('pbr','N/A')}  "
+                f"D/E: {f.get('debt_to_equity','N/A')}",
+                f"- 营收增长: {f.get('revenue_growth','N/A')}  "
+                f"盈利增长: {f.get('earnings_growth','N/A')}  "
+                f"股息率: {f.get('dividend_yield','N/A')}",
+                f"- 52W: {f.get('52w_low','N/A')} – {f.get('52w_high','N/A')}  "
+                f"市值: {f.get('market_cap_jpy','N/A')}",
+            ]
+            eps = s.get("eps_quarters", [])
+            if eps:
+                eps_str = "  →  ".join(
+                    f"{e['period'][:7]} **{e['diluted_eps']:+.2f}**" for e in eps
+                )
+                # 判断EPS趋势方向
+                vals = [e["diluted_eps"] for e in eps]
+                if len(vals) >= 2:
+                    trend_note = "📈 改善" if vals[0] > vals[-1] else "📉 恶化" if vals[0] < vals[-1] else "→ 持平"
+                    lines.append(f"- 季度EPS趋势({trend_note}): {eps_str}")
+                else:
+                    lines.append(f"- 季度EPS: {eps_str}")
+            if wb:
+                lines.append(f"- 模型反馈: {wb}")
+            lines.append("")
+
+        # 按日期保存个股深析报告（不覆盖）
+        stock_dir = REPORT_DIR / "stock_analysis"
+        stock_dir.mkdir(exist_ok=True)
+        today_str = report.get("asof", "")
+        syms = "_".join(s["symbol"].replace(".","") for s in stock_analysis if "error" not in s)
+        if syms:
+            stock_path = stock_dir / f"{today_str}_{syms}.md"
+            stock_lines = [f"# 个股深析报告  {report.get('generated_at','')}  —  {syms}", ""]
+            stock_lines += lines[lines.index("## 七、个股深析"):]
+            with open(stock_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(stock_lines))
+            print(f"[briefing] 个股报告 → {stock_path}")
+
+    lines.append("---")
+    lines.append("*本报告由 worker-quant v2 自动生成，数据来源 yfinance（约15分钟延迟）。投资决策请结合实际情况判断。*")
+
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    return json_path, md_path
+
+
 # ── 入口 ──────────────────────────────────────────────────────────────────
 
 def main():
@@ -494,6 +1101,10 @@ def main():
                     help="market=行情+策略  stock=个股深析  full=全部")
     ap.add_argument("--symbols", default="",
                     help="个股分析时指定代码，逗号分隔，如 9432.T,5401.T")
+    ap.add_argument("--output-version", choices=["v1", "v2"], default="v2",
+                    help="报告格式版本: v2（默认，6节结构）| v1（旧版兼容）")
+    ap.add_argument("--no-refresh", action="store_true",
+                    help="跳过自动数据刷新（新闻/基本面），直接用现有DB数据生成报告")
     ap.add_argument("--db", default=DB_PATH)
     args = ap.parse_args()
 
@@ -512,8 +1123,10 @@ def main():
         sys.exit(1)
 
     print(f"[briefing] 生成中... mode={args.mode}  {now_jst().strftime('%H:%M JST')}")
-    report = build_briefing(args.mode, extra)
-    json_p, md_p = write_report(report)
+    report = build_briefing(args.mode, extra, skip_preflight=args.no_refresh)
+    json_p, md_p = write_report(report)          # 始终写 v1（保持兼容）
+    if args.output_version == "v2" or True:      # v2 默认同时输出
+        write_report_v2(report)
 
     print(f"[briefing] 完成")
     print(f"  JSON → {json_p}")

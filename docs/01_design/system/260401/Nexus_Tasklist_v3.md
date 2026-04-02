@@ -74,13 +74,13 @@
 **目标**：architect 产出结构化 workplan，impl 步骤按 workplan 执行
 
 **步骤**：
-1. 修改 `configs/prompt_scripts/registry.json` 中 `architect.system_spec.v2`，要求输出 JSON workplan
+1. 修改 `configs/prompt_scripts/registry.json` 中 `architect.system_spec.v2`，要求输出 `plan/workplan.json`，顶层为 `be_tasks` / `fe_tasks`
 2. 在 `workflow_step_builder.js` 中解析 arch artifact，提取 workplan，注入到 impl 步骤 context
 3. 实现 graceful fallback（arch 不输出 workplan 时，impl 正常运行）
 4. 运行 3 次 canary 验证稳定性
 
 **验收标准**：
-- [ ] arch artifact 包含 `workplan` 字段（JSON 数组，每项有 title/files/acceptance）
+- [ ] arch artifact 包含 `plan/workplan.json`，并通过 schema 校验：`be_tasks` / `fe_tasks`，每项包含 `id` / `description` / `verify`
 - [ ] impl 步骤 context 包含 `injected_workplan`
 - [ ] 3/3 canary 通过，product_fidelity = demo_usable
 

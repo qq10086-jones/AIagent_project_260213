@@ -52,7 +52,7 @@ export function analyzeTaskRisk(tool_name, payload) {
     { re: /\b(?:drop\s+table|truncate\s+table|alter\s+table)\b/i, reason: "db_destructive_operation" },
     { re: /(?:^|[\s"'`(/])(?:\.github\/|infra\/|deploy\/|k8s\/|Dockerfile)(?=$|[\s"'`),/\\])/i, reason: "sensitive_path_or_secret" },
     { re: /(^|[\s"'`(])(?:\.env(?:\.[A-Za-z0-9._-]+)?)(?=$|[\s"'`),/\\])/i, reason: "sensitive_path_or_secret" },
-    { re: /\b(?:secret|credentials?)\b/i, reason: "sensitive_path_or_secret" },
+    { re: /\b(?:secret(?:s)?|api[_ -]?key|access[_ -]?key|private[_ -]?key|client[_ -]?secret)\b/i, reason: "sensitive_path_or_secret" },
     { re: /(生产|正式环境|线上|密钥|数据库迁移|删除表)/i, reason: "high_risk_intent" },
   ];
 

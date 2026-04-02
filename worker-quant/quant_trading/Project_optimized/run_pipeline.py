@@ -111,7 +111,7 @@ def main(cfg_path: str):
         cmd = [
             "python", "update_fundamentals.py",
             "--db", db_path,
-            "--source", str(fund.get("source", "jquants")),
+            "--source", str(fund.get("source", "yfinance")),
         ]
         if fund.get("csv_path"):
             cmd += ["--csv_path", str(fund.get("csv_path"))]

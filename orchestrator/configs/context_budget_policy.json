@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "default_thresholds": {
+    "warning_prompt_chars": 80000,
+    "overflow_risk_prompt_chars": 120000,
+    "warning_artifact_bytes": 500000,
+    "overflow_risk_artifact_bytes": 1000000,
+    "warning_injected_context_bytes": 150000,
+    "overflow_risk_injected_context_bytes": 300000
+  },
+  "role_overrides": {
+    "architect": {
+      "warning_prompt_chars": 100000,
+      "overflow_risk_prompt_chars": 150000
+    },
+    "backend": {
+      "warning_injected_context_bytes": 200000,
+      "overflow_risk_injected_context_bytes": 350000
+    },
+    "frontend": {
+      "warning_injected_context_bytes": 200000,
+      "overflow_risk_injected_context_bytes": 350000
+    }
+  }
+}

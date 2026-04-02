@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
-import fs from "fs";
+import session from "express-session";
+import csurf from "csurf";
+import Database from "better-sqlite3";
 import { randomUUID } from "crypto";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
@@ -8,66 +10,57 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const appRoot = resolve(__dirname, "..", "..");
-const dataPath = join(appRoot, "data", "store.json");
+const dbPath = join(appRoot, "data", "crm.db");
 
-function readStore() {
-  return JSON.parse(fs.readFileSync(dataPath, "utf8"));
-}
+const db = new Database(dbPath);
 
-function writeStore(store) {
-  fs.writeFileSync(dataPath, JSON.stringify(store, null, 2), "utf8");
-}
+db.exec(`
+  CREATE TABLE IF NOT EXISTS customers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT DEFAULT '',
+    company TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL
+  );
 
-function withPreviews(store) {
-  const year = new Date().getFullYear();
-  const templates = (store.templates || []).map((template) => {
-    const count = (store.documents || []).filter((doc) => doc.templateId === template.id && String(doc.docNumber || "").includes(String(year))).length;
-    return {
-      ...template,
-      nextNumberPreview: `${template.codePrefix}-${year}-${String(count + 1).padStart(3, "0")}`,
-    };
-  });
-  return { ...store, templates };
-}
+  CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    username TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    expiresAt TEXT NOT NULL
+  );
+`);
 
-function nowIso() {
-  return new Date().toISOString();
-}
+const insertCustomer = db.prepare(`
+  INSERT INTO customers (id, name, email, phone, company, notes, createdAt, updatedAt)
+  VALUES (@id, @name, @email, @phone, @company, @notes, @createdAt, @updatedAt)
+`);
 
-function summarizeFromContent(content) {
-  const clean = String(content || "").trim();
-  if (!clean) return "未命名请求";
-  return clean.length > 28 ? `${clean.slice(0, 28)}...` : clean;
-}
+const seedCustomers = [
+  { name: '张三', email: 'zhangsan@example.com', phone: '13800138000', company: '示例公司A', notes: '' },
+  { name: '李四', email: 'lisi@example.com', phone: '13900139000', company: '示例公司B', notes: '' },
+  { name: '王五', email: 'wangwu@example.com', phone: '13700137000', company: '示例公司C', notes: '' },
+];
 
-function nextDocNumber(store, template) {
-  const year = new Date().getFullYear();
-  const matches = (store.documents || []).filter((doc) => doc.templateId === template.id && String(doc.docNumber || "").includes(`${year}`));
-  return `${template.codePrefix}-${year}-${String(matches.length + 1).padStart(3, "0")}`;
-}
-
-function nextRevision(currentRevision) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const idx = alphabet.indexOf(String(currentRevision || "A").toUpperCase());
-  if (idx < 0 || idx >= alphabet.length - 1) return "Z";
-  return alphabet[idx + 1];
-}
-
-function makeHistory(action, document, payload) {
-  const labelMap = { issued: "首版发行", revised: "修订发行" };
-  return {
-    id: `hist_${randomUUID()}`,
-    documentId: document.id,
-    docNumber: document.docNumber,
-    revision: document.revision,
-    action,
-    actionLabel: labelMap[action] || action,
-    actor: payload.actor || document.owner,
-    source: payload.source || document.sourceLabel || "system",
-    distribution: document.distribution,
-    changeSummary: payload.changeSummary,
-    timestamp: nowIso(),
-  };
+const existingCustomers = db.prepare("SELECT COUNT(*) as count FROM customers").get();
+if (existingCustomers.count === 0) {
+  const now = new Date().toISOString();
+  for (const c of seedCustomers) {
+    insertCustomer.run({
+      id: `cust_${randomUUID()}`,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      company: c.company,
+      notes: c.notes,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
 }
 
 const app = express();
@@ -75,202 +68,195 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(appRoot));
 
-app.get("/api/bootstrap", (_req, res) => {
-  res.json({ success: true, data: withPreviews(readStore()) });
-});
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'crm-dev-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false,
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000,
+  },
+}));
 
-app.post("/api/intake/discord", (req, res) => {
-  const store = readStore();
-  const content = String(req.body?.content || "").trim();
-  if (!content) {
-    return res.status(400).json({ success: false, error: "content is required" });
+const csrfProtection = csurf({ cookie: false });
+
+function validateSession(req, _res, next) {
+  if (!req.session || !req.session.userId) {
+    return next();
   }
-  const request = {
-    id: `req_${randomUUID()}`,
-    source: "discord",
-    requester: String(req.body?.requester || "discord-user"),
-    channel: String(req.body?.channel || "#doc-control"),
-    summary: summarizeFromContent(content),
-    content,
-    status: "new",
-    suggestedTemplateId: req.body?.suggestedTemplateId || null,
-    createdAt: nowIso(),
-  };
-  store.intakeRequests.unshift(request);
-  writeStore(store);
-  res.json({ success: true, data: request });
-});
-
-app.post("/api/documents/generate", (req, res) => {
-  const store = readStore();
-  const payload = req.body || {};
-  const template = (store.templates || []).find((item) => item.id === payload.templateId);
-  if (!template) {
-    return res.status(400).json({ success: false, error: "unknown templateId" });
+  const sessionId = req.session.sessionId;
+  if (!sessionId) {
+    return next();
   }
-  if (!payload.title || !payload.department || !payload.owner || !payload.effectiveDate) {
-    return res.status(400).json({ success: false, error: "title, department, owner, effectiveDate are required" });
+  const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND expiresAt > ?").get(sessionId, new Date().toISOString());
+  if (!session) {
+    req.session.destroy();
+    return next();
   }
-
-  const document = {
-    id: `doc_${randomUUID()}`,
-    templateId: template.id,
-    templateName: template.name,
-    docNumber: nextDocNumber(store, template),
-    revision: "A",
-    title: String(payload.title).trim(),
-    department: String(payload.department).trim(),
-    owner: String(payload.owner).trim(),
-    effectiveDate: String(payload.effectiveDate).trim(),
-    distribution: Array.isArray(payload.distribution) ? payload.distribution : [],
-    status: "released",
-    sourceLabel: payload.sourceRequestId ? "Discord Intake" : "Manual Issue",
-    sourceRequestId: payload.sourceRequestId || null,
-    excelTemplateRef: String(payload.excelTemplateRef || template.excelTemplateRef || ""),
-    payloadSummary: String(payload.payloadSummary || ""),
-    updatedAt: nowIso(),
-  };
-
-  const history = makeHistory("issued", document, {
-    actor: document.owner,
-    source: document.sourceLabel,
-    changeSummary: String(payload.changeSummary || `首版发行 ${document.title}`),
-  });
-
-  store.documents.unshift(document);
-  store.releaseHistory.unshift(history);
-  if (document.sourceRequestId) {
-    store.intakeRequests = (store.intakeRequests || []).map((item) => (
-      item.id === document.sourceRequestId ? { ...item, status: "issued" } : item
-    ));
-  }
-  writeStore(store);
-  res.json({ success: true, data: { document, history } });
-});
-
-app.post("/api/documents/:id/revise", (req, res) => {
-  const store = readStore();
-  const payload = req.body || {};
-  const target = (store.documents || []).find((item) => item.id === req.params.id);
-  if (!target) {
-    return res.status(404).json({ success: false, error: "document not found" });
-  }
-  if (!payload.actor || !payload.effectiveDate || !payload.changeSummary) {
-    return res.status(400).json({ success: false, error: "actor, effectiveDate, changeSummary are required" });
-  }
-
-  target.revision = nextRevision(target.revision);
-  target.effectiveDate = String(payload.effectiveDate).trim();
-  target.updatedAt = nowIso();
-  target.status = "released";
-
-  const history = makeHistory("revised", target, {
-    actor: String(payload.actor).trim(),
-    source: target.sourceLabel || "Revision Desk",
-    changeSummary: String(payload.changeSummary).trim(),
-  });
-
-  store.releaseHistory.unshift(history);
-  writeStore(store);
-  res.json({ success: true, data: { document: target, history } });
-});
-
-app.get("*", (_req, res) => {
-  res.sendFile(join(appRoot, "index.html"));
-});
-
-const customerStore = new Map();
-
-function createCustomer(data) {
-  const now = new Date().toISOString();
-  const customer = {
-    id: `cust_${randomUUID()}`,
-    name: data.name || '',
-    email: data.email || '',
-    phone: data.phone || '',
-    company: data.company || '',
-    notes: data.notes || '',
-    createdAt: now,
-    updatedAt: now,
-  };
-  customerStore.set(customer.id, customer);
-  return customer;
+  req.session.user = { id: session.userId, username: session.username };
+  next();
 }
 
-createCustomer({ name: '张三', email: 'zhangsan@example.com', phone: '13800138000', company: '示例公司A' });
-createCustomer({ name: '李四', email: 'lisi@example.com', phone: '13900139000', company: '示例公司B' });
-createCustomer({ name: '王五', email: 'wangwu@example.com', phone: '13700137000', company: '示例公司C' });
+function generateCsrfToken(req, _res, next) {
+  req.csrfToken = req.csrfToken;
+  next();
+}
 
-app.get('/api/customers', (req, res) => {
+function requireAuth(req, res, next) {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  next();
+}
+
+function loggerMiddleware(req, _res, next) {
+  console.log(`${req.method} ${req.path}`);
+  next();
+}
+
+app.use(loggerMiddleware);
+app.use(validateSession);
+app.use(generateCsrfToken);
+
+app.get('/api/csrf-token', (req, res) => {
+  res.json({ csrfToken: req.csrfToken });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ success: false, error: 'username and password are required' });
+  }
+  if (username === 'admin' && password === 'admin123') {
+    const sessionId = `sess_${randomUUID()}`;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    db.prepare("INSERT INTO sessions (id, userId, username, createdAt, expiresAt) VALUES (?, ?, ?, ?, ?)").run(
+      sessionId, 'user_1', username, now.toISOString(), expiresAt.toISOString()
+    );
+    req.session.sessionId = sessionId;
+    req.session.userId = 'user_1';
+    req.session.username = username;
+    return res.json({ success: true, data: { userId: 'user_1', username } });
+  }
+  res.status(401).json({ success: false, error: 'Invalid credentials' });
+});
+
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  const sessionId = req.session.sessionId;
+  if (sessionId) {
+    db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+  }
+  req.session.destroy();
+  res.json({ success: true });
+});
+
+app.get('/api/customers', requireAuth, (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const search = (req.query.search || '').toLowerCase();
 
-  let result = Array.from(customerStore.values());
+  let query = "SELECT * FROM customers";
+  let countQuery = "SELECT COUNT(*) as count FROM customers";
+  const params = [];
+
   if (search) {
-    result = result.filter(c =>
-      c.name.toLowerCase().includes(search) ||
-      c.email.toLowerCase().includes(search)
-    );
+    query += " WHERE LOWER(name) LIKE ? OR LOWER(email) LIKE ?";
+    countQuery += " WHERE LOWER(name) LIKE ? OR LOWER(email) LIKE ?";
+    params.push(`%${search}%`, `%${search}%`);
   }
 
-  result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  query += " ORDER BY createdAt DESC LIMIT ? OFFSET ?";
+  params.push(limit, (page - 1) * limit);
 
-  const total = result.length;
-  const totalPages = Math.ceil(total / limit);
-  const offset = (page - 1) * limit;
+  const customers = db.prepare(query).all(...params);
+  const { count } = db.prepare(countQuery).get(...(search ? [`%${search}%`, `%${search}%`] : []));
+  const total = count;
 
   res.json({
-    data: result.slice(offset, offset + limit),
-    pagination: { page, limit, total, totalPages }
+    data: customers,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
   });
 });
 
-app.get('/api/customers/:id', (req, res) => {
-  const customer = customerStore.get(req.params.id);
+app.get('/api/customers/:id', requireAuth, (req, res) => {
+  const customer = db.prepare("SELECT * FROM customers WHERE id = ?").get(req.params.id);
   if (!customer) {
     return res.status(404).json({ success: false, error: 'Customer not found' });
   }
   res.json({ success: true, data: customer });
 });
 
-app.post('/api/customers', (req, res) => {
-  const { name, email } = req.body;
+app.post('/api/customers', requireAuth, csrfProtection, (req, res) => {
+  const { name, email, phone, company, notes } = req.body;
   if (!name || !email) {
     return res.status(400).json({ success: false, error: 'name and email are required' });
   }
-  const customer = createCustomer(req.body);
+  const now = new Date().toISOString();
+  const customer = {
+    id: `cust_${randomUUID()}`,
+    name,
+    email,
+    phone: phone || '',
+    company: company || '',
+    notes: notes || '',
+    createdAt: now,
+    updatedAt: now,
+  };
+  insertCustomer.run(customer);
   res.status(201).json({ success: true, data: customer });
 });
 
-app.put('/api/customers/:id', (req, res) => {
-  const customer = customerStore.get(req.params.id);
-  if (!customer) {
+app.put('/api/customers/:id', requireAuth, csrfProtection, (req, res) => {
+  const existing = db.prepare("SELECT * FROM customers WHERE id = ?").get(req.params.id);
+  if (!existing) {
     return res.status(404).json({ success: false, error: 'Customer not found' });
   }
+  const { name, email, phone, company, notes } = req.body;
   const updated = {
-    ...customer,
-    ...req.body,
-    id: customer.id,
-    createdAt: customer.createdAt,
+    ...existing,
+    name: name !== undefined ? name : existing.name,
+    email: email !== undefined ? email : existing.email,
+    phone: phone !== undefined ? phone : existing.phone,
+    company: company !== undefined ? company : existing.company,
+    notes: notes !== undefined ? notes : existing.notes,
     updatedAt: new Date().toISOString(),
   };
-  customerStore.set(updated.id, updated);
+  db.prepare(`
+    UPDATE customers SET name = @name, email = @email, phone = @phone, company = @company, notes = @notes, updatedAt = @updatedAt
+    WHERE id = @id
+  `).run(updated);
   res.json({ success: true, data: updated });
 });
 
-app.delete('/api/customers/:id', (req, res) => {
-  if (!customerStore.has(req.params.id)) {
+app.delete('/api/customers/:id', requireAuth, (req, res) => {
+  const existing = db.prepare("SELECT * FROM customers WHERE id = ?").get(req.params.id);
+  if (!existing) {
     return res.status(404).json({ success: false, error: 'Customer not found' });
   }
-  customerStore.delete(req.params.id);
+  db.prepare("DELETE FROM customers WHERE id = ?").run(req.params.id);
   res.status(204).send();
 });
 
+app.use(express.static(join(__dirname, 'public')));
+
+app.get('/', (_req, res) => {
+  res.sendFile(join(__dirname, 'public', 'index.html'));
+});
+
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: 'Not found' });
+});
+
+app.use((err, req, res, _next) => {
+  console.error(err.stack);
+  res.status(500).json({ success: false, error: 'Internal server error' });
+});
+
 app.listen(PORT, () => {
-  console.log(`Document Release Hub listening on http://localhost:${PORT}`);
+  console.log(`CRM Backend listening on http://localhost:${PORT}`);
 });
 
 export default app;

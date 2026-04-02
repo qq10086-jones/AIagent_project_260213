@@ -1,7 +1,14 @@
 import path from "path";
 
 export function normalizeRelPath(value) {
-  return String(value || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  const normalized = String(value || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  if (normalized === "sandbox" || normalized.startsWith("sandbox/")) {
+    return `workspace/${normalized}`;
+  }
+  if (normalized === "scratch" || normalized.startsWith("scratch/")) {
+    return `workspace/${normalized}`;
+  }
+  return normalized;
 }
 
 export function isProtectedRoot(relPath) {

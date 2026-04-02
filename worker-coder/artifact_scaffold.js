@@ -10,6 +10,50 @@ function inferProjectType(taskPrompt = "") {
   return match ? String(match[1]).trim().toLowerCase() : "";
 }
 
+function isMinimalReviewableCrm(taskPrompt = "") {
+  const text = String(taskPrompt || "").toLowerCase();
+  return inferProjectType(taskPrompt) === "webapp_crm" && /\b(minimal|reviewable|lightweight|small)\b/.test(text);
+}
+
+function normalizeBeToFeHandoff(parsed = null) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const apiContracts = Array.isArray(parsed.api_contracts)
+    ? parsed.api_contracts
+    : parsed.api_contracts && typeof parsed.api_contracts === "object"
+      ? Object.entries(parsed.api_contracts).map(([name, value]) => {
+          const item = value && typeof value === "object" ? value : {};
+          const keyText = String(name || "");
+          const methodPathMatch = keyText.match(/^(GET|POST|PUT|PATCH|DELETE)\s+(\S+)/i);
+          return {
+            name: keyText,
+            method: String(item.method || methodPathMatch?.[1] || "").toUpperCase(),
+            path: String(item.path || methodPathMatch?.[2] || ""),
+            response_shape: item.response_shape || item.response || "",
+            auth_required: Boolean(item.auth_required),
+          };
+        })
+      : [];
+  const sharedTypes = Array.isArray(parsed.shared_types)
+    ? parsed.shared_types
+    : parsed.shared_types && typeof parsed.shared_types === "object"
+      ? Object.entries(parsed.shared_types).map(([name, value]) => ({
+          name: String(name || ""),
+          description: typeof value === "string" ? value : JSON.stringify(value),
+        }))
+      : [];
+  const scopeConstraints = Array.isArray(parsed.scope_constraints)
+    ? parsed.scope_constraints.filter((item) => typeof item === "string" && item.trim())
+    : [];
+  return {
+    from_step: String(parsed.from_step || "impl_be"),
+    to_step: String(parsed.to_step || "impl_fe"),
+    be_changes_path: String(parsed.be_changes_path || "impl/be_changes"),
+    api_contracts: apiContracts.filter((item) => item && typeof item === "object" && String(item.name || item.path || "").trim()),
+    shared_types: sharedTypes.filter((item) => item && typeof item === "object" && String(item.name || "").trim()),
+    scope_constraints: scopeConstraints,
+  };
+}
+
 function buildCrmBackendTemplate() {
   return [
     "const express = require('express');",
@@ -42,15 +86,9 @@ function buildCrmBackendTemplate() {
     "createCustomer({ name: 'Alice Chen', email: 'alice@example.com', phone: '13800138000', company: 'Acme Corp', notes: 'Enterprise account' });",
     "createCustomer({ name: 'Bob Wang', email: 'bob@example.com', phone: '13900139000', company: 'TechStart Inc', notes: 'Needs onboarding follow-up' });",
     "createCustomer({ name: 'Carol Liu', email: 'carol@example.com', phone: '13700137000', company: 'Global Solutions', notes: 'Renewal due next month' });",
-    "function filterCustomers(search) {",
-    "  const normalized = String(search || '').trim().toLowerCase();",
-    "  const rows = Array.from(customerStore.values());",
-    "  if (!normalized) return rows;",
-    "  return rows.filter((customer) => customer.name.toLowerCase().includes(normalized) || customer.email.toLowerCase().includes(normalized) || customer.company.toLowerCase().includes(normalized));",
-    "}",
     "app.get('/api/customers', (req, res) => {",
-    "  const filtered = filterCustomers(req.query.search).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));",
-    "  res.json({ success: true, data: filtered, pagination: { page: 1, limit: filtered.length || 1, total: filtered.length, totalPages: 1 } });",
+    "  const rows = Array.from(customerStore.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));",
+    "  res.json({ success: true, data: rows });",
     "});",
     "app.get('/api/customers/:id', (req, res) => {",
     "  const customer = customerStore.get(String(req.params.id || ''));",
@@ -70,12 +108,6 @@ function buildCrmBackendTemplate() {
     "  customerStore.set(updated.id, updated);",
     "  return res.json({ success: true, data: updated });",
     "});",
-    "app.delete('/api/customers/:id', (req, res) => {",
-    "  if (!customerStore.has(String(req.params.id || ''))) return res.status(404).json({ success: false, error: 'Customer not found' });",
-    "  customerStore.delete(String(req.params.id || ''));",
-    "  return res.status(204).send();",
-    "});",
-    "app.get('/health', (_req, res) => res.json({ success: true, status: 'ok' }));",
     "app.get('/', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));",
     "app.listen(PORT, () => console.log('Customer API server listening on http://localhost:' + PORT));",
     "module.exports = app;",
@@ -91,7 +123,7 @@ function buildCrmFrontendHtmlTemplate() {
     '  <meta charset="utf-8" />',
     '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
     '  <title>Customer Workspace</title>',
-    '  <style>body{margin:0;font-family:Georgia,serif;background:#f4efe6;color:#1e2430}.shell{max-width:1080px;margin:0 auto;padding:28px 20px}.hero,.panel{background:#fffaf3;border:1px solid #d7c9b4;border-radius:22px;padding:20px;box-shadow:0 12px 30px rgba(0,0,0,.06)}.layout{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;margin-top:18px}.toolbar,.actions,form{display:grid;gap:12px}.toolbar{grid-template-columns:1fr auto}.list{display:grid;gap:12px}.card{border:1px solid #d7c9b4;border-radius:18px;padding:14px;background:#fffdf9}.detail-grid{display:grid;grid-template-columns:100px 1fr;gap:8px 12px}.empty{padding:14px;border:1px dashed #d7c9b4;border-radius:16px;color:#5f6777}.primary{background:#145b4c;color:#fff;border:none;border-radius:999px;padding:10px 14px}.secondary,.danger{border:none;border-radius:999px;padding:10px 14px}.secondary{background:#efe5d6}.danger{background:#f8dfd7;color:#a33e2b}input,textarea{width:100%;padding:11px 12px;border:1px solid #c8b89f;border-radius:14px;background:#fffdf9;font:inherit}textarea{min-height:100px}@media(max-width:820px){.layout{grid-template-columns:1fr}}</style>',
+    '  <style>body{margin:0;font-family:Georgia,serif;background:#f4efe6;color:#1e2430}.shell{max-width:1080px;margin:0 auto;padding:28px 20px}.hero,.panel{background:#fffaf3;border:1px solid #d7c9b4;border-radius:22px;padding:20px;box-shadow:0 12px 30px rgba(0,0,0,.06)}.layout{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;margin-top:18px}.actions,form{display:grid;gap:12px}.list{display:grid;gap:12px}.card{border:1px solid #d7c9b4;border-radius:18px;padding:14px;background:#fffdf9}.detail-grid{display:grid;grid-template-columns:100px 1fr;gap:8px 12px}.empty{padding:14px;border:1px dashed #d7c9b4;border-radius:16px;color:#5f6777}.primary{background:#145b4c;color:#fff;border:none;border-radius:999px;padding:10px 14px}.secondary{border:none;border-radius:999px;padding:10px 14px;background:#efe5d6}input,textarea{width:100%;padding:11px 12px;border:1px solid #c8b89f;border-radius:14px;background:#fffdf9;font:inherit}textarea{min-height:100px}@media(max-width:820px){.layout{grid-template-columns:1fr}}</style>',
     '</head>',
     '<body>',
     '  <div class="shell">',
@@ -101,8 +133,8 @@ function buildCrmFrontendHtmlTemplate() {
     '      <div class="actions"><button class="primary" id="heroAddCustomer">Add Customer</button><button class="secondary" id="heroRefreshCustomers">Refresh List</button></div>',
     '    </section>',
     '    <div class="layout">',
-    '      <section class="panel"><div class="toolbar"><input id="searchInput" type="search" placeholder="Search by customer, email, or company" /><button class="secondary" id="searchButton">Search</button></div><div id="customerList" class="list"></div></section>',
-    '      <aside class="panel"><div id="detailEmpty" class="empty">Select a customer to inspect account details and notes.</div><div id="detailContent" hidden><div class="actions"><button class="primary" id="editCustomerButton">Edit</button><button class="danger" id="deleteCustomerButton">Delete</button></div><dl class="detail-grid"><dt>Name</dt><dd id="detailName"></dd><dt>Email</dt><dd id="detailEmail"></dd><dt>Phone</dt><dd id="detailPhone"></dd><dt>Company</dt><dd id="detailCompany"></dd><dt>Notes</dt><dd id="detailNotes"></dd><dt>Updated</dt><dd id="detailUpdatedAt"></dd></dl></div><h3 id="formTitle">Add Customer</h3><form id="customerForm"><input id="customerId" type="hidden" /><input id="nameInput" placeholder="Customer name" required /><input id="emailInput" type="email" placeholder="customer@example.com" required /><input id="phoneInput" placeholder="Phone number" /><input id="companyInput" placeholder="Company name" /><textarea id="notesInput" placeholder="Relationship notes and next step"></textarea><div class="actions"><button class="primary" type="submit" id="saveCustomerButton">Save Customer</button><button class="secondary" type="button" id="resetFormButton">Reset</button></div><div id="formFeedback"></div></form></aside>',
+    '      <section class="panel"><div id="customerList" class="list"></div></section>',
+    '      <aside class="panel"><div id="detailEmpty" class="empty">Select a customer to inspect account details and notes.</div><div id="detailContent" hidden><div class="actions"><button class="primary" id="editCustomerButton">Edit</button></div><dl class="detail-grid"><dt>Name</dt><dd id="detailName"></dd><dt>Email</dt><dd id="detailEmail"></dd><dt>Phone</dt><dd id="detailPhone"></dd><dt>Company</dt><dd id="detailCompany"></dd><dt>Notes</dt><dd id="detailNotes"></dd><dt>Updated</dt><dd id="detailUpdatedAt"></dd></dl></div><h3 id="formTitle">Add Customer</h3><form id="customerForm"><input id="customerId" type="hidden" /><input id="nameInput" placeholder="Customer name" required /><input id="emailInput" type="email" placeholder="customer@example.com" required /><input id="phoneInput" placeholder="Phone number" /><input id="companyInput" placeholder="Company name" /><textarea id="notesInput" placeholder="Relationship notes and next step"></textarea><div class="actions"><button class="primary" type="submit" id="saveCustomerButton">Save Customer</button><button class="secondary" type="button" id="resetFormButton">Reset</button></div><div id="formFeedback"></div></form></aside>',
     '    </div>',
     '  </div>',
     '  <script type="module" src="./app.js"></script>',
@@ -114,18 +146,17 @@ function buildCrmFrontendHtmlTemplate() {
 
 function buildCrmFrontendJsTemplate() {
   return [
-    "const state={customers:[],selectedCustomerId:null,lastSearch:''};",
-    "const refs={list:document.getElementById('customerList'),searchInput:document.getElementById('searchInput'),searchButton:document.getElementById('searchButton'),heroAddCustomer:document.getElementById('heroAddCustomer'),heroRefreshCustomers:document.getElementById('heroRefreshCustomers'),detailEmpty:document.getElementById('detailEmpty'),detailContent:document.getElementById('detailContent'),detailName:document.getElementById('detailName'),detailEmail:document.getElementById('detailEmail'),detailPhone:document.getElementById('detailPhone'),detailCompany:document.getElementById('detailCompany'),detailNotes:document.getElementById('detailNotes'),detailUpdatedAt:document.getElementById('detailUpdatedAt'),editCustomerButton:document.getElementById('editCustomerButton'),deleteCustomerButton:document.getElementById('deleteCustomerButton'),form:document.getElementById('customerForm'),formTitle:document.getElementById('formTitle'),feedback:document.getElementById('formFeedback'),customerId:document.getElementById('customerId'),nameInput:document.getElementById('nameInput'),emailInput:document.getElementById('emailInput'),phoneInput:document.getElementById('phoneInput'),companyInput:document.getElementById('companyInput'),notesInput:document.getElementById('notesInput'),resetFormButton:document.getElementById('resetFormButton')};",
+    "const state={customers:[],selectedCustomerId:null};",
+    "const refs={list:document.getElementById('customerList'),heroAddCustomer:document.getElementById('heroAddCustomer'),heroRefreshCustomers:document.getElementById('heroRefreshCustomers'),detailEmpty:document.getElementById('detailEmpty'),detailContent:document.getElementById('detailContent'),detailName:document.getElementById('detailName'),detailEmail:document.getElementById('detailEmail'),detailPhone:document.getElementById('detailPhone'),detailCompany:document.getElementById('detailCompany'),detailNotes:document.getElementById('detailNotes'),detailUpdatedAt:document.getElementById('detailUpdatedAt'),editCustomerButton:document.getElementById('editCustomerButton'),form:document.getElementById('customerForm'),formTitle:document.getElementById('formTitle'),feedback:document.getElementById('formFeedback'),customerId:document.getElementById('customerId'),nameInput:document.getElementById('nameInput'),emailInput:document.getElementById('emailInput'),phoneInput:document.getElementById('phoneInput'),companyInput:document.getElementById('companyInput'),notesInput:document.getElementById('notesInput'),resetFormButton:document.getElementById('resetFormButton')};",
     "async function apiFetch(url,options={}){const response=await fetch(url,options);if(response.status===204)return{success:true};const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||body.message||'Request failed');return body;}",
     "function escapeHtml(value){return String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');}",
     "function renderList(){if(!state.customers.length){refs.list.innerHTML='<div class=\"empty\">No customers matched this view yet.</div>';return;}refs.list.innerHTML=state.customers.map((customer)=>'<article class=\"card\" data-customer-id=\"'+customer.id+'\"><strong>'+escapeHtml(customer.name)+'</strong><div>'+escapeHtml(customer.email)+'</div><div>'+escapeHtml(customer.company||'Independent Account')+'</div><div class=\"actions\"><button class=\"secondary\" type=\"button\" data-action=\"view\">View</button><button class=\"primary\" type=\"button\" data-action=\"edit\">Edit</button></div></article>').join('');}",
     "function renderDetail(customer){if(!customer){refs.detailEmpty.hidden=false;refs.detailContent.hidden=true;return;}refs.detailEmpty.hidden=true;refs.detailContent.hidden=false;refs.detailName.textContent=customer.name||'';refs.detailEmail.textContent=customer.email||'';refs.detailPhone.textContent=customer.phone||'No phone recorded';refs.detailCompany.textContent=customer.company||'Independent Account';refs.detailNotes.textContent=customer.notes||'No notes yet';refs.detailUpdatedAt.textContent=new Date(customer.updatedAt||customer.createdAt||Date.now()).toLocaleString();}",
     "function resetForm(customer=null){refs.feedback.textContent='';refs.customerId.value=customer?.id||'';refs.nameInput.value=customer?.name||'';refs.emailInput.value=customer?.email||'';refs.phoneInput.value=customer?.phone||'';refs.companyInput.value=customer?.company||'';refs.notesInput.value=customer?.notes||'';refs.formTitle.textContent=customer?'Edit Customer':'Add Customer';}",
-    "async function loadCustomers(search=state.lastSearch){state.lastSearch=String(search||'').trim();const suffix=state.lastSearch?'?search='+encodeURIComponent(state.lastSearch):'';const payload=await apiFetch('/api/customers'+suffix);state.customers=Array.isArray(payload.data)?payload.data:[];if(!state.customers.some((customer)=>customer.id===state.selectedCustomerId)){state.selectedCustomerId=state.customers[0]?.id||null;}renderList();renderDetail(state.customers.find((customer)=>customer.id===state.selectedCustomerId)||null);}",
+    "async function loadCustomers(){const payload=await apiFetch('/api/customers');state.customers=Array.isArray(payload.data)?payload.data:[];if(!state.customers.some((customer)=>customer.id===state.selectedCustomerId)){state.selectedCustomerId=state.customers[0]?.id||null;}renderList();renderDetail(state.customers.find((customer)=>customer.id===state.selectedCustomerId)||null);}",
     "async function selectCustomer(customerId){const payload=await apiFetch('/api/customers/'+customerId);state.selectedCustomerId=payload.data?.id||customerId;renderList();renderDetail(payload.data||null);}",
-    "async function submitForm(event){event.preventDefault();refs.feedback.textContent='';const body={name:refs.nameInput.value.trim(),email:refs.emailInput.value.trim(),phone:refs.phoneInput.value.trim(),company:refs.companyInput.value.trim(),notes:refs.notesInput.value.trim()};if(!body.name||!body.email){refs.feedback.textContent='Name and email are required.';return;}const customerId=refs.customerId.value.trim();const method=customerId?'PUT':'POST';const endpoint=customerId?'/api/customers/'+customerId:'/api/customers';try{const payload=await apiFetch(endpoint,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});resetForm();await loadCustomers(state.lastSearch);if(payload.data?.id)await selectCustomer(payload.data.id);}catch(error){refs.feedback.textContent=error.message||'Unable to save customer.';}}",
-    "async function deleteSelectedCustomer(){if(!state.selectedCustomerId)return;try{await apiFetch('/api/customers/'+state.selectedCustomerId,{method:'DELETE'});state.selectedCustomerId=null;resetForm();await loadCustomers(state.lastSearch);}catch(error){refs.feedback.textContent=error.message||'Unable to delete customer.';}}",
-    "refs.searchButton?.addEventListener('click',()=>loadCustomers(refs.searchInput.value));refs.heroRefreshCustomers?.addEventListener('click',()=>loadCustomers(refs.searchInput.value));refs.heroAddCustomer?.addEventListener('click',()=>resetForm());refs.resetFormButton?.addEventListener('click',()=>resetForm());refs.form?.addEventListener('submit',submitForm);refs.editCustomerButton?.addEventListener('click',()=>{const customer=state.customers.find((entry)=>entry.id===state.selectedCustomerId)||null;resetForm(customer);});refs.deleteCustomerButton?.addEventListener('click',deleteSelectedCustomer);refs.list?.addEventListener('click',(event)=>{const button=event.target.closest('button');const card=event.target.closest('[data-customer-id]');if(!button||!card)return;const customerId=card.getAttribute('data-customer-id');if(!customerId)return;if(button.dataset.action==='edit'){const customer=state.customers.find((entry)=>entry.id===customerId)||null;resetForm(customer);renderDetail(customer);state.selectedCustomerId=customerId;renderList();return;}selectCustomer(customerId).catch((error)=>{refs.feedback.textContent=error.message||'Unable to load customer.';});});",
+    "async function submitForm(event){event.preventDefault();refs.feedback.textContent='';const body={name:refs.nameInput.value.trim(),email:refs.emailInput.value.trim(),phone:refs.phoneInput.value.trim(),company:refs.companyInput.value.trim(),notes:refs.notesInput.value.trim()};if(!body.name||!body.email){refs.feedback.textContent='Name and email are required.';return;}const customerId=refs.customerId.value.trim();const method=customerId?'PUT':'POST';const endpoint=customerId?'/api/customers/'+customerId:'/api/customers';try{const payload=await apiFetch(endpoint,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});resetForm();await loadCustomers();if(payload.data?.id)await selectCustomer(payload.data.id);}catch(error){refs.feedback.textContent=error.message||'Unable to save customer.';}}",
+    "refs.heroRefreshCustomers?.addEventListener('click',()=>loadCustomers());refs.heroAddCustomer?.addEventListener('click',()=>resetForm());refs.resetFormButton?.addEventListener('click',()=>resetForm());refs.form?.addEventListener('submit',submitForm);refs.editCustomerButton?.addEventListener('click',()=>{const customer=state.customers.find((entry)=>entry.id===state.selectedCustomerId)||null;resetForm(customer);});refs.list?.addEventListener('click',(event)=>{const button=event.target.closest('button');const card=event.target.closest('[data-customer-id]');if(!button||!card)return;const customerId=card.getAttribute('data-customer-id');if(!customerId)return;if(button.dataset.action==='edit'){const customer=state.customers.find((entry)=>entry.id===customerId)||null;resetForm(customer);renderDetail(customer);state.selectedCustomerId=customerId;renderList();return;}selectCustomer(customerId).catch((error)=>{refs.feedback.textContent=error.message||'Unable to load customer.';});});",
     "loadCustomers().catch((error)=>{refs.feedback.textContent=error.message||'Unable to load customers.';});",
     "",
   ].join('\n');
@@ -207,7 +238,7 @@ export function buildArtifactTemplate({ relPath, rootAbs, stepId, taskPrompt }) 
 
 - As an operator, I can manage the core entities described in the goal.
 - As an operator, I can create, view, and edit records.
-- As an operator, I can search and filter records.
+- As an operator, I can move between the list, detail, and form views without losing context.
 
 # Acceptance Criteria
 
@@ -773,7 +804,8 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (rel === "plan/spec.md" && ext === ".md") {
       const expectedHeadings = ["scope", "user stories", "acceptance criteria", "non-goals", "artifact list"];
-      if (!markdownHasHeadings(raw, expectedHeadings)) {
+      const minimalCrmMismatch = isMinimalReviewableCrm(taskPrompt) && /\bsearch and filter\b|\bdelete\b/i.test(raw);
+      if (!markdownHasHeadings(raw, expectedHeadings) || minimalCrmMismatch) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "pm_spec_headings_repaired" };
       }
@@ -794,7 +826,8 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
       // Only require the generic "interfaces" section  Especific endpoint headings vary by project type
       const expectedHeadings = ["interfaces"];
       const staticMismatch = projectType === "single_file_html" && /api\/customers|customer detail|create.*customer|update.*customer/i.test(raw);
-      if (!markdownHasHeadings(raw, expectedHeadings) || staticMismatch) {
+      const minimalCrmMismatch = isMinimalReviewableCrm(taskPrompt) && /(##\s*delete\s+\/api\/customers\/:id|##\s*get\s+\/health|\bpaginat|\bsearch\b|\bfilter\b)/i.test(raw);
+      if (!markdownHasHeadings(raw, expectedHeadings) || staticMismatch || minimalCrmMismatch) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "interfaces_headings_repaired" };
       }
@@ -806,12 +839,26 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
         || !/##\s*FE Tasks/i.test(raw)
         || !/\|\s*verify:/i.test(raw)
       );
-      if (staticMismatch || genericMismatch) {
+      const minimalCrmMismatch = isMinimalReviewableCrm(taskPrompt) && (/\bdelete\b|\bpaginat|\bsearch\b|\bfilter\b|\bmobile\b|\bresponsive\b/i.test(raw) || ((raw.match(/T-BE-\d+/g) || []).length > 5) || ((raw.match(/T-FE-\d+/g) || []).length > 5));
+      if (staticMismatch || genericMismatch || minimalCrmMismatch) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return {
           repaired: true,
           reason: staticMismatch ? "workplan_static_html_repaired" : "workplan_structured_format_repaired",
         };
+      }
+    }
+    if (rel === "plan/workplan.json" && ext === ".json") {
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch {}
+      const beTasks = Array.isArray(parsed?.be_tasks) ? parsed.be_tasks : [];
+      const feTasks = Array.isArray(parsed?.fe_tasks) ? parsed.fe_tasks : [];
+      const taskText = JSON.stringify(parsed || {}).toLowerCase();
+      const genericMismatch = !(beTasks.length > 0 && feTasks.length > 0);
+      const minimalCrmMismatch = isMinimalReviewableCrm(taskPrompt) && (/\bdelete\b|\bpaginat|\bsearch\b|\bfilter\b|\bmobile\b|\bresponsive\b/.test(taskText) || beTasks.length > 5 || feTasks.length > 5);
+      if (genericMismatch || minimalCrmMismatch) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "workplan_json_repaired" };
       }
     }
     if (rel === "impl/be_changes/server.js" && ext === ".js" && projectType === "webapp_crm") {
@@ -864,6 +911,31 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
         return { repaired: true, reason: "pm_handoff_schema_repaired" };
       }
     }
+    if (rel === "handoff/be_to_fe.json" && ext === ".json") {
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch {}
+      const normalized = normalizeBeToFeHandoff(parsed);
+      const apiContracts = Array.isArray(normalized?.api_contracts) ? normalized.api_contracts : [];
+      const sharedTypes = Array.isArray(normalized?.shared_types) ? normalized.shared_types : [];
+      const scopeConstraints = Array.isArray(normalized?.scope_constraints) ? normalized.scope_constraints : [];
+      const valid = normalized
+        && typeof normalized.from_step === "string" && normalized.from_step.trim()
+        && typeof normalized.to_step === "string" && normalized.to_step.trim()
+        && typeof normalized.be_changes_path === "string" && normalized.be_changes_path.trim()
+        && Array.isArray(apiContracts)
+        && Array.isArray(sharedTypes)
+        && Array.isArray(scopeConstraints)
+        && apiContracts.every((item) => item && typeof item === "object" && typeof item.name === "string" && item.name.trim())
+        && sharedTypes.every((item) => item && typeof item === "object" && typeof item.name === "string" && item.name.trim());
+      if (!valid) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "be_to_fe_handoff_schema_repaired" };
+      }
+      if (!(Array.isArray(parsed?.api_contracts) && Array.isArray(parsed?.shared_types))) {
+        fs.writeFileSync(targetAbs, JSON.stringify(normalized, null, 2), "utf8");
+        return { repaired: true, reason: "be_to_fe_handoff_schema_repaired" };
+      }
+    }
     if (rel === "handoff/architect_to_impl.json" && ext === ".json") {
       let parsed = null;
       try { parsed = JSON.parse(raw); } catch {}
@@ -873,12 +945,15 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
         (Array.isArray(parsed?.interfaces) && parsed.interfaces.some((item) => /api\/customers/i.test(String(item || ""))))
         || (Array.isArray(parsed?.modules) && parsed.modules.some((item) => /customer|backend api/i.test(String(item || ""))))
       );
+      const minimalCrmMismatch = isMinimalReviewableCrm(taskPrompt)
+        && Array.isArray(parsed?.interfaces)
+        && parsed.interfaces.some((item) => /delete|health|search|filter|pagination/i.test(String(item || "")));
       if (!(typeof parsed?.from_step === "string" && parsed.from_step.trim()
         && Array.isArray(parsed?.to_steps) && parsed.to_steps.length > 0
         && Array.isArray(parsed?.modules) && parsed.modules.length > 0
         && Array.isArray(parsed?.interfaces) && parsed.interfaces.length > 0
         && decisions.length > 0
-        && risks.length > 0) || staticMismatch) {
+        && risks.length > 0) || staticMismatch || minimalCrmMismatch) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "arch_handoff_schema_repaired" };
       }
@@ -895,6 +970,26 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
       if (!isQaReportValid(raw, rootAbs)) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "qa_report_invalid" };
+      }
+    }
+    if (rel === "handoff/impl_to_qa.json" && ext === ".json") {
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch {}
+      const fromSteps = Array.isArray(parsed?.from_steps) ? parsed.from_steps.filter((item) => typeof item === "string" && item.trim()) : [];
+      const knownLimitations = Array.isArray(parsed?.known_limitations)
+        ? parsed.known_limitations.filter((item) => typeof item === "string" && item.trim())
+        : [];
+      const runInstructionsValid = typeof parsed?.run_instructions === "string"
+        ? parsed.run_instructions.trim().length > 0
+        : Array.isArray(parsed?.run_instructions) && parsed.run_instructions.some((item) => typeof item === "string" && item.trim());
+      if (!(fromSteps.length > 0
+        && parsed?.to_step === "qa_verify"
+        && typeof parsed?.be_changes_path === "string" && parsed.be_changes_path.trim()
+        && typeof parsed?.fe_changes_path === "string" && parsed.fe_changes_path.trim()
+        && runInstructionsValid
+        && knownLimitations.length > 0)) {
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "impl_to_qa_handoff_schema_repaired" };
       }
     }
     if ((rel === "release/release_notes.md" || rel === "release/README.md") && ext === ".md") {

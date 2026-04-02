@@ -2,33 +2,32 @@
 
 ## Current Status
 
-The project has moved from design completion into runnable beta-path validation. The core Coding Team workflow is now wired as:
+The v3.1 mainline is still centered on:
 
 `pm_spec -> arch_design -> impl_be -> impl_fe -> smoke_test -> qa_verify -> release_pack -> deploy_preview`
 
-The most important current milestone is that the Discord-supported beta path now completes successfully through the local live stack, with release artifacts, smoke evidence, preview routing, and quality classification all landing in the expected places.
+The project is now in a runnable Discord-entry beta state with stronger prompt contracts, stronger validator coverage, and plain-checkout registry validation working without Docker-only stub files.
 
 ## What Changed Recently
 
-### 1. Quality-design closure
+### 1. SP-03 contract and validator tightening
 
-- `smoke_test` is now part of the formal workflow definition.
-- `release_pack` now includes runtime evidence summaries in the release manifest and summary.
-- workflow completion summaries now surface runtime evidence instead of relying only on `README` extraction.
-- live validation scripts were tightened so they check smoke evidence and runtime evidence from actual artifacts.
+- `architect.system_spec.v2` now explicitly requires `plan/workplan.json`.
+- the structured workplan contract is injected into both `impl_be` and `impl_fe` as execution context.
+- architect validation now rejects minimal CRM workplans that drift into out-of-scope features such as delete, pagination, mobile-first expansion, or unrelated auth/python scope.
+- regression coverage was added for workplan injection and validator behavior.
 
-### 2. Discord and preview-path stabilization
+### 2. Worker-coder repair and fallback hardening
 
-- Discord intake and workflow status messaging were cleaned up for the current workflow shape.
-- preview routing now prefers run-scoped implementation output instead of shared sandbox fallback paths.
-- the product-fidelity audit now evaluates the released frontend surface instead of being polluted by unrelated root files.
+- stale workspace-reorg test expectations were fixed in `worker-coder`.
+- CRM scaffold repair now normalizes typed handoffs and repairs malformed `handoff/impl_to_qa.json` and `handoff/be_to_fe.json` outputs when the model emits the old shape.
+- minimal CRM fallback output was narrowed so it no longer silently introduces extra search/delete scope.
 
-### 3. Worker-coder fallback hardening
+### 3. Project-quality cleanup
 
-- CRM fallback scaffolding now generates a minimal runnable backend and frontend instead of placeholders.
-- backend fallback now serves `public/`, honors `process.env.PORT`, and exposes smokeable API routes.
-- frontend fallback now produces a usable same-origin CRM UI for the preview and smoke path.
-- scaffold repair logic now upgrades broken placeholder outputs into the new minimal runnable structure.
+- the v3.1 tasklist was aligned to the real `SP-03` `workplan.json` contract.
+- checked-in orchestrator config files now let `node orchestrator/scripts/validate_registry.js` pass from a plain checkout.
+- `.gitignore` was updated to reduce generated-file noise from preview and quant report outputs.
 
 ## Latest Validated Outcome
 
@@ -36,38 +35,54 @@ The most important current milestone is that the Discord-supported beta path now
 
 Validated via:
 
-- `npm --prefix orchestrator run validate:discord_coding_supported_beta -- --base-url http://localhost:3000 --runs 1 --warmup 0 --concurrency 1 --strict false --min-workflow-success-rate 1.0 --min-go-rate 1.0 --max-total-p95-ms 3600000`
+- `npm --prefix orchestrator run validate:discord_coding_supported_beta -- --base-url http://localhost:3000 --runs 2 --warmup 0 --concurrency 1 --timeout-sec 2700 --strict false --min-workflow-success-rate 1.0 --min-go-rate 1.0 --max-total-p95-ms 5400000`
 
 Outcome:
 
-- workflow status: `succeeded`
-- go/no-go: `GO`
-- smoke root status: `200`
-- smoke api status: `200`
-- product fidelity: `demo_usable`
-- perceptual quality: `high`
+- workflow success rate: `2/2`
+- go rate: `1/2`
+- verdict: `FAIL` at suite level because `go_rate 0.500 < 1.000`
+- latest successful `GO` run:
+  - `workflow_run_id = ec5a4d18-2dea-4a45-889d-52312a863f55`
+  - `run_id = 817af805-cd4a-475b-ab76-2b721b25de60`
+  - `preview_url = http://localhost:46007`
+  - `product_fidelity = demo_usable`
+  - `perceptual_quality = high`
+- paired successful-but-warned run:
+  - `workflow_run_id = a7fbf2b5-5db0-4cba-abd9-a84c8445d5be`
+  - `run_id = ae540ae7-26fd-47d1-a9ec-a70ebb78bbae`
+  - `preview_url = http://localhost:46006`
+  - `product_fidelity = artifact_complete_but_shallow`
 
 Primary evidence:
 
-- latest live workflow report:
-  `runtime/artifacts/orchestrator/canary/live_m9_workflow/live_m9_workflow_report.json`
-- successful release summary:
-  `runtime/artifacts/release/9e9f2d35-c1ac-4705-8861-9c92781ebcf6/summary/run_summary.md`
-- successful smoke report:
-  `runtime/artifacts/release/9e9f2d35-c1ac-4705-8861-9c92781ebcf6/smoke/smoke_result.json`
-- successful product fidelity report:
-  `runtime/artifacts/release/9e9f2d35-c1ac-4705-8861-9c92781ebcf6/qa/product_fidelity_report.json`
+- validation report:
+  `runtime/artifacts/orchestrator/validation/discord_coding_load_test/2026-04-02T08-35-41-916Z/discord_coding_load_test_report.json`
+- successful `GO` run summary:
+  `runtime/artifacts/release/817af805-cd4a-475b-ab76-2b721b25de60/summary/run_summary.md`
+- successful `GO` product fidelity:
+  `runtime/artifacts/release/817af805-cd4a-475b-ab76-2b721b25de60/qa/product_fidelity_report.json`
+- successful `GO` preview deployment:
+  `runtime/artifacts/release/817af805-cd4a-475b-ab76-2b721b25de60/preview/deployment_result.json`
 
-Additional runtime evidence from the latest successful run:
+Additional runtime evidence from the latest successful `GO` run:
 
 - `strict_canary_verdict = PASS`
 - `preview_validation = PREVIEW_MATCHED`
-- `superpowers_detected_steps = 6`
-- `superpowers_configured_steps = 6`
+- `superpowers_detected_steps = 4`
+- `superpowers_configured_steps = 4`
 - `superpowers_available_steps = 4`
-- `superpowers_steps_used = 6`
+- `superpowers_steps_used = 4`
+- `smoke_root_status = 200`
+- `smoke_api_status = 401`
+
+## QA Assessment
+
+- Nexus critical-path code quality is materially better than earlier in the day: the release path runs end-to-end and the validator/tests now enforce the intended minimal-reviewable scope much more tightly.
+- Nexus project quality is improved but not fully closed: the suite-level canary is still not at `2/2 GO`, so `SP-03` is not closed yet.
+- The main remaining quality signal is the shallow QA artifact from run `ae540ae7-26fd-47d1-a9ec-a70ebb78bbae`, not a workflow crash.
 
 ## Recommended Next Step
 
-1. Return to the v3.1 mainline and finish `SP-03` so architect workplan output is consumed as structured execution context by `impl_be` and `impl_fe`.
-2. Keep the governance stream moving by finishing the remaining `SCO-05 / GOV-01` reporting and operator surfaces around Permission Council decisions.
+1. Finish `SP-03` by eliminating the shallow QA artifact path and getting a clean multi-run `GO` canary.
+2. Continue the v3.1 governance stream with `SCO-05 / GOV-01`.

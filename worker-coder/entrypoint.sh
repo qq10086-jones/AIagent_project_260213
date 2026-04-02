@@ -18,14 +18,14 @@ if [ -f /app/opencode.json.tpl ]; then
   fi
 
   if [ -d /workspace/external/vendor/superpowers ]; then
-    export OPENCODE_PLUGIN_JSON='[
+    export OPENCODE_PLUGINS_JSON='[
     "superpowers@git+https://github.com/obra/superpowers.git"
   ]'
   else
-    export OPENCODE_PLUGIN_JSON='[]'
+    export OPENCODE_PLUGINS_JSON='[]'
   fi
 
-  envsubst '${MINIMAX_API_KEY} ${DASHSCOPE_API_KEY} ${DASH_SCOPE_API_KEY} ${QWEN_API_KEY} ${ALIBABA_CODING_PLAN_API_KEY} ${OPENCODE_PLUGIN_JSON}' \
+  envsubst '${MINIMAX_API_KEY} ${DASHSCOPE_API_KEY} ${DASH_SCOPE_API_KEY} ${QWEN_API_KEY} ${ALIBABA_CODING_PLAN_API_KEY} ${OPENCODE_PLUGINS_JSON}' \
     < /app/opencode.json.tpl \
     > /app/opencode.json
   mkdir -p /root/.config/opencode

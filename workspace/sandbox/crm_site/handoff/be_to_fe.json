@@ -4,50 +4,143 @@
   "be_changes_path": "impl/be_changes",
   "api_contracts": [
     {
+      "name": "Get CSRF Token",
+      "method": "GET",
+      "path": "/api/csrf-token",
+      "auth": "none",
+      "response": "{ csrfToken: string }"
+    },
+    {
+      "name": "Login",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "auth": "none",
+      "request": "{ username: string, password: string }",
+      "response": "{ success: true, data: { userId: string, username: string } }"
+    },
+    {
+      "name": "Logout",
+      "method": "POST",
+      "path": "/api/auth/logout",
+      "auth": "session",
+      "response": "{ success: true }"
+    },
+    {
       "name": "List Customers",
       "method": "GET",
-      "path": "/api/customers"
+      "path": "/api/customers",
+      "auth": "session",
+      "query": "{ page?: number, limit?: number, search?: string }",
+      "response": "{ data: Customer[], pagination: { page, limit, total, totalPages } }"
     },
     {
       "name": "Get Customer",
       "method": "GET",
-      "path": "/api/customers/:id"
+      "path": "/api/customers/:id",
+      "auth": "session",
+      "response": "{ success: true, data: Customer }"
     },
     {
       "name": "Create Customer",
       "method": "POST",
-      "path": "/api/customers"
+      "path": "/api/customers",
+      "auth": "session + CSRF",
+      "request": "{ name: string, email: string, phone?: string, company?: string, notes?: string }",
+      "response": "{ success: true, data: Customer }"
     },
     {
       "name": "Update Customer",
       "method": "PUT",
-      "path": "/api/customers/:id"
+      "path": "/api/customers/:id",
+      "auth": "session + CSRF",
+      "request": "Partial<Customer>",
+      "response": "{ success: true, data: Customer }"
     },
     {
       "name": "Delete Customer",
       "method": "DELETE",
-      "path": "/api/customers/:id"
+      "path": "/api/customers/:id",
+      "auth": "session",
+      "response": "204 No Content"
     }
   ],
   "shared_types": [
     {
-      "name": "Customer"
+      "name": "Customer",
+      "fields": {
+        "id": "string",
+        "name": "string",
+        "email": "string",
+        "phone": "string",
+        "company": "string",
+        "notes": "string",
+        "createdAt": "string (ISO8601)",
+        "updatedAt": "string (ISO8601)"
+      }
     },
     {
-      "name": "CustomerListResponse"
+      "name": "CustomerListResponse",
+      "fields": {
+        "data": "Customer[]",
+        "pagination": "Pagination"
+      }
     },
     {
-      "name": "CustomerCreateRequest"
+      "name": "Pagination",
+      "fields": {
+        "page": "number",
+        "limit": "number",
+        "total": "number",
+        "totalPages": "number"
+      }
     },
     {
-      "name": "CustomerUpdateRequest"
+      "name": "CustomerCreateRequest",
+      "fields": {
+        "name": "string (required)",
+        "email": "string (required)",
+        "phone": "string (optional)",
+        "company": "string (optional)",
+        "notes": "string (optional)"
+      }
+    },
+    {
+      "name": "CustomerUpdateRequest",
+      "fields": {
+        "name": "string (optional)",
+        "email": "string (optional)",
+        "phone": "string (optional)",
+        "company": "string (optional)",
+        "notes": "string (optional)"
+      }
+    },
+    {
+      "name": "LoginRequest",
+      "fields": {
+        "username": "string",
+        "password": "string"
+      }
+    },
+    {
+      "name": "LoginResponse",
+      "fields": {
+        "userId": "string",
+        "username": "string"
+      }
     }
   ],
   "scope_constraints": [
-    "No authentication/authorization implemented",
-    "No database persistence - in-memory only",
-    "No pagination beyond limit query parameter",
-    "No customer search beyond name/email filter",
-    "No customer relationships or associated entities"
-  ]
+    "SQLite database persistence at data/crm.db",
+    "Session-based authentication with express-session",
+    "CSRF protection on POST/PUT/DELETE endpoints via csurf",
+    "Default login: username=admin, password=admin123",
+    "Customer CRUD only - no other entities",
+    "GET /api/customers supports pagination (page, limit) and search",
+    "Static files served from impl/be_changes/public/",
+    "SPA fallback: GET / returns public/index.html"
+  ],
+  "static_assets": {
+    "public_path": "impl/be_changes/public/",
+    "index_html": "impl/be_changes/public/index.html"
+  }
 }

@@ -66,6 +66,19 @@ function writeText(filePath, value) {
   fs.writeFileSync(filePath, value, "utf8");
 }
 
+function resolveReleaseArtifactPath(workspaceRoot, runId, relPath) {
+  const runIdText = String(runId || "").trim();
+  const rel = String(relPath || "").replace(/^[/\\]+/, "");
+  const candidates = [
+    path.resolve(workspaceRoot, "runtime", "artifacts", "release", runIdText, rel),
+    path.resolve(workspaceRoot, "artifacts", "release", runIdText, rel),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[0];
+}
+
 async function getJson(url, init = {}) {
   const res = await fetch(url, init);
   const text = await res.text();
@@ -145,7 +158,7 @@ async function pollWorkflow(baseUrl, workflowRunId, timeoutMs, intervalMs) {
 }
 
 function readGoNoGo(workspaceRoot, runId) {
-  const goPath = path.resolve(workspaceRoot, "artifacts", "release", String(runId || ""), "qa", "go_no_go_result.json");
+  const goPath = resolveReleaseArtifactPath(workspaceRoot, runId, path.join("qa", "go_no_go_result.json"));
   if (!fs.existsSync(goPath)) {
     return { exists: false, verdict: "", path: goPath };
   }
@@ -159,7 +172,7 @@ function readGoNoGo(workspaceRoot, runId) {
 }
 
 function readFidelityReport(workspaceRoot, runId) {
-  const p = path.resolve(workspaceRoot, "artifacts", "release", String(runId || ""), "qa", "product_fidelity_report.json");
+  const p = resolveReleaseArtifactPath(workspaceRoot, runId, path.join("qa", "product_fidelity_report.json"));
   if (!fs.existsSync(p)) return { exists: false, classification: "", perceptual_score: "", should_warn: false };
   const value = readJson(p);
   return {
@@ -171,7 +184,7 @@ function readFidelityReport(workspaceRoot, runId) {
 }
 
 function readPreviewValidationReport(workspaceRoot, runId) {
-  const p = path.resolve(workspaceRoot, "artifacts", "release", String(runId || ""), "qa", "preview_validation_report.json");
+  const p = resolveReleaseArtifactPath(workspaceRoot, runId, path.join("qa", "preview_validation_report.json"));
   if (!fs.existsSync(p)) return { exists: false, classification: "", should_warn: false };
   const value = readJson(p);
   return {

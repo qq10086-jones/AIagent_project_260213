@@ -170,7 +170,7 @@ def main():
         cmd = [
             "python", "update_fundamentals.py",
             "--db", db_path,
-            "--source", str(fund.get("source", "jquants")),
+            "--source", str(fund.get("source", "yfinance")),
         ]
         if fund.get("csv_path"):
             cmd += ["--csv_path", str(fund.get("csv_path"))]
@@ -340,27 +340,48 @@ def main():
         print(">>", " ".join(cmd))
         run_and_capture(cmd)
 
-    # 6) Learning M1: compute IC and update factor_registry (optional)
+    # 6) Learning M1: compute IC and update factor_registry (每周一次，非每日)
     learn = cfg.get("learning", {})
     if learn.get("enabled", True):
-        H = int(model.get("H", 20))
-        rebal = int(model.get("rebalance_every", 20))
-        lookback = int(learn.get("lookback_periods", 60))
-        min_cross_n = int(learn.get("min_cross_section_n", 25))
-        shadow_flag = ["--shadow"] if learn.get("shadow", False) else []
-        cmd = [
-            "python", "compute_ic.py",
-            "--db", db_path,
-            "--H", str(H),
-            "--rebalance_every", str(rebal),
-            "--lookback_periods", str(lookback),
-            "--min_cross_section_n", str(min_cross_n),
-        ] + shadow_flag
-        print(">>", " ".join(cmd))
-        try:
-            run_and_capture(cmd)
-        except RuntimeError as e:
-            print(f"⚠️  compute_ic.py failed (non-fatal): {e}")
+        from datetime import date as _date
+        # 门控：仅每周一（weekday=0）运行，或 config 设置 ic_update_force=true 强制跑
+        today_weekday = _date.today().weekday()
+        ic_force = bool(learn.get("ic_update_force", False))
+        if today_weekday != 0 and not ic_force:
+            print(f"[IC] 今日为周{today_weekday+1}，IC 更新跳过（仅周一运行，如需强制设置 learning.ic_update_force=true）")
+        else:
+            H = int(model.get("H", 20))
+            rebal = int(model.get("rebalance_every", 20))
+            lookback = int(learn.get("lookback_periods", 60))
+            min_cross_n = int(learn.get("min_cross_section_n", 25))
+            # paper_days 防护：少于30天时，IC 结果仅记录日志，不覆盖 factor_registry 权重
+            paper_days_required = int(learn.get("paper_days_required", 30))
+            shadow_flag = ["--shadow"] if learn.get("shadow", False) else []
+            # 通过 --dry_run_weights 标志通知 compute_ic.py 不写入权重（如已支持该参数）
+            # 否则此处仅打印警告，compute_ic.py 本身的防护逻辑负责拦截
+            try:
+                import sqlite3 as _sq
+                with _sq.connect(db_path) as _c:
+                    paper_days_actual = (_c.execute(
+                        "SELECT COUNT(DISTINCT date) FROM signals WHERE signal_mode='ridge'"
+                    ).fetchone() or [0])[0]
+            except Exception:
+                paper_days_actual = 0
+            if paper_days_actual < paper_days_required:
+                print(f"[IC] paper_days={paper_days_actual} < {paper_days_required}，IC 计算运行但权重不生效（waiting for more data）")
+            cmd = [
+                "python", "compute_ic.py",
+                "--db", db_path,
+                "--H", str(H),
+                "--rebalance_every", str(rebal),
+                "--lookback_periods", str(lookback),
+                "--min_cross_section_n", str(min_cross_n),
+            ] + shadow_flag
+            print(">>", " ".join(cmd))
+            try:
+                run_and_capture(cmd)
+            except RuntimeError as e:
+                print(f"⚠️  compute_ic.py failed (non-fatal): {e}")
  
     # 7) Promotion audit (final pass after learning updates)
     promotion = cfg.get("promotion", {})

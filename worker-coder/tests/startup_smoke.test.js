@@ -32,8 +32,8 @@ function main() {
   assert.match(workerText, /startup-preflight/);
 
   assert.match(entrypointText, /OPENCODE_PLUGINS_JSON/);
-  assert.match(entrypointText, /superpowers\.js/);
-  assert.match(opencodeTemplateText, /"plugins"\s*:\s*\$\{OPENCODE_PLUGINS_JSON\}/);
+  assert.match(entrypointText, /superpowers@git\+https:\/\/github\.com\/obra\/superpowers\.git/);
+  assert.match(opencodeTemplateText, /"plugin"\s*:\s*\$\{OPENCODE_PLUGINS_JSON\}/);
 
   assert.match(codingServiceText, /from '\.\/scope_guard\.js'/);
   assert.match(codingServiceText, /from '\.\/step_artifact_contract\.js'/, "coding_service must import from step_artifact_contract");

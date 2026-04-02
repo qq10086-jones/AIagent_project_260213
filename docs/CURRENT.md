@@ -3,7 +3,7 @@
 > **新员工从这里开始。** 本页列出所有"当前有效"文档的直接链接。
 > 历史版本在各子目录中保留，但不需要阅读。
 
-**最后更新**: 2026-04-01
+**最后更新**: 2026-04-02
 
   - latest live workflow: `runtime/artifacts/orchestrator/canary/live_m9_workflow/live_m9_workflow_report.json`
   - latest verified status: `PASS / GO`, `superpowers_configured_steps = 6`, `superpowers_steps_used = 6`
@@ -52,7 +52,7 @@
 
 | 功能 | 设计文档 | 任务清单 | 状态 |
 |------|---------|---------|------|
-| Superpowers 集成 | [`03_feature_development/2026-03-28_superpowers_integration_design.md`](03_feature_development/2026-03-28_superpowers_integration_design.md) | [`03_feature_development/2026-03-28_superpowers_integration_tasklist.md`](03_feature_development/2026-03-28_superpowers_integration_tasklist.md) | 60%，Track A/B/C 待完成 |
+| Superpowers 集成 | [`03_feature_development/2026-03-28_superpowers_integration_design.md`](03_feature_development/2026-03-28_superpowers_integration_design.md) | [`01_design/system/260401/Nexus_Tasklist_v3.md`](01_design/system/260401/Nexus_Tasklist_v3.md) | `SP-01` / `SP-02` 已通过，当前主线为 `SP-03` |
 | Beta 质量提升 | [`03_feature_development/2026-03-29_nexus_beta_quality_design.md`](03_feature_development/2026-03-29_nexus_beta_quality_design.md) | [`03_feature_development/2026-03-29_nexus_beta_quality_tasklist.md`](03_feature_development/2026-03-29_nexus_beta_quality_tasklist.md) | 已并入 v3 任务清单 |
 
 ---
@@ -60,8 +60,8 @@
 ## 最新进度报告
 
 - **当前状态**: [`03_feature_development/PROGRESS_LATEST.md`](03_feature_development/PROGRESS_LATEST.md)
-- **最近一次验证**: [`03_feature_development/progress_reports/progress_20260401_discord_supported_beta_live.md`](03_feature_development/progress_reports/progress_20260401_discord_supported_beta_live.md)
-  - verdict = GO ✅ | superpowers_configured_steps = 0 ⚠️
+- **最近一次验证**: [`03_feature_development/PROGRESS_LATEST.md`](03_feature_development/PROGRESS_LATEST.md)
+  - verdict = `PASS / GO` | `superpowers_configured_steps = 6` | 当前主线 = `SP-03`
 
 ---
 

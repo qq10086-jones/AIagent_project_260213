@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
 import pandas as pd
@@ -288,202 +287,230 @@ def import_csv(db_path: str, csv_path: Path, fail_closed: bool, require_availabl
         conn.commit()
 
 
-def _jquants_env_credentials() -> tuple[str | None, str | None]:
-    mail = os.getenv("JQUANTS_MAIL") or os.getenv("JQUANTS_EMAIL")
-    password = os.getenv("JQUANTS_PASSWORD")
-    return mail, password
-
-
-def _jquants_api_key() -> str | None:
-    return os.getenv("JQUANTS_API_KEY")
-
-
-def _normalize_jquants_frame(df: pd.DataFrame) -> pd.DataFrame:
-    frame = df.copy()
-    rename_map = {
-        "LocalCode": "symbol",
-        "DisclosureDate": "published_ts",
-        "DisclosedDate": "published_ts",
-        "CurrentPeriodEndDate": "fiscal_period_end",
-        "FiscalYearEnd": "fiscal_period_end",
-        "NetSales": "revenue",
-        "Revenue": "revenue",
-        "OperatingProfit": "operating_income",
-        "OperatingIncome": "operating_income",
-        "Profit": "net_income",
-        "NetIncome": "net_income",
-        "EarningsPerShare": "eps",
-        "BookValuePerShare": "book_value_per_share",
-        "DividendPerShare": "dividend_per_share",
-        "CashFlowsFromOperatingActivities": "operating_cf",
-        "CashFlowsFromInvestingActivities": "free_cf",
-        "TotalAssets": "total_assets",
-        "Equity": "total_equity",
-        "TotalEquity": "total_equity",
-        "InterestBearingDebt": "total_debt",
-        "NumberOfIssuedAndOutstandingSharesAtTheEndOfFiscalYearIncludingTreasuryStock": "shares_outstanding",
-        "ForecastNetSales": "guidance_revenue",
-        "ForecastOperatingProfit": "guidance_operating_income",
-        "ForecastEarningsPerShare": "guidance_eps",
-    }
-    for src, dst in rename_map.items():
-        if src in frame.columns and dst not in frame.columns:
-            frame[dst] = frame[src]
-    if "symbol" in frame.columns:
-        frame["symbol"] = frame["symbol"].astype(str).str.strip()
-        frame.loc[~frame["symbol"].str.endswith(".T"), "symbol"] = frame["symbol"].astype(str) + ".T"
-    if "published_ts" in frame.columns:
-        frame["published_ts"] = pd.to_datetime(frame["published_ts"], errors="coerce").dt.strftime("%Y-%m-%dT%H:%M:%S")
-    if "available_ts" not in frame.columns and "published_ts" in frame.columns:
-        frame["available_ts"] = frame["published_ts"]
-    if "fiscal_period_end" not in frame.columns:
-        frame["fiscal_period_end"] = ""
-    if "source" not in frame.columns:
-        frame["source"] = "jquants"
-    if "currency" not in frame.columns:
-        frame["currency"] = "JPY"
-    return frame
-
-
-_V2_RENAME: dict[str, str] = {
-    "Code":    "symbol",
-    "DiscDate": "published_ts",
-    "CurPerEn": "fiscal_period_end",
-    "Sales":   "revenue",
-    "OP":      "operating_income",
-    "NP":      "net_income",
-    "EPS":     "eps",
-    "BPS":     "book_value_per_share",
-    "DivAnn":  "dividend_per_share",
-    "CFO":     "operating_cf",
-    "CFI":     "free_cf",
-    "TA":      "total_assets",
-    "Eq":      "total_equity",
-    "ShOutFY": "shares_outstanding",
-    "FSales":  "guidance_revenue",
-    "FOP":     "guidance_operating_income",
-    "FEPS":    "guidance_eps",
-}
-
-
-def _fetch_v2(db_path: str, api_key: str) -> pd.DataFrame:
-    """Fetch latest financial summary for screened tickers via J-Quants ClientV2."""
-    import jquantsapi  # type: ignore
+def _fetch_yfinance_fundamentals(db_path: str) -> pd.DataFrame:
+    """通过 yfinance 抓取所有 tickers 的最新季度基本面数据，生成与 import_csv 兼容的 DataFrame。"""
     import sqlite3 as _sq
-    import warnings
+    import yfinance as yf
 
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    client = jquantsapi.ClientV2(api_key=api_key)
-
-    # Load screened tickers from DB
     with _sq.connect(db_path) as _conn:
         rows = _conn.execute("SELECT DISTINCT symbol FROM tickers").fetchall()
     symbols = [r[0] for r in rows if r[0]]
 
-    frames = []
+    records = []
     for sym in symbols:
-        # Strip .T suffix for J-Quants code (5-digit numeric)
-        code = sym.replace(".T", "")
         try:
-            df = client.get_fin_summary(code=code)
-            if df is not None and not df.empty:
-                frames.append(df)
-        except Exception:
-            continue
+            tk = yf.Ticker(sym)
+            info = tk.info or {}
 
-    if not frames:
-        return pd.DataFrame()
+            # 季度财务报表
+            try:
+                q_income = tk.quarterly_income_stmt
+            except Exception:
+                q_income = pd.DataFrame()
+            try:
+                q_balance = tk.quarterly_balance_sheet
+            except Exception:
+                q_balance = pd.DataFrame()
+            try:
+                q_cashflow = tk.quarterly_cashflow
+            except Exception:
+                q_cashflow = pd.DataFrame()
 
-    combined = pd.concat(frames, ignore_index=True)
-    # Rename V2 columns to our schema
-    for src, dst in _V2_RENAME.items():
-        if src in combined.columns and dst not in combined.columns:
-            combined[dst] = combined[src]
-    print(f"[fundamentals] J-Quants V2: fetched {len(combined)} rows for {len(symbols)} tickers")
-    return combined
+            # 确定最近季报日期
+            if not q_income.empty:
+                latest_date = q_income.columns[0]
+            elif not q_balance.empty:
+                latest_date = q_balance.columns[0]
+            else:
+                latest_date = pd.Timestamp.now()
+
+            fiscal_period_end = str(latest_date)[:10]
+            # yfinance 无真实 PIT 信息，以今日作为 available_ts（保守处理）
+            now_ts = pd.Timestamp.now().strftime("%Y-%m-%dT%H:%M:%S")
+            available_ts = now_ts
+            published_ts = now_ts
+
+            def _get(df: pd.DataFrame, keys: list) -> "float | None":
+                """在 DataFrame 中按候选行名依序查找第一列的值。"""
+                if df.empty:
+                    return None
+                for k in keys:
+                    if k in df.index:
+                        try:
+                            return float(df.loc[k].iloc[0])
+                        except Exception:
+                            pass
+                return None
+
+            revenue      = _get(q_income,   ["Total Revenue", "Revenue"])
+            op_income    = _get(q_income,   ["Operating Income", "EBIT"])
+            net_income   = _get(q_income,   ["Net Income", "Net Income Common Stockholders"])
+            total_assets = _get(q_balance,  ["Total Assets"])
+            total_equity = _get(q_balance,  ["Stockholders Equity", "Common Stock Equity", "Total Stockholder Equity"])
+            total_debt   = _get(q_balance,  ["Total Debt", "Long Term Debt And Capital Lease Obligation"])
+            shares_out   = _get(q_balance,  ["Share Issued", "Ordinary Shares Number"])
+            op_cf        = _get(q_cashflow, ["Operating Cash Flow", "Cash Flows From Used In Operating Activities Direct Method"])
+
+            # 每股数据从 info 补充
+            eps   = info.get("trailingEps")
+            bvps  = info.get("bookValue")
+            div_r = info.get("dividendRate")
+            div_ps = div_r / 4 if div_r else None  # 年化转季度近似
+            if shares_out is None:
+                shares_out = info.get("sharesOutstanding")
+            guidance_eps = info.get("forwardEps")
+
+            records.append({
+                "symbol":                    sym,
+                "fiscal_period_end":         fiscal_period_end,
+                "published_ts":              published_ts,
+                "available_ts":              available_ts,
+                "source":                    "yfinance",
+                "currency":                  "JPY",
+                "revenue":                   revenue,
+                "operating_income":          op_income,
+                "net_income":                net_income,
+                "eps":                       eps,
+                "book_value_per_share":      bvps,
+                "dividend_per_share":        div_ps,
+                "operating_cf":              op_cf,
+                "free_cf":                   None,
+                "total_assets":              total_assets,
+                "total_equity":              total_equity,
+                "total_debt":                total_debt,
+                "shares_outstanding":        shares_out,
+                "guidance_revenue":          None,
+                "guidance_operating_income": None,
+                "guidance_eps":              guidance_eps,
+            })
+        except Exception as exc:
+            print(f"[fundamentals] yfinance error for {sym}: {exc}")
+
+    print(f"[fundamentals] yfinance: 获取 {len(records)}/{len(symbols)} 只标的基本面数据")
+    return pd.DataFrame(records) if records else pd.DataFrame()
 
 
-def import_jquants(db_path: str, fail_closed: bool, require_available_ts: bool) -> None:
+def import_yfinance(db_path: str, fail_closed: bool, require_available_ts: bool) -> None:
+    """通过 yfinance 抓取基本面并写入 DB（零付费依赖）。"""
     try:
-        import jquantsapi  # type: ignore
-    except Exception as exc:
-        message = f"jquantsapi is unavailable: {exc}"
+        import yfinance  # noqa: F401
+    except ImportError as exc:
+        msg = f"yfinance 未安装: {exc}"
         if fail_closed:
-            raise RuntimeError(message) from exc
-        print(f"[fundamentals] {message}")
+            raise RuntimeError(msg) from exc
+        print(f"[fundamentals] {msg}")
         return
 
-    # --- ClientV2 path (JQUANTS_API_KEY — Google OAuth / direct key) ---
-    api_key = _jquants_api_key()
-    if api_key:
-        try:
-            raw = _fetch_v2(db_path, api_key)
-        except Exception as exc:
-            message = f"J-Quants V2 fetch failed: {exc}"
-            if fail_closed:
-                raise RuntimeError(message) from exc
-            print(f"[fundamentals] {message}")
-            return
-        if raw.empty:
-            print("[fundamentals] J-Quants V2 returned no data.")
-            return
-        normalized = _normalize_jquants_frame(raw)
-        temp_csv = Path(db_path).with_name("_tmp_jquants_fundamentals.csv")
-        normalized.to_csv(temp_csv, index=False)
-        try:
-            import_csv(db_path, temp_csv, fail_closed=fail_closed, require_available_ts=require_available_ts)
-        finally:
-            try:
-                temp_csv.unlink()
-            except Exception:
-                pass
-        return
-
-    # --- ClientV1 path (JQUANTS_MAIL + JQUANTS_PASSWORD — legacy) ---
-    mail, password = _jquants_env_credentials()
-    if not mail or not password:
-        message = "J-Quants credentials are not set. Set JQUANTS_API_KEY (recommended) or JQUANTS_MAIL+JQUANTS_PASSWORD."
-        if fail_closed:
-            raise RuntimeError(message)
-        print(f"[fundamentals] {message}")
-        return
-
-    import warnings
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    client = jquantsapi.Client(mail_address=mail, password=password)
-    statements = None
-    for candidate in ["get_statements", "get_fins_statements", "get_fin_statements"]:
-        fetcher = getattr(client, candidate, None)
-        if fetcher is None:
-            continue
-        try:
-            statements = fetcher()
-            break
-        except TypeError:
-            try:
-                statements = fetcher(code=None)
-                break
-            except Exception:
-                continue
-        except Exception as exc:
-            if fail_closed:
-                raise RuntimeError(f"J-Quants statements fetch failed via {candidate}: {exc}") from exc
-    if statements is None:
-        message = "Unable to fetch statements from J-Quants client (V1)."
-        if fail_closed:
-            raise RuntimeError(message)
-        print(f"[fundamentals] {message}")
-        return
-
-    raw = statements if isinstance(statements, pd.DataFrame) else pd.DataFrame(statements)
+    raw = _fetch_yfinance_fundamentals(db_path)
     if raw.empty:
-        print("[fundamentals] J-Quants returned no statements.")
+        print("[fundamentals] yfinance 未返回任何数据。")
         return
-    normalized = _normalize_jquants_frame(raw)
-    temp_csv = Path(db_path).with_name("_tmp_jquants_fundamentals.csv")
-    normalized.to_csv(temp_csv, index=False)
+
+    # 通过临时 CSV 复用 import_csv 的全部逻辑（包含 _build_feature_daily_rows）
+    temp_csv = Path(db_path).with_name("_tmp_yf_fundamentals.csv")
+    raw.to_csv(temp_csv, index=False)
     try:
-        import_csv(db_path, temp_csv, fail_closed=fail_closed, require_available_ts=require_available_ts)
+        import_csv(db_path, temp_csv, fail_closed=fail_closed, require_available_ts=False)
+    finally:
+        try:
+            temp_csv.unlink()
+        except Exception:
+            pass
+
+
+def _fetch_jquants_v2_fundamentals(db_path: str) -> pd.DataFrame:
+    """通过 jquantsapi 抓取最新季报基本面数据。"""
+    import sqlite3 as _sq
+    import time
+    try:
+        import jquantsapi
+    except ImportError as exc:
+        raise RuntimeError(f"jquantsapi 未安装: {exc}")
+
+    api_key = os.getenv("JQUANTS_API_KEY")
+    if not api_key:
+        raise RuntimeError("未设置 JQUANTS_API_KEY 环境变量。")
+        
+    client = jquantsapi.ClientV2(api_key=api_key)
+
+    with _sq.connect(db_path) as _conn:
+        rows = _conn.execute("SELECT DISTINCT symbol FROM tickers").fetchall()
+    symbols = [r[0] for r in rows if r[0]]
+
+    records = []
+    for i, sym in enumerate(symbols):
+        # 移除 .T 后缀给 J-Quants
+        sym_prefix = sym.split(".")[0] if "." in sym else sym
+        print(f"[fundamentals] jquants_v2: Fetching {sym} ({i+1}/{len(symbols)})...")
+        try:
+            # 获取最近基本面
+            df = client.get_fin_summary(code=sym_prefix)
+            if df is not None and not df.empty:
+                # J-Quants 返回多行，取最后一条（最新）
+                df = df.sort_values("DisclosedDate", ascending=True)
+                latest = df.iloc[-1]
+
+                published_ts = latest.get("DisclosedDate")
+                if not published_ts:
+                    published_ts = pd.Timestamp.now().strftime("%Y-%m-%dT%H:%M:%S")
+                # 兼容不同字段格式
+                available_ts = published_ts
+                fiscal_period_end = latest.get("CurrentPeriodEndDate", latest.get("CurPerEn", ""))
+
+                op_income = latest.get("OperatingProfit", latest.get("OP"))
+                revenue = latest.get("NetSales", latest.get("Sales"))
+                op_cf = latest.get("CashFlowsFromOperatingActivities", latest.get("CFO"))
+                net_income = latest.get("ProfitLossAttributableToOwnersOfParent", latest.get("NP"))
+                bvps = latest.get("BookValuePerShare", latest.get("BPS"))
+                eps = latest.get("EarningsPerShare", latest.get("EPS"))
+                total_assets = latest.get("TotalAssets")
+                total_equity = latest.get("Equity", latest.get("TotalEquity"))
+
+                records.append({
+                    "symbol":                    sym,
+                    "fiscal_period_end":         fiscal_period_end,
+                    "published_ts":              published_ts,
+                    "available_ts":              available_ts,
+                    "source":                    "jquants_v2",
+                    "currency":                  "JPY",
+                    "revenue":                   float(revenue) if revenue is not None else None,
+                    "operating_income":          float(op_income) if op_income is not None else None,
+                    "net_income":                float(net_income) if net_income is not None else None,
+                    "eps":                       float(eps) if eps is not None else None,
+                    "book_value_per_share":      float(bvps) if bvps is not None else None,
+                    "dividend_per_share":        None, # 需要从 yfinance 补充或另行获取
+                    "operating_cf":              float(op_cf) if op_cf is not None else None,
+                    "free_cf":                   None,
+                    "total_assets":              float(total_assets) if total_assets is not None else None,
+                    "total_equity":              float(total_equity) if total_equity is not None else None,
+                    "total_debt":                None,
+                    "shares_outstanding":        None,
+                    "guidance_revenue":          None,
+                    "guidance_operating_income": None,
+                    "guidance_eps":              None,
+                })
+        except Exception as exc:
+            print(f"[fundamentals] jquants_v2 error for {sym}: {exc}")
+        
+        # 速率限制 5次/分 → 12s
+        if i < len(symbols) - 1:
+            time.sleep(12.5)
+
+    print(f"[fundamentals] jquants_v2: 获取 {len(records)}/{len(symbols)} 只标的基本面数据")
+    return pd.DataFrame(records) if records else pd.DataFrame()
+
+
+def import_jquants_v2(db_path: str, fail_closed: bool, require_available_ts: bool) -> None:
+    """通过 jquantsapi 抓取基本面并写入 DB。"""
+    raw = _fetch_jquants_v2_fundamentals(db_path)
+    if raw.empty:
+        print("[fundamentals] jquants_v2 未返回任何数据。")
+        return
+
+    temp_csv = Path(db_path).with_name("_tmp_jq_fundamentals.csv")
+    raw.to_csv(temp_csv, index=False)
+    try:
+        import_csv(db_path, temp_csv, fail_closed=fail_closed, require_available_ts=False)
     finally:
         try:
             temp_csv.unlink()
@@ -494,7 +521,8 @@ def import_jquants(db_path: str, fail_closed: bool, require_available_ts: bool) 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Initialize or import point-in-time fundamentals")
     ap.add_argument("--db", default="japan_market.db")
-    ap.add_argument("--source", default="noop", choices=["noop", "csv", "jquants"])
+    ap.add_argument("--source", default="yfinance", choices=["noop", "csv", "yfinance", "jquants_v2"],
+                    help="数据源: yfinance（默认，免费）| jquants_v2（高质量季报）| csv（手动导入）| noop（仅建表）")
     ap.add_argument("--csv_path", default=None)
     ap.add_argument("--fail_closed", action="store_true")
     ap.add_argument("--require_available_ts", action="store_true")
@@ -513,8 +541,12 @@ def main() -> None:
         import_csv(args.db, Path(args.csv_path), args.fail_closed, args.require_available_ts)
         return
 
-    if args.source == "jquants":
-        import_jquants(args.db, fail_closed=args.fail_closed, require_available_ts=args.require_available_ts)
+    if args.source == "yfinance":
+        import_yfinance(args.db, fail_closed=args.fail_closed, require_available_ts=args.require_available_ts)
+        return
+        
+    if args.source == "jquants_v2":
+        import_jquants_v2(args.db, fail_closed=args.fail_closed, require_available_ts=args.require_available_ts)
         return
 
     print("[fundamentals] noop mode; schema only.")

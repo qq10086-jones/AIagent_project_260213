@@ -5,8 +5,8 @@ update:
   universe_file: null
 
 fundamental:
-  enabled: false
-  source: "noop"          # jquants | csv | noop  (jquantsapi 未安装，暂用 noop)
+  enabled: true
+  source: "jquants_v2"          # jquants_v2 (高质量季报混合方案) | yfinance | csv | noop
   csv_path: null
   fail_closed: true
   require_available_ts: true

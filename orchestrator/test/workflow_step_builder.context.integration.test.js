@@ -600,3 +600,55 @@ test("impl_be payload leaves injected_workplan null when structured workplan is 
   assert.equal(payload.workplan_validation.code, "WORKPLAN_JSON_INVALID");
 });
 
+test("impl_fe payload exposes injected_workplan from structured workplan json", () => {
+  const workspaceRoot = makeWorkspace();
+  writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan-fe/plan/workplan.json", JSON.stringify({
+    be_tasks: [],
+    fe_tasks: [
+      { id: "T-FE-1", description: "Render customer list", verify: "Customer list renders from GET /api/customers" },
+    ],
+  }, null, 2));
+
+  const builder = createStepBuilder({
+    workspaceRoot,
+    registry: { project_types: {}, acceptance_suites: {} },
+    promptScriptRegistry: {
+      scripts: {
+        "frontend.impl.v1": { script_id: "frontend.impl.v1", role: "frontend", llm_role: "frontend", validation: {} },
+      },
+    },
+    handoffContracts: { handoffs: {} },
+    runtimeConfig: {},
+  });
+
+  const payload = builder.buildStepPayload({
+    run: {
+      run_id: "run-workplan-fe",
+      workflow_run_id: "wf-workplan-fe",
+      workflow_id: "coding_team_v0",
+      project_type: "webapp_crm",
+      input_json: JSON.stringify({ goal: "Build CRM frontend" }),
+    },
+    stepDef: {
+      id: "impl_fe",
+      role: "frontend",
+      tool: "coding.delegate",
+      gate: "policy",
+      prompt_script_id: "frontend.impl.v1",
+    },
+    stepIndex: 3,
+  });
+
+  assert.match(payload.task_prompt, /\[Structured Workplan/);
+  assert.match(payload.task_prompt, /FE Tasks\]/);
+  assert.match(payload.task_prompt, /T-FE-1: Render customer list/);
+  assert.deepEqual(payload.injected_workplan, {
+    section: "FE Tasks",
+    source: "runtime/artifacts/release/run-workplan-fe/plan/workplan.json",
+    tasks: [
+      { id: "T-FE-1", description: "Render customer list", verify: "Customer list renders from GET /api/customers" },
+    ],
+  });
+  assert.deepEqual(payload.tool_adapter_request.payload.injected_workplan, payload.injected_workplan);
+});
+

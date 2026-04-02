@@ -1,28 +1,39 @@
 {
-  "generated_at": "2026-04-02 08:08 JST",
+  "generated_at": "2026-04-02 15:05 JST",
   "asof": "2026-04-02",
   "session": {
-    "time_jst": "08:08",
-    "session": "pre_market",
-    "mins_to_close": 442,
-    "trading": false
+    "time_jst": "15:05",
+    "session": "afternoon",
+    "mins_to_close": 25,
+    "trading": true
   },
-  "mode": "market",
+  "mode": "full",
+  "regime": {
+    "trend": "DOWN",
+    "vol_level": "HIGH",
+    "bias": "BEARISH",
+    "sma5": 54848.4,
+    "sma20": 55698.6,
+    "atr_5d_pct": 3.74,
+    "atr_60d_pct": 2.43,
+    "ret_5d_pct": -1.32,
+    "action_bias": "下跌+高波动，全面防御，立即执行止损"
+  },
   "market": {
     "nikkei_etf": {
-      "open": 43400.0,
-      "cur": 48260.0,
-      "low": 42820.0,
-      "high": 48280.0,
-      "prev_close": 48260.0,
-      "vol_total": 8699685,
-      "last_time": "15:24",
-      "chg_pct": 0.0,
+      "open": 56700.0,
+      "cur": 54750.0,
+      "low": 54680.0,
+      "high": 56760.0,
+      "prev_close": 56200.0,
+      "vol_total": 434387,
+      "last_time": "14:53",
+      "chg_pct": -2.58,
       "trend_5m": "up",
-      "volume_spike_ratio": 12.1
+      "volume_spike_ratio": 12.0
     },
-    "market_ret_pct": 0.0,
-    "sentiment": "neutral"
+    "market_ret_pct": -2.58,
+    "sentiment": "weak"
   },
   "candidates": [
     {
@@ -32,370 +43,434 @@
       "fundamental_score": 1.0,
       "score_adjusted": 24.3,
       "fundamental_note": "基本面正常",
-      "price_cur": 1282.5,
-      "price_open": 1280.5,
-      "chg_pct": 0.0,
+      "price_cur": 1267.5,
+      "price_open": 1286.0,
+      "chg_pct": -1.17,
       "trend_5m": "up",
-      "volume_spike": 12.6,
-      "ret_today": 2.27,
-      "ret_20d": -11.44,
-      "excess_vs_market": 4.73,
-      "vol_5d": 1.98
+      "volume_spike": 11.8,
+      "ret_today": -1.44,
+      "ret_20d": -10.27,
+      "excess_vs_market": 1.16,
+      "vol_5d": 2.07,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
     },
     {
       "rank": 2,
       "symbol": "9432.T",
-      "score_tech": 23.34,
+      "score_tech": 23.48,
       "fundamental_score": 1.0,
-      "score_adjusted": 23.34,
+      "score_adjusted": 23.48,
       "fundamental_note": "基本面正常",
-      "price_cur": 156.1999969482422,
-      "price_open": 155.89999389648438,
-      "chg_pct": 0.0,
-      "trend_5m": "flat",
-      "volume_spike": 15.8,
-      "ret_today": -0.83,
-      "ret_20d": 4.24,
-      "excess_vs_market": 1.64,
-      "vol_5d": 0.64
+      "price_cur": 156.3000030517578,
+      "price_open": 157.39999389648438,
+      "chg_pct": 0.06,
+      "trend_5m": "up",
+      "volume_spike": 15.5,
+      "ret_today": 0.26,
+      "ret_20d": 5.13,
+      "excess_vs_market": 2.86,
+      "vol_5d": 0.52,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
     },
     {
       "rank": 3,
       "symbol": "8604.T",
-      "score_tech": 23.24,
+      "score_tech": 23.17,
       "fundamental_score": 1.0,
-      "score_adjusted": 23.24,
+      "score_adjusted": 23.17,
       "fundamental_note": "基本面正常",
-      "price_cur": 1278.0,
-      "price_open": 1205.5,
-      "chg_pct": 0.0,
+      "price_cur": 1250.0,
+      "price_open": 1297.0,
+      "chg_pct": -2.19,
       "trend_5m": "up",
-      "volume_spike": 31.9,
-      "ret_today": 6.73,
-      "ret_20d": 0.0,
-      "excess_vs_market": 9.19,
-      "vol_5d": 4.0
+      "volume_spike": 28.5,
+      "ret_today": -2.68,
+      "ret_20d": 2.63,
+      "excess_vs_market": -0.08,
+      "vol_5d": 4.17,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
     },
     {
       "rank": 4,
-      "symbol": "7733.T",
-      "score_tech": 22.71,
+      "symbol": "9434.T",
+      "score_tech": 22.97,
       "fundamental_score": 1.0,
-      "score_adjusted": 22.71,
+      "score_adjusted": 22.97,
       "fundamental_note": "基本面正常",
-      "price_cur": 1570.0,
-      "price_open": 1499.5,
-      "chg_pct": 0.0,
+      "price_cur": 214.5,
+      "price_open": 214.60000610351562,
+      "chg_pct": 1.23,
       "trend_5m": "up",
-      "volume_spike": 21.1,
-      "ret_today": 5.14,
-      "ret_20d": 13.09,
-      "excess_vs_market": 7.61,
-      "vol_5d": 3.52
+      "volume_spike": 12.6,
+      "ret_today": 0.7,
+      "ret_20d": 3.85,
+      "excess_vs_market": 3.3,
+      "vol_5d": 0.78,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
     },
     {
       "rank": 5,
-      "symbol": "9434.T",
-      "score_tech": 22.69,
+      "symbol": "7261.T",
+      "score_tech": 22.36,
       "fundamental_score": 1.0,
-      "score_adjusted": 22.69,
+      "score_adjusted": 22.36,
       "fundamental_note": "基本面正常",
-      "price_cur": 211.89999389648438,
-      "price_open": 213.60000610351562,
-      "chg_pct": 0.0,
+      "price_cur": 1049.0,
+      "price_open": 1087.5,
+      "chg_pct": -2.92,
       "trend_5m": "up",
-      "volume_spike": 12.3,
-      "ret_today": 0.9,
-      "ret_20d": 2.97,
-      "excess_vs_market": 3.37,
-      "vol_5d": 0.68
+      "volume_spike": 30.1,
+      "ret_today": -3.05,
+      "ret_20d": -8.97,
+      "excess_vs_market": -0.45,
+      "vol_5d": 3.43,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
     },
     {
       "rank": 6,
-      "symbol": "7261.T",
-      "score_tech": 22.33,
+      "symbol": "7211.T",
+      "score_tech": 21.88,
       "fundamental_score": 1.0,
-      "score_adjusted": 22.33,
+      "score_adjusted": 21.88,
       "fundamental_note": "基本面正常",
-      "price_cur": 1080.5,
-      "price_open": 1041.0,
-      "chg_pct": 0.0,
+      "price_cur": 304.8999938964844,
+      "price_open": 316.8999938964844,
+      "chg_pct": -1.58,
       "trend_5m": "up",
-      "volume_spike": 33.3,
-      "ret_today": 4.14,
-      "ret_20d": -9.51,
-      "excess_vs_market": 6.61,
-      "vol_5d": 3.17
+      "volume_spike": 13.5,
+      "ret_today": -1.61,
+      "ret_20d": -16.94,
+      "excess_vs_market": 0.99,
+      "vol_5d": 2.82,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
     },
     {
       "rank": 7,
-      "symbol": "2801.T",
-      "score_tech": 22.18,
-      "fundamental_score": 1.0,
-      "score_adjusted": 22.18,
-      "fundamental_note": "基本面正常",
-      "price_cur": 1519.0,
-      "price_open": 1441.5,
-      "chg_pct": 0.0,
-      "trend_5m": "up",
-      "volume_spike": 38.7,
-      "ret_today": 6.17,
-      "ret_20d": 9.3,
-      "excess_vs_market": 8.63,
-      "vol_5d": 2.96
-    },
-    {
-      "rank": 8,
-      "symbol": "7211.T",
-      "score_tech": 21.91,
-      "fundamental_score": 1.0,
-      "score_adjusted": 21.91,
-      "fundamental_note": "基本面正常",
-      "price_cur": 309.79998779296875,
-      "price_open": 308.70001220703125,
-      "chg_pct": 0.0,
-      "trend_5m": "up",
-      "volume_spike": 18.0,
-      "ret_today": 0.91,
-      "ret_20d": -19.76,
-      "excess_vs_market": 3.38,
-      "vol_5d": 2.85
-    },
-    {
-      "rank": 9,
-      "symbol": "5401.T",
-      "score_tech": 23.55,
+      "symbol": "9501.T",
+      "score_tech": 23.54,
       "fundamental_score": 0.92,
       "score_adjusted": 21.66,
       "fundamental_note": "近1季1季EPS亏损(降权-8%)",
-      "price_cur": 590.7000122070312,
-      "price_open": 578.4000244140625,
-      "chg_pct": 0.0,
+      "price_cur": 645.5,
+      "price_open": 664.4000244140625,
+      "chg_pct": -2.11,
       "trend_5m": "up",
-      "volume_spike": 15.4,
-      "ret_today": 2.8,
-      "ret_20d": -2.6,
-      "excess_vs_market": 5.26,
-      "vol_5d": 1.63
+      "volume_spike": 7.8,
+      "ret_today": -2.39,
+      "ret_20d": 1.24,
+      "excess_vs_market": 0.21,
+      "vol_5d": 2.21,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 8,
+      "symbol": "4755.T",
+      "score_tech": 23.11,
+      "fundamental_score": 0.92,
+      "score_adjusted": 21.26,
+      "fundamental_note": "近1季1季EPS亏损(降权-8%)",
+      "price_cur": 733.9000244140625,
+      "price_open": 755.0,
+      "chg_pct": -2.9,
+      "trend_5m": "up",
+      "volume_spike": 22.9,
+      "ret_today": -2.77,
+      "ret_20d": -6.61,
+      "excess_vs_market": -0.17,
+      "vol_5d": 2.99,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 9,
+      "symbol": "6471.T",
+      "score_tech": 21.09,
+      "fundamental_score": 1.0,
+      "score_adjusted": 21.09,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1118.0,
+      "price_open": 1163.5,
+      "chg_pct": -2.4,
+      "trend_5m": "up",
+      "volume_spike": 12.5,
+      "ret_today": -2.02,
+      "ret_20d": -8.67,
+      "excess_vs_market": 0.58,
+      "vol_5d": 3.13,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
     },
     {
       "rank": 10,
-      "symbol": "9501.T",
-      "score_tech": 23.5,
+      "symbol": "5020.T",
+      "score_tech": 22.76,
       "fundamental_score": 0.92,
-      "score_adjusted": 21.62,
+      "score_adjusted": 20.94,
       "fundamental_note": "近1季1季EPS亏损(降权-8%)",
-      "price_cur": 659.4000244140625,
-      "price_open": 643.5999755859375,
-      "chg_pct": 0.0,
+      "price_cur": 1440.0,
+      "price_open": 1512.0,
+      "chg_pct": -3.32,
       "trend_5m": "up",
-      "volume_spike": 6.1,
-      "ret_today": 3.51,
-      "ret_20d": 3.75,
-      "excess_vs_market": 5.97,
-      "vol_5d": 2.1
+      "volume_spike": 9.6,
+      "ret_today": -3.81,
+      "ret_20d": 9.36,
+      "excess_vs_market": -1.21,
+      "vol_5d": 3.84,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
     },
     {
       "rank": 11,
-      "symbol": "4755.T",
-      "score_tech": 23.12,
+      "symbol": "7201.T",
+      "score_tech": 22.65,
       "fundamental_score": 0.92,
-      "score_adjusted": 21.27,
+      "score_adjusted": 20.84,
       "fundamental_note": "近1季1季EPS亏损(降权-8%)",
-      "price_cur": 755.7999877929688,
-      "price_open": 731.2999877929688,
-      "chg_pct": 0.0,
+      "price_cur": 345.8999938964844,
+      "price_open": 352.8999938964844,
+      "chg_pct": 0.06,
       "trend_5m": "up",
-      "volume_spike": 28.9,
-      "ret_today": 4.41,
-      "ret_20d": -4.37,
-      "excess_vs_market": 6.88,
-      "vol_5d": 2.69
+      "volume_spike": 23.0,
+      "ret_today": -0.03,
+      "ret_20d": -7.36,
+      "excess_vs_market": 2.57,
+      "vol_5d": 2.76,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
     },
     {
       "rank": 12,
-      "symbol": "6471.T",
-      "score_tech": 21.2,
-      "fundamental_score": 1.0,
-      "score_adjusted": 21.2,
-      "fundamental_note": "基本面正常",
-      "price_cur": 1145.5,
-      "price_open": 1102.0,
-      "chg_pct": 0.0,
+      "symbol": "4005.T",
+      "score_tech": 22.23,
+      "fundamental_score": 0.92,
+      "score_adjusted": 20.45,
+      "fundamental_note": "近1季1季EPS亏损(降权-8%)",
+      "price_cur": 524.0999755859375,
+      "price_open": 534.2000122070312,
+      "chg_pct": -1.76,
       "trend_5m": "up",
-      "volume_spike": 28.8,
-      "ret_today": 4.92,
-      "ret_20d": -14.56,
-      "excess_vs_market": 7.39,
-      "vol_5d": 3.05
+      "volume_spike": 24.2,
+      "ret_today": -1.87,
+      "ret_20d": 11.89,
+      "excess_vs_market": 0.73,
+      "vol_5d": 3.99,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
     },
     {
       "rank": 13,
-      "symbol": "5020.T",
-      "score_tech": 22.73,
-      "fundamental_score": 0.92,
-      "score_adjusted": 20.91,
-      "fundamental_note": "近1季1季EPS亏损(降权-8%)",
-      "price_cur": 1489.5,
-      "price_open": 1425.0,
-      "chg_pct": 0.0,
-      "trend_5m": "flat",
-      "volume_spike": 46.7,
-      "ret_today": 6.13,
-      "ret_20d": 4.66,
-      "excess_vs_market": 8.6,
-      "vol_5d": 2.83
-    },
-    {
-      "rank": 14,
-      "symbol": "7201.T",
-      "score_tech": 22.62,
-      "fundamental_score": 0.92,
-      "score_adjusted": 20.81,
-      "fundamental_note": "近1季1季EPS亏损(降权-8%)",
-      "price_cur": 345.70001220703125,
-      "price_open": 336.0,
-      "chg_pct": 0.0,
-      "trend_5m": "down",
-      "volume_spike": 24.5,
-      "ret_today": 3.93,
-      "ret_20d": -11.19,
-      "excess_vs_market": 6.4,
-      "vol_5d": 2.83
-    },
-    {
-      "rank": 15,
-      "symbol": "4005.T",
-      "score_tech": 22.21,
-      "fundamental_score": 0.92,
-      "score_adjusted": 20.43,
-      "fundamental_note": "近1季1季EPS亏损(降权-8%)",
-      "price_cur": 533.5,
-      "price_open": 501.8999938964844,
-      "chg_pct": 0.0,
+      "symbol": "5401.T",
+      "score_tech": 23.62,
+      "fundamental_score": 0.84,
+      "score_adjusted": 19.84,
+      "fundamental_note": "近2季2季EPS亏损(降权-16%)",
+      "price_cur": 582.2000122070312,
+      "price_open": 595.2000122070312,
+      "chg_pct": -1.44,
       "trend_5m": "up",
-      "volume_spike": 15.3,
-      "ret_today": 6.95,
-      "ret_20d": 6.04,
-      "excess_vs_market": 9.41,
-      "vol_5d": 3.66
+      "volume_spike": 11.3,
+      "ret_today": -1.66,
+      "ret_20d": -1.83,
+      "excess_vs_market": 0.94,
+      "vol_5d": 1.86,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    }
+  ],
+  "macro_news": [
+    {
+      "category": "TRADE",
+      "summary": "日産、メキシコ製車両の関税軽減を米政府に求める－低価格維持に必要 - Bloomberg.com",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "「相互関税」公表から１年 - sp.m.jiji.com",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "「相互関税」公表から１年 - 時事通信ニュース",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "破産申請の理由の4割以上が「関税コスト」...トランプ関税が米国民に与える「破産」の苦しみ - ニュ",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "「相互関税」公表から１年 - wakayama.keizai.biz",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "「相互関税」公表から１年 - ひなた宮崎経済新聞",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "「相互関税」公表から１年 - 倉敷経済新聞",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "「相互関税」公表から１年 - 盛岡経済新聞",
+      "score": -0.4
     }
   ],
   "screener_meta": {
-    "count": 15,
+    "count": 13,
     "hard_vetoed_count": 0,
     "downweighted_count": 6
   },
   "live_state": {
     "positions": [],
     "orders": [],
-    "account": {}
+    "account": {
+      "asof": "2026-04-01",
+      "nav": 400000.0,
+      "cash": 400000.0
+    }
   },
   "db_signals": [
     {
-      "asof": "2026-03-26",
+      "asof": "2026-04-01",
+      "symbol": "8306.T",
+      "score": 25.054661914072465,
+      "name": "MUFG",
+      "sector": "Bank"
+    },
+    {
+      "asof": "2026-04-01",
+      "symbol": "6758.T",
+      "score": 24.888136001665178,
+      "name": "Sony Group",
+      "sector": "Tech/Entertainment"
+    },
+    {
+      "asof": "2026-04-01",
+      "symbol": "7011.T",
+      "score": 24.857916025592495,
+      "name": "Mitsubishi Heavy",
+      "sector": "Defense/Space"
+    },
+    {
+      "asof": "2026-04-01",
+      "symbol": "6501.T",
+      "score": 24.766405306148272,
+      "name": "Hitachi",
+      "sector": "Conglomerate"
+    },
+    {
+      "asof": "2026-04-01",
+      "symbol": "7203.T",
+      "score": 24.74268833429196,
+      "name": "Toyota Motor",
+      "sector": "Auto"
+    },
+    {
+      "asof": "2026-04-01",
+      "symbol": "1605.T",
+      "score": 24.41885102848993,
+      "name": "Inpex",
+      "sector": "Oil & Gas"
+    },
+    {
+      "asof": "2026-04-01",
       "symbol": "7267.T",
-      "score": 24.32922336748822,
+      "score": 24.302979088219267,
       "name": "Honda Motor",
       "sector": "Auto"
     },
     {
-      "asof": "2026-03-26",
+      "asof": "2026-04-01",
+      "symbol": "6702.T",
+      "score": 23.895664598320614,
+      "name": "Fujitsu",
+      "sector": "IT Services"
+    },
+    {
+      "asof": "2026-04-01",
+      "symbol": "8001.T",
+      "score": 23.83633099268778,
+      "name": "Itochu",
+      "sector": "Trading"
+    },
+    {
+      "asof": "2026-04-01",
+      "symbol": "4568.T",
+      "score": 23.744683862719512,
+      "name": "Daiichi Sankyo",
+      "sector": "Pharma"
+    },
+    {
+      "asof": "2026-04-01",
       "symbol": "5401.T",
-      "score": 23.93345022293174,
+      "score": 23.618676717561964,
       "name": "Nippon Steel",
       "sector": "Steel"
     },
     {
-      "asof": "2026-03-26",
+      "asof": "2026-04-01",
       "symbol": "9501.T",
-      "score": 23.523981654042448,
+      "score": 23.53875817184163,
       "name": "Tokyo Electric Power",
       "sector": "Utility"
     },
     {
-      "asof": "2026-03-26",
+      "asof": "2026-04-01",
+      "symbol": "9107.T",
+      "score": 23.505360912235435,
+      "name": "Kawasaki Kisen",
+      "sector": "Shipping"
+    },
+    {
+      "asof": "2026-04-01",
+      "symbol": "6752.T",
+      "score": 23.496954867516777,
+      "name": "Panasonic Holdings",
+      "sector": "Electronics"
+    },
+    {
+      "asof": "2026-04-01",
       "symbol": "9432.T",
-      "score": 23.37267539092379,
+      "score": 23.48422175360166,
       "name": "NTT",
       "sector": "Telecom"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "8604.T",
-      "score": 23.25609282394143,
-      "name": "Nomura Holdings",
-      "sector": "Securities"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "4755.T",
-      "score": 23.17430485454151,
-      "name": "Rakuten Group",
-      "sector": "Internet"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "7733.T",
-      "score": 22.764884954987984,
-      "name": "Olympus",
-      "sector": "Medical Devices"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "5020.T",
-      "score": 22.756685377926956,
-      "name": "ENEOS",
-      "sector": "Energy"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "9434.T",
-      "score": 22.707090826822565,
-      "name": "SoftBank Corp",
-      "sector": "Telecom"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "7201.T",
-      "score": 22.66039199450339,
-      "name": "Nissan Motor",
-      "sector": "Auto"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "2801.T",
-      "score": 22.34099390421312,
-      "name": "Kikkoman",
-      "sector": "Food"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "7261.T",
-      "score": 22.334765924786975,
-      "name": "Mazda Motor",
-      "sector": "Auto"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "4005.T",
-      "score": 22.251903984017414,
-      "name": "Sumitomo Chemical",
-      "sector": "Chemical"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "7211.T",
-      "score": 21.955265295064336,
-      "name": "Mitsubishi Motors",
-      "sector": "Auto"
-    },
-    {
-      "asof": "2026-03-26",
-      "symbol": "6471.T",
-      "score": 21.300404116100637,
-      "name": "NSK",
-      "sector": "Bearings"
     }
   ]
 }

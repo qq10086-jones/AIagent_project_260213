@@ -59,6 +59,19 @@ function writeText(filePath, value) {
   fs.writeFileSync(filePath, value, "utf8");
 }
 
+function resolveReleaseArtifactPath(workspaceRoot, runId, relPath) {
+  const runIdText = String(runId || "").trim();
+  const rel = String(relPath || "").replace(/^[/\\]+/, "");
+  const candidates = [
+    path.resolve(workspaceRoot, "runtime", "artifacts", "release", runIdText, rel),
+    path.resolve(workspaceRoot, "artifacts", "release", runIdText, rel),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[0];
+}
+
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -151,7 +164,7 @@ function extractStepMetrics(steps) {
 }
 
 function readGoNoGo(workspaceRoot, runId) {
-  const goPath = path.resolve(workspaceRoot, "artifacts", "release", String(runId || ""), "qa", "go_no_go_result.json");
+  const goPath = resolveReleaseArtifactPath(workspaceRoot, runId, path.join("qa", "go_no_go_result.json"));
   if (!fs.existsSync(goPath)) {
     return { exists: false, verdict: "", path: goPath };
   }

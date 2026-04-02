@@ -61,6 +61,89 @@ const INTERFACE_HEADING_PATTERNS = [
   /^rpc[:\s]/,
 ];
 
+function collectWorkplanTaskText(workplanJson) {
+  const allTasks = [
+    ...(Array.isArray(workplanJson?.be_tasks) ? workplanJson.be_tasks : []),
+    ...(Array.isArray(workplanJson?.fe_tasks) ? workplanJson.fe_tasks : []),
+  ];
+  return allTasks
+    .filter((item) => item && typeof item === "object")
+    .map((item) => `${String(item.id || "").trim()} ${String(item.description || "").trim()} ${String(item.verify || "").trim()}`.trim())
+    .join("\n")
+    .toLowerCase();
+}
+
+function normalizeAcceptanceCriteria(acceptanceJson) {
+  if (Array.isArray(acceptanceJson?.criteria)) {
+    return acceptanceJson.criteria.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function extractInterfaceContracts(interfacesText = "") {
+  const headings = extractMarkdownHeadings(interfacesText);
+  return headings
+    .map((heading) => {
+      const match = heading.match(/^(get|post|put|patch|delete)\s+(\S+)/i);
+      if (!match) return null;
+      return {
+        method: String(match[1] || "").toUpperCase(),
+        path: String(match[2] || "").trim(),
+      };
+    })
+    .filter(Boolean);
+}
+
+function corpusIncludesAny(corpus, patterns = []) {
+  return patterns.some((pattern) => pattern.test(corpus));
+}
+
+function validateWorkplanProjectFit({
+  archText = "",
+  interfacesText = "",
+  specText = "",
+  acceptanceJson = null,
+  workplanJson = null,
+}) {
+  const corpus = [
+    String(archText || ""),
+    String(interfacesText || ""),
+    String(specText || ""),
+    collectWorkplanTaskText(workplanJson),
+  ].join("\n").toLowerCase();
+  const looksLikeCrmFlow = /\/api\/customers/.test(corpus);
+  if (!looksLikeCrmFlow) return [];
+
+  const errors = [];
+  const acceptanceCriteria = normalizeAcceptanceCriteria(acceptanceJson).join("\n").toLowerCase();
+  const interfaceContracts = extractInterfaceContracts(interfacesText);
+  const allowedMethods = new Set(interfaceContracts.map((item) => item.method));
+  const beTasks = Array.isArray(workplanJson?.be_tasks) ? workplanJson.be_tasks : [];
+  const feTasks = Array.isArray(workplanJson?.fe_tasks) ? workplanJson.fe_tasks : [];
+  const isMinimalScope = /\b(minimal|reviewable|lightweight|small)\b/.test(`${specText}\n${acceptanceCriteria}`.toLowerCase());
+
+  if (/\b(flask|django|fastapi|python app|python backend)\b/.test(corpus)) {
+    errors.push("workplan_project_fit:python_runtime_conflicts_with_node_backend_contract");
+  }
+  if (/\b(api[-\s]?key auth|x-api-key|authentication middleware|auth middleware|requests without .*401)\b/.test(corpus)) {
+    errors.push("workplan_project_fit:unexpected_auth_scope_for_minimal_crm");
+  }
+  if (!allowedMethods.has("DELETE") && /\bdelete\b/.test(corpus)) {
+    errors.push("workplan_project_fit:delete_scope_not_present_in_interfaces");
+  }
+  if (!corpusIncludesAny(acceptanceCriteria, [/\bpaginat/, /\bpage\b/]) && /\bpaginat/.test(corpus)) {
+    errors.push("workplan_project_fit:pagination_not_requested_by_acceptance");
+  }
+  if (!corpusIncludesAny(`${specText}\n${acceptanceCriteria}`.toLowerCase(), [/\bmobile\b/, /\bresponsive\b/]) && /\b(mobile|responsive)\b/.test(corpus)) {
+    errors.push("workplan_project_fit:responsive_scope_not_requested");
+  }
+  if (isMinimalScope) {
+    if (beTasks.length > 5) errors.push("workplan_project_fit:be_task_count_exceeds_minimal_scope");
+    if (feTasks.length > 5) errors.push("workplan_project_fit:fe_task_count_exceeds_minimal_scope");
+  }
+  return errors;
+}
+
 function readJsonFile(absPath) {
   try {
     return JSON.parse(fs.readFileSync(absPath, "utf8"));
@@ -204,6 +287,8 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
   const rawArchText = readTextFile(archPath);
   const archText = rawArchText.toLowerCase();
   const rawInterfacesText = readTextFile(interfacesPath);
+  const rawSpecText = readTextFile(path.resolve(rootAbs, "plan/spec.md"));
+  const acceptanceJson = readJsonFile(path.resolve(rootAbs, "plan/acceptance.json"));
   const workplanText = readTextFile(workplanPath).toLowerCase();
   const riskJson = readJsonFile(riskPath);
   const workplanJson = readJsonFile(workplanJsonPath);
@@ -223,6 +308,15 @@ export function validateArchitectOutput({ workspaceRoot, artifactRoot }) {
   const workplanErrors = validateJsonSchemaLite(CODING_TEAM_WORKPLAN_SCHEMA, workplanJson, "$");
   if (workplanErrors.length > 0) {
     missingSections.push(...workplanErrors.map((item) => `workplan.json:${item}`));
+  }
+  if (workplanErrors.length === 0) {
+    missingSections.push(...validateWorkplanProjectFit({
+      archText: rawArchText,
+      interfacesText: rawInterfacesText,
+      specText: rawSpecText,
+      acceptanceJson,
+      workplanJson,
+    }));
   }
   const interfacesValidation = validateInterfacesDocument(rawInterfacesText);
   if (!interfacesValidation.ok) {

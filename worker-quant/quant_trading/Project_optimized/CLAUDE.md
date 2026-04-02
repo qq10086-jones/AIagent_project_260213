@@ -18,6 +18,8 @@ C:\Users\linweiye\AIagent_project_260213\worker-quant\quant_trading\Project_opti
 | 全量深度分析 | → 场景三 |
 | 复盘持仓 / 今天赚了多少 | → 场景四 |
 | 尾盘操作 / 现在要不要买 | → 场景五 |
+| 每日完整分析 / 收盘后全量运行 | → 场景六 |
+| 只更新数据 / 不生成报告 | → 场景七 |
 
 ---
 
@@ -229,6 +231,8 @@ Project_optimized\
 ├── japan_market.db            ← SQLite 主数据库
 ├── reports\briefing_latest.md ← 每次运行后的报告
 ├── reports\briefing_latest.json
+├── reports\briefing_v2_latest.md  ← v2格式报告（6节结构，推荐使用）
+├── reports\briefing_v2_latest.json ← nexus JSON schema（含 regime/orders/risk_alerts）
 ├── ss7_sqlite_news_overlay.py ← 核心模型（勿随意修改）
 ├── screener.py                ← 选股器
 ├── daily_run.py               ← 每日自动运行（Task Scheduler，16:30 JST）
@@ -237,7 +241,54 @@ Project_optimized\
 
 ---
 
-## 六、给用户：如何让其他 AI 调用本文档
+## 六、新增场景（v2.0 链路）
+
+### 场景六：每日完整分析（A+B 两链路全量）
+
+**适用时机**：收盘后 16:30 JST 自动运行，或第二天开盘前手动触发
+
+**执行步骤**
+
+**Step 1: 运行完整日链路（Category A — 数据更新）**
+```bash
+python daily_run.py --config config.yaml
+```
+此命令依次执行：数据库更新 → 基本面更新(yfinance) → 选股器 → 新闻采集 → 模型/信号 → 决策
+
+**Step 2: 生成 v2 分析报告（Category B — 策略分析）**
+```bash
+python quant_briefing.py --mode full --output-version v2
+```
+
+**Step 3: 读取报告**
+```
+reports\briefing_v2_latest.md
+reports\briefing_v2_latest.json
+```
+
+**Step 4: 报告六节解读顺序**
+1. **一、市场状态** → 看 `action_bias` 判断今日整体操作基调
+2. **二、今日有效情报** → 检查是否有 🔴公司负面 或 🟡宏观负面
+3. **三、持仓健康度** → 检查是否有 ⚠️止损 标记，立即处理
+4. **四、候选信号 Top 5** → 结合新闻风险等级选标的
+5. **五、今日操作指令** → 确认/修改挂单
+6. **六、风险提示** → 不可跳过
+
+---
+
+### 场景七：仅更新数据（Category A，不做策略分析）
+
+**适用时机**：只想刷新数据库，不需要生成报告
+
+```bash
+python db_update.py --db japan_market.db
+python update_fundamentals.py --db japan_market.db --source yfinance
+python news_to_db.py --db japan_market.db --lookback_hours 26 --sources kabutan,google,boj,trade,gdelt
+```
+
+---
+
+## 七、给用户：如何让其他 AI 调用本文档
 
 将以下文字**原文复制**发给其他 AI（Gemini、MiniMax 等），替换 `[场景名]` 即可：
 

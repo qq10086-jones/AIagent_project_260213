@@ -1,103 +1,121 @@
-# Frontend Implementation Notes - Coffee Shop Website
+# Frontend Implementation Notes - CRM
 
-## UI Scope
+## UI Decisions
 
-### Coffee Shop Website Components
+1. **Multi-page SPA-style Navigation**: Separate HTML pages (login.html, index.html, customer.html, customer-form.html) with shared app.js.
 
-1. **Hero Section (首页主视觉)**
-   - Brand name "Bean & Brew" with coffee shop tagline
-   - CTA button "Reserve a Table" for reservations
-   - Smooth scroll to reservation section on click
+2. **Session-based Authentication**: Login form posts to /api/auth/login. Session cookie is managed by browser automatically (same-origin fetch with credentials).
 
-2. **Menu Display (菜单展示)**
-   - Three categories: Espresso Drinks, Handcrafted Beverages, Bakery
-   - Item name, price, and description for each
-   - Grid layout for menu items
+3. **CSRF Token Management**: After successful login, frontend fetches CSRF token from /api/csrf-token and stores it globally (window.currentCsrfToken). All POST/PUT/DELETE requests include the CSRF token in the 'CSRF-Token' header.
 
-3. **Business Hours (营业时间)**
-   - Weekday and weekend hours display
-   - Icon-enhanced visual presentation
+4. **401 Handling**: All API calls check for 401 responses and redirect to login.html when unauthorized.
 
-4. **Store Address (门店地址)**
-   - Full address display in contact section
-   - Phone number and email
+5. **Relative API Paths**: All API calls use relative paths via API_BASE = '/api'. No hardcoded localhost URLs.
 
-5. **Reservation Button (预约按钮)**
-   - Placeholder with "Coming Soon" message
-   - Calls to phone number for actual bookings
-   - Scroll to reservation section from hero CTA
+6. **Error Handling**: Toast notifications for success/error feedback, inline error messages for form validation.
 
-6. **Features Section (门店卖点)**
-   - Premium Beans, Expert Baristas, Eco-Friendly
-   - Feature cards with icons
+7. **Loading States**: Loading indicators shown while fetching data.
 
-7. **Brand Story (门店介绍)**
-   - History with timeline (2018-2024)
-   - Content sections
+## Authentication Flow
 
-8. **User Reviews (用户评价)**
-   - Latest 3 reviews in card format
-   - Review submission form
+1. User navigates to any protected page
+2. If not authenticated (no session), API call returns 401
+3. Frontend detects 401 and redirects to login.html
+4. User enters credentials and submits login form
+5. On success, frontend fetches CSRF token and stores it
+6. Frontend redirects to index.html (customer list)
+7. All subsequent API calls include session cookie and CSRF token
 
-9. **FAQ Section (常见问题)**
-   - Accordion-style FAQ items
-   - Topics: dairy-free options, reservations, Wi-Fi, pet-friendly
+## File Structure
 
-10. **Contact Section**
-    - Form with name, email, message fields
-    - Contact info display
-
-## API Consumption
-
-- **Contract Source**: `handoff/be_to_fe.json`
-- **Consumed Endpoints**:
-  - `GET /api/hero` - Hero section content
-  - `GET /api/features` - Store selling points
-  - `GET /api/story` - Brand story with timeline
-  - `GET /api/reviews/latest` - Latest 3 customer reviews
-  - `GET /api/faqs` - FAQ items
-  - `GET /api/contact` - Contact information
-  - `POST /api/contact` - Contact form submission
-  - `POST /api/reviews` - Review submission
-
-- **Fallback**: Static data used when API unavailable (LANDING_CONTENT)
+```
+impl/fe_changes/public/
+├── login.html           # Login form page
+├── index.html           # Customer list page (protected)
+├── customer.html        # Customer detail page (protected)
+├── customer-form.html   # Add/Edit customer form (protected)
+├── app.js               # API client and page logic
+└── css/
+    └── styles.css       # All styling
+```
 
 ## Run Instructions
 
 ### Development Mode
 
 ```bash
-cd workspace/sandbox/crm_site
+cd workspace/sandbox/crm_site/impl/be_changes
 npm install
 npm start
 ```
 
-The server will start on http://localhost:3000
+Server runs on http://localhost:3000
 
-### Verification
+### Login Credentials
 
-```bash
-node --check workspace/sandbox/crm_site/impl/fe_changes/app.js
+- Username: admin
+- Password: admin123
+
+## API Contract Compliance
+
+Frontend uses only endpoints defined in handoff/be_to_fe.json:
+
+### Authentication Endpoints
+- POST /api/auth/login - Login with username/password
+- POST /api/auth/logout - Logout (requires auth + CSRF)
+- GET /api/csrf-token - Get CSRF token (requires auth)
+
+### Customer Endpoints
+- GET /api/customers - List with pagination/search (requires auth)
+- GET /api/customers/:id - Get detail (requires auth)
+- POST /api/customers - Create (requires auth + CSRF)
+- PUT /api/customers/:id - Update (requires auth + CSRF)
+- DELETE /api/customers/:id - Delete (requires auth)
+
+## Customer Data Fields
+
+All customer fields from backend are displayed:
+- id, name, email, phone, company, notes, createdAt, updatedAt
+
+## API Response Shapes
+
+### GET /api/customers
+```json
+{
+  "data": [{ "id", "name", "email", "phone", "company", "notes", "createdAt", "updatedAt" }],
+  "pagination": { "page", "limit", "total", "totalPages" }
+}
 ```
 
-### File Structure
-
-```
-workspace/sandbox/crm_site/
-├── impl/
-│   └── fe_changes/
-│       └── app.js          # Frontend implementation
-├── index.html              # Entry HTML
-├── styles.css              # All styling
-└── app.js                  # Root app.js (loads fe_changes)
+### GET /api/customers/:id
+```json
+{ "success": true, "data": { "id", "name", "email", ... } }
 ```
 
-## Assumptions
+### POST /api/customers (requires CSRF)
+```json
+// Request: { "name", "email", "phone?", "company?", "notes?" }
+// Response: { "success": true, "data": { created customer } }
+```
 
-1. Backend implements all API endpoints as defined in be_to_fe.json contract
-2. HTML structure has required elements with matching CSS classes
-3. Contact form provides user feedback on submission
-4. Reviews section displays latest 3 reviews by default
-5. Reservation system is placeholder only (actual booking not in backend scope)
-6. Menu data is hardcoded but could be fetched from API
-7. Static fallback data available for offline/demo mode
+### PUT /api/customers/:id (requires CSRF)
+```json
+// Request: { "name?", "email?", ... }
+// Response: { "success": true, "data": { updated customer } }
+```
+
+### DELETE /api/customers/:id (requires CSRF)
+```json
+// Response: 204 No Content
+```
+
+## User Journeys
+
+1. **Login**: Navigate to site -> Redirected to login.html -> Enter credentials -> Redirect to customer list
+2. **View Customer List**: Load index.html -> See paginated list of customers
+3. **Search Customers**: Enter search term -> List filters by name/email
+4. **View Customer Detail**: Click View -> Navigate to customer.html?id=xxx
+5. **Add Customer**: Click Add Customer -> Fill form -> Submit -> Redirect to detail
+6. **Edit Customer**: Click Edit -> Modify fields -> Submit -> Redirect to detail
+7. **Delete Customer**: Click Delete -> Confirm -> Remove from list
+8. **Logout**: Click Logout -> Session destroyed -> Redirect to login

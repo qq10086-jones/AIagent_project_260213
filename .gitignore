@@ -21,6 +21,7 @@ artifacts/runs/
 artifacts/logs/
 artifacts/release/
 artifacts/canary/
+artifacts/preview_runtime_registry.json
 orchestrator/artifacts/canary/
 orchestrator/artifacts/validation/worker_coding_cohort/worker_coding_cohort_*/
 orchestrator/artifacts/validation/m10_load_test/
@@ -53,4 +54,12 @@ worker-quant/quant_trading/Project_optimized/daily_run.bat
 worker-quant/quant_trading/Project_optimized/logs/
 worker-quant/quant_trading/Project_optimized/.yf_cache/
 worker-quant/quant_trading/Project_optimized/artifacts/decision/
+worker-quant/quant_trading/Project_optimized/reports/briefing_latest.json
+worker-quant/quant_trading/Project_optimized/reports/briefing_latest.md
+worker-quant/quant_trading/Project_optimized/reports/briefing_v2_latest.json
+worker-quant/quant_trading/Project_optimized/reports/briefing_v2_latest.md
 worker-quant/quant_trading/Project_optimized/reports/random_subset_2021_03_11/
+workspace/sandbox/crm_site/handoff/
+workspace/sandbox/crm_site/impl/be_changes/package.json
+workspace/sandbox/crm_site/impl/be_changes/public/
+workspace/sandbox/crm_site/impl/fe_changes/public/

@@ -38,9 +38,9 @@ function main() {
     repoMap: { candidate_files: ["workspace/sandbox/crm_site/app.js"] },
   });
   assert.match(contract, /step_id: impl_fe/);
-  assert.match(contract, /target_paths: sandbox\/crm_site\/app\.js/);
-  assert.match(contract, /verification_command: node --check sandbox\/crm_site\/app\.js/);
-  assert.match(contract, /verification_plan: syntax_check:node --check sandbox\/crm_site\/app\.js, build:npm run build/);
+  assert.match(contract, /target_paths: workspace\/sandbox\/crm_site\/app\.js/);
+  assert.match(contract, /verification_command: node --check workspace\/sandbox\/crm_site\/app\.js/);
+  assert.match(contract, /verification_plan: syntax_check:node --check workspace\/sandbox\/crm_site\/app\.js, build:npm run build/);
 
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "prompt-contract-"));
   const taskDir = path.join(tempRoot, "artifacts", "runs", "run-1", "task_1");

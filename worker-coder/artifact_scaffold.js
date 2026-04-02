@@ -161,6 +161,24 @@ function buildCrmFrontendJsTemplate() {
     "",
   ].join('\n');
 }
+
+function inferRuntimePackageManifest({ projectType = "", serverSource = "" } = {}) {
+  const src = String(serverSource || "");
+  const isCrm = String(projectType) === "webapp_crm";
+  const isEsm = isCrm || /\bimport\s.+\sfrom\s+['"][^'"]+['"]|export\s+default\b/.test(src);
+  const needsExpress = /\bexpress\b/.test(src) || String(projectType) === "webapp_crm";
+  const needsCors = isCrm || /\bcors\b/.test(src);
+  const dependencies = {};
+  if (needsExpress) dependencies.express = "^4.18.2";
+  if (needsCors) dependencies.cors = "^2.8.5";
+  return {
+    name: projectType === "webapp_crm" ? "customer-workspace" : "generated-app",
+    version: "1.0.0",
+    main: "server.js",
+    ...(isEsm ? { type: "module" } : {}),
+    dependencies,
+  };
+}
 export function ensureExpectedArtifacts({ workspaceRoot, artifactRoot, expectedArtifacts, stepId, taskPrompt }) {
   const relRoot = String(artifactRoot || "").trim().replace(/\\/g, "/");
   const expected = Array.isArray(expectedArtifacts) ? expectedArtifacts : [];
@@ -603,14 +621,9 @@ ${prompt}
     return `body {\n  font-family: sans-serif;\n}\n`;
   }
   if (rel === "impl/be_changes/package.json") {
-    return JSON.stringify({
-      name: projectType === "webapp_crm" ? "customer-workspace" : "generated-app",
-      version: "1.0.0",
-      main: "server.js",
-      dependencies: {
-        express: "^4.19.2"
-      }
-    }, null, 2);
+    const serverPath = path.join(rootAbs, "impl", "be_changes", "server.js");
+    const serverSource = fs.existsSync(serverPath) ? fs.readFileSync(serverPath, "utf8") : "";
+    return JSON.stringify(inferRuntimePackageManifest({ projectType, serverSource }), null, 2);
   }
   if (rel === "release/README.md") {
     return `# Run Instructions\n\n1. cd impl/be_changes\n2. npm install\n3. node server.js\n4. Open http://localhost:3000\n\nGenerated at: ${now}\n`;
@@ -872,6 +885,34 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
       if (!hasCustomerRoutes || !servesPublicDir || !rootRouteUsesIndex || catchAllBeforeApi || hasMojibake) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "crm_backend_contract_repaired" };
+      }
+    }
+    if (rel === "impl/be_changes/package.json" && ext === ".json") {
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch {}
+      const serverPath = path.join(rootAbs, "impl", "be_changes", "server.js");
+      const serverSource = fs.existsSync(serverPath) ? fs.readFileSync(serverPath, "utf8") : "";
+      const expectedManifest = inferRuntimePackageManifest({ projectType, serverSource });
+      const existingDeps = parsed && typeof parsed.dependencies === "object" && !Array.isArray(parsed.dependencies)
+        ? parsed.dependencies
+        : {};
+      const expectedDeps = expectedManifest.dependencies || {};
+      const missingDep = Object.entries(expectedDeps).some(([name]) => !String(existingDeps?.[name] || "").trim());
+      const esmMismatch = Boolean(expectedManifest.type === "module") !== Boolean(parsed?.type === "module");
+      const mainMismatch = String(parsed?.main || "").trim() !== "server.js";
+      if (!parsed || missingDep || esmMismatch || mainMismatch) {
+        const repairedManifest = {
+          ...expectedManifest,
+          ...(parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}),
+          main: "server.js",
+          ...(expectedManifest.type === "module" ? { type: "module" } : {}),
+          dependencies: {
+            ...existingDeps,
+            ...expectedDeps,
+          },
+        };
+        fs.writeFileSync(targetAbs, JSON.stringify(repairedManifest, null, 2), "utf8");
+        return { repaired: true, reason: "runtime_package_manifest_repaired" };
       }
     }
     if ((rel === "impl/fe_changes/app.js" || rel === "impl/fe_changes/public/app.js") && ext === ".js" && projectType === "webapp_crm") {

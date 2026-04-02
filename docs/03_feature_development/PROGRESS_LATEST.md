@@ -1,4 +1,4 @@
-# Nexus Project Progress Report - 2026-04-02
+# Nexus Project Progress Report - 2026-04-03
 
 ## Current Status
 
@@ -7,6 +7,8 @@ The v3.1 mainline is still centered on:
 `pm_spec -> arch_design -> impl_be -> impl_fe -> smoke_test -> qa_verify -> release_pack -> deploy_preview`
 
 The project is now in a runnable Discord-entry beta state with stronger prompt contracts, stronger validator coverage, and plain-checkout registry validation working without Docker-only stub files.
+
+As of `2026-04-03`, the latest locally validated state is no longer the earlier `2/2 workflow, 1/2 GO` canary. The mainline has now passed a fresh end-to-end Discord-supported beta validation after fixing two concrete worker-coder artifact-contract defects.
 
 ## What Changed Recently
 
@@ -22,6 +24,8 @@ The project is now in a runnable Discord-entry beta state with stronger prompt c
 - stale workspace-reorg test expectations were fixed in `worker-coder`.
 - CRM scaffold repair now normalizes typed handoffs and repairs malformed `handoff/impl_to_qa.json` and `handoff/be_to_fe.json` outputs when the model emits the old shape.
 - minimal CRM fallback output was narrowed so it no longer silently introduces extra search/delete scope.
+- runtime backend manifest repair now infers missing Node dependencies such as `cors` from generated `server.js` and restores the correct ESM package shape for preview/smoke startup.
+- successful delegation now re-applies step-contract artifact repair and validates typed handoffs before the result leaves `worker-coder`, so malformed `impl_be` handoffs are retried internally instead of failing later in orchestrator.
 
 ### 3. Project-quality cleanup
 
@@ -32,6 +36,8 @@ The project is now in a runnable Discord-entry beta state with stronger prompt c
 ## Latest Validated Outcome
 
 ### Discord-supported beta simulation
+
+Previous state from `2026-04-02`:
 
 Validated via:
 
@@ -76,13 +82,44 @@ Additional runtime evidence from the latest successful `GO` run:
 - `smoke_root_status = 200`
 - `smoke_api_status = 401`
 
+### Latest local recovery validation
+
+Validated via:
+
+- `npm.cmd --prefix orchestrator run validate:discord_coding_supported_beta -- --base-url http://localhost:3000 --runs 1 --warmup 0 --concurrency 1 --strict false --min-workflow-success-rate 1.0 --min-go-rate 1.0 --max-total-p95-ms 3600000`
+
+Outcome:
+
+- workflow success rate: `1/1`
+- go rate: `1/1`
+- verdict: `PASS`
+- latest successful `GO` run:
+  - `workflow_run_id = 87261874-71d2-4197-812f-8e60df9439b1`
+  - `run_id = fa3e3208-ed96-4b38-8fc2-1905f7418af1`
+  - `preview_url = http://localhost:46007`
+  - `product_fidelity = demo_usable`
+  - `perceptual_quality = high`
+  - `preview_validation = preview_matched`
+  - `total_duration_ms = 1103588`
+
+Primary evidence:
+
+- validation report:
+  `runtime/artifacts/orchestrator/validation/discord_coding_load_test/2026-04-02T15-44-30-951Z/discord_coding_load_test_report.json`
+- `GO` result:
+  `runtime/artifacts/release/fa3e3208-ed96-4b38-8fc2-1905f7418af1/qa/go_no_go_result.json`
+- product fidelity:
+  `runtime/artifacts/release/fa3e3208-ed96-4b38-8fc2-1905f7418af1/qa/product_fidelity_report.json`
+- preview deployment:
+  `runtime/artifacts/release/fa3e3208-ed96-4b38-8fc2-1905f7418af1/preview/deployment_result.json`
+
 ## QA Assessment
 
-- Nexus critical-path code quality is materially better than earlier in the day: the release path runs end-to-end and the validator/tests now enforce the intended minimal-reviewable scope much more tightly.
-- Nexus project quality is improved but not fully closed: the suite-level canary is still not at `2/2 GO`, so `SP-03` is not closed yet.
-- The main remaining quality signal is the shallow QA artifact from run `ae540ae7-26fd-47d1-a9ec-a70ebb78bbae`, not a workflow crash.
+- Nexus critical-path code quality is materially better than before the recovery work: the release path runs end-to-end, preview deployment recovers cleanly, and typed handoff defects are now repaired and validated inside `worker-coder`.
+- Nexus project quality is improved enough to claim a fresh local `PASS` for the Discord-supported beta path, but the broader `SP-03` closeout standard should still be multi-run consistency rather than a single clean rerun.
+- The earlier shallow-QA signal from run `ae540ae7-26fd-47d1-a9ec-a70ebb78bbae` is still useful historical evidence, but it is no longer the latest blocker. The concrete blocker that was actually fixed was a combination of runtime package-manifest drift and success-path handoff-contract drift in `worker-coder`.
 
 ## Recommended Next Step
 
-1. Finish `SP-03` by eliminating the shallow QA artifact path and getting a clean multi-run `GO` canary.
-2. Continue the v3.1 governance stream with `SCO-05 / GOV-01`.
+1. Re-run the Discord-supported beta canary in multi-run mode to confirm the new `PASS` result holds beyond a single recovery run.
+2. If the multi-run canary stays clean, close `SP-03` and continue the v3.1 governance stream with `SCO-05 / GOV-01`.

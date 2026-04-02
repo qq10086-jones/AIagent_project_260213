@@ -63,11 +63,10 @@ export function salvageWorkflowArtifactFailure({ workspaceRoot, artifactRoot, ex
     if (!timeoutOnlySteps.has(safeStepId) && !implementationSteps.has(safeStepId)) return null;
     if (timeoutOnlySteps.has(safeStepId) && !result?.diagnostics?.timeout) return null;
     const handoff = getWorkflowStepHandoff(safeStepId);
-    const scaffoldExpectedArtifacts = Array.from(new Set([
-        ...(Array.isArray(expectedArtifacts) ? expectedArtifacts : []),
-        ...(Array.isArray(handoff?.required_artifacts) ? handoff.required_artifacts : []),
-        String(handoff?.typed_handoff?.file || "").trim(),
-    ].filter(Boolean)));
+    const scaffoldExpectedArtifacts = buildStepContractExpectedArtifacts({
+        stepId: safeStepId,
+        expectedArtifacts,
+    });
     const scaffold = ensureExpectedArtifacts({
         workspaceRoot,
         artifactRoot,
@@ -92,6 +91,15 @@ export function salvageWorkflowArtifactFailure({ workspaceRoot, artifactRoot, ex
         handoffValidation,
         salvageReason: implementationSteps.has(safeStepId) ? "artifact_contract" : "timeout",
     };
+}
+
+export function buildStepContractExpectedArtifacts({ stepId, expectedArtifacts }) {
+    const handoff = getWorkflowStepHandoff(stepId);
+    return Array.from(new Set([
+        ...(Array.isArray(expectedArtifacts) ? expectedArtifacts : []),
+        ...(Array.isArray(handoff?.required_artifacts) ? handoff.required_artifacts : []),
+        String(handoff?.typed_handoff?.file || "").trim(),
+    ].filter(Boolean)));
 }
 
 
@@ -532,12 +540,16 @@ export const CodingService = {
             });
             finalFallbackFrom = finalFallbackFrom || result?.diagnostics?.fallback_from || null;
 
+            const scaffoldExpectedArtifacts = buildStepContractExpectedArtifacts({
+                stepId,
+                expectedArtifacts,
+            });
             let artifactScaffold = null;
             if (result?.ok) {
                 artifactScaffold = ensureExpectedArtifacts({
                     workspaceRoot,
                     artifactRoot: artifact_root,
-                    expectedArtifacts: expected_artifacts,
+                    expectedArtifacts: scaffoldExpectedArtifacts,
                     stepId: step_id,
                     taskPrompt: effectivePrompt,
                 });
@@ -641,6 +653,22 @@ export const CodingService = {
                 };
             }
 
+            const handoff = getWorkflowStepHandoff(step_id);
+            const roleValidation = result?.ok
+                ? validateWorkflowStepArtifacts({
+                    workspaceRoot,
+                    artifactRoot: artifact_root,
+                    stepId,
+                })
+                : { checked: false, ok: true };
+            const handoffValidation = result?.ok && handoff
+                ? validateCodingTeamHandoff({
+                    workspaceRoot,
+                    artifactRoot: artifact_root,
+                    handoff,
+                })
+                : { checked: false, ok: true };
+
             const staticCheck = result?.ok
                 ? await runStaticChecks({
                     workspaceRoot: executionWorkspaceRoot,
@@ -658,7 +686,75 @@ export const CodingService = {
                 })
                 : { checked: false, ok: true, command: "", commands: [], records: [], achieved_tiers: [], unresolved_tiers: [], logPath: null };
 
-            if (result?.ok && staticCheck.checked && !staticCheck.ok) {
+            if (result?.ok && roleValidation.checked && !roleValidation.ok) {
+                finalSummary = buildDelegateFailureSummary({
+                    workspaceRoot,
+                    runId: run_id,
+                    taskId: task_id,
+                    stepId: step_id,
+                    providerRequested,
+                    providerUsed: result.provider_used || preferredProvider,
+                    targetPaths: effectiveTargetPaths,
+                    finalGitSummary,
+                    stdoutPath,
+                    stderrPath,
+                    staticCheck,
+                    verification,
+                    adapterResult: result,
+                    verificationCommand: verification_command,
+                    promptContract,
+                    redactedStdout,
+                    redactedStderr,
+                    startedAt: started,
+                    phase: "artifact_contract",
+                    summaryText: `step artifact validation failed: ${roleValidation.detail || roleValidation.code || "unknown artifact validation error"}`,
+                    testResult: "failed",
+                    errorCode: roleValidation.code || "E_WORKFLOW_ARTIFACT_INVALID",
+                    error: roleValidation.detail || "workflow step artifact validation failed",
+                    taskClass: taskContract.task_class,
+                    betaTemplateId: taskContract.beta_template_id,
+                    contextEnvelope: taskContract.context_envelope,
+                });
+                finalSummary.diagnostics = {
+                    ...(finalSummary.diagnostics || {}),
+                    role_validation: roleValidation,
+                    handoff_validation: handoffValidation,
+                };
+            } else if (result?.ok && handoffValidation.checked && !handoffValidation.ok) {
+                finalSummary = buildDelegateFailureSummary({
+                    workspaceRoot,
+                    runId: run_id,
+                    taskId: task_id,
+                    stepId: step_id,
+                    providerRequested,
+                    providerUsed: result.provider_used || preferredProvider,
+                    targetPaths: effectiveTargetPaths,
+                    finalGitSummary,
+                    stdoutPath,
+                    stderrPath,
+                    staticCheck,
+                    verification,
+                    adapterResult: result,
+                    verificationCommand: verification_command,
+                    promptContract,
+                    redactedStdout,
+                    redactedStderr,
+                    startedAt: started,
+                    phase: "artifact_contract",
+                    summaryText: `typed handoff validation failed: ${handoffValidation.detail || handoffValidation.code || "unknown handoff validation error"}`,
+                    testResult: "failed",
+                    errorCode: handoffValidation.code || "E_HANDOFF_INVALID",
+                    error: handoffValidation.detail || "workflow handoff validation failed",
+                    taskClass: taskContract.task_class,
+                    betaTemplateId: taskContract.beta_template_id,
+                    contextEnvelope: taskContract.context_envelope,
+                });
+                finalSummary.diagnostics = {
+                    ...(finalSummary.diagnostics || {}),
+                    role_validation: roleValidation,
+                    handoff_validation: handoffValidation,
+                };
+            } else if (result?.ok && staticCheck.checked && !staticCheck.ok) {
                 finalSummary = buildDelegateFailureSummary({
                     workspaceRoot,
                     runId: run_id,
@@ -846,6 +942,8 @@ export const CodingService = {
                         task_contract: taskContract,
                         failure_attribution: null,
                         artifact_scaffold: artifactScaffold || null,
+                        role_validation: roleValidation,
+                        handoff_validation: handoffValidation,
                         execution_adapter_packet: execution_adapter_packet || null,
                         tool_adapter_request: adapterRequest,
                         prompt_contract: promptContract.diagnostics,

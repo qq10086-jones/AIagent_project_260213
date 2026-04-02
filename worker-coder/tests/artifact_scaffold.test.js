@@ -80,8 +80,8 @@ function main() {
     taskPrompt: "Workflow: coding_team_v0\nProject Type: webapp_crm\nGoal: Build a minimal CRM web app",
   }));
   assert.equal(crmPackageJson.main, "server.js");
-  assert.equal(crmPackageJson.type, undefined);
-  assert.deepEqual(Object.keys(crmPackageJson.dependencies).sort(), ["express"]);
+  assert.equal(crmPackageJson.type, "module");
+  assert.deepEqual(Object.keys(crmPackageJson.dependencies).sort(), ["cors", "express"]);
 
   const handoff = JSON.parse(fs.readFileSync(path.join(rootAbs, "handoff", "be_to_fe.json"), "utf8"));
   assert.equal(handoff.from_step, "impl_be");
@@ -168,6 +168,32 @@ function main() {
   assert.deepEqual(preservedCrmBackend.repaired, []);
   const preservedServerText = fs.readFileSync(path.join(rootAbs, "impl", "be_changes", "server.js"), "utf8");
   assert.match(preservedServerText, /const express = require\('express'\);/);
+  fs.writeFileSync(path.join(rootAbs, "impl", "be_changes", "server.js"), [
+    "import express from 'express';",
+    "import cors from 'cors';",
+    "const app = express();",
+    "app.use(cors());",
+    "app.listen(process.env.PORT || 3000);",
+  ].join("\n"));
+  fs.writeFileSync(path.join(rootAbs, "impl", "be_changes", "package.json"), JSON.stringify({
+    name: "crm-live-validation",
+    version: "1.0.0",
+    main: "server.js",
+    dependencies: { express: "^4.21.2" },
+  }, null, 2));
+  const repairedPackageManifest = ensureExpectedArtifacts({
+    workspaceRoot,
+    artifactRoot,
+    expectedArtifacts: ["impl/be_changes/package.json"],
+    stepId: "impl_be",
+    taskPrompt: "Workflow: coding_team_v0\nProject Type: webapp_crm\nGoal: Build a minimal CRM web app",
+  });
+  assert.ok(repairedPackageManifest.repaired.includes("impl/be_changes/package.json"));
+  const repairedPackageJson = JSON.parse(fs.readFileSync(path.join(rootAbs, "impl", "be_changes", "package.json"), "utf8"));
+  assert.equal(repairedPackageJson.type, "module");
+  assert.equal(repairedPackageJson.main, "server.js");
+  assert.equal(repairedPackageJson.dependencies.express, "^4.18.2");
+  assert.equal(repairedPackageJson.dependencies.cors, "^2.8.5");
   fs.mkdirSync(path.join(rootAbs, "handoff"), { recursive: true });
   fs.writeFileSync(path.join(rootAbs, "handoff", "impl_to_qa.json"), JSON.stringify({
     from_step: "impl_fe",

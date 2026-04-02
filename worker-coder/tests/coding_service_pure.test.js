@@ -3,40 +3,49 @@
  *   - payloadToAdapterRequest: input normalization / shape contract
  *   - requiresScopedTargetPaths: boolean gate logic
  *
- * No filesystem, no network — pure JS only.
+ * No filesystem, no network; pure JS only.
  */
 import assert from "node:assert/strict";
-import { payloadToAdapterRequest, requiresScopedTargetPaths } from "../coding_service.js";
+import {
+  buildStepContractExpectedArtifacts,
+  payloadToAdapterRequest,
+  requiresScopedTargetPaths,
+} from "../coding_service.js";
 
 function main() {
-  // ── requiresScopedTargetPaths ─────────────────────────────────────────────
+  assert.equal(requiresScopedTargetPaths("impl_be", []), true);
+  assert.equal(requiresScopedTargetPaths("impl_fe", []), true);
+  assert.equal(requiresScopedTargetPaths("IMPL_BE", []), true);
+  assert.equal(requiresScopedTargetPaths("IMPL_FE", []), true);
 
-  // impl steps always require scoped paths
-  assert.equal(requiresScopedTargetPaths("impl_be", []), true, "impl_be + empty array → true");
-  assert.equal(requiresScopedTargetPaths("impl_fe", []), true, "impl_fe + empty array → true");
-  assert.equal(requiresScopedTargetPaths("IMPL_BE", []), true, "case-insensitive impl_be → true");
-  assert.equal(requiresScopedTargetPaths("IMPL_FE", []), true, "case-insensitive impl_fe → true");
+  assert.equal(requiresScopedTargetPaths("pm_spec", []), false);
+  assert.equal(requiresScopedTargetPaths("arch_design", []), false);
+  assert.equal(requiresScopedTargetPaths("release_pack", []), false);
+  assert.equal(requiresScopedTargetPaths("", []), false);
+  assert.equal(requiresScopedTargetPaths(null, []), false);
+  assert.equal(requiresScopedTargetPaths(undefined, undefined), false);
 
-  // non-impl steps without paths → false
-  assert.equal(requiresScopedTargetPaths("pm_spec", []), false, "pm_spec + empty → false");
-  assert.equal(requiresScopedTargetPaths("arch_design", []), false, "arch_design + empty → false");
-  assert.equal(requiresScopedTargetPaths("release_pack", []), false, "release_pack + empty → false");
-  assert.equal(requiresScopedTargetPaths("", []), false, "empty stepId + empty paths → false");
-  assert.equal(requiresScopedTargetPaths(null, []), false, "null stepId → false");
-  assert.equal(requiresScopedTargetPaths(undefined, undefined), false, "undefined inputs → false");
+  assert.equal(requiresScopedTargetPaths("pm_spec", ["src/foo.js"]), true);
+  assert.equal(requiresScopedTargetPaths("arch_design", ["src/bar.js"]), true);
+  assert.equal(requiresScopedTargetPaths("", ["x"]), true);
+  assert.equal(requiresScopedTargetPaths("pm_spec", [null, undefined, ""]), false);
+  assert.equal(requiresScopedTargetPaths("pm_spec", ["", "src/real.js"]), true);
 
-  // any step with non-empty target_paths → true
-  assert.equal(requiresScopedTargetPaths("pm_spec", ["src/foo.js"]), true, "pm_spec + paths → true");
-  assert.equal(requiresScopedTargetPaths("arch_design", ["src/bar.js"]), true, "arch_design + paths → true");
-  assert.equal(requiresScopedTargetPaths("", ["x"]), true, "empty stepId + paths → true");
+  const implBeArtifacts = buildStepContractExpectedArtifacts({
+    stepId: "impl_be",
+    expectedArtifacts: ["impl/be_changes/server.js"],
+  });
+  assert.ok(implBeArtifacts.includes("impl/be_changes/server.js"));
+  assert.ok(implBeArtifacts.includes("impl/be_changes/package.json"));
+  assert.ok(implBeArtifacts.includes("impl/be_notes.md"));
+  assert.ok(implBeArtifacts.includes("handoff/be_to_fe.json"));
 
-  // falsy items in array are filtered out
-  assert.equal(requiresScopedTargetPaths("pm_spec", [null, undefined, ""]), false, "only falsy items → false");
-  assert.equal(requiresScopedTargetPaths("pm_spec", ["", "src/real.js"]), true, "mixed falsy/real → true");
+  const passthroughArtifacts = buildStepContractExpectedArtifacts({
+    stepId: "unknown_step",
+    expectedArtifacts: ["foo.txt"],
+  });
+  assert.deepEqual(passthroughArtifacts, ["foo.txt"]);
 
-  // ── payloadToAdapterRequest ───────────────────────────────────────────────
-
-  // Full payload round-trip: all fields supplied
   const full = payloadToAdapterRequest({
     provider: "opencode",
     task_prompt: "build a feature",
@@ -81,9 +90,8 @@ function main() {
   assert.equal(full.context.task_id, "task-xyz");
   assert.equal(full.context.artifact_workspace_root, "/workspace/isolated");
 
-  // Defaults for missing / falsy inputs
   const empty = payloadToAdapterRequest({});
-  assert.equal(empty.provider, "opencode", "provider defaults to opencode");
+  assert.equal(empty.provider, "opencode");
   assert.equal(empty.payload.step_id, "");
   assert.equal(empty.payload.task_prompt, "");
   assert.equal(empty.payload.artifact_root, "");
@@ -103,7 +111,6 @@ function main() {
   assert.equal(empty.context.task_id, "");
   assert.equal(empty.context.artifact_workspace_root, "");
 
-  // Non-array expected_artifacts / target_paths → coerced to []
   const coerced = payloadToAdapterRequest({
     expected_artifacts: "plan/spec.md",
     target_paths: null,
@@ -113,13 +120,11 @@ function main() {
   assert.deepEqual(coerced.payload.target_paths, []);
   assert.deepEqual(coerced.payload.verification_plan, []);
 
-  // allow_provider_fallback: truthy string → true, 0 → false
   const fallbackTrue = payloadToAdapterRequest({ allow_provider_fallback: 1 });
   assert.equal(fallbackTrue.payload.allow_provider_fallback, true);
   const fallbackFalse = payloadToAdapterRequest({ allow_provider_fallback: 0 });
   assert.equal(fallbackFalse.payload.allow_provider_fallback, false);
 
-  // wall_clock_timeout_s: string number → coerced
   const timeout = payloadToAdapterRequest({ wall_clock_timeout_s: "600" });
   assert.equal(timeout.payload.wall_clock_timeout_s, 600);
 

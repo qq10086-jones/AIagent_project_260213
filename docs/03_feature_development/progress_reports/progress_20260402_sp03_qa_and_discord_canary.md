@@ -73,3 +73,27 @@ Run details:
 The main quest is still `SP-03`. It is not blocked, but it is not closed. The current codebase can produce a valid Discord-entry release, yet the live evidence still shows inconsistent QA depth across repeated runs.
 
 The next milestone should be a clean repeated-canary result where the workflow still succeeds and the QA/release artifacts stay consistently above the `demo_usable` threshold.
+
+## 2026-04-03 Follow-up
+
+The `2026-04-02` report captured the correct surface symptom, but the next local debugging pass identified two harder blockers underneath it:
+
+- backend preview artifacts could be emitted with a runtime manifest that did not include all dependencies required by generated `server.js`
+- successful `worker-coder` delegation did not force full step-contract artifact repair and typed-handoff validation before returning to orchestrator
+
+Those defects were fixed on `2026-04-03`, and a fresh single-run Discord-supported beta validation then passed end-to-end:
+
+- suite verdict: `PASS`
+- workflow success count: `1/1`
+- `GO` count: `1/1`
+- workflow run: `87261874-71d2-4197-812f-8e60df9439b1`
+- release run: `fa3e3208-ed96-4b38-8fc2-1905f7418af1`
+- preview validation: `preview_matched`
+- product fidelity: `demo_usable`
+
+Recovery evidence:
+
+- `runtime/artifacts/orchestrator/validation/discord_coding_load_test/2026-04-02T15-44-30-951Z/discord_coding_load_test_report.json`
+- `runtime/artifacts/release/fa3e3208-ed96-4b38-8fc2-1905f7418af1/qa/go_no_go_result.json`
+
+This means the remaining `SP-03` question is now repeatability, not whether the beta path can be recovered to a clean `GO`.

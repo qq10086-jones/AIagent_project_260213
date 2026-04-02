@@ -17,6 +17,23 @@
     "positive_ic_ratio": 1.0,
     "min_family_t_stat": 0.9757408
   },
+  "production_eligibility_rule": {
+    "guard_must_pass": true,
+    "min_observations": 80
+  },
+  "production_eligible_factors": [
+    "mom_consist"
+  ],
+  "cleanup_summary": {
+    "eligible_count": 1,
+    "exclude_count": 4,
+    "exclude_candidates": [
+      "ret20",
+      "rsi14",
+      "slope60",
+      "vol_adj_mom20"
+    ]
+  },
   "backtest_metrics": {
     "total_return_pct": 0.0,
     "annual_vol_pct": 0.0,

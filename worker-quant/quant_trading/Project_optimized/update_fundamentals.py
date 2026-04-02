@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import os
+import sys
 from pathlib import Path
 
 import pandas as pd
 
 from trade_schema import connect, ensure_trade_tables
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 
 SNAPSHOT_NUMERIC_COLUMNS = [
@@ -419,7 +427,7 @@ def import_yfinance(db_path: str, fail_closed: bool, require_available_ts: bool)
 
 
 def _fetch_jquants_v2_fundamentals(db_path: str) -> pd.DataFrame:
-    """通过 jquantsapi 抓取最新季报基本面数据。"""
+    '''通过 jquantsapi 抓取最新季报基本面数据的强壮版（支持断点续传、429退避）'''
     import sqlite3 as _sq
     import time
     try:
@@ -429,42 +437,78 @@ def _fetch_jquants_v2_fundamentals(db_path: str) -> pd.DataFrame:
 
     api_key = os.getenv("JQUANTS_API_KEY")
     if not api_key:
-        raise RuntimeError("未设置 JQUANTS_API_KEY 环境变量。")
+        raise RuntimeError("未设置 JQUANTS_API_KEY 环境变量。请在配置或环境里加入。")
         
     client = jquantsapi.ClientV2(api_key=api_key)
 
     with _sq.connect(db_path) as _conn:
+        # 获取所有目标股票
         rows = _conn.execute("SELECT DISTINCT symbol FROM tickers").fetchall()
-    symbols = [r[0] for r in rows if r[0]]
+        all_symbols = [r[0] for r in rows if r[0]]
+        
+        # 断点跳过（Resumable Fetch）机制：保护免费额度
+        rs = _conn.execute("""
+            SELECT DISTINCT symbol FROM fundamental_snapshots
+            WHERE source = 'jquants_v2' 
+              AND available_ts > datetime('now', '-14 days')
+        """).fetchall()
+        fetched_symbols = {r[0] for r in rs if r[0]}
+
+    symbols = sorted([s for s in all_symbols if s not in fetched_symbols])
+    print(f"[fundamentals] jquants_v2: 剔除 {len(fetched_symbols)} 只最近已更新的标的，剩余需获取: {len(symbols)}/{len(all_symbols)}")
 
     records = []
     for i, sym in enumerate(symbols):
-        # 移除 .T 后缀给 J-Quants
         sym_prefix = sym.split(".")[0] if "." in sym else sym
         print(f"[fundamentals] jquants_v2: Fetching {sym} ({i+1}/{len(symbols)})...")
-        try:
-            # 获取最近基本面
-            df = client.get_fin_summary(code=sym_prefix)
-            if df is not None and not df.empty:
-                # J-Quants 返回多行，取最后一条（最新）
+        
+        retries = 0
+        max_retries = 3
+        df = None
+        
+        while retries <= max_retries:
+            try:
+                df = client.get_fin_summary(code=sym_prefix)
+                break
+            except Exception as exc:
+                err_msg = str(exc).lower()
+                if "429" in err_msg or "rate limit" in err_msg or "too many" in err_msg or "exceeded" in err_msg:
+                    sleep_time = 30 * (2 ** retries)
+                    print(f"[fundamentals] ⚠️ 触发 429 Rate Limit ({sym}). 休眠 {sleep_time} 秒后重试 ({retries+1}/{max_retries})...")
+                    time.sleep(sleep_time)
+                    retries += 1
+                else:
+                    print(f"[fundamentals] jquants_v2 error for {sym}: {exc}")
+                    break
+        
+        if retries > max_retries:
+            print(f"[fundamentals] 🚨 J-Quants 遭到持续封禁，自动中止任务。正在将已获取的 {len(records)} 只股票紧急落库...")
+            break
+            
+        if df is not None and not df.empty:
+            try:
                 df = df.sort_values("DisclosedDate", ascending=True)
                 latest = df.iloc[-1]
 
                 published_ts = latest.get("DisclosedDate")
-                if not published_ts:
-                    published_ts = pd.Timestamp.now().strftime("%Y-%m-%dT%H:%M:%S")
-                # 兼容不同字段格式
+                if not published_ts or type(published_ts) == float:
+                    published_ts = __import__("pandas").Timestamp.now().strftime("%Y-%m-%dT%H:%M:%S")
+
                 available_ts = published_ts
                 fiscal_period_end = latest.get("CurrentPeriodEndDate", latest.get("CurPerEn", ""))
 
-                op_income = latest.get("OperatingProfit", latest.get("OP"))
-                revenue = latest.get("NetSales", latest.get("Sales"))
-                op_cf = latest.get("CashFlowsFromOperatingActivities", latest.get("CFO"))
-                net_income = latest.get("ProfitLossAttributableToOwnersOfParent", latest.get("NP"))
-                bvps = latest.get("BookValuePerShare", latest.get("BPS"))
-                eps = latest.get("EarningsPerShare", latest.get("EPS"))
-                total_assets = latest.get("TotalAssets")
-                total_equity = latest.get("Equity", latest.get("TotalEquity"))
+                def _safe_float(val):
+                    try: return float(val) if val is not None else None
+                    except: return None
+
+                op_income = _safe_float(latest.get("OperatingProfit", latest.get("OP")))
+                revenue = _safe_float(latest.get("NetSales", latest.get("Sales")))
+                op_cf = _safe_float(latest.get("CashFlowsFromOperatingActivities", latest.get("CFO")))
+                net_income = _safe_float(latest.get("ProfitLossAttributableToOwnersOfParent", latest.get("NP")))
+                bvps = _safe_float(latest.get("BookValuePerShare", latest.get("BPS")))
+                eps = _safe_float(latest.get("EarningsPerShare", latest.get("EPS")))
+                total_assets = _safe_float(latest.get("TotalAssets"))
+                total_equity = _safe_float(latest.get("Equity", latest.get("TotalEquity")))
 
                 records.append({
                     "symbol":                    sym,
@@ -473,33 +517,31 @@ def _fetch_jquants_v2_fundamentals(db_path: str) -> pd.DataFrame:
                     "available_ts":              available_ts,
                     "source":                    "jquants_v2",
                     "currency":                  "JPY",
-                    "revenue":                   float(revenue) if revenue is not None else None,
-                    "operating_income":          float(op_income) if op_income is not None else None,
-                    "net_income":                float(net_income) if net_income is not None else None,
-                    "eps":                       float(eps) if eps is not None else None,
-                    "book_value_per_share":      float(bvps) if bvps is not None else None,
-                    "dividend_per_share":        None, # 需要从 yfinance 补充或另行获取
-                    "operating_cf":              float(op_cf) if op_cf is not None else None,
+                    "revenue":                   revenue,
+                    "operating_income":          op_income,
+                    "net_income":                net_income,
+                    "eps":                       eps,
+                    "book_value_per_share":      bvps,
+                    "dividend_per_share":        None,
+                    "operating_cf":              op_cf,
                     "free_cf":                   None,
-                    "total_assets":              float(total_assets) if total_assets is not None else None,
-                    "total_equity":              float(total_equity) if total_equity is not None else None,
+                    "total_assets":              total_assets,
+                    "total_equity":              total_equity,
                     "total_debt":                None,
                     "shares_outstanding":        None,
                     "guidance_revenue":          None,
                     "guidance_operating_income": None,
                     "guidance_eps":              None,
                 })
-        except Exception as exc:
-            print(f"[fundamentals] jquants_v2 error for {sym}: {exc}")
+            except Exception as exc:
+                print(f"[fundamentals] jquants_v2 parsing error for {sym}: {exc}")
         
-        # 速率限制 5次/分 → 12s
         if i < len(symbols) - 1:
             time.sleep(12.5)
 
-    print(f"[fundamentals] jquants_v2: 获取 {len(records)}/{len(symbols)} 只标的基本面数据")
+    print(f"[fundamentals] jquants_v2: 实际成功抓取 {len(records)} 只标的")
+    import pandas as pd
     return pd.DataFrame(records) if records else pd.DataFrame()
-
-
 def import_jquants_v2(db_path: str, fail_closed: bool, require_available_ts: bool) -> None:
     """通过 jquantsapi 抓取基本面并写入 DB。"""
     raw = _fetch_jquants_v2_fundamentals(db_path)

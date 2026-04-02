@@ -1327,7 +1327,13 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     print(f"2) Build features/targets (n={len(trade_tickers)}) ...")
     trade_vol = vol.reindex(columns=trade_tickers)
     feats = make_features(trade_px, volumes=trade_vol)
-    use_fundamental_features = os.getenv("SS6_USE_FUNDAMENTAL_FEATURES", "1") == "1"
+    excluded_factors = [f.strip() for f in os.environ.get("SS7_EXCLUDED_FACTORS", "").split(",") if f.strip()]
+    if excluded_factors:
+        for ex_f in excluded_factors:
+            if ex_f in feats.columns.get_level_values(1):
+                feats = feats.drop(columns=ex_f, level=1)
+        print(f"   [features] Excluded from model: {excluded_factors}")
+    use_fundamental_features = os.getenv("SS7_USE_FUNDAMENTAL_FEATURES", "1") == "1"
     if use_fundamental_features:
         extra_feature_panels = load_feature_daily_panels(
             db_path=bt.db_path,
@@ -1445,6 +1451,11 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     gross_ret = []
     net_ret = []
     stop_loss_log = []
+    benchmark_state_hist = []
+    benchmark_scale_hist = []
+    dd_state_hist = []
+    dd_scale_hist = []
+    rebalance_due_hist = []
 
     # IMPORTANT: fix look-ahead
     # At decision time i (close of dates[i]), labels for a training date t need prices up to t+H.
@@ -1542,11 +1553,13 @@ def backtest(bt: BTConfig, ex: ExecConfig):
             if (cur_price - ep) / ep < -stop_pct:
                 stop_loss_tickers.add(tkr)
 
+        rebalance_due = bool((i - start_i) % int(bt.rebalance_every) == 0)
+
         # compute target weights
         if risk_off or dd_scale == 0.0:
             w_target = pd.Series(0.0, index=trade_tickers)
         else:
-            if (i - start_i) % int(bt.rebalance_every) == 0:
+            if rebalance_due:
                 # safe training window ends at i-H (exclusive of i-H+1..i which would leak)
                 train_end = i - int(bt.H)
                 train_start = max(train_end - int(bt.train_window), 0)
@@ -1702,6 +1715,11 @@ def backtest(bt: BTConfig, ex: ExecConfig):
 
         w_target_hist.append(w_target.reindex(trade_tickers).fillna(0.0).to_numpy(dtype=float))
         risk_off_hist.append(bool(risk_off))
+        benchmark_state_hist.append(str(benchmark_state))
+        benchmark_scale_hist.append(float(benchmark_scale))
+        dd_state_hist.append(str(dd_state))
+        dd_scale_hist.append(float(dd_scale))
+        rebalance_due_hist.append(bool(rebalance_due))
         news_gate_hist.append(float(news_gate))
         vol_target_scale_hist.append(float(vol_target_scale))
         forecast_vol_hist.append(float(forecast_vol) if np.isfinite(forecast_vol) else float("nan"))
@@ -1809,12 +1827,13 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 stop_loss_tickers.add(tkr)
 
         regime_scale = min(float(benchmark_scale), float(dd_scale))
+        rebalance_due = bool((end_i - start_i) % int(bt.rebalance_every) == 0)
 
         if regime_scale == 0.0:
             w_target = pd.Series(0.0, index=trade_tickers)
         else:
             # Use the same rebalance cadence logic as the main loop.
-            if (end_i - start_i) % int(bt.rebalance_every) == 0:
+            if rebalance_due:
                 train_end = end_i - int(bt.H)
                 train_start = max(train_end - int(bt.train_window), 0)
                 train_dates = dates[train_start:train_end]
@@ -1919,6 +1938,11 @@ def backtest(bt: BTConfig, ex: ExecConfig):
 
         w_target_hist.append(w_target.reindex(trade_tickers).fillna(0.0).to_numpy(dtype=float))
         risk_off_hist.append(bool(risk_off))
+        benchmark_state_hist.append(str(benchmark_state))
+        benchmark_scale_hist.append(float(benchmark_scale))
+        dd_state_hist.append(str(dd_state))
+        dd_scale_hist.append(float(dd_scale))
+        rebalance_due_hist.append(bool(rebalance_due))
         news_gate_hist.append(float(news_gate))
         vol_target_scale_hist.append(float(vol_target_scale))
         forecast_vol_hist.append(float(forecast_vol) if np.isfinite(forecast_vol) else float("nan"))
@@ -1941,7 +1965,12 @@ def backtest(bt: BTConfig, ex: ExecConfig):
             "net_ret": net_ret,
             "turnover_notional": turnover_notional,
             "cost_paid": costs_paid,
+            "benchmark_state": benchmark_state_hist,
+            "benchmark_scale": benchmark_scale_hist,
             "risk_off": risk_off_hist,
+            "dd_state": dd_state_hist,
+            "dd_scale": dd_scale_hist,
+            "rebalance_due": rebalance_due_hist,
             "news_gate": news_gate_hist,
             "vol_target_scale": vol_target_scale_hist,
             "forecast_vol_annual": forecast_vol_hist,
@@ -2174,6 +2203,82 @@ def latest_actionable_weights(w_df: pd.DataFrame) -> tuple[pd.Series, Optional[p
         return export_row, export_dt, latest_is_zero
     return latest_row, pd.Timestamp(w_df.index[-1]), latest_is_zero
 
+
+def build_zero_exposure_report(
+    w_df: pd.DataFrame,
+    stats: pd.DataFrame,
+    signal_mode: str,
+    rebalance_every: int,
+) -> dict:
+    if w_df.empty or stats.empty:
+        return {
+            "signal_mode": signal_mode,
+            "has_history": False,
+            "primary_cause": "no_history",
+        }
+
+    weight_sums = w_df.fillna(0.0).abs().sum(axis=1)
+    latest_dt = pd.Timestamp(w_df.index[-1])
+    latest_weight_sum = float(weight_sums.iloc[-1])
+    latest_stats = stats.iloc[-1].to_dict()
+
+    nonzero = weight_sums[weight_sums > 1e-9]
+    last_nonzero_dt = pd.Timestamp(nonzero.index[-1]) if len(nonzero) else None
+    last_nonzero_sum = float(nonzero.iloc[-1]) if len(nonzero) else 0.0
+    latest_pos = len(w_df.index) - 1
+    last_nonzero_pos = int(weight_sums.index.get_loc(last_nonzero_dt)) if last_nonzero_dt is not None else None
+    next_rebalance_asof = None
+    if last_nonzero_pos is not None:
+        next_pos = last_nonzero_pos + int(rebalance_every)
+        if next_pos < len(w_df.index):
+            next_rebalance_asof = pd.Timestamp(w_df.index[next_pos]).strftime("%Y-%m-%d")
+
+    latest_risk_off = bool(latest_stats.get("risk_off", False))
+    latest_dd_scale = float(latest_stats.get("dd_scale", 1.0) or 0.0)
+    latest_rebalance_due = bool(latest_stats.get("rebalance_due", False))
+    latest_stop_loss_count = int(latest_stats.get("stop_loss_count", 0) or 0)
+
+    if latest_weight_sum > 1e-9:
+        primary_cause = "actionable_nonzero_target"
+    elif latest_risk_off:
+        primary_cause = "benchmark_risk_off"
+    elif latest_dd_scale <= 1e-12:
+        primary_cause = "drawdown_risk_off"
+    elif not latest_rebalance_due and last_nonzero_dt is not None:
+        primary_cause = "awaiting_next_rebalance_after_flatten"
+    elif latest_stop_loss_count > 0:
+        primary_cause = "stop_loss_flattened_positions"
+    else:
+        primary_cause = "zero_target_from_signal_or_optimizer"
+
+    report = {
+        "signal_mode": signal_mode,
+        "has_history": True,
+        "latest_asof": latest_dt.strftime("%Y-%m-%d"),
+        "latest_weight_sum": latest_weight_sum,
+        "latest_weights_zero": bool(latest_weight_sum <= 1e-9),
+        "last_nonzero_asof": last_nonzero_dt.strftime("%Y-%m-%d") if last_nonzero_dt is not None else None,
+        "last_nonzero_weight_sum": last_nonzero_sum,
+        "days_since_last_nonzero": (
+            int(max(latest_pos - last_nonzero_pos, 0)) if last_nonzero_pos is not None else None
+        ),
+        "rebalance_every_trading_days": int(rebalance_every),
+        "next_rebalance_asof_estimate": next_rebalance_asof,
+        "latest_state": {
+            "benchmark_state": str(latest_stats.get("benchmark_state", "unknown")),
+            "benchmark_scale": float(latest_stats.get("benchmark_scale", 0.0) or 0.0),
+            "risk_off": latest_risk_off,
+            "drawdown_state": str(latest_stats.get("dd_state", "unknown")),
+            "dd_scale": latest_dd_scale,
+            "rebalance_due": latest_rebalance_due,
+            "news_gate": float(latest_stats.get("news_gate", 1.0) or 0.0),
+            "vol_target_scale": float(latest_stats.get("vol_target_scale", 1.0) or 0.0),
+            "stop_loss_count": latest_stop_loss_count,
+        },
+        "primary_cause": primary_cause,
+    }
+    return report
+
 # =========================================================
 # 8) Main
 # =========================================================
@@ -2181,79 +2286,79 @@ def latest_actionable_weights(w_df: pd.DataFrame) -> tuple[pd.Series, Optional[p
 if __name__ == "__main__":
     # -------- user knobs --------
     # Allow pipeline/env-driven runs
-    INITIAL_CAPITAL = float(os.getenv("SS6_INITIAL_CAPITAL", "1000000"))
+    INITIAL_CAPITAL = float(os.getenv("SS7_INITIAL_CAPITAL", "1000000"))
     # change to 20w / 2000w to see differences due to integer shares/impact/adv caps
-    TICKERS = os.getenv("SS6_TICKERS", "9432.T,9433.T,2914.T,3382.T,8604.T,7201.T").split(",")
+    TICKERS = os.getenv("SS7_TICKERS", "9432.T,9433.T,2914.T,3382.T,8604.T,7201.T").split(",")
     TICKERS = [t.strip() for t in TICKERS if t.strip()]  # from env or default
-    BENCHMARK = os.getenv("SS6_BENCHMARK", "1321.T")
+    BENCHMARK = os.getenv("SS7_BENCHMARK", "1321.T")
 
     # If you trade JP stocks in board lots, you probably want lot_size_default=100
     ex = ExecConfig(
         initial_capital=INITIAL_CAPITAL,
-        lot_size_default=int(os.getenv("SS6_LOT_SIZE_DEFAULT", "100")),        # set 100 for most JP stocks if required
-        fee_bps=float(os.getenv("SS6_FEE_BPS", "5.0")),
-        slippage_bps=float(os.getenv("SS6_SLIPPAGE_BPS", "5.0")),
-        impact_k=float(os.getenv("SS6_IMPACT_K", "0.5")),              # e.g. 5.0 penalize large trades
-        max_adv_frac=float(os.getenv("SS6_MAX_ADV_FRAC", "1.0")),          # e.g. 0.05 limit to 5% ADV
-        cash_rate_daily=float(os.getenv("SS6_CASH_RATE_DAILY", "0.0")),
-        target_vol_annual_pct=float(os.getenv("SS6_TARGET_VOL_ANNUAL_PCT", "0.0")),
-        vol_target_lookback=int(os.getenv("SS6_VOL_TARGET_LOOKBACK", "20")),
-        vol_target_min_scale=float(os.getenv("SS6_VOL_TARGET_MIN_SCALE", "0.35")),
-        vol_target_max_scale=float(os.getenv("SS6_VOL_TARGET_MAX_SCALE", "1.0")),
+        lot_size_default=int(os.getenv("SS7_LOT_SIZE_DEFAULT", "100")),        # set 100 for most JP stocks if required
+        fee_bps=float(os.getenv("SS7_FEE_BPS", "5.0")),
+        slippage_bps=float(os.getenv("SS7_SLIPPAGE_BPS", "5.0")),
+        impact_k=float(os.getenv("SS7_IMPACT_K", "0.5")),              # e.g. 5.0 penalize large trades
+        max_adv_frac=float(os.getenv("SS7_MAX_ADV_FRAC", "1.0")),          # e.g. 0.05 limit to 5% ADV
+        cash_rate_daily=float(os.getenv("SS7_CASH_RATE_DAILY", "0.0")),
+        target_vol_annual_pct=float(os.getenv("SS7_TARGET_VOL_ANNUAL_PCT", "0.0")),
+        vol_target_lookback=int(os.getenv("SS7_VOL_TARGET_LOOKBACK", "20")),
+        vol_target_min_scale=float(os.getenv("SS7_VOL_TARGET_MIN_SCALE", "0.35")),
+        vol_target_max_scale=float(os.getenv("SS7_VOL_TARGET_MAX_SCALE", "1.0")),
     )
 
     bt = BTConfig(
         tickers=TICKERS,
         benchmark_ticker=BENCHMARK,
-        end=(os.getenv("SS6_END") or None),
-        start=os.getenv("SS6_START", "2020-01-01"),
-        H=int(os.getenv("SS6_H", "20")),
-        rebalance_every=int(os.getenv("SS6_REBALANCE_EVERY", "20")),
-        ma_window=int(os.getenv("SS6_BENCHMARK_SLOW_MA_WINDOW", os.getenv("SS6_MA_WINDOW", "60"))),
-        benchmark_fast_ma_window=int(os.getenv("SS6_BENCHMARK_FAST_MA_WINDOW", "20")),
-        benchmark_slow_ma_window=int(os.getenv("SS6_BENCHMARK_SLOW_MA_WINDOW", os.getenv("SS6_MA_WINDOW", "60"))),
-        benchmark_hysteresis_enter_pct=float(os.getenv("SS6_BENCHMARK_HYSTERESIS_ENTER_PCT", "0.01")),
-        benchmark_hysteresis_exit_pct=float(os.getenv("SS6_BENCHMARK_HYSTERESIS_EXIT_PCT", "0.01")),
-        safe_plot=(os.getenv("SS6_SAFE_PLOT","1") != "0"),
-        output_dir=os.getenv("SS6_OUTPUT_DIR","reports"),
-        db_path=os.getenv("SS6_DB_PATH", None),
-        stop_loss_pct=float(os.getenv("SS6_STOP_LOSS_PCT", "0.08")),
-        stop_loss_mode=os.getenv("SS6_STOP_LOSS_MODE", "atr"),
-        atr_window=int(os.getenv("SS6_ATR_WINDOW", "20")),
-        stop_loss_vol_mult=float(os.getenv("SS6_STOP_LOSS_VOL_MULT", "2.5")),
-        stop_loss_min_pct=float(os.getenv("SS6_STOP_LOSS_MIN_PCT", "0.03")),
-        stop_loss_max_pct=float(os.getenv("SS6_STOP_LOSS_MAX_PCT", "0.12")),
-        max_dd_half=float(os.getenv("SS6_MAX_DD_HALF", "0.12")),
-        max_dd_full=float(os.getenv("SS6_MAX_DD_FULL", "0.18")),
-        max_dd_reentry_cooldown_days=int(os.getenv("SS6_MAX_DD_REENTRY_COOLDOWN_DAYS", "20")),
-        target_vol_annual_pct=float(os.getenv("SS6_TARGET_VOL_ANNUAL_PCT", "0.0")),
-        vol_target_lookback=int(os.getenv("SS6_VOL_TARGET_LOOKBACK", "20")),
-        vol_target_min_scale=float(os.getenv("SS6_VOL_TARGET_MIN_SCALE", "0.35")),
-        vol_target_max_scale=float(os.getenv("SS6_VOL_TARGET_MAX_SCALE", "1.0")),
-        signal_mode=os.getenv("SS6_SIGNAL_MODE", "ridge"),
+        end=(os.getenv("SS7_END") or None),
+        start=os.getenv("SS7_START", "2020-01-01"),
+        H=int(os.getenv("SS7_H", "20")),
+        rebalance_every=int(os.getenv("SS7_REBALANCE_EVERY", "20")),
+        ma_window=int(os.getenv("SS7_BENCHMARK_SLOW_MA_WINDOW", os.getenv("SS7_MA_WINDOW", "60"))),
+        benchmark_fast_ma_window=int(os.getenv("SS7_BENCHMARK_FAST_MA_WINDOW", "20")),
+        benchmark_slow_ma_window=int(os.getenv("SS7_BENCHMARK_SLOW_MA_WINDOW", os.getenv("SS7_MA_WINDOW", "60"))),
+        benchmark_hysteresis_enter_pct=float(os.getenv("SS7_BENCHMARK_HYSTERESIS_ENTER_PCT", "0.01")),
+        benchmark_hysteresis_exit_pct=float(os.getenv("SS7_BENCHMARK_HYSTERESIS_EXIT_PCT", "0.01")),
+        safe_plot=(os.getenv("SS7_SAFE_PLOT","1") != "0"),
+        output_dir=os.getenv("SS7_OUTPUT_DIR","reports"),
+        db_path=os.getenv("SS7_DB_PATH", None),
+        stop_loss_pct=float(os.getenv("SS7_STOP_LOSS_PCT", "0.08")),
+        stop_loss_mode=os.getenv("SS7_STOP_LOSS_MODE", "atr"),
+        atr_window=int(os.getenv("SS7_ATR_WINDOW", "20")),
+        stop_loss_vol_mult=float(os.getenv("SS7_STOP_LOSS_VOL_MULT", "2.5")),
+        stop_loss_min_pct=float(os.getenv("SS7_STOP_LOSS_MIN_PCT", "0.03")),
+        stop_loss_max_pct=float(os.getenv("SS7_STOP_LOSS_MAX_PCT", "0.12")),
+        max_dd_half=float(os.getenv("SS7_MAX_DD_HALF", "0.12")),
+        max_dd_full=float(os.getenv("SS7_MAX_DD_FULL", "0.18")),
+        max_dd_reentry_cooldown_days=int(os.getenv("SS7_MAX_DD_REENTRY_COOLDOWN_DAYS", "20")),
+        target_vol_annual_pct=float(os.getenv("SS7_TARGET_VOL_ANNUAL_PCT", "0.0")),
+        vol_target_lookback=int(os.getenv("SS7_VOL_TARGET_LOOKBACK", "20")),
+        vol_target_min_scale=float(os.getenv("SS7_VOL_TARGET_MIN_SCALE", "0.35")),
+        vol_target_max_scale=float(os.getenv("SS7_VOL_TARGET_MAX_SCALE", "1.0")),
+        signal_mode=os.getenv("SS7_SIGNAL_MODE", "ridge"),
         compare_signal_modes=[
-            m.strip() for m in os.getenv("SS6_COMPARE_SIGNAL_MODES", "shadow_eq,shadow_ic,shadow_hybrid_ic").split(",")
+            m.strip() for m in os.getenv("SS7_COMPARE_SIGNAL_MODES", "shadow_eq,shadow_ic,shadow_hybrid_ic").split(",")
             if m.strip()
         ],
     )
 
     # ---- optional: News overlay (external gating/risk layer) ----
-    # Preferred: SS6_NEWS_DB=<path/to/japan_market.db> (reads feature_daily directly)
-    # Fallback:  SS6_NEWS_CSV=<path/to/news.csv> + SS6_NEWS_ON=1
-    bt.news.enabled = (os.getenv("SS6_NEWS_ON", "0") == "1")
-    bt.news.db_path = os.getenv("SS6_NEWS_DB", None) or None
-    bt.news.csv_path = os.getenv("SS6_NEWS_CSV", None)
+    # Preferred: SS7_NEWS_DB=<path/to/japan_market.db> (reads feature_daily directly)
+    # Fallback:  SS7_NEWS_CSV=<path/to/news.csv> + SS7_NEWS_ON=1
+    bt.news.enabled = (os.getenv("SS7_NEWS_ON", "0") == "1")
+    bt.news.db_path = os.getenv("SS7_NEWS_DB", None) or None
+    bt.news.csv_path = os.getenv("SS7_NEWS_CSV", None)
     if bt.news.db_path:
         bt.news.enabled = True  # DB path alone is sufficient to enable overlay
-    bt.news.half_life_days = float(os.getenv("SS6_NEWS_HALF_LIFE_DAYS", str(bt.news.half_life_days)))
-    bt.news.lookback_days = int(os.getenv("SS6_NEWS_LOOKBACK_DAYS", str(bt.news.lookback_days)))
-    bt.news.A_max = float(os.getenv("SS6_NEWS_A_MAX", str(bt.news.A_max)))
-    bt.news.U_high = float(os.getenv("SS6_NEWS_U_HIGH", str(bt.news.U_high)))
-    bt.news.absF_min = float(os.getenv("SS6_NEWS_ABSF_MIN", str(bt.news.absF_min)))
-    bt.news.g_min = float(os.getenv("SS6_NEWS_G_MIN", str(bt.news.g_min)))
-    bt.news.k_absF = float(os.getenv("SS6_NEWS_K_ABSF", str(bt.news.k_absF)))
-    bt.news.k_U = float(os.getenv("SS6_NEWS_K_U", str(bt.news.k_U)))
-    bt.news.k_A = float(os.getenv("SS6_NEWS_K_A", str(bt.news.k_A)))
+    bt.news.half_life_days = float(os.getenv("SS7_NEWS_HALF_LIFE_DAYS", str(bt.news.half_life_days)))
+    bt.news.lookback_days = int(os.getenv("SS7_NEWS_LOOKBACK_DAYS", str(bt.news.lookback_days)))
+    bt.news.A_max = float(os.getenv("SS7_NEWS_A_MAX", str(bt.news.A_max)))
+    bt.news.U_high = float(os.getenv("SS7_NEWS_U_HIGH", str(bt.news.U_high)))
+    bt.news.absF_min = float(os.getenv("SS7_NEWS_ABSF_MIN", str(bt.news.absF_min)))
+    bt.news.g_min = float(os.getenv("SS7_NEWS_G_MIN", str(bt.news.g_min)))
+    bt.news.k_absF = float(os.getenv("SS7_NEWS_K_ABSF", str(bt.news.k_absF)))
+    bt.news.k_U = float(os.getenv("SS7_NEWS_K_U", str(bt.news.k_U)))
+    bt.news.k_A = float(os.getenv("SS7_NEWS_K_A", str(bt.news.k_A)))
 
     print("=" * 70)
     try:
@@ -2321,6 +2426,44 @@ if __name__ == "__main__":
         f"(exported_asof={target_meta['exported_asof']}, last_row_zero={latest_is_zero}, "
         f"last_nonzero_asof={target_meta['last_nonzero_asof']})"
     )
+
+    zero_exposure_report = build_zero_exposure_report(
+        w_df=primary["w_df"],
+        stats=primary["stats"],
+        signal_mode=bt.signal_mode,
+        rebalance_every=int(bt.rebalance_every),
+    )
+    (out_dir / "zero_exposure_report.json").write_text(
+        json.dumps(zero_exposure_report, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    zero_lines = [
+        f"# Zero Exposure Report: {bt.signal_mode}",
+        "",
+        f"- Latest asof: {zero_exposure_report.get('latest_asof')}",
+        f"- Latest weights zero: {zero_exposure_report.get('latest_weights_zero')}",
+        f"- Primary cause: {zero_exposure_report.get('primary_cause')}",
+        f"- Last nonzero asof: {zero_exposure_report.get('last_nonzero_asof')}",
+        f"- Days since last nonzero: {zero_exposure_report.get('days_since_last_nonzero')}",
+        f"- Next rebalance asof estimate: {zero_exposure_report.get('next_rebalance_asof_estimate')}",
+        "",
+        "## Latest State",
+        "",
+    ]
+    latest_state = zero_exposure_report.get("latest_state", {})
+    for key in [
+        "benchmark_state",
+        "benchmark_scale",
+        "risk_off",
+        "drawdown_state",
+        "dd_scale",
+        "rebalance_due",
+        "news_gate",
+        "vol_target_scale",
+        "stop_loss_count",
+    ]:
+        zero_lines.append(f"- {key}: {latest_state.get(key)}")
+    (out_dir / "zero_exposure_report.md").write_text("\n".join(zero_lines) + "\n", encoding="utf-8")
 
     compare_df = pd.DataFrame(
         [

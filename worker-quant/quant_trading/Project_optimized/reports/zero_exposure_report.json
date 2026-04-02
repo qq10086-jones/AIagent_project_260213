@@ -1,0 +1,24 @@
+{
+  "signal_mode": "ridge",
+  "has_history": true,
+  "latest_asof": "2026-04-02",
+  "latest_weight_sum": 0.0,
+  "latest_weights_zero": true,
+  "last_nonzero_asof": "2026-03-27",
+  "last_nonzero_weight_sum": 0.5556623681162869,
+  "days_since_last_nonzero": 4,
+  "rebalance_every_trading_days": 10,
+  "next_rebalance_asof_estimate": null,
+  "latest_state": {
+    "benchmark_state": "off",
+    "benchmark_scale": 0.0,
+    "risk_off": true,
+    "drawdown_state": "on",
+    "dd_scale": 1.0,
+    "rebalance_due": false,
+    "news_gate": 0.0,
+    "vol_target_scale": 1.0,
+    "stop_loss_count": 0
+  },
+  "primary_cause": "benchmark_risk_off"
+}

@@ -520,8 +520,13 @@ def main():
         "factor_health_report.md",
         "factor_health_families.csv",
         "factor_health_factors.csv",
+        "factor_registry_cleanup_candidates.csv",
+        "factor_registry_cleanup_report.json",
+        "factor_registry_cleanup_report.md",
         "signal_mode_compare_report.json",
         "signal_mode_compare_report.md",
+        "zero_exposure_report.json",
+        "zero_exposure_report.md",
         "earnings_event_study.json",
         "earnings_event_study.csv",
         "earnings_event_study.md",
@@ -635,6 +640,7 @@ def main():
                 "factor_family_contributions_file": str(factor_family_csv),
                 "factor_family_summary_file": str(factor_family_json),
                 "factor_family_summary": family_contrib_summary,
+                "zero_exposure_report_file": str(out_run / "zero_exposure_report.json"),
             },
             "portfolio": {
                 "mode": portfolio_mode,
@@ -655,6 +661,12 @@ def main():
                 "drawdown_scale": dd_scale,
                 "drawdown_status": dd_status,
                 "peak_nav_input": peak_nav,
+            },
+            "diagnostics": {
+                "target_weights_zero_now": bool(float(target_meta.get("export_row_sum", 0.0) or 0.0) <= 1e-12),
+                "last_nonzero_asof": target_meta.get("last_nonzero_asof"),
+                "last_nonzero_row_sum": target_meta.get("last_nonzero_row_sum"),
+                "weights_sum_before_norm": info["weights_sum_before_norm"],
             },
         }
 

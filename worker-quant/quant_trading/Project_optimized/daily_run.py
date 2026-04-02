@@ -33,9 +33,16 @@ import os
 import re
 import subprocess
 import sqlite3
+import sys
 from pathlib import Path
 
 from trade_schema import connect, ensure_learning_tables, ensure_trade_tables, save_screening_history
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 
 def load_cfg(path: str) -> dict:
@@ -114,7 +121,7 @@ def resolve_screener_max_cost_per_lot(cfg: dict) -> float:
 
 
 def run_and_capture(cmd: list[str]) -> str:
-    p = subprocess.run(cmd, text=True, capture_output=True)
+    p = subprocess.run(cmd, text=True, capture_output=True, encoding="utf-8", errors="replace")
     if p.returncode != 0:
         raise RuntimeError(f"Command failed: {' '.join(cmd)}\nSTDOUT:\n{p.stdout}\nSTDERR:\n{p.stderr}")
     # Echo for user visibility
@@ -236,58 +243,59 @@ def main():
             print(f"⚠️  news_to_db.py failed (non-fatal, overlay disabled): {e}")
 
     env = os.environ.copy()
-    env["SS6_DB_PATH"] = db_path
-    env["SS6_TICKERS"] = ",".join(symbols)
-    env["SS6_BENCHMARK"] = str(model.get("benchmark_ticker", "1321.T"))
-    env["SS6_START"] = str(model.get("start", "2020-01-01"))
-    env["SS6_END"] = "" if model.get("end") is None else str(model["end"])
-    env["SS6_SIGNAL_MODE"] = os.environ.get("SS6_SIGNAL_MODE") or str(model.get("signal_mode", "shadow_ic"))
-    comp_modes = os.environ.get("SS6_COMPARE_SIGNAL_MODES") or model.get("compare_signal_modes", ["ridge", "shadow_eq"])
+    env["SS7_DB_PATH"] = db_path
+    env["SS7_TICKERS"] = ",".join(symbols)
+    env["SS7_BENCHMARK"] = str(model.get("benchmark_ticker", "1321.T"))
+    env["SS7_START"] = str(model.get("start", "2020-01-01"))
+    env["SS7_END"] = "" if model.get("end") is None else str(model["end"])
+    env["SS7_EXCLUDED_FACTORS"] = ",".join(model.get("excluded_factors", []))
+    env["SS7_SIGNAL_MODE"] = os.environ.get("SS7_SIGNAL_MODE") or str(model.get("signal_mode", "shadow_ic"))
+    comp_modes = os.environ.get("SS7_COMPARE_SIGNAL_MODES") or model.get("compare_signal_modes", ["ridge", "shadow_eq"])
     if isinstance(comp_modes, list):
         comp_modes = ",".join(comp_modes)
-    env["SS6_COMPARE_SIGNAL_MODES"] = str(comp_modes)
-    env["SS6_H"] = str(int(model.get("H", 20)))
-    env["SS6_TRAIN_WINDOW"] = str(int(model.get("train_window", 252)))
-    env["SS6_REBALANCE_EVERY"] = str(int(model.get("rebalance_every", 20)))
-    env["SS6_BENCHMARK_FAST_MA_WINDOW"] = str(int(model.get("benchmark_fast_ma_window", 20)))
-    env["SS6_BENCHMARK_SLOW_MA_WINDOW"] = str(int(model.get("benchmark_slow_ma_window", model.get("ma_window", 60))))
-    env["SS6_BENCHMARK_HYSTERESIS_ENTER_PCT"] = str(float(model.get("benchmark_hysteresis_enter_pct", 0.01)))
-    env["SS6_BENCHMARK_HYSTERESIS_EXIT_PCT"] = str(float(model.get("benchmark_hysteresis_exit_pct", 0.01)))
-    env["SS6_SAFE_PLOT"] = "1" if bool(model.get("safe_plot", True)) else "0"
-    env["SS6_OUTPUT_DIR"] = out_dir
-    env["SS6_INITIAL_CAPITAL"] = str(float(exec_cfg.get("initial_capital", 1_000_000)))
-    env["SS6_LOT_SIZE_DEFAULT"] = str(int(exec_cfg.get("lot_size_default", 100)))
-    env["SS6_FEE_BPS"] = str(float(exec_cfg.get("fee_bps", 5.0)))
-    env["SS6_SLIPPAGE_BPS"] = str(float(exec_cfg.get("slippage_bps", 5.0)))
-    env["SS6_IMPACT_K"] = str(float(exec_cfg.get("impact_k", 0.5)))
-    env["SS6_MAX_ADV_FRAC"] = str(float(max_adv_frac))
-    env["SS6_CASH_RATE_DAILY"] = str(float(exec_cfg.get("cash_rate_daily", 0.0)))
-    env["SS6_TARGET_VOL_ANNUAL_PCT"] = str(float(exec_cfg.get("target_vol_annual_pct", 0.0)))
-    env["SS6_VOL_TARGET_LOOKBACK"] = str(int(exec_cfg.get("vol_target_lookback", 20)))
-    env["SS6_VOL_TARGET_MIN_SCALE"] = str(float(exec_cfg.get("vol_target_min_scale", 0.35)))
-    env["SS6_VOL_TARGET_MAX_SCALE"] = str(float(exec_cfg.get("vol_target_max_scale", 1.0)))
-    env["SS6_STOP_LOSS_PCT"] = str(float(exec_cfg.get("stop_loss_pct", 0.08)))
-    env["SS6_STOP_LOSS_MODE"] = str(exec_cfg.get("stop_loss_mode", "volatility"))
-    env["SS6_ATR_WINDOW"] = str(int(exec_cfg.get("atr_window", 20)))
-    env["SS6_STOP_LOSS_VOL_MULT"] = str(float(exec_cfg.get("stop_loss_vol_mult", 2.5)))
-    env["SS6_STOP_LOSS_MIN_PCT"] = str(float(exec_cfg.get("stop_loss_min_pct", 0.03)))
-    env["SS6_STOP_LOSS_MAX_PCT"] = str(float(exec_cfg.get("stop_loss_max_pct", 0.12)))
-    env["SS6_MAX_DD_HALF"] = str(float(exec_cfg.get("max_dd_half", 0.12)))
-    env["SS6_MAX_DD_FULL"] = str(float(exec_cfg.get("max_dd_full", 0.18)))
-    env["SS6_MAX_DD_REENTRY_COOLDOWN_DAYS"] = str(int(exec_cfg.get("max_dd_reentry_cooldown_days", 20)))
+    env["SS7_COMPARE_SIGNAL_MODES"] = str(comp_modes)
+    env["SS7_H"] = str(int(model.get("H", 20)))
+    env["SS7_TRAIN_WINDOW"] = str(int(model.get("train_window", 252)))
+    env["SS7_REBALANCE_EVERY"] = str(int(model.get("rebalance_every", 20)))
+    env["SS7_BENCHMARK_FAST_MA_WINDOW"] = str(int(model.get("benchmark_fast_ma_window", 20)))
+    env["SS7_BENCHMARK_SLOW_MA_WINDOW"] = str(int(model.get("benchmark_slow_ma_window", model.get("ma_window", 60))))
+    env["SS7_BENCHMARK_HYSTERESIS_ENTER_PCT"] = str(float(model.get("benchmark_hysteresis_enter_pct", 0.01)))
+    env["SS7_BENCHMARK_HYSTERESIS_EXIT_PCT"] = str(float(model.get("benchmark_hysteresis_exit_pct", 0.01)))
+    env["SS7_SAFE_PLOT"] = "1" if bool(model.get("safe_plot", True)) else "0"
+    env["SS7_OUTPUT_DIR"] = out_dir
+    env["SS7_INITIAL_CAPITAL"] = str(float(exec_cfg.get("initial_capital", 1_000_000)))
+    env["SS7_LOT_SIZE_DEFAULT"] = str(int(exec_cfg.get("lot_size_default", 100)))
+    env["SS7_FEE_BPS"] = str(float(exec_cfg.get("fee_bps", 5.0)))
+    env["SS7_SLIPPAGE_BPS"] = str(float(exec_cfg.get("slippage_bps", 5.0)))
+    env["SS7_IMPACT_K"] = str(float(exec_cfg.get("impact_k", 0.5)))
+    env["SS7_MAX_ADV_FRAC"] = str(float(max_adv_frac))
+    env["SS7_CASH_RATE_DAILY"] = str(float(exec_cfg.get("cash_rate_daily", 0.0)))
+    env["SS7_TARGET_VOL_ANNUAL_PCT"] = str(float(exec_cfg.get("target_vol_annual_pct", 0.0)))
+    env["SS7_VOL_TARGET_LOOKBACK"] = str(int(exec_cfg.get("vol_target_lookback", 20)))
+    env["SS7_VOL_TARGET_MIN_SCALE"] = str(float(exec_cfg.get("vol_target_min_scale", 0.35)))
+    env["SS7_VOL_TARGET_MAX_SCALE"] = str(float(exec_cfg.get("vol_target_max_scale", 1.0)))
+    env["SS7_STOP_LOSS_PCT"] = str(float(exec_cfg.get("stop_loss_pct", 0.08)))
+    env["SS7_STOP_LOSS_MODE"] = str(exec_cfg.get("stop_loss_mode", "volatility"))
+    env["SS7_ATR_WINDOW"] = str(int(exec_cfg.get("atr_window", 20)))
+    env["SS7_STOP_LOSS_VOL_MULT"] = str(float(exec_cfg.get("stop_loss_vol_mult", 2.5)))
+    env["SS7_STOP_LOSS_MIN_PCT"] = str(float(exec_cfg.get("stop_loss_min_pct", 0.03)))
+    env["SS7_STOP_LOSS_MAX_PCT"] = str(float(exec_cfg.get("stop_loss_max_pct", 0.12)))
+    env["SS7_MAX_DD_HALF"] = str(float(exec_cfg.get("max_dd_half", 0.12)))
+    env["SS7_MAX_DD_FULL"] = str(float(exec_cfg.get("max_dd_full", 0.18)))
+    env["SS7_MAX_DD_REENTRY_COOLDOWN_DAYS"] = str(int(exec_cfg.get("max_dd_reentry_cooldown_days", 20)))
 
     # news overlay — DB 模式优先；CSV 作为旧式兼容
     news_cfg = model.get("news", {})
     news_enabled = bool(news_cfg.get("enabled", False))
     news_csv = str(news_cfg.get("csv_path", ""))
     if news_enabled:
-        env["SS6_NEWS_ON"]  = "1"
-        env["SS6_NEWS_DB"]  = db_path
-        env["SS6_NEWS_CSV"] = news_csv
+        env["SS7_NEWS_ON"]  = "1"
+        env["SS7_NEWS_DB"]  = db_path
+        env["SS7_NEWS_CSV"] = news_csv
     else:
-        env["SS6_NEWS_ON"]  = "0"
-        env["SS6_NEWS_CSV"] = ""
-    env["SS6_USE_FUNDAMENTAL_FEATURES"] = "1" if bool(fund.get("use_in_live_scoring", False)) else "0"
+        env["SS7_NEWS_ON"]  = "0"
+        env["SS7_NEWS_CSV"] = ""
+    env["SS7_USE_FUNDAMENTAL_FEATURES"] = "1" if bool(fund.get("use_in_live_scoring", False)) else "0"
 
     print(f">> execution max_adv_frac={max_adv_frac:.4f}")
     cmd = ["python", "ss7_sqlite_news_overlay.py"]

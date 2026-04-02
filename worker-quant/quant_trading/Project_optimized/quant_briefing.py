@@ -347,7 +347,7 @@ def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
     except ImportError:
         return positions
 
-    VOL_MULT   = 6.0    # 与 config.yaml SS6_STOP_LOSS_VOL_MULT 一致
+    VOL_MULT   = 6.0    # 与 config.yaml SS7_STOP_LOSS_VOL_MULT 一致
     STOP_FLOOR = 0.06   # 6% 最低止损线
     STOP_CAP   = 0.20   # 20% 最大止损线
 

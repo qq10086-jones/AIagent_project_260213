@@ -1,9 +1,9 @@
 {
   "mode": "shadow_hybrid_ic",
-  "exported_asof": "2025-10-01",
-  "history_last_asof": "2025-10-01",
-  "history_last_row_is_zero": false,
-  "export_row_sum": 0.5208299396676995,
-  "last_nonzero_asof": "2025-10-01",
-  "last_nonzero_row_sum": 0.5208299396676995
+  "exported_asof": "2026-04-02",
+  "history_last_asof": "2026-04-02",
+  "history_last_row_is_zero": true,
+  "export_row_sum": 0.0,
+  "last_nonzero_asof": "2026-03-27",
+  "last_nonzero_row_sum": 0.5517144184819519
 }

@@ -1,0 +1,74 @@
+{
+  "target_mode": "ridge",
+  "eligibility_rule": {
+    "guard_must_pass": true,
+    "min_observations": 80
+  },
+  "summary": {
+    "eligible_count": 1,
+    "exclude_count": 4,
+    "exclude_candidates": [
+      "ret20",
+      "rsi14",
+      "slope60",
+      "vol_adj_mom20"
+    ]
+  },
+  "rows": [
+    {
+      "family": "technical",
+      "factor_name": "mom_consist",
+      "ic_mean": 0.010054339594129958,
+      "t_stat": 2.058778,
+      "guard": "PASS",
+      "n_observations": 218,
+      "production_eligible": true,
+      "recommended_action": "keep",
+      "exclusion_reason": "eligible"
+    },
+    {
+      "family": "technical",
+      "factor_name": "ret20",
+      "ic_mean": 0.030052345788930374,
+      "t_stat": 0.620537,
+      "guard": "FAIL",
+      "n_observations": 50,
+      "production_eligible": false,
+      "recommended_action": "exclude_from_production",
+      "exclusion_reason": "insufficient_observations_and_guard_fail"
+    },
+    {
+      "family": "technical",
+      "factor_name": "rsi14",
+      "ic_mean": 0.02694153013332967,
+      "t_stat": 0.604236,
+      "guard": "FAIL",
+      "n_observations": 50,
+      "production_eligible": false,
+      "recommended_action": "exclude_from_production",
+      "exclusion_reason": "insufficient_observations_and_guard_fail"
+    },
+    {
+      "family": "technical",
+      "factor_name": "slope60",
+      "ic_mean": 0.017675099531606245,
+      "t_stat": 1.051152,
+      "guard": "FAIL",
+      "n_observations": 50,
+      "production_eligible": false,
+      "recommended_action": "exclude_from_production",
+      "exclusion_reason": "insufficient_observations_and_guard_fail"
+    },
+    {
+      "family": "technical",
+      "factor_name": "vol_adj_mom20",
+      "ic_mean": 0.03311356044042312,
+      "t_stat": 0.544001,
+      "guard": "FAIL",
+      "n_observations": 50,
+      "production_eligible": false,
+      "recommended_action": "exclude_from_production",
+      "exclusion_reason": "insufficient_observations_and_guard_fail"
+    }
+  ]
+}

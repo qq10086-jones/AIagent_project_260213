@@ -6,10 +6,10 @@ update:
 
 fundamental:
   enabled: true
-  source: "jquants_v2"          # jquants_v2 (高质量季报混合方案) | yfinance | csv | noop
+  source: "jquants_v2"            # stable default: yfinance | jquants_v2 (optional enhancement) | csv | noop
   csv_path: null
-  fail_closed: true
-  require_available_ts: true
+  fail_closed: false
+  require_available_ts: false
   use_in_live_scoring: true   # 基本面因子进入 ss7 模型评分（P0修复 2026-03-26）
   use_in_learning: true
 
@@ -32,11 +32,12 @@ model:
   #   signal_mode 维持 ridge，等 paper_days≥30 + IC t-stat≥1.5 + Sharpe≥1.5 后再切换
   signal_mode: "ridge"
   compare_signal_modes: ["ridge", "shadow_eq", "shadow_ic", "shadow_hybrid_ic"]
+  excluded_factors: ["ret20", "rsi14", "slope60", "vol_adj_mom20"]
   start: "2020-01-01"
   end: null
-  H: 20
+  H: 10
   train_window: 252
-  rebalance_every: 20
+  rebalance_every: 10
   benchmark_ticker: "1321.T"
   benchmark_fast_ma_window: 20
   benchmark_slow_ma_window: 60
@@ -99,7 +100,7 @@ promotion:
 decision:
   cash: 400000          # 与 exec.initial_capital 保持一致
   lot: 100
-  min_trade: 5000
+  min_trade: 1000
   out_dir: "artifacts/decision"
 
 paper:

@@ -116,8 +116,16 @@ def _paper_mode_stats(db_path: str, target_mode: str) -> dict[str, Any]:
             WHERE source='paper_simulator'
             """
         ).fetchall()
+        snapshot_rows = conn.execute(
+            """
+            SELECT DISTINCT run_id, asof
+            FROM account_snapshots
+            WHERE run_id IS NOT NULL
+            """
+        ).fetchall()
 
     filled_by_run = {str(run_id): str(asof) for run_id, asof in fill_rows}
+    snap_by_run = {str(run_id): str(asof) for run_id, asof in snapshot_rows}
     matched_runs = []
     paper_days = set()
     for run_id, asof, status, snapshot_path in run_rows:
@@ -125,15 +133,19 @@ def _paper_mode_stats(db_path: str, target_mode: str) -> dict[str, Any]:
         if mode != target_mode:
             continue
         run_id = str(run_id)
-        is_papered = run_id in filled_by_run
+        has_fill = run_id in filled_by_run
+        has_snapshot = run_id in snap_by_run
+        is_papered = has_fill or has_snapshot
         if is_papered:
-            paper_days.add(str(filled_by_run[run_id]))
+            paper_days.add(str(filled_by_run.get(run_id) or snap_by_run.get(run_id) or asof))
         matched_runs.append(
             {
                 "run_id": run_id,
                 "asof": str(asof),
                 "status": str(status) if status is not None else None,
                 "paper_executed": is_papered,
+                "has_fills": has_fill,
+                "has_snapshot": has_snapshot,
             }
         )
     return {

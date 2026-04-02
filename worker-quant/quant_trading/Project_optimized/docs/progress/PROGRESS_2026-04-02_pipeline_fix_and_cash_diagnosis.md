@@ -26,7 +26,7 @@ fundamental:
 ```
 
 Screener 已使用 yfinance 作为基本面回退，`enabled: false` 对 screener 无影响。
-`SS6_USE_FUNDAMENTAL_FEATURES` 环境变量仍由 `use_in_live_scoring` 控制（保持原值）。
+`SS7_USE_FUNDAMENTAL_FEATURES` 环境变量仍由 `use_in_live_scoring` 控制（保持原值）。
 
 ---
 

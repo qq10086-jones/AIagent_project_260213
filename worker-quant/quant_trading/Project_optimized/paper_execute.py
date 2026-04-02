@@ -68,6 +68,18 @@ def _load_orders(conn, run_id: str) -> list[tuple]:
     ).fetchall()
 
 
+def _update_run_status_after_paper(conn, run_id: str, order_count: int, fills_inserted: int) -> str:
+    if fills_inserted > 0:
+        status = "paper_filled"
+    elif order_count <= 0:
+        status = "paper_no_orders"
+    else:
+        status = "paper_checked_no_fill"
+    conn.execute("UPDATE decision_runs SET status=? WHERE run_id=?", (status, run_id))
+    conn.commit()
+    return status
+
+
 def _market_quote(conn, symbol: str, asof: str, price_mode: str) -> dict | None:
     if price_mode == "latest":
         row = conn.execute(
@@ -261,6 +273,7 @@ def main():
     ensure_trade_tables(conn)
     try:
         meta = get_run_meta(conn, run_id)
+        order_count = len(_load_orders(conn, run_id))
         fills_df, missing = simulate_fills(
             conn,
             run_id=run_id,
@@ -293,11 +306,13 @@ def main():
         if artifact_dir is None:
             artifact_dir = Path("artifacts/decision") / asof / run_id
         md_path, csv_path = generate_execution_report(conn, run_id, asof, artifact_dir)
+        run_status = _update_run_status_after_paper(conn, run_id, order_count=order_count, fills_inserted=inserted)
 
         print("=" * 70)
         print("Paper execution complete")
         print(f"run_id: {run_id}")
         print(f"asof: {asof}")
+        print(f"run_status: {run_status}")
         print(f"fills_inserted: {inserted}")
         print(f"positions: {len(rows_out)} (prev_positions_asof={prev_asof})")
         print(f"nav: {snap['nav']:,.2f} cash={snap['cash_end']:,.2f} positions_value={snap['positions_value']:,.2f}")

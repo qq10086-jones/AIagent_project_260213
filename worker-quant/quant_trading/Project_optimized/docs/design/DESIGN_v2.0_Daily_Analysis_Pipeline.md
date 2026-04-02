@@ -285,3 +285,56 @@ regime = {
 ---
 
 *最后更新：2026-04-02*
+## Runtime Addendum (2026-04-02)
+
+This addendum records the current validated runtime state and should override older
+aspirational notes when the two differ.
+
+### Stable Default Production Mode
+
+- Default unattended daily-run mode should be:
+  - `fundamental.enabled: true`
+  - `fundamental.source: "yfinance"`
+  - `fail_closed: false`
+  - `require_available_ts: false`
+- `jquants_v2` remains an optional enhancement path, not the default production path.
+- Reason: local validation showed that full-universe J-Quants refresh can hit repeated
+  `429` rate limits and materially extend runtime.
+
+### Current Operational Truth
+
+- The daily pipeline is operational in the local environment.
+- The current live outcome is still:
+  - `recommendation = hold`
+  - `orders = 0`
+  - `paper_days = 0`
+- Therefore the primary problem is not "pipeline cannot run". The primary problem is
+  "pipeline runs, but governance evidence is not accumulating."
+
+### Zero-Exposure Risk Before Benchmark Gating
+
+- `Sharpe = 0` must not be explained only by the benchmark MA20/MA60 regime filter.
+- The observed zero-exposure period started before the later benchmark risk-off trigger.
+- This creates a first-class design risk in:
+  `signal -> target weights -> order proposal -> min_trade / sizing filters`
+- Current working hypothesis:
+  `ridge` may be over-regularized, producing weak near-equal-weight output that is then
+  rounded or filtered into zero effective exposure.
+
+### Governance Risk Statement
+
+- A governance deadlock risk exists because paper statistics are not accumulating.
+- This should be treated as a diagnosis item, not yet as a proven claim that
+  `paper_execute.py` itself is broken.
+- Two cases must be separated explicitly:
+  1. execution path runs, but no orders survive sizing and risk filters
+  2. execution status, fills, or account state are not written back consistently
+
+### Factor Quality Caution
+
+- The factor set should currently be treated as partially validated.
+- The next phase should prioritize:
+  - factor quality cleanup
+  - paper-loop diagnosis
+  - signal-to-weight diagnosis
+- The next phase should not prioritize expanding factor count.

@@ -14,15 +14,60 @@
   },
   "paper_stats": {
     "mode": "ridge",
-    "decision_run_count": 1,
-    "paper_days": 0,
-    "paper_asofs": [],
+    "decision_run_count": 6,
+    "paper_days": 2,
+    "paper_asofs": [
+      "2026-04-01",
+      "2026-04-02"
+    ],
     "recent_runs": [
       {
         "run_id": "2026-04-01__0cb010ffd8",
         "asof": "2026-04-01",
         "status": "proposed",
-        "paper_executed": false
+        "paper_executed": true,
+        "has_fills": false,
+        "has_snapshot": true
+      },
+      {
+        "run_id": "2026-04-02__297e682985",
+        "asof": "2026-04-02",
+        "status": "proposed",
+        "paper_executed": false,
+        "has_fills": false,
+        "has_snapshot": false
+      },
+      {
+        "run_id": "2026-04-02__433f0690f9",
+        "asof": "2026-04-02",
+        "status": "paper_no_orders",
+        "paper_executed": false,
+        "has_fills": false,
+        "has_snapshot": false
+      },
+      {
+        "run_id": "2026-04-02__d58703cf65",
+        "asof": "2026-04-02",
+        "status": "paper_no_orders",
+        "paper_executed": false,
+        "has_fills": false,
+        "has_snapshot": false
+      },
+      {
+        "run_id": "2026-04-02__0f2928da87",
+        "asof": "2026-04-02",
+        "status": "paper_no_orders",
+        "paper_executed": false,
+        "has_fills": false,
+        "has_snapshot": false
+      },
+      {
+        "run_id": "2026-04-02__31a2731438",
+        "asof": "2026-04-02",
+        "status": "paper_no_orders",
+        "paper_executed": true,
+        "has_fills": false,
+        "has_snapshot": true
       }
     ]
   },
@@ -112,7 +157,7 @@
     },
     "paper_days": {
       "passed": false,
-      "actual": 0,
+      "actual": 2,
       "threshold": 30
     },
     "turnover_stability": {

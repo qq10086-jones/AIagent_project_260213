@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -35,6 +36,12 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 try:
     import requests as _requests

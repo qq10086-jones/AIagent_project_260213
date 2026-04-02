@@ -1,5 +1,6 @@
 {
   "recommended_mode": "ridge",
+  "recommendation_note": "All compared modes currently export zero target weights. Shared latest cause: benchmark_risk_off.",
   "ranking": [
     {
       "mode": "ridge",
@@ -13,7 +14,12 @@
       "avg_turnover_pct": 0.0,
       "turnover_cv": 0.0,
       "avg_cost_paid": 0.0,
-      "score": 0.0
+      "score": 0.0,
+      "current_weights_zero": true,
+      "last_nonzero_asof": "2026-03-27",
+      "last_nonzero_row_sum": 0.5556623681162869,
+      "export_row_sum": 0.0,
+      "actionable_now": false
     },
     {
       "mode": "shadow_eq",
@@ -27,7 +33,12 @@
       "avg_turnover_pct": 0.0,
       "turnover_cv": 0.0,
       "avg_cost_paid": 0.0,
-      "score": 0.0
+      "score": 0.0,
+      "current_weights_zero": true,
+      "last_nonzero_asof": "2026-03-27",
+      "last_nonzero_row_sum": 0.5376256630443992,
+      "export_row_sum": 0.0,
+      "actionable_now": false
     },
     {
       "mode": "shadow_ic",
@@ -41,7 +52,12 @@
       "avg_turnover_pct": 0.0,
       "turnover_cv": 0.0,
       "avg_cost_paid": 0.0,
-      "score": 0.0
+      "score": 0.0,
+      "current_weights_zero": true,
+      "last_nonzero_asof": "2026-03-27",
+      "last_nonzero_row_sum": 0.5354227129189453,
+      "export_row_sum": 0.0,
+      "actionable_now": false
     },
     {
       "mode": "shadow_hybrid_ic",
@@ -55,11 +71,18 @@
       "avg_turnover_pct": 0.0,
       "turnover_cv": 0.0,
       "avg_cost_paid": 0.0,
-      "score": 0.0
+      "score": 0.0,
+      "current_weights_zero": true,
+      "last_nonzero_asof": "2026-03-27",
+      "last_nonzero_row_sum": 0.5517144184819519,
+      "export_row_sum": 0.0,
+      "actionable_now": false
     }
   ],
   "summary": {
     "mode_count": 4,
+    "actionable_mode_count": 0,
+    "all_modes_zero_now": true,
     "best_sharpe_mode": "ridge",
     "best_return_mode": "ridge",
     "lowest_drawdown_mode": "ridge"

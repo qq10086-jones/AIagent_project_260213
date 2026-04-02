@@ -115,8 +115,10 @@ yfinance 日本股票季报数据稀疏（quarterly_income_stmt 多数只有 EPS
 
 **验证方式**：跑完后检查 `fundamental_snapshots` 中 `operating_income` 是否非 NULL，与 J-Quants 网站季报对比。
 
-- [x] 由用户自行实现 `import_jquants_v2()`
-- [x] 在 `daily_run.bat` 中设置 `JQUANTS_API_KEY=<your_key>`
+- [x] 由用户（及 AI 协助）最终实现强壮版 `import_jquants_v2()`
+- [x] 加入 `429 Rate Limit` 指数退避重试保护（Exponential Backoff）
+- [x] 引入基于 14天缓存 的断点试跳过机制，支持分批增量拉取大盘
+- [x] 在 `daily_run.bat` / 本地环境变量中设置 `JQUANTS_API_KEY`
 - [x] `config.yaml` 中 `fundamental.source` 改为 `jquants_v2`
 
 ---
@@ -134,3 +136,44 @@ yfinance 日本股票季报数据稀疏（quarterly_income_stmt 多数只有 EPS
 ---
 
 *最后更新：2026-04-02（全部原 P0/P1/P2 任务已完成；新增 A5 J-Quants 混合方案遗留待用户实现）*
+## Runtime Follow-ups Added After Local QA (2026-04-02)
+
+These tasks were added after validating the current local runtime behavior. They are
+intended to close the gap between "pipeline runs" and "governance can accumulate real
+evidence".
+
+### [P0] R1. Diagnose paper-loop evidence gap
+
+- [x] **R1-1** Verify whether `paper_execute.py` is actually writing fills/account state correctly or whether the system is simply producing zero executable orders.
+- [x] **R1-2** Trace `decision_runs.status`, `paper_executed`, fills insertion, and account snapshot updates for the most recent runs and document the exact break point.
+- [x] **R1-3** Produce a short QA note that distinguishes "execution path broken" from "execution path runs but no orders survive filters".
+
+Status note:
+`paper_execute.py` runs successfully on this machine. The current evidence shows "execution path runs, but current runs have zero orders / zero fills", not a hard execution-path break. `evaluate_promotion.py` and `paper_execute.py` were updated so governance stats now reflect snapshots and status transitions more accurately.
+
+### [P0] R2. Diagnose zero-exposure path
+
+- [x] **R2-1** Trace `signal -> target_weights -> orders_proposal` and identify where non-zero alpha turns into zero effective exposure.
+- [x] **R2-2** Quantify the impact of `min_trade`, lot sizing, cash sizing, and post-processing filters on order suppression.
+- [x] **R2-3** Confirm whether the benchmark regime filter is the primary blocker or merely a later secondary blocker.
+
+Status note:
+A formal `zero_exposure_report.json/md` is now produced by `ss7_sqlite_news_overlay.py`. Current finding: the latest direct blocker is `benchmark_risk_off`, while the last non-zero target remains `2026-03-12`. Order suppression is currently happening before `min_trade` filtering because the latest exported target weights are already zero.
+
+### [P1] R3. Compare primary signal modes in paper governance
+
+- [x] **R3-1** Run paper-governance comparison for `ridge` and `shadow_ic` in parallel rather than relying on backtest-only comparison.
+- [x] **R3-2** Compare weight concentration, non-zero order count, and surviving executable orders across modes.
+- [ ] **R3-3** Do not switch the production default mode until paper-layer evidence exists for both candidates.
+
+Status note:
+The comparison report now includes actionable status, last non-zero asof, and shared latest zero-exposure cause. Current result: all four compared modes are zero now, so there is no evidence-based reason to switch away from `ridge` yet.
+
+### [P1] R4. Clean up factor registry participation
+
+- [x] **R4-1** Identify factors with insufficient observations or failing statistical guards and mark them as non-production candidates.
+- [ ] **R4-2** Prevent low-confidence factors from diluting the production weight calculation without explicit override.
+- [x] **R4-3** Publish a compact factor-quality summary listing observation count, IC mean, t-stat, and production eligibility.
+
+Status note:
+`factor_health_report.py` now emits `factor_registry_cleanup_candidates.csv` and cleanup reports. Current production-eligible factor set contains only `mom_consist`; `ret20`, `rsi14`, `slope60`, and `vol_adj_mom20` are marked as exclusion candidates.

@@ -1,0 +1,6 @@
+family,factor_name,ic_mean,t_stat,guard,n_observations,production_eligible,recommended_action,exclusion_reason
+technical,mom_consist,0.010054339594129958,2.058778,PASS,218,True,keep,eligible
+technical,ret20,0.030052345788930374,0.620537,FAIL,50,False,exclude_from_production,insufficient_observations_and_guard_fail
+technical,rsi14,0.02694153013332967,0.604236,FAIL,50,False,exclude_from_production,insufficient_observations_and_guard_fail
+technical,slope60,0.017675099531606245,1.051152,FAIL,50,False,exclude_from_production,insufficient_observations_and_guard_fail
+technical,vol_adj_mom20,0.03311356044042312,0.544001,FAIL,50,False,exclude_from_production,insufficient_observations_and_guard_fail

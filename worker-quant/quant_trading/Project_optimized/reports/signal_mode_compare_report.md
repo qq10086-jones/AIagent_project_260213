@@ -1,9 +1,11 @@
 # Signal Mode Comparison Report
 
 - Recommended mode: ridge
-- Note: All compared modes currently export zero target weights. Shared latest cause: benchmark_risk_off.
+- Note: All compared modes currently export zero target weights. Shared latest cause: benchmark_regime_capped_exposure.
 - Actionable mode count: 0
 - All modes zero now: True
+- Zero exposure days: 5
+- Zero exposure alert: True
 - Best Sharpe mode: ridge
 - Best return mode: ridge
 - Lowest drawdown mode: ridge

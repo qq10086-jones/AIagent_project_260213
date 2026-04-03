@@ -34,6 +34,7 @@ import re
 import subprocess
 import sqlite3
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from trade_schema import connect, ensure_learning_tables, ensure_trade_tables, save_screening_history
@@ -60,6 +61,143 @@ def latest_trading_day(db_path: str) -> str:
     if not row or row[0] is None:
         raise RuntimeError("daily_prices is empty. Run db_update.py first.")
     return str(row[0])
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _latest_fundamental_status(db_path: str) -> dict:
+    with sqlite3.connect(db_path) as conn:
+        source_rows = conn.execute(
+            """
+            SELECT source, COUNT(*), COUNT(DISTINCT symbol), MAX(available_ts)
+            FROM fundamental_snapshots
+            GROUP BY source
+            ORDER BY MAX(available_ts) DESC
+            """
+        ).fetchall()
+        latest_row = conn.execute(
+            """
+            SELECT source, available_ts
+            FROM fundamental_snapshots
+            WHERE available_ts IS NOT NULL
+            ORDER BY available_ts DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        summary_row = conn.execute(
+            """
+            SELECT COUNT(*), COUNT(DISTINCT symbol)
+            FROM fundamental_snapshots
+            """
+        ).fetchone()
+    latest_source = str(latest_row[0]) if latest_row and latest_row[0] is not None else None
+    latest_rows = int(summary_row[0] or 0) if summary_row else 0
+    latest_symbols = int(summary_row[1] or 0) if summary_row else 0
+    latest_ts = str(latest_row[1]) if latest_row and latest_row[1] is not None else None
+    return {
+        "latest_source": latest_source,
+        "latest_rows": latest_rows,
+        "latest_symbols": latest_symbols,
+        "latest_available_ts": latest_ts,
+        "sources": [
+            {
+                "source": str(source),
+                "rows": int(rows or 0),
+                "symbols": int(symbols or 0),
+                "latest_available_ts": str(ts) if ts is not None else None,
+            }
+            for source, rows, symbols, ts in source_rows
+        ],
+    }
+
+
+def write_fundamental_status_report(reports_dir: Path, status: dict) -> None:
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    payload = dict(status)
+    payload["reported_at_utc"] = _utc_now_iso()
+    (reports_dir / "fundamentals_status.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    lines = [
+        "# Fundamentals Status",
+        "",
+        f"- Step status: {payload.get('step_status', 'unknown')}",
+        f"- Blocking mode: {bool(payload.get('blocking', False))}",
+        f"- Configured source: {payload.get('configured_source')}",
+        f"- Attempted refresh: {bool(payload.get('attempted_refresh', False))}",
+        f"- Message: {payload.get('message', '')}",
+        f"- Latest source in DB: {payload.get('latest_source')}",
+        f"- Latest available_ts: {payload.get('latest_available_ts')}",
+        f"- Latest symbol coverage: {int(payload.get('latest_symbols', 0) or 0)}",
+        "",
+        "## Source Coverage",
+        "",
+    ]
+    for row in payload.get("sources", []):
+        lines.append(
+            f"- {row.get('source')}: rows={int(row.get('rows', 0) or 0)} | "
+            f"symbols={int(row.get('symbols', 0) or 0)} | latest_available_ts={row.get('latest_available_ts')}"
+        )
+    (reports_dir / "fundamentals_status.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_fundamentals_step(cfg: dict, db_path: str, reports_dir: Path) -> dict:
+    fund = cfg.get("fundamental", {})
+    status = {
+        "step_status": "disabled",
+        "blocking": bool(fund.get("blocking", False)),
+        "configured_source": str(fund.get("source", "yfinance")),
+        "attempted_refresh": False,
+        "message": "Fundamental refresh disabled.",
+    }
+    if not fund.get("enabled", False):
+        status.update(_latest_fundamental_status(db_path))
+        write_fundamental_status_report(reports_dir, status)
+        return status
+
+    run_on_main_path = bool(fund.get("run_on_main_path", False))
+    if not run_on_main_path:
+        status["step_status"] = "skipped_main_path"
+        status["message"] = "Refresh skipped on main path; using latest cached fundamentals from DB."
+        status.update(_latest_fundamental_status(db_path))
+        write_fundamental_status_report(reports_dir, status)
+        return status
+
+    cmd = [
+        "python", "update_fundamentals.py",
+        "--db", db_path,
+        "--source", str(fund.get("source", "yfinance")),
+    ]
+    if fund.get("csv_path"):
+        cmd += ["--csv_path", str(fund.get("csv_path"))]
+    if bool(fund.get("fail_closed", True)):
+        cmd += ["--fail_closed"]
+    if bool(fund.get("require_available_ts", True)):
+        cmd += ["--require_available_ts"]
+
+    status["attempted_refresh"] = True
+    print(">>", " ".join(cmd))
+    try:
+        run_and_capture(cmd)
+        status["step_status"] = "refreshed"
+        status["message"] = "Fundamental refresh completed."
+    except RuntimeError as exc:
+        allow_stale = bool(fund.get("allow_stale_on_failure", True))
+        status["step_status"] = "degraded_cached" if allow_stale else "failed"
+        status["message"] = str(exc)
+        status.update(_latest_fundamental_status(db_path))
+        write_fundamental_status_report(reports_dir, status)
+        if not allow_stale:
+            raise
+        print("[fundamentals] refresh failed; continuing with cached fundamentals already stored in DB.")
+        return status
+
+    status.update(_latest_fundamental_status(db_path))
+    write_fundamental_status_report(reports_dir, status)
+    return status
 
 
 def resolve_screener_min_adv(cfg: dict) -> float:
@@ -152,6 +290,7 @@ def main():
 
     cfg = load_cfg(args.config)
     db_path = cfg.get("db_path", "japan_market.db")
+    reports_dir = Path(str(cfg.get("model", {}).get("output_dir", "reports")))
 
     # 0) 自动过期前日未成交挂单
     import datetime
@@ -171,22 +310,9 @@ def main():
 
     asof = latest_trading_day(db_path)
 
-    # 1.5) Optional fundamentals update
+    # 1.5) Optional fundamentals update with degraded-cache support
     fund = cfg.get("fundamental", {})
-    if fund.get("enabled", False):
-        cmd = [
-            "python", "update_fundamentals.py",
-            "--db", db_path,
-            "--source", str(fund.get("source", "yfinance")),
-        ]
-        if fund.get("csv_path"):
-            cmd += ["--csv_path", str(fund.get("csv_path"))]
-        if bool(fund.get("fail_closed", True)):
-            cmd += ["--fail_closed"]
-        if bool(fund.get("require_available_ts", True)):
-            cmd += ["--require_available_ts"]
-        print(">>", " ".join(cmd))
-        run_and_capture(cmd)
+    run_fundamentals_step(cfg, db_path, reports_dir)
 
     # 2) Screener
     scr = cfg.get("screener", {})
@@ -261,6 +387,8 @@ def main():
     env["SS7_BENCHMARK_SLOW_MA_WINDOW"] = str(int(model.get("benchmark_slow_ma_window", model.get("ma_window", 60))))
     env["SS7_BENCHMARK_HYSTERESIS_ENTER_PCT"] = str(float(model.get("benchmark_hysteresis_enter_pct", 0.01)))
     env["SS7_BENCHMARK_HYSTERESIS_EXIT_PCT"] = str(float(model.get("benchmark_hysteresis_exit_pct", 0.01)))
+    env["SS7_BENCHMARK_OFF_SCALE"] = str(float(model.get("benchmark_off_scale", 0.25)))
+    env["SS7_BENCHMARK_CAUTION_SCALE"] = str(float(model.get("benchmark_caution_scale", 0.60)))
     env["SS7_SAFE_PLOT"] = "1" if bool(model.get("safe_plot", True)) else "0"
     env["SS7_OUTPUT_DIR"] = out_dir
     env["SS7_INITIAL_CAPITAL"] = str(float(exec_cfg.get("initial_capital", 1_000_000)))
@@ -348,6 +476,15 @@ def main():
         print(">>", " ".join(cmd))
         run_and_capture(cmd)
 
+    promotion = cfg.get("promotion", {})
+    cmd = [
+        "python", "compare_signal_modes_report.py",
+        "--reports_dir", out_dir,
+        "--max_zero_exposure_days", str(int(promotion.get("max_zero_exposure_days", 3))),
+    ]
+    print(">>", " ".join(cmd))
+    run_and_capture(cmd)
+
     # 6) Learning M1: compute IC and update factor_registry (每周一次，非每日)
     learn = cfg.get("learning", {})
     if learn.get("enabled", True):
@@ -405,6 +542,9 @@ def main():
         "--max_drawdown_pct", str(float(promotion.get("max_drawdown_pct", 20.0))),
         "--paper_days_required", str(int(promotion.get("paper_days_required", 20))),
         "--min_sharpe_improvement", str(float(promotion.get("min_sharpe_improvement", 0.0))),
+        "--min_eligible_factors", str(int(promotion.get("min_eligible_factors", 3))),
+        "--max_zero_exposure_days", str(int(promotion.get("max_zero_exposure_days", 3))),
+        "--require_actionable_mode", "1" if bool(promotion.get("require_actionable_mode", True)) else "0",
     ]
     if promotion.get("max_turnover_cv") is not None:
         cmd += ["--max_turnover_cv", str(float(promotion.get("max_turnover_cv")))]
@@ -425,6 +565,7 @@ def main():
     cmd = [
         "python", "compare_signal_modes_report.py",
         "--reports_dir", out_dir,
+        "--max_zero_exposure_days", str(int(promotion.get("max_zero_exposure_days", 3))),
     ]
     print(">>", " ".join(cmd))
     run_and_capture(cmd)

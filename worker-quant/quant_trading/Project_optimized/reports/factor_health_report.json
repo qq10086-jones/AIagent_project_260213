@@ -45,5 +45,11 @@
     "turnover_cv": 0.0,
     "avg_cost_paid": 0.0
   },
-  "promotion_recommendation": "hold"
+  "promotion_recommendation": "hold",
+  "qa_stats": {
+    "eligible_factor_count": 1,
+    "actionable_mode_count": 0,
+    "latest_zero_exposure_days": 5,
+    "latest_weights_zero": true
+  }
 }

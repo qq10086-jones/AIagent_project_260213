@@ -798,6 +798,8 @@ class BTConfig:
     benchmark_slow_ma_window: int = 60
     benchmark_hysteresis_enter_pct: float = 0.01
     benchmark_hysteresis_exit_pct: float = 0.01
+    benchmark_off_scale: float = 0.25
+    benchmark_caution_scale: float = 0.60
     min_valid_ratio: float = 0.98
     min_cov_obs: int = 10
 
@@ -1051,6 +1053,8 @@ def benchmark_regime_scale(
     prev_state: str,
     enter_pct: float,
     exit_pct: float,
+    off_scale: float,
+    caution_scale: float,
 ) -> tuple[str, float]:
     """Three-state benchmark regime with hysteresis.
 
@@ -1060,7 +1064,7 @@ def benchmark_regime_scale(
       - off     : no benchmark-driven risk budget
     """
     if not np.isfinite(px_b) or not np.isfinite(fast_ma_b) or not np.isfinite(slow_ma_b):
-        return "off", 0.0
+        return "off", float(np.clip(off_scale, 0.0, 1.0))
 
     enter_line = slow_ma_b * (1.0 - float(enter_pct))
     exit_line = fast_ma_b * (1.0 + float(exit_pct))
@@ -1094,7 +1098,11 @@ def benchmark_regime_scale(
         else:
             state = "caution"
 
-    scale_map = {"off": 0.0, "caution": 0.5, "on": 1.0}
+    scale_map = {
+        "off": float(np.clip(off_scale, 0.0, 1.0)),
+        "caution": float(np.clip(caution_scale, 0.0, 1.0)),
+        "on": 1.0,
+    }
     return state, scale_map[state]
 
 # ── sector cap helper ─────────────────────────────────────────────────────────
@@ -1453,6 +1461,13 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     stop_loss_log = []
     benchmark_state_hist = []
     benchmark_scale_hist = []
+    benchmark_price_hist = []
+    benchmark_fast_ma_hist = []
+    benchmark_slow_ma_hist = []
+    benchmark_enter_line_hist = []
+    benchmark_exit_line_hist = []
+    benchmark_fast_minus_slow_pct_hist = []
+    benchmark_price_minus_slow_pct_hist = []
     dd_state_hist = []
     dd_scale_hist = []
     rebalance_due_hist = []
@@ -1483,9 +1498,23 @@ def backtest(bt: BTConfig, ex: ExecConfig):
             prev_state=prev_benchmark_state,
             enter_pct=bt.benchmark_hysteresis_enter_pct,
             exit_pct=bt.benchmark_hysteresis_exit_pct,
+            off_scale=bt.benchmark_off_scale,
+            caution_scale=bt.benchmark_caution_scale,
         )
         prev_benchmark_state = benchmark_state
-        risk_off = benchmark_scale <= 1e-12
+        risk_off = str(benchmark_state).lower() == "off" and benchmark_scale <= 1e-12
+        enter_line_b = slow_ma_b * (1.0 - float(bt.benchmark_hysteresis_enter_pct)) if np.isfinite(slow_ma_b) else np.nan
+        exit_line_b = fast_ma_b * (1.0 + float(bt.benchmark_hysteresis_exit_pct)) if np.isfinite(fast_ma_b) else np.nan
+        fast_minus_slow_pct = (
+            (fast_ma_b / max(slow_ma_b, 1e-12)) - 1.0
+            if np.isfinite(fast_ma_b) and np.isfinite(slow_ma_b)
+            else np.nan
+        )
+        price_minus_slow_pct = (
+            (px_b / max(slow_ma_b, 1e-12)) - 1.0
+            if np.isfinite(px_b) and np.isfinite(slow_ma_b)
+            else np.nan
+        )
 
         # ── 最大回撤控制 ──────────────────────────────────────────────
         px_t_cur = trade_px.loc[dt].astype(float).clip(lower=1e-6)
@@ -1717,6 +1746,13 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         risk_off_hist.append(bool(risk_off))
         benchmark_state_hist.append(str(benchmark_state))
         benchmark_scale_hist.append(float(benchmark_scale))
+        benchmark_price_hist.append(float(px_b) if np.isfinite(px_b) else float("nan"))
+        benchmark_fast_ma_hist.append(float(fast_ma_b) if np.isfinite(fast_ma_b) else float("nan"))
+        benchmark_slow_ma_hist.append(float(slow_ma_b) if np.isfinite(slow_ma_b) else float("nan"))
+        benchmark_enter_line_hist.append(float(enter_line_b) if np.isfinite(enter_line_b) else float("nan"))
+        benchmark_exit_line_hist.append(float(exit_line_b) if np.isfinite(exit_line_b) else float("nan"))
+        benchmark_fast_minus_slow_pct_hist.append(float(fast_minus_slow_pct) if np.isfinite(fast_minus_slow_pct) else float("nan"))
+        benchmark_price_minus_slow_pct_hist.append(float(price_minus_slow_pct) if np.isfinite(price_minus_slow_pct) else float("nan"))
         dd_state_hist.append(str(dd_state))
         dd_scale_hist.append(float(dd_scale))
         rebalance_due_hist.append(bool(rebalance_due))
@@ -1761,8 +1797,22 @@ def backtest(bt: BTConfig, ex: ExecConfig):
             prev_state=prev_benchmark_state,
             enter_pct=bt.benchmark_hysteresis_enter_pct,
             exit_pct=bt.benchmark_hysteresis_exit_pct,
+            off_scale=bt.benchmark_off_scale,
+            caution_scale=bt.benchmark_caution_scale,
         )
-        risk_off = benchmark_scale <= 1e-12
+        risk_off = str(benchmark_state).lower() == "off" and benchmark_scale <= 1e-12
+        enter_line_b = slow_ma_b * (1.0 - float(bt.benchmark_hysteresis_enter_pct)) if np.isfinite(slow_ma_b) else np.nan
+        exit_line_b = fast_ma_b * (1.0 + float(bt.benchmark_hysteresis_exit_pct)) if np.isfinite(fast_ma_b) else np.nan
+        fast_minus_slow_pct = (
+            (fast_ma_b / max(slow_ma_b, 1e-12)) - 1.0
+            if np.isfinite(fast_ma_b) and np.isfinite(slow_ma_b)
+            else np.nan
+        )
+        price_minus_slow_pct = (
+            (px_b / max(slow_ma_b, 1e-12)) - 1.0
+            if np.isfinite(px_b) and np.isfinite(slow_ma_b)
+            else np.nan
+        )
 
         px_t_cur = trade_px.loc[dt].astype(float).clip(lower=1e-6)
         cur_equity_abs = float((holdings.astype(float) * px_t_cur).sum() + cash)
@@ -1940,6 +1990,13 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         risk_off_hist.append(bool(risk_off))
         benchmark_state_hist.append(str(benchmark_state))
         benchmark_scale_hist.append(float(benchmark_scale))
+        benchmark_price_hist.append(float(px_b) if np.isfinite(px_b) else float("nan"))
+        benchmark_fast_ma_hist.append(float(fast_ma_b) if np.isfinite(fast_ma_b) else float("nan"))
+        benchmark_slow_ma_hist.append(float(slow_ma_b) if np.isfinite(slow_ma_b) else float("nan"))
+        benchmark_enter_line_hist.append(float(enter_line_b) if np.isfinite(enter_line_b) else float("nan"))
+        benchmark_exit_line_hist.append(float(exit_line_b) if np.isfinite(exit_line_b) else float("nan"))
+        benchmark_fast_minus_slow_pct_hist.append(float(fast_minus_slow_pct) if np.isfinite(fast_minus_slow_pct) else float("nan"))
+        benchmark_price_minus_slow_pct_hist.append(float(price_minus_slow_pct) if np.isfinite(price_minus_slow_pct) else float("nan"))
         dd_state_hist.append(str(dd_state))
         dd_scale_hist.append(float(dd_scale))
         rebalance_due_hist.append(bool(rebalance_due))
@@ -1967,6 +2024,13 @@ def backtest(bt: BTConfig, ex: ExecConfig):
             "cost_paid": costs_paid,
             "benchmark_state": benchmark_state_hist,
             "benchmark_scale": benchmark_scale_hist,
+            "benchmark_price": benchmark_price_hist,
+            "benchmark_fast_ma": benchmark_fast_ma_hist,
+            "benchmark_slow_ma": benchmark_slow_ma_hist,
+            "benchmark_enter_line": benchmark_enter_line_hist,
+            "benchmark_exit_line": benchmark_exit_line_hist,
+            "benchmark_fast_minus_slow_pct": benchmark_fast_minus_slow_pct_hist,
+            "benchmark_price_minus_slow_pct": benchmark_price_minus_slow_pct_hist,
             "risk_off": risk_off_hist,
             "dd_state": dd_state_hist,
             "dd_scale": dd_scale_hist,
@@ -2234,6 +2298,8 @@ def build_zero_exposure_report(
             next_rebalance_asof = pd.Timestamp(w_df.index[next_pos]).strftime("%Y-%m-%d")
 
     latest_risk_off = bool(latest_stats.get("risk_off", False))
+    latest_benchmark_state = str(latest_stats.get("benchmark_state", "unknown"))
+    latest_benchmark_scale = float(latest_stats.get("benchmark_scale", 0.0) or 0.0)
     latest_dd_scale = float(latest_stats.get("dd_scale", 1.0) or 0.0)
     latest_rebalance_due = bool(latest_stats.get("rebalance_due", False))
     latest_stop_loss_count = int(latest_stats.get("stop_loss_count", 0) or 0)
@@ -2242,6 +2308,8 @@ def build_zero_exposure_report(
         primary_cause = "actionable_nonzero_target"
     elif latest_risk_off:
         primary_cause = "benchmark_risk_off"
+    elif latest_benchmark_scale < 1.0:
+        primary_cause = "benchmark_regime_capped_exposure"
     elif latest_dd_scale <= 1e-12:
         primary_cause = "drawdown_risk_off"
     elif not latest_rebalance_due and last_nonzero_dt is not None:
@@ -2265,8 +2333,8 @@ def build_zero_exposure_report(
         "rebalance_every_trading_days": int(rebalance_every),
         "next_rebalance_asof_estimate": next_rebalance_asof,
         "latest_state": {
-            "benchmark_state": str(latest_stats.get("benchmark_state", "unknown")),
-            "benchmark_scale": float(latest_stats.get("benchmark_scale", 0.0) or 0.0),
+            "benchmark_state": latest_benchmark_state,
+            "benchmark_scale": latest_benchmark_scale,
             "risk_off": latest_risk_off,
             "drawdown_state": str(latest_stats.get("dd_state", "unknown")),
             "dd_scale": latest_dd_scale,
@@ -2274,6 +2342,15 @@ def build_zero_exposure_report(
             "news_gate": float(latest_stats.get("news_gate", 1.0) or 0.0),
             "vol_target_scale": float(latest_stats.get("vol_target_scale", 1.0) or 0.0),
             "stop_loss_count": latest_stop_loss_count,
+        },
+        "benchmark_diagnostics": {
+            "price": float(latest_stats.get("benchmark_price", np.nan)),
+            "fast_ma": float(latest_stats.get("benchmark_fast_ma", np.nan)),
+            "slow_ma": float(latest_stats.get("benchmark_slow_ma", np.nan)),
+            "enter_line": float(latest_stats.get("benchmark_enter_line", np.nan)),
+            "exit_line": float(latest_stats.get("benchmark_exit_line", np.nan)),
+            "fast_minus_slow_pct": float(latest_stats.get("benchmark_fast_minus_slow_pct", np.nan)),
+            "price_minus_slow_pct": float(latest_stats.get("benchmark_price_minus_slow_pct", np.nan)),
         },
         "primary_cause": primary_cause,
     }
@@ -2319,6 +2396,8 @@ if __name__ == "__main__":
         benchmark_slow_ma_window=int(os.getenv("SS7_BENCHMARK_SLOW_MA_WINDOW", os.getenv("SS7_MA_WINDOW", "60"))),
         benchmark_hysteresis_enter_pct=float(os.getenv("SS7_BENCHMARK_HYSTERESIS_ENTER_PCT", "0.01")),
         benchmark_hysteresis_exit_pct=float(os.getenv("SS7_BENCHMARK_HYSTERESIS_EXIT_PCT", "0.01")),
+        benchmark_off_scale=float(os.getenv("SS7_BENCHMARK_OFF_SCALE", "0.25")),
+        benchmark_caution_scale=float(os.getenv("SS7_BENCHMARK_CAUTION_SCALE", "0.60")),
         safe_plot=(os.getenv("SS7_SAFE_PLOT","1") != "0"),
         output_dir=os.getenv("SS7_OUTPUT_DIR","reports"),
         db_path=os.getenv("SS7_DB_PATH", None),
@@ -2463,6 +2542,18 @@ if __name__ == "__main__":
         "stop_loss_count",
     ]:
         zero_lines.append(f"- {key}: {latest_state.get(key)}")
+    zero_lines.extend(["", "## Benchmark Diagnostics", ""])
+    benchmark_diag = zero_exposure_report.get("benchmark_diagnostics", {})
+    for key in [
+        "price",
+        "fast_ma",
+        "slow_ma",
+        "enter_line",
+        "exit_line",
+        "fast_minus_slow_pct",
+        "price_minus_slow_pct",
+    ]:
+        zero_lines.append(f"- {key}: {benchmark_diag.get(key)}")
     (out_dir / "zero_exposure_report.md").write_text("\n".join(zero_lines) + "\n", encoding="utf-8")
 
     compare_df = pd.DataFrame(

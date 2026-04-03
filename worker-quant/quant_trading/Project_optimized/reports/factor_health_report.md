@@ -7,6 +7,9 @@
 - Max drawdown %: 0.00
 - Avg turnover %: 0.00
 - Production-eligible factors (80+ obs + PASS): mom_consist
+- QA eligible factor count: 1
+- QA actionable mode count: 0
+- QA latest zero exposure days: 5
 
 ## Family Summary
 

@@ -7,6 +7,9 @@ update:
 fundamental:
   enabled: true
   source: "jquants_v2"            # stable default: yfinance | jquants_v2 (optional enhancement) | csv | noop
+  run_on_main_path: false
+  blocking: false
+  allow_stale_on_failure: true
   csv_path: null
   fail_closed: false
   require_available_ts: false
@@ -43,6 +46,8 @@ model:
   benchmark_slow_ma_window: 60
   benchmark_hysteresis_enter_pct: 0.01
   benchmark_hysteresis_exit_pct: 0.01
+  benchmark_off_scale: 0.25
+  benchmark_caution_scale: 0.60
   safe_plot: true
   output_dir: "reports"
   exec:
@@ -96,6 +101,9 @@ promotion:
   min_sharpe_improvement: 0.1 # 要求相对 ridge 至少提升 0.1 Sharpe
   baseline_mode: "ridge"
   max_turnover_cv: 2.5
+  min_eligible_factors: 3
+  max_zero_exposure_days: 3
+  require_actionable_mode: true
 
 decision:
   cash: 400000          # 与 exec.initial_capital 保持一致

@@ -157,6 +157,16 @@ def _paper_mode_stats(db_path: str, target_mode: str) -> dict[str, Any]:
     }
 
 
+def _load_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
 def _learning_gate_stats(db_path: str, target_mode: str) -> dict[str, Any]:
     families = MODE_FACTOR_FAMILIES.get(target_mode, MODE_FACTOR_FAMILIES["ridge"])
     selected_factors = []
@@ -274,7 +284,7 @@ def _learning_gate_stats(db_path: str, target_mode: str) -> dict[str, Any]:
     }
 
 
-def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_path: str, thresholds: dict[str, Any]) -> dict[str, Any]:
+def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_path: str, reports_dir: Path, thresholds: dict[str, Any]) -> dict[str, Any]:
     if "mode" not in compare_df.columns:
         raise ValueError("signal_mode_compare.csv must contain a mode column")
     if target_mode not in set(compare_df["mode"].astype(str)):
@@ -284,6 +294,8 @@ def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_
     baseline_row = compare_df.loc[compare_df["mode"].astype(str) == baseline_mode].iloc[0] if baseline_mode in set(compare_df["mode"].astype(str)) else None
     paper_stats = _paper_mode_stats(db_path, target_mode)
     learning_stats = _learning_gate_stats(db_path, target_mode)
+    compare_report = _load_json(reports_dir / "signal_mode_compare_report.json")
+    zero_report = _load_json(reports_dir / "zero_exposure_report.json")
 
     target_sharpe = _safe_float(target_row.get("sharpe"))
     target_sortino = _safe_float(target_row.get("sortino"))
@@ -298,8 +310,19 @@ def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_
     min_sharpe_improvement = _safe_float(thresholds.get("min_sharpe_improvement"), 0.0)
     min_production_ic = _safe_float(thresholds.get("min_production_ic"), 0.0)
     min_t_stat = _safe_float(thresholds.get("min_t_stat"), 0.0)
+    min_eligible_factors = int(thresholds.get("min_eligible_factors", 0) or 0)
+    max_zero_exposure_days = int(thresholds.get("max_zero_exposure_days", 9999) or 9999)
+    require_actionable_mode = bool(int(thresholds.get("require_actionable_mode", 1) or 0))
     max_turnover_cv = thresholds.get("max_turnover_cv")
     max_turnover_cv = None if max_turnover_cv is None else _safe_float(max_turnover_cv, 0.0)
+    eligible_factor_count = 0
+    for metrics in learning_stats.get("family_metrics", {}).values():
+        for row in metrics.get("factors", []):
+            if str(row.get("guard")) == "PASS" and int(row.get("n_observations", 0) or 0) >= 80:
+                eligible_factor_count += 1
+    actionable_mode_count = int(compare_report.get("summary", {}).get("actionable_mode_count", 0) or 0)
+    latest_weights_zero = bool(zero_report.get("latest_weights_zero", False))
+    zero_days = int(zero_report.get("days_since_last_nonzero", 0) or 0) if latest_weights_zero else 0
 
     gates = {
         "production_ic": {
@@ -334,6 +357,22 @@ def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_
             "actual": int(paper_stats["paper_days"]),
             "threshold": paper_days_required,
         },
+        "eligible_factors": {
+            "passed": eligible_factor_count >= min_eligible_factors,
+            "actual": eligible_factor_count,
+            "threshold": min_eligible_factors,
+        },
+        "zero_exposure_window": {
+            "passed": (not latest_weights_zero) or zero_days < max_zero_exposure_days,
+            "actual": zero_days,
+            "threshold": max_zero_exposure_days,
+            "latest_weights_zero": latest_weights_zero,
+        },
+        "actionable_mode_available": {
+            "passed": (actionable_mode_count > 0) if require_actionable_mode else True,
+            "actual": actionable_mode_count,
+            "threshold": 1 if require_actionable_mode else 0,
+        },
     }
     if max_turnover_cv is None:
         gates["turnover_stability"] = {
@@ -367,6 +406,12 @@ def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_
         },
         "paper_stats": paper_stats,
         "learning_stats": learning_stats,
+        "qa_stats": {
+            "eligible_factor_count": eligible_factor_count,
+            "actionable_mode_count": actionable_mode_count,
+            "latest_zero_exposure_days": zero_days,
+            "latest_weights_zero": latest_weights_zero,
+        },
         "gates": gates,
     }
 
@@ -384,6 +429,9 @@ def main() -> None:
     ap.add_argument("--min_production_ic", type=float, default=0.0)
     ap.add_argument("--min_t_stat", type=float, default=1.5)
     ap.add_argument("--max_turnover_cv", type=float, default=None)
+    ap.add_argument("--min_eligible_factors", type=int, default=3)
+    ap.add_argument("--max_zero_exposure_days", type=int, default=3)
+    ap.add_argument("--require_actionable_mode", type=int, default=1)
     args = ap.parse_args()
 
     reports_dir = Path(args.reports_dir)
@@ -397,6 +445,7 @@ def main() -> None:
         target_mode=args.target_mode,
         baseline_mode=args.baseline_mode,
         db_path=args.db,
+        reports_dir=reports_dir,
         thresholds={
             "min_backtest_sharpe": args.min_backtest_sharpe,
             "max_drawdown_pct": args.max_drawdown_pct,
@@ -405,6 +454,9 @@ def main() -> None:
             "min_production_ic": args.min_production_ic,
             "min_t_stat": args.min_t_stat,
             "max_turnover_cv": args.max_turnover_cv,
+            "min_eligible_factors": args.min_eligible_factors,
+            "max_zero_exposure_days": args.max_zero_exposure_days,
+            "require_actionable_mode": args.require_actionable_mode,
         },
     )
 

@@ -29,7 +29,7 @@ def _load_zero_exposure_report(reports_dir: Path) -> dict:
         return {}
 
 
-def build_report(reports_dir: Path) -> dict:
+def build_report(reports_dir: Path, max_zero_exposure_days: int = 3) -> dict:
     compare_path = reports_dir / "signal_mode_compare.csv"
     if not compare_path.exists():
         raise FileNotFoundError(f"Missing {compare_path}")
@@ -82,6 +82,9 @@ def build_report(reports_dir: Path) -> dict:
     all_zero_now = bool((~df["actionable_now"].fillna(False).astype(bool)).all())
     zero_exposure = _load_zero_exposure_report(reports_dir)
     zero_cause = str(zero_exposure.get("primary_cause", "") or "")
+    latest_weights_zero = bool(zero_exposure.get("latest_weights_zero", False))
+    zero_days = int(zero_exposure.get("days_since_last_nonzero", 0) or 0) if latest_weights_zero else 0
+    zero_exposure_alert = bool(latest_weights_zero and zero_days >= int(max_zero_exposure_days))
     report = {
         "recommended_mode": str(best["mode"]),
         "recommendation_note": (
@@ -98,9 +101,19 @@ def build_report(reports_dir: Path) -> dict:
             "mode_count": int(len(ranked)),
             "actionable_mode_count": actionable_count,
             "all_modes_zero_now": all_zero_now,
+            "latest_zero_exposure_days": zero_days,
+            "max_zero_exposure_days_allowed": int(max_zero_exposure_days),
+            "zero_exposure_alert": zero_exposure_alert,
             "best_sharpe_mode": str(df.sort_values("sharpe", ascending=False).iloc[0]["mode"]),
             "best_return_mode": str(df.sort_values("total_return_pct", ascending=False).iloc[0]["mode"]),
             "lowest_drawdown_mode": str(df.sort_values("max_drawdown_pct", ascending=True).iloc[0]["mode"]),
+        },
+        "qa": {
+            "status": "alert" if zero_exposure_alert else "ok",
+            "checks": {
+                "all_modes_actionable": actionable_count > 0,
+                "zero_exposure_within_limit": not zero_exposure_alert,
+            },
         },
     }
     (reports_dir / "signal_mode_compare_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -112,6 +125,8 @@ def build_report(reports_dir: Path) -> dict:
         f"- Note: {report['recommendation_note']}",
         f"- Actionable mode count: {report['summary']['actionable_mode_count']}",
         f"- All modes zero now: {report['summary']['all_modes_zero_now']}",
+        f"- Zero exposure days: {report['summary']['latest_zero_exposure_days']}",
+        f"- Zero exposure alert: {report['summary']['zero_exposure_alert']}",
         f"- Best Sharpe mode: {report['summary']['best_sharpe_mode']}",
         f"- Best return mode: {report['summary']['best_return_mode']}",
         f"- Lowest drawdown mode: {report['summary']['lowest_drawdown_mode']}",
@@ -133,8 +148,9 @@ def build_report(reports_dir: Path) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--reports_dir", default="reports")
+    ap.add_argument("--max_zero_exposure_days", type=int, default=3)
     args = ap.parse_args()
-    report = build_report(Path(args.reports_dir))
+    report = build_report(Path(args.reports_dir), max_zero_exposure_days=int(args.max_zero_exposure_days))
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 

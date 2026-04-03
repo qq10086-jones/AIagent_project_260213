@@ -1,6 +1,6 @@
 {
   "recommended_mode": "ridge",
-  "recommendation_note": "All compared modes currently export zero target weights. Shared latest cause: benchmark_risk_off.",
+  "recommendation_note": "All compared modes currently export zero target weights. Shared latest cause: benchmark_regime_capped_exposure.",
   "ranking": [
     {
       "mode": "ridge",
@@ -17,7 +17,7 @@
       "score": 0.0,
       "current_weights_zero": true,
       "last_nonzero_asof": "2026-03-27",
-      "last_nonzero_row_sum": 0.5556623681162869,
+      "last_nonzero_row_sum": 0.5556623681162868,
       "export_row_sum": 0.0,
       "actionable_now": false
     },
@@ -83,8 +83,18 @@
     "mode_count": 4,
     "actionable_mode_count": 0,
     "all_modes_zero_now": true,
+    "latest_zero_exposure_days": 5,
+    "max_zero_exposure_days_allowed": 3,
+    "zero_exposure_alert": true,
     "best_sharpe_mode": "ridge",
     "best_return_mode": "ridge",
     "lowest_drawdown_mode": "ridge"
+  },
+  "qa": {
+    "status": "alert",
+    "checks": {
+      "all_modes_actionable": false,
+      "zero_exposure_within_limit": false
+    }
   }
 }

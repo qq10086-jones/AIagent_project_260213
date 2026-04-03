@@ -136,6 +136,7 @@ def build_report(db_path: str, reports_dir: Path, target_mode: str) -> dict:
             "avg_cost_paid": _safe_float(compare_row.get("avg_cost_paid")),
         },
         "promotion_recommendation": promotion.get("recommendation"),
+        "qa_stats": promotion.get("qa_stats", {}),
     }
 
     out_json = reports_dir / "factor_health_report.json"
@@ -167,6 +168,9 @@ def build_report(db_path: str, reports_dir: Path, target_mode: str) -> dict:
         f"- Max drawdown %: {_safe_float(compare_row.get('max_drawdown_pct', target_metrics.get('max_drawdown_pct'))):.2f}",
         f"- Avg turnover %: {_safe_float(compare_row.get('avg_turnover_pct')):.2f}",
         f"- Production-eligible factors ({MIN_PRODUCTION_OBS}+ obs + PASS): {', '.join(eligible_factors) if eligible_factors else 'none'}",
+        f"- QA eligible factor count: {int(report.get('qa_stats', {}).get('eligible_factor_count', 0) or 0)}",
+        f"- QA actionable mode count: {int(report.get('qa_stats', {}).get('actionable_mode_count', 0) or 0)}",
+        f"- QA latest zero exposure days: {int(report.get('qa_stats', {}).get('latest_zero_exposure_days', 0) or 0)}",
         "",
         "## Family Summary",
         "",

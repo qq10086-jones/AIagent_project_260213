@@ -1,9 +1,9 @@
 {
   "mode": "ridge",
-  "exported_asof": "2026-04-02",
-  "history_last_asof": "2026-04-02",
+  "exported_asof": "2026-04-03",
+  "history_last_asof": "2026-04-03",
   "history_last_row_is_zero": true,
   "export_row_sum": 0.0,
   "last_nonzero_asof": "2026-03-27",
-  "last_nonzero_row_sum": 0.5556623681162869
+  "last_nonzero_row_sum": 0.5556623681162868
 }

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expense Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="bg-indigo-600 text-white p-4 shadow-lg">
+    <h1 class="text-2xl font-bold">Expense Tracker</h1>
+  </nav>
+
+  <main class="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Dashboard Summary -->
+    <section id="dashboard" class="lg:col-span-3 grid grid-cols-3 gap-4">
+      <div class="bg-white rounded-xl shadow p-6 text-center">
+        <p class="text-gray-500 text-sm">This Month Total</p>
+        <p id="monthTotal" class="text-3xl font-bold text-indigo-600">$0.00</p>
+      </div>
+      <div class="bg-white rounded-xl shadow p-6 text-center">
+        <p class="text-gray-500 text-sm">Top Category</p>
+        <p id="topCategory" class="text-xl font-semibold">—</p>
+      </div>
+      <div class="bg-white rounded-xl shadow p-6 text-center">
+        <p class="text-gray-500 text-sm">Transactions</p>
+        <p id="txCount" class="text-3xl font-bold text-green-600">0</p>
+      </div>
+    </section>
+
+    <!-- Add Expense Form -->
+    <section class="bg-white rounded-xl shadow p-6">
+      <h2 class="text-lg font-semibold mb-4">Add Expense</h2>
+      <form id="expenseForm" class="space-y-3">
+        <input type="number" id="amount" step="0.01" placeholder="Amount" required class="w-full border rounded-lg p-2">
+        <input type="text" id="description" placeholder="Description" required class="w-full border rounded-lg p-2">
+        <select id="category" class="w-full border rounded-lg p-2">
+          <option value="Food">Food</option>
+          <option value="Transport">Transport</option>
+          <option value="Housing">Housing</option>
+          <option value="Entertainment">Entertainment</option>
+          <option value="Health">Health</option>
+          <option value="Other">Other</option>
+        </select>
+        <input type="date" id="date" required class="w-full border rounded-lg p-2">
+        <button type="submit" class="w-full bg-indigo-600 text-white rounded-lg p-2 hover:bg-indigo-700">Add</button>
+      </form>
+    </section>
+
+    <!-- Charts -->
+    <section class="lg:col-span-2 bg-white rounded-xl shadow p-6">
+      <h2 class="text-lg font-semibold mb-4">Monthly Summary</h2>
+      <div class="grid grid-cols-2 gap-4">
+        <canvas id="barChart"></canvas>
+        <canvas id="pieChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Expense List -->
+    <section class="lg:col-span-3 bg-white rounded-xl shadow p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-semibold">Recent Expenses</h2>
+        <button id="exportBtn" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600">Export CSV</button>
+      </div>
+      <table class="w-full text-left">
+        <thead class="border-b"><tr><th class="p-2">Date</th><th>Description</th><th>Category</th><th class="text-right">Amount</th><th></th></tr></thead>
+        <tbody id="expenseList"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "recommended_mode": "sprint_momentum",
+  "recommendation_note": "Recommendation is based on current comparison metrics.",
+  "ranking": [
+    {
+      "mode": "sprint_momentum",
+      "total_return_pct": 0.0,
+      "max_drawdown_pct": 0.0,
+      "sharpe": 0.0,
+      "sortino": 0.0,
+      "avg_turnover_pct": 0.0,
+      "turnover_cv": 0.0,
+      "score": 0.0,
+      "current_weights_zero": false,
+      "last_nonzero_asof": "2026-02-16",
+      "last_nonzero_row_sum": 1.0,
+      "export_row_sum": 1.0,
+      "actionable_now": true
+    }
+  ],
+  "summary": {
+    "mode_count": 1,
+    "actionable_mode_count": 1,
+    "all_modes_zero_now": false,
+    "latest_zero_exposure_days": 0,
+    "max_zero_exposure_days_allowed": 3,
+    "zero_exposure_alert": false,
+    "zero_exposure_primary_cause": "none",
+    "best_sharpe_mode": "sprint_momentum",
+    "best_return_mode": "sprint_momentum",
+    "lowest_drawdown_mode": "sprint_momentum"
+  },
+  "qa": {
+    "status": "ok",
+    "checks": {
+      "all_modes_actionable": true,
+      "zero_exposure_within_limit": true
+    }
+  }
+}

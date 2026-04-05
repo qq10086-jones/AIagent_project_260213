@@ -7,6 +7,7 @@ from typing import Optional
 
 import pandas as pd
 
+from make_decision import enforce_lot_feasible_weights, enforce_target_weight_limits
 from trade_schema import connect, ensure_trade_tables
 
 
@@ -31,21 +32,24 @@ def _load_json(path: Optional[Path]) -> dict:
         return {}
 
 
-def _latest_asof(conn, table: str, column: str = "asof") -> Optional[str]:
-    row = conn.execute(f"SELECT {column} FROM {table} ORDER BY {column} DESC LIMIT 1").fetchone()
+def _latest_asof(conn, table: str, column: str = "asof", strategy_id: str = "default") -> Optional[str]:
+    row = conn.execute(
+        f"SELECT {column} FROM {table} WHERE strategy_id=? ORDER BY {column} DESC LIMIT 1",
+        (strategy_id,),
+    ).fetchone()
     return str(row[0]) if row and row[0] is not None else None
 
 
-def _load_positions(conn, asof: str) -> pd.DataFrame:
+def _load_positions(conn, asof: str, strategy_id: str = "default") -> pd.DataFrame:
     df = pd.read_sql_query(
         """
         SELECT symbol, qty, avg_cost, market_price, market_value, unrealized_pnl
         FROM positions
-        WHERE asof=?
+        WHERE asof=? AND strategy_id=?
         ORDER BY symbol
         """,
         conn,
-        params=(asof,),
+        params=(asof, strategy_id),
     )
     if df.empty:
         return pd.DataFrame(columns=["symbol", "qty", "avg_cost", "market_price", "market_value", "unrealized_pnl"])
@@ -54,15 +58,15 @@ def _load_positions(conn, asof: str) -> pd.DataFrame:
     return df
 
 
-def _load_snapshot(conn, asof: str) -> dict:
+def _load_snapshot(conn, asof: str, strategy_id: str = "default") -> dict:
     row = conn.execute(
         """
         SELECT asof, cash, positions_value, nav, run_id
         FROM account_snapshots
-        WHERE asof=?
+        WHERE asof=? AND strategy_id=?
         LIMIT 1
         """,
-        (asof,),
+        (asof, strategy_id),
     ).fetchone()
     if not row:
         return {"asof": asof, "cash": 0.0, "positions_value": 0.0, "nav": 0.0, "run_id": None}
@@ -121,6 +125,7 @@ def build_live_trade_advice(
     conn,
     reports_dir: Path,
     asof: Optional[str] = None,
+    strategy_id: str = "default",
     target_weights_path: Optional[Path] = None,
     target_meta_path: Optional[Path] = None,
     promotion_path: Optional[Path] = None,
@@ -128,9 +133,11 @@ def build_live_trade_advice(
     min_trade_value: float = 5000.0,
     buy_limit_buffer_bps: float = 20.0,
     sell_limit_buffer_bps: float = 20.0,
+    max_single_position_pct: float = 0.25,
+    max_sector_weight: float = 0.35,
 ) -> tuple[dict, pd.DataFrame]:
     ensure_trade_tables(conn)
-    asof_used = asof or _latest_asof(conn, "positions") or _latest_asof(conn, "account_snapshots")
+    asof_used = asof or _latest_asof(conn, "positions", strategy_id=strategy_id) or _latest_asof(conn, "account_snapshots", strategy_id=strategy_id)
     if not asof_used:
         return {
             "status": "warning",
@@ -148,8 +155,16 @@ def build_live_trade_advice(
     target_weights = _load_target_weights(target_weights_path)
     target_meta = _load_json(target_meta_path)
     promotion = _load_json(promotion_path)
-    positions = _load_positions(conn, asof_used)
-    snapshot = _load_snapshot(conn, asof_used)
+    positions = _load_positions(conn, asof_used, strategy_id=strategy_id)
+    snapshot = _load_snapshot(conn, asof_used, strategy_id=strategy_id)
+    sector_rows = conn.execute("SELECT symbol, sector FROM tickers").fetchall()
+    sector_map = {str(symbol): str(sector or "Unknown") for symbol, sector in sector_rows}
+    target_weights, cap_diagnostics = enforce_target_weight_limits(
+        target_weights,
+        sector_map=sector_map,
+        max_single_position_pct=max_single_position_pct,
+        max_sector_weight=max_sector_weight,
+    )
 
     union_symbols = sorted(set(target_weights["symbol"].tolist()) | set(positions["symbol"].tolist()))
     prices = _load_latest_prices(conn, union_symbols, asof_used)
@@ -168,6 +183,24 @@ def build_live_trade_advice(
     nav = float(snapshot.get("nav") or 0.0)
     if nav <= 0:
         nav = float(merged["current_value"].fillna(0.0).sum()) + float(snapshot.get("cash") or 0.0)
+
+    price_map = {
+        str(row.symbol): float(row.last_close)
+        for row in prices.itertuples(index=False)
+        if pd.notna(row.last_close) and float(row.last_close) > 0.0
+    }
+    target_weights, lot_diagnostics = enforce_lot_feasible_weights(
+        target_weights,
+        prices=price_map,
+        nav_before=nav,
+        lot_size=lot_size,
+        min_trade_notional=min_trade_value,
+        sector_map=sector_map,
+        max_single_position_pct=max_single_position_pct,
+        max_sector_weight=max_sector_weight,
+    )
+    merged = merged.drop(columns=["target_weight"], errors="ignore").merge(target_weights, on="symbol", how="left")
+    merged["target_weight"] = pd.to_numeric(merged["target_weight"], errors="coerce").fillna(0.0)
 
     merged["current_weight"] = merged["current_value"] / nav if nav > 0 else 0.0
     merged["target_value"] = merged["target_weight"] * nav
@@ -301,6 +334,12 @@ def build_live_trade_advice(
         warnings.append(
             f"Buy recommendations were scaled to {buy_scale*100:.1f}% of desired rebalance due to cash constraint."
         )
+    if cap_diagnostics.get("pre_cap_max_single", 0.0) > cap_diagnostics.get("max_single_position_pct", 1.0) + 1e-12:
+        warnings.append("Single-name concentration cap adjusted the target weights before advice generation.")
+    if cap_diagnostics.get("pre_cap_max_sector", 0.0) > cap_diagnostics.get("max_sector_weight", 1.0) + 1e-12:
+        warnings.append("Sector concentration cap adjusted the target weights before advice generation.")
+    if lot_diagnostics.get("selected_count", 0) > 0 and target_sum > float(lot_diagnostics.get("gross_budget", 0.0)) - 1e-12:
+        warnings.append("Target weights were compressed into a lot-feasible subset for the current account size.")
 
     if actionable.empty:
         actions.append("Hold current state; no lot-sized rebalance trade clears the threshold.")
@@ -323,6 +362,8 @@ def build_live_trade_advice(
         "latest_target_mode": target_meta.get("primary_mode") or promotion.get("target_mode"),
         "promotion_recommendation": promotion.get("recommendation"),
         "selected_run_id": snapshot.get("run_id"),
+        "cap_diagnostics": cap_diagnostics,
+        "lot_feasibility": lot_diagnostics,
     }
     report = {
         "status": status,
@@ -389,6 +430,9 @@ def main():
     ap.add_argument("--min_trade_value", type=float, default=5000.0)
     ap.add_argument("--buy_limit_buffer_bps", type=float, default=20.0)
     ap.add_argument("--sell_limit_buffer_bps", type=float, default=20.0)
+    ap.add_argument("--max_single_position_pct", type=float, default=0.25)
+    ap.add_argument("--max_sector_weight", type=float, default=0.35)
+    ap.add_argument("--strategy_id", default="default")
     args = ap.parse_args()
 
     conn = connect(args.db)
@@ -398,6 +442,7 @@ def main():
             conn,
             reports_dir=Path(args.reports_dir),
             asof=args.asof,
+            strategy_id=str(args.strategy_id),
             target_weights_path=Path(args.target_weights) if args.target_weights else None,
             target_meta_path=Path(args.target_meta) if args.target_meta else None,
             promotion_path=Path(args.promotion) if args.promotion else None,
@@ -405,6 +450,8 @@ def main():
             min_trade_value=float(args.min_trade_value),
             buy_limit_buffer_bps=float(args.buy_limit_buffer_bps),
             sell_limit_buffer_bps=float(args.sell_limit_buffer_bps),
+            max_single_position_pct=float(args.max_single_position_pct),
+            max_sector_weight=float(args.max_sector_weight),
         )
         out_json, out_csv, out_md = write_live_trade_advice(report, advice_df, Path(args.out_dir))
         print(json.dumps(report, ensure_ascii=False, indent=2))

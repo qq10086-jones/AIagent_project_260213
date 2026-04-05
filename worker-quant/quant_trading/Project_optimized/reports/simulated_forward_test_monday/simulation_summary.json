@@ -1,0 +1,55 @@
+{
+  "mode": "accelerated_forward",
+  "db_path": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\state\\simulated_forward_test_monday\\japan_market_sim.db",
+  "reports_dir": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\reports\\simulated_forward_test_monday",
+  "artifacts_dir": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\artifacts\\simulated_forward_test_monday",
+  "state_dir": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\state\\simulated_forward_test_monday",
+  "start_asof": "2026-02-02",
+  "end_asof": "2026-02-02",
+  "completed_days": 1,
+  "failed_days": 0,
+  "last_completed_asof": "2026-02-02",
+  "current_asof": null,
+  "updated_at_utc": "2026-04-04T15:57:06+00:00",
+  "last_run": {
+    "asof": "2026-02-02",
+    "returncode": 0,
+    "status": "completed"
+  },
+  "news_shadow": {
+    "asof": "2026-02-02",
+    "simulation": true,
+    "shadow_only": true,
+    "news_risk": "LOW",
+    "macro_sentiment": 0.0,
+    "would_have_applied": false,
+    "effective_sprint_gating": false,
+    "required_days": 30,
+    "observed_days": 1,
+    "remaining_days": 29,
+    "ready_for_gating_review": false,
+    "window_start_asof": "2026-02-02",
+    "window_end_asof": "2026-02-02",
+    "would_have_applied_days": 0,
+    "avg_macro_sentiment": 0.0,
+    "latest_observation": {
+      "asof": "2026-02-02",
+      "macro_sentiment": 0.0,
+      "news_risk": "LOW",
+      "would_have_applied": false
+    }
+  },
+  "promotion": {},
+  "latest_runtime_event": {
+    "ts_utc": "2026-04-04T15:57:06+00:00",
+    "level": "info",
+    "event": "sprint_followup_skipped",
+    "simulation": true,
+    "simulation_mode": "accelerated_forward",
+    "simulation_asof": "2026-02-02",
+    "simulation_state_path": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\state\\simulated_forward_test_monday\\simulation_state.json",
+    "simulation_strict_pit": true,
+    "strategy_id": "sprint",
+    "reason": "harvest_specific_reports"
+  }
+}

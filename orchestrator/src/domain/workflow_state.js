@@ -31,6 +31,8 @@ export const STEP_CONTRACTS = {
       "Publish top risks and mitigations in risk/risk_report.json.",
       "Split implementation work for FE/BE/QA in plan/workplan.md using the structured task list format: '## BE Tasks' and '## FE Tasks' sections, each task as '- [ ] T-BE-N: <description> | verify: <concrete assertion>', max 8 tasks per team, ordered by dependency.",
       "Also write plan/workplan.json with structured be_tasks and fe_tasks arrays so implementation steps can consume the workplan without markdown parsing.",
+      "Write handoff/architect_to_impl.json with from_step, to_steps, modules, interfaces, decisions, risks, and a top-level workplan object containing be_tasks and fe_tasks arrays that mirror plan/workplan.json.",
+      "For minimal or reviewable CRM goals, do not include responsive design, mobile polish, breakpoints, or device-specific styling tasks unless the goal explicitly requests them.",
       "Define all API endpoints or internal interfaces in plan/interfaces.md as concrete markdown headings like '## GET /api/books' or '## Event: record.created' (adapt names to the actual domain).",
       "Under each plan/interfaces.md heading, include request shape, response shape or payload shape, and auth requirement.",
       "Keep the Interfaces section in plan/arch.md brief and point it to plan/interfaces.md for the concrete contract list.",

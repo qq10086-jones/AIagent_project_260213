@@ -320,3 +320,34 @@ python news_to_db.py --db japan_market.db --lookback_hours 26 --sources kabutan,
 ---
 
 *最后更新：2026-03-26*
+---
+
+## Dual Strategy Update (2026-04-04)
+
+- `daily_run.py` 现在按 `config.yaml -> strategy_profiles` 解析 phase 并选择 `sprint` / `harvest`。
+- `Sprint` 独立信号链入口是 `sprint_signal.py`。
+- `Kelly` 仓位与冷却期逻辑在 `kelly_sizer.py`，事件写入 `reports/runtime_events.jsonl`。
+- benchmark / VIX 二次确认逻辑在 `benchmark_regime.py`。
+- `paper_trading_account.json` 已降级为只读诊断快照；真实数据源是 SQLite。
+
+### Recommended Runs
+
+```bash
+python daily_run.py --config config.yaml
+python live_trade_advisor.py --db japan_market.db --reports_dir reports --strategy_id sprint
+python quant_briefing.py --mode market
+```
+
+### Key Files
+
+- `daily_run.py`
+- `sprint_signal.py`
+- `kelly_sizer.py`
+- `benchmark_regime.py`
+- `paper_execute.py`
+- `live_trade_advisor.py`
+- `quant_briefing.py`
+- `model_ridge.py`
+- `execution_model.py`
+- `news_overlay.py`
+- `portfolio_optimizer.py`

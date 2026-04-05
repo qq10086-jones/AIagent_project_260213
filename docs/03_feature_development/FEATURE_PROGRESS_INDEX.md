@@ -3,6 +3,11 @@
 Location: `docs/03_feature_development/progress_reports/`
 
 ## Timeline
+- `progress_20260405_v31_blockers_resolved.md` — SCO-05 council, SA-01 guardrails, 4 test fixes, worker-coder capability summary
+- `progress_20260404_dual_strategy_qa_fix_pass.md` (see also: `worker-quant/.../PROGRESS_2026-04-02.md`)
+- `progress_20260404_quant_promotion_and_nexus_e2e.md`
+- `progress_20260403_nexus_worker_coder_recovery_and_canary_pass.md`
+- `progress_20260402_sp03_qa_and_discord_canary.md`
 - `progress_20260305_coding_team_fasttrack.md`
 - `progress_20260224_222417_recovered_placeholder.md`
 - `progress_20260225_MAS_Milestone.md`

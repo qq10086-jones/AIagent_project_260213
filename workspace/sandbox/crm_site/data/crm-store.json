@@ -1,0 +1,104 @@
+{
+  "customers": [
+    {
+      "id": "cust_ae156384-f673-4f2d-964b-b775396fd3df",
+      "name": "张三",
+      "email": "zhangsan@example.com",
+      "phone": "13800138000",
+      "company": "示例公司A",
+      "notes": "",
+      "createdAt": "2026-04-05T02:30:32.729Z",
+      "updatedAt": "2026-04-05T02:30:32.729Z"
+    },
+    {
+      "id": "cust_08a26871-deac-4793-aa3b-e9248043aee6",
+      "name": "李四",
+      "email": "lisi@example.com",
+      "phone": "13900139000",
+      "company": "示例公司B",
+      "notes": "",
+      "createdAt": "2026-04-05T02:30:32.729Z",
+      "updatedAt": "2026-04-05T02:30:32.729Z"
+    },
+    {
+      "id": "cust_758211cb-1472-48c5-9895-21cac56358a0",
+      "name": "王五",
+      "email": "wangwu@example.com",
+      "phone": "13700137000",
+      "company": "示例公司C",
+      "notes": "",
+      "createdAt": "2026-04-05T02:30:32.729Z",
+      "updatedAt": "2026-04-05T02:30:32.729Z"
+    },
+    {
+      "id": "cust_74ca07b9-84b8-4d4a-a0fc-72721b261e83",
+      "name": "Smoke Test User",
+      "email": "smoke@example.com",
+      "phone": "10086",
+      "company": "Nexus QA",
+      "notes": "created by verify_crm_site runtime smoke",
+      "createdAt": "2026-04-05T02:30:33.330Z",
+      "updatedAt": "2026-04-05T02:30:33.330Z"
+    },
+    {
+      "id": "cust_0ea1a934-7eff-4089-b7b9-f12357c39c85",
+      "name": "Smoke Test User",
+      "email": "smoke@example.com",
+      "phone": "10086",
+      "company": "Nexus QA",
+      "notes": "created by verify_crm_site runtime smoke",
+      "createdAt": "2026-04-05T02:31:23.988Z",
+      "updatedAt": "2026-04-05T02:31:23.988Z"
+    },
+    {
+      "id": "cust_1136beb4-3b8f-4e60-a583-b1e77c51304f",
+      "name": "Smoke Test User",
+      "email": "smoke@example.com",
+      "phone": "10086",
+      "company": "Nexus QA",
+      "notes": "created by verify_crm_site runtime smoke",
+      "createdAt": "2026-04-05T02:43:19.445Z",
+      "updatedAt": "2026-04-05T02:43:19.445Z"
+    },
+    {
+      "id": "cust_30f6bc51-6d3f-4450-81b6-3c9904aa3dce",
+      "name": "Smoke Test User",
+      "email": "smoke@example.com",
+      "phone": "10086",
+      "company": "Nexus QA",
+      "notes": "created by verify_crm_site runtime smoke",
+      "createdAt": "2026-04-05T02:43:46.195Z",
+      "updatedAt": "2026-04-05T02:43:46.195Z"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "sess_def65d11-9949-4bba-bb86-f517d87f8e10",
+      "userId": "user_1",
+      "username": "admin",
+      "createdAt": "2026-04-05T02:30:33.316Z",
+      "expiresAt": "2026-04-06T02:30:33.316Z"
+    },
+    {
+      "id": "sess_ee388fed-9f19-4b5e-9d3f-b2aab66e7272",
+      "userId": "user_1",
+      "username": "admin",
+      "createdAt": "2026-04-05T02:31:23.975Z",
+      "expiresAt": "2026-04-06T02:31:23.975Z"
+    },
+    {
+      "id": "sess_fbcffbdc-3072-4914-a336-353119e1bd98",
+      "userId": "user_1",
+      "username": "admin",
+      "createdAt": "2026-04-05T02:43:19.431Z",
+      "expiresAt": "2026-04-06T02:43:19.431Z"
+    },
+    {
+      "id": "sess_d9ff2c23-e827-42c5-8c31-745302ba313d",
+      "userId": "user_1",
+      "username": "admin",
+      "createdAt": "2026-04-05T02:43:46.181Z",
+      "expiresAt": "2026-04-06T02:43:46.181Z"
+    }
+  ]
+}

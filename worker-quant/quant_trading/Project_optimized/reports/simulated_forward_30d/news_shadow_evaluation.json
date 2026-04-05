@@ -1,0 +1,23 @@
+{
+  "asof": "2026-03-17",
+  "simulation": true,
+  "shadow_only": true,
+  "news_risk": "LOW",
+  "macro_sentiment": 0.0,
+  "would_have_applied": false,
+  "effective_sprint_gating": false,
+  "required_days": 30,
+  "observed_days": 30,
+  "remaining_days": 0,
+  "ready_for_gating_review": true,
+  "window_start_asof": "2026-02-02",
+  "window_end_asof": "2026-03-17",
+  "would_have_applied_days": 0,
+  "avg_macro_sentiment": 0.0,
+  "latest_observation": {
+    "asof": "2026-03-17",
+    "macro_sentiment": 0.0,
+    "news_risk": "LOW",
+    "would_have_applied": false
+  }
+}

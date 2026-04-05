@@ -1,0 +1,128 @@
+{"ts_utc": "2026-04-03T13:10:42+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-03T13:10:42+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T13:10:43+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-03T13:10:56+00:00", "level": "warning", "event": "zero_exposure_fallback_triggered", "prior_zero_days": 5, "zero_limit": 3, "fallback_mode": "ridge"}
+{"ts_utc": "2026-04-03T13:10:56+00:00", "level": "warning", "event": "news_overlay_disabled_by_fallback", "prior_zero_days": 5}
+{"ts_utc": "2026-04-03T13:13:57+00:00", "level": "info", "event": "ss7_completed", "signal_mode": "ridge"}
+{"ts_utc": "2026-04-03T13:14:06+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T13:14:06+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__3ebb9bca78"}
+{"ts_utc": "2026-04-03T13:14:06+00:00", "level": "info", "event": "paper_execute_completed", "asof": "2026-04-03", "run_id": "2026-04-03__3ebb9bca78", "paper_status": "paper_no_orders"}
+{"ts_utc": "2026-04-03T13:15:54+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-03T13:15:54+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T13:15:55+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-03T13:16:01+00:00", "level": "warning", "event": "zero_exposure_fallback_triggered", "prior_zero_days": 5, "zero_limit": 3, "fallback_mode": "ridge"}
+{"ts_utc": "2026-04-03T13:16:01+00:00", "level": "warning", "event": "news_overlay_disabled_by_fallback", "prior_zero_days": 5}
+{"ts_utc": "2026-04-03T13:19:00+00:00", "level": "info", "event": "ss7_completed", "signal_mode": "ridge"}
+{"ts_utc": "2026-04-03T13:19:09+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T13:19:09+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__961c2ee780"}
+{"ts_utc": "2026-04-03T13:19:09+00:00", "level": "info", "event": "paper_execute_completed", "asof": "2026-04-03", "run_id": "2026-04-03__961c2ee780", "paper_status": "paper_filled"}
+{"ts_utc": "2026-04-03T14:44:33+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-03T14:44:33+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T14:44:33+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-03T14:47:50+00:00", "level": "info", "event": "ss7_completed", "signal_mode": "shadow_hybrid_ic"}
+{"ts_utc": "2026-04-03T14:47:59+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T14:47:59+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__b94260b2ef"}
+{"ts_utc": "2026-04-03T14:47:59+00:00", "level": "info", "event": "paper_execute_completed", "asof": "2026-04-03", "run_id": "2026-04-03__b94260b2ef", "paper_status": "paper_no_orders"}
+{"ts_utc": "2026-04-03T14:48:16+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-03T14:48:16+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T14:48:16+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-03T14:51:14+00:00", "level": "info", "event": "ss7_completed", "signal_mode": "shadow_hybrid_ic"}
+{"ts_utc": "2026-04-03T14:51:23+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T14:51:23+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__08f78a392e"}
+{"ts_utc": "2026-04-03T14:51:23+00:00", "level": "info", "event": "paper_execute_completed", "asof": "2026-04-03", "run_id": "2026-04-03__08f78a392e", "paper_status": "paper_filled"}
+{"ts_utc": "2026-04-03T14:56:48+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-03T14:56:48+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T14:56:49+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-03T14:59:46+00:00", "level": "info", "event": "ss7_completed", "signal_mode": "shadow_hybrid_ic"}
+{"ts_utc": "2026-04-03T15:03:37+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-03T15:03:37+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-04"}
+{"ts_utc": "2026-04-03T15:03:39+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-03T15:06:36+00:00", "level": "info", "event": "ss7_completed", "signal_mode": "shadow_hybrid_ic"}
+{"ts_utc": "2026-04-03T15:06:45+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T15:06:45+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__49347176c0"}
+{"ts_utc": "2026-04-03T15:06:46+00:00", "level": "info", "event": "paper_execute_completed", "asof": "2026-04-03", "run_id": "2026-04-03__49347176c0", "paper_status": "paper_filled"}
+{"ts_utc": "2026-04-03T15:11:51+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-03T15:11:51+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-04"}
+{"ts_utc": "2026-04-03T15:11:53+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-03T15:14:48+00:00", "level": "info", "event": "ss7_completed", "signal_mode": "shadow_hybrid_ic"}
+{"ts_utc": "2026-04-03T15:14:57+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T15:14:57+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__79a55678a4"}
+{"ts_utc": "2026-04-03T15:14:58+00:00", "level": "info", "event": "paper_execute_completed", "asof": "2026-04-03", "run_id": "2026-04-03__79a55678a4", "paper_status": "paper_filled"}
+{"ts_utc": "2026-04-03T15:17:24+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-03T15:17:24+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-04"}
+{"ts_utc": "2026-04-03T15:17:27+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-03T15:20:23+00:00", "level": "info", "event": "ss7_completed", "signal_mode": "shadow_hybrid_ic"}
+{"ts_utc": "2026-04-03T15:20:32+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-03T15:20:32+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__e090e9e561"}
+{"ts_utc": "2026-04-03T15:20:32+00:00", "level": "info", "event": "paper_execute_completed", "asof": "2026-04-03", "run_id": "2026-04-03__e090e9e561", "paper_status": "paper_no_orders"}
+{"ts_utc": "2026-04-04T02:58:48+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-04T02:58:48+00:00", "level": "info", "event": "phase_resolved", "phase": "phase_1", "strategy_id": "sprint", "total_nav": 399733.5561859453}
+{"ts_utc": "2026-04-04T02:58:48+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-04"}
+{"ts_utc": "2026-04-04T02:58:52+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-04T02:59:21+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-04T02:59:21+00:00", "level": "info", "event": "phase_resolved", "phase": "phase_1", "strategy_id": "sprint", "total_nav": 399733.5561859453}
+{"ts_utc": "2026-04-04T02:59:21+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-04"}
+{"ts_utc": "2026-04-04T02:59:24+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-04T02:59:40+00:00", "level": "info", "event": "sprint_signal_completed", "strategy_id": "sprint", "benchmark_state": "off", "benchmark_scale": 0.0, "selected_count": 0}
+{"ts_utc": "2026-04-04T02:59:41+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-04T02:59:41+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__74e9e827eb"}
+{"ts_utc": "2026-04-04T03:00:52+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-04T03:00:52+00:00", "level": "info", "event": "phase_resolved", "phase": "phase_1", "strategy_id": "sprint", "total_nav": 399733.5561859453}
+{"ts_utc": "2026-04-04T03:00:52+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-04"}
+{"ts_utc": "2026-04-04T03:00:54+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-04T03:01:04+00:00", "level": "info", "event": "sprint_signal_completed", "strategy_id": "sprint", "benchmark_state": "off", "benchmark_scale": 0.0, "selected_count": 0}
+{"ts_utc": "2026-04-04T03:01:04+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-04T03:01:04+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__fb8e192dca"}
+{"ts_utc": "2026-04-04T03:01:05+00:00", "level": "info", "event": "paper_execute_completed", "asof": "2026-04-03", "run_id": "2026-04-03__fb8e192dca", "paper_status": "paper_no_orders"}
+{"ts_utc": "2026-04-04T03:01:05+00:00", "level": "info", "event": "execution_quality", "strategy_id": "sprint", "fill_count": 0, "avg_slippage_bps": 0.0, "fill_validation_rate": 1.0}
+{"ts_utc": "2026-04-04T03:01:05+00:00", "level": "info", "event": "sprint_followup_skipped", "strategy_id": "sprint", "reason": "harvest_specific_reports"}
+{"ts_utc": "2026-04-04T13:47:43+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-04T13:47:43+00:00", "level": "info", "event": "phase_resolved", "phase": "phase_1", "strategy_ids": ["sprint"], "total_nav": 400000.0}
+{"ts_utc": "2026-04-04T13:47:43+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-04"}
+{"ts_utc": "2026-04-04T13:47:45+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-04T13:47:46+00:00", "level": "info", "event": "sprint_signal_completed", "strategy_id": "sprint", "benchmark_state": "off", "benchmark_scale": 0.0, "selected_count": 0}
+{"ts_utc": "2026-04-04T13:47:47+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-04T13:47:47+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__4c3c3a3d7d"}
+{"ts_utc": "2026-04-04T13:47:47+00:00", "level": "info", "event": "paper_execute_completed", "asof": "2026-04-03", "run_id": "2026-04-03__4c3c3a3d7d", "paper_status": "paper_no_orders"}
+{"ts_utc": "2026-04-04T13:47:47+00:00", "level": "info", "event": "execution_quality", "strategy_id": "sprint", "fill_count": 0, "avg_slippage_bps": 0.0, "fill_validation_rate": 1.0}
+{"ts_utc": "2026-04-04T13:47:48+00:00", "level": "info", "event": "sprint_followup_skipped", "strategy_id": "sprint", "reason": "harvest_specific_reports"}
+{"ts_utc": "2026-04-04T14:11:11+00:00", "level": "info", "event": "daily_run_started", "config": "config.yaml", "db_path": "japan_market.db"}
+{"ts_utc": "2026-04-04T14:11:11+00:00", "level": "info", "event": "phase_resolved", "phase": "phase_1", "strategy_ids": ["sprint"], "total_nav": 400000.0}
+{"ts_utc": "2026-04-04T14:11:11+00:00", "level": "info", "event": "stale_orders_expired", "asof": "2026-04-04"}
+{"ts_utc": "2026-04-04T14:11:11+00:00", "level": "info", "event": "fundamentals_status", "status": "skipped_main_path", "configured_source": "jquants_v2", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-04T14:11:12+00:00", "level": "info", "event": "sprint_signal_completed", "strategy_id": "sprint", "benchmark_state": "off", "benchmark_scale": 0.0, "selected_count": 0}
+{"ts_utc": "2026-04-04T14:11:13+00:00", "level": "info", "event": "make_decision_completed", "asof": "2026-04-03"}
+{"ts_utc": "2026-04-04T14:11:13+00:00", "level": "info", "event": "daily_run_completed", "asof": "2026-04-03", "run_id": "2026-04-03__7de8dfc646"}
+{"ts_utc": "2026-04-04T14:11:13+00:00", "level": "info", "event": "paper_execute_completed", "asof": "2026-04-03", "run_id": "2026-04-03__7de8dfc646", "paper_status": "paper_no_orders"}
+{"ts_utc": "2026-04-04T14:11:13+00:00", "level": "info", "event": "execution_quality", "strategy_id": "sprint", "fill_count": 0, "avg_slippage_bps": 0.0, "fill_validation_rate": 1.0}
+{"ts_utc": "2026-04-04T14:11:14+00:00", "level": "info", "event": "sprint_followup_skipped", "strategy_id": "sprint", "reason": "harvest_specific_reports"}
+{"ts_utc": "2026-04-05T01:42:52+00:00", "level": "info", "event": "daily_run_started", "simulation": false, "simulation_strict_pit": true, "config": "config.yaml", "db_path": "japan_market.db", "asof_override": null}
+{"ts_utc": "2026-04-05T01:42:52+00:00", "level": "info", "event": "phase_resolved", "simulation": false, "simulation_strict_pit": true, "phase": "phase_1", "strategy_ids": ["sprint"], "total_nav": 400000.0}
+{"ts_utc": "2026-04-05T01:42:52+00:00", "level": "info", "event": "stale_orders_expired", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-05"}
+{"ts_utc": "2026-04-05T01:42:56+00:00", "level": "info", "event": "fundamentals_status", "simulation": false, "simulation_strict_pit": true, "status": "skipped_main_path", "configured_source": "yfinance", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-05T01:43:01+00:00", "level": "info", "event": "sprint_signal_completed", "simulation": false, "simulation_strict_pit": true, "strategy_id": "sprint", "benchmark_state": "off", "benchmark_scale": 0.25, "selected_count": 0}
+{"ts_utc": "2026-04-05T01:43:07+00:00", "level": "info", "event": "make_decision_completed", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-03"}
+{"ts_utc": "2026-04-05T01:43:07+00:00", "level": "info", "event": "daily_run_completed", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-03", "run_id": "2026-04-03__095fcecebb"}
+{"ts_utc": "2026-04-05T01:43:08+00:00", "level": "info", "event": "paper_execute_completed", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-03", "run_id": "2026-04-03__095fcecebb", "paper_status": "paper_no_orders"}
+{"ts_utc": "2026-04-05T01:43:08+00:00", "level": "info", "event": "execution_quality", "simulation": false, "simulation_strict_pit": true, "strategy_id": "sprint", "fill_count": 0, "avg_slippage_bps": 0.0, "fill_validation_rate": 1.0}
+{"ts_utc": "2026-04-05T01:43:08+00:00", "level": "info", "event": "sprint_followup_skipped", "simulation": false, "simulation_strict_pit": true, "strategy_id": "sprint", "reason": "harvest_specific_reports"}
+{"ts_utc": "2026-04-05T01:44:21+00:00", "level": "info", "event": "daily_run_started", "simulation": false, "simulation_strict_pit": true, "config": "config.yaml", "db_path": "japan_market.db", "asof_override": null}
+{"ts_utc": "2026-04-05T01:44:21+00:00", "level": "info", "event": "phase_resolved", "simulation": false, "simulation_strict_pit": true, "phase": "phase_1", "strategy_ids": ["sprint"], "total_nav": 400000.0}
+{"ts_utc": "2026-04-05T01:44:21+00:00", "level": "info", "event": "stale_orders_expired", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-05"}
+{"ts_utc": "2026-04-05T01:44:23+00:00", "level": "info", "event": "fundamentals_status", "simulation": false, "simulation_strict_pit": true, "status": "skipped_main_path", "configured_source": "yfinance", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-05T01:44:27+00:00", "level": "info", "event": "sprint_signal_completed", "simulation": false, "simulation_strict_pit": true, "strategy_id": "sprint", "benchmark_state": "off", "benchmark_scale": 0.25, "selected_count": 1}
+{"ts_utc": "2026-04-05T01:44:28+00:00", "level": "info", "event": "make_decision_completed", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-03"}
+{"ts_utc": "2026-04-05T01:44:28+00:00", "level": "info", "event": "daily_run_completed", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-03", "run_id": "2026-04-03__dbe37affe2"}
+{"ts_utc": "2026-04-05T01:44:29+00:00", "level": "info", "event": "paper_execute_completed", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-03", "run_id": "2026-04-03__dbe37affe2", "paper_status": "paper_no_orders"}
+{"ts_utc": "2026-04-05T01:44:29+00:00", "level": "info", "event": "execution_quality", "simulation": false, "simulation_strict_pit": true, "strategy_id": "sprint", "fill_count": 0, "avg_slippage_bps": 0.0, "fill_validation_rate": 1.0}
+{"ts_utc": "2026-04-05T01:44:29+00:00", "level": "info", "event": "sprint_followup_skipped", "simulation": false, "simulation_strict_pit": true, "strategy_id": "sprint", "reason": "harvest_specific_reports"}
+{"ts_utc": "2026-04-05T01:45:50+00:00", "level": "info", "event": "daily_run_started", "simulation": false, "simulation_strict_pit": true, "config": "config.yaml", "db_path": "japan_market.db", "asof_override": null}
+{"ts_utc": "2026-04-05T01:45:50+00:00", "level": "info", "event": "phase_resolved", "simulation": false, "simulation_strict_pit": true, "phase": "phase_1", "strategy_ids": ["sprint"], "total_nav": 400000.0}
+{"ts_utc": "2026-04-05T01:45:50+00:00", "level": "info", "event": "stale_orders_expired", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-05"}
+{"ts_utc": "2026-04-05T01:45:52+00:00", "level": "info", "event": "fundamentals_status", "simulation": false, "simulation_strict_pit": true, "status": "skipped_main_path", "configured_source": "yfinance", "latest_available_ts": "2026-04-03T08:29:35"}
+{"ts_utc": "2026-04-05T01:45:58+00:00", "level": "info", "event": "sprint_signal_completed", "simulation": false, "simulation_strict_pit": true, "strategy_id": "sprint", "benchmark_state": "off", "benchmark_scale": 0.25, "selected_count": 1}
+{"ts_utc": "2026-04-05T01:45:58+00:00", "level": "info", "event": "make_decision_completed", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-03"}
+{"ts_utc": "2026-04-05T01:45:58+00:00", "level": "info", "event": "daily_run_completed", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-03", "run_id": "2026-04-03__bc9f466afc"}
+{"ts_utc": "2026-04-05T01:45:59+00:00", "level": "info", "event": "paper_execute_completed", "simulation": false, "simulation_strict_pit": true, "asof": "2026-04-03", "run_id": "2026-04-03__bc9f466afc", "paper_status": "paper_filled"}
+{"ts_utc": "2026-04-05T01:45:59+00:00", "level": "info", "event": "execution_quality", "simulation": false, "simulation_strict_pit": true, "strategy_id": "sprint", "fill_count": 1, "avg_slippage_bps": 3.788106060607088, "fill_validation_rate": 1.0}
+{"ts_utc": "2026-04-05T01:45:59+00:00", "level": "info", "event": "sprint_followup_skipped", "simulation": false, "simulation_strict_pit": true, "strategy_id": "sprint", "reason": "harvest_specific_reports"}

@@ -66,7 +66,7 @@ function main() {
         step_payloads: {
           impl_fe: {
             beta_template_id: "wc.fe_modify.v1",
-            target_paths: ["workspace/sandbox/crm_site/app.js"],
+            target_paths: ["sandbox/crm_site/app.js"],
           },
         },
       }),
@@ -93,30 +93,30 @@ function main() {
   assert.deepEqual(payload.verification_plan, [
     {
       tier: "syntax_check",
-      command: "node --check workspace/sandbox/crm_site/app.js",
+      command: "node --check sandbox/crm_site/app.js",
       required: true,
       source: "inferred_target_paths",
     },
     {
       tier: "lint",
-      command: "npm --prefix workspace/sandbox/crm_site run lint",
+      command: "npm --prefix sandbox/crm_site run lint",
       required: false,
-      source: "package_json:workspace/sandbox/crm_site/package.json",
+      source: "package_json:sandbox/crm_site/package.json",
     },
     {
       tier: "type_check",
-      command: "npm --prefix workspace/sandbox/crm_site run typecheck",
+      command: "npm --prefix sandbox/crm_site run typecheck",
       required: false,
-      source: "package_json:workspace/sandbox/crm_site/package.json",
+      source: "package_json:sandbox/crm_site/package.json",
     },
     {
       tier: "build",
-      command: "npm --prefix workspace/sandbox/crm_site run build",
+      command: "npm --prefix sandbox/crm_site run build",
       required: false,
-      source: "package_json:workspace/sandbox/crm_site/package.json",
+      source: "package_json:sandbox/crm_site/package.json",
     },
   ]);
-  assert.equal(payload.verification_command, "node --check workspace/sandbox/crm_site/app.js");
+  assert.equal(payload.verification_command, "node --check sandbox/crm_site/app.js");
   assert.ok(Array.isArray(payload.human_acceptance_criteria));
 
   assert.throws(() => {
@@ -132,7 +132,7 @@ function main() {
             impl_fe: {
               beta_template_id: "wc.fe_modify.v1",
               task_class: "be_create",
-              target_paths: ["workspace/sandbox/crm_site/app.js"],
+              target_paths: ["sandbox/crm_site/app.js"],
             },
           },
         }),

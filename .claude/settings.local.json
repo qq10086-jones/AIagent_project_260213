@@ -113,7 +113,10 @@
       "Bash(cat /c/Users/linweiye/AIagent_project_260213/artifacts/release/20782314-65bd-4b5b-a1ef-830a86b1b2ea/tasks/*/delegate_stdout_attempt*.log)",
       "Bash(xxd \"/c/Users/linweiye/AIagent_project_260213/artifacts/release/20782314-65bd-4b5b-a1ef-830a86b1b2ea/impl/be_changes/server.js\")",
       "Bash(xxd \"/c/Users/linweiye/AIagent_project_260213/worker-coder/artifact_scaffold.js\")",
-      "Bash(cat \"/c/Users/linweiye/AIagent_project_260213/artifacts/runs/20782314-65bd-4b5b-a1ef-830a86b1b2ea/task_10ab3a26-2e08-40ad-9da7-0ae23beb42be/delegate_stderr_attempt1_\"*.log)"
+      "Bash(cat \"/c/Users/linweiye/AIagent_project_260213/artifacts/runs/20782314-65bd-4b5b-a1ef-830a86b1b2ea/task_10ab3a26-2e08-40ad-9da7-0ae23beb42be/delegate_stderr_attempt1_\"*.log)",
+      "Bash(python -c \":*)",
+      "Bash(PYTHONIOENCODING=utf-8 python daily_run.py)",
+      "Bash(PYTHONIOENCODING=utf-8 python quant_briefing.py --mode market)"
     ]
   }
 }

@@ -1,0 +1,18 @@
+{
+  "run_id": "crm_site_delivery_2026_04_05",
+  "workflow_id": "coding_team_v0",
+  "completed_at": "2026-04-05T00:00:00Z",
+  "artifacts": [
+    { "path": "impl/be_changes/server.js", "type": "backend_entry", "size_bytes": 11707 },
+    { "path": "impl/be_changes/package.json", "type": "backend_manifest", "size_bytes": 428 },
+    { "path": "impl/be_changes/public/index.html", "type": "frontend_shell", "size_bytes": 7847 },
+    { "path": "impl/be_notes.md", "type": "implementation_notes", "size_bytes": 4909 },
+    { "path": "handoff/be_to_fe.json", "type": "handoff_contract", "size_bytes": 4039 },
+    { "path": "handoff/impl_to_qa.json", "type": "qa_handoff", "size_bytes": 878 },
+    { "path": "smoke/smoke_result.json", "type": "runtime_smoke", "size_bytes": 788 },
+    { "path": "release/release_notes.md", "type": "release_notes", "size_bytes": 987 },
+    { "path": "release/README.md", "type": "release_readme", "size_bytes": 848 },
+    { "path": "release/start.sh", "type": "startup_script", "size_bytes": 94 },
+    { "path": "release/start.ps1", "type": "startup_script_windows", "size_bytes": 151 }
+  ]
+}

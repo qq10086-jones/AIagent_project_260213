@@ -1,0 +1,51 @@
+{
+  "be_tasks": [
+    {
+      "id": "BE-01",
+      "description": "Set up Express server with SQLite connection",
+      "verify": "node --check app.js"
+    },
+    {
+      "id": "BE-02",
+      "description": "Implement expense CRUD REST endpoints",
+      "verify": "curl POST /api/expenses returns 201"
+    },
+    {
+      "id": "BE-03",
+      "description": "Implement monthly summary aggregation endpoint",
+      "verify": "GET /api/summary/monthly returns JSON"
+    },
+    {
+      "id": "BE-04",
+      "description": "Implement CSV export endpoint with RFC 4180 compliance",
+      "verify": "GET /api/export/csv returns text/csv"
+    }
+  ],
+  "fe_tasks": [
+    {
+      "id": "FE-01",
+      "description": "Build expense form component with category dropdown",
+      "verify": "Form submits to API and refreshes list"
+    },
+    {
+      "id": "FE-02",
+      "description": "Build expense list with edit/delete actions",
+      "verify": "CRUD operations reflect in UI"
+    },
+    {
+      "id": "FE-03",
+      "description": "Integrate Chart.js for monthly bar and pie charts",
+      "verify": "Charts render with API data"
+    },
+    {
+      "id": "FE-04",
+      "description": "Add CSV export button with date range picker",
+      "verify": "Clicking export downloads .csv file"
+    },
+    {
+      "id": "FE-05",
+      "description": "Build dashboard overview page",
+      "verify": "Shows total, top categories, recent items"
+    }
+  ]
+}

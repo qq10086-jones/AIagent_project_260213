@@ -1,0 +1,143 @@
+{
+  "run_id": "2026-03-02__82fc42a344",
+  "asof": "2026-03-02",
+  "artifact_dir": "artifacts\\backfill_decision\\2026-03-02\\2026-03-02__82fc42a344",
+  "data": {
+    "db_path": "japan_market.db",
+    "db_last_update": "2026-04-03T21:27:14",
+    "price_mode": "yfinance:auto_adjust=True"
+  },
+  "model_outputs": {
+    "reports_dir": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\paper_backfill_2026-03-02_dk2zdtv0\\reports",
+    "exported": [
+      "target_weights.csv",
+      "promotion_decision.json",
+      "factor_health_report.json",
+      "factor_registry_cleanup_report.json",
+      "signal_mode_compare_report.json",
+      "zero_exposure_report.json",
+      "earnings_event_study.json",
+      "optimizer_objective_evaluation.json"
+    ],
+    "target_weights_file": "artifacts\\backfill_decision\\2026-03-02\\2026-03-02__82fc42a344\\target_weights.csv",
+    "target_weights_meta": {
+      "primary_mode": "shadow_hybrid_ic",
+      "exported_asof": "2026-03-02",
+      "history_last_asof": "2026-03-02",
+      "history_last_row_is_zero": false,
+      "export_row_sum": 0.5798082503454189,
+      "last_nonzero_asof": "2026-03-02",
+      "last_nonzero_row_sum": 0.5798082503454189
+    },
+    "factor_family_contributions_file": "artifacts\\backfill_decision\\2026-03-02\\2026-03-02__82fc42a344\\factor_family_contributions.csv",
+    "factor_family_summary_file": "artifacts\\backfill_decision\\2026-03-02\\2026-03-02__82fc42a344\\factor_family_summary.json",
+    "factor_family_summary": {
+      "target_mode": "shadow_hybrid_ic",
+      "families": {
+        "price": {
+          "configured_factor_count": 15,
+          "active_factor_count": 15,
+          "is_active_in_mode": true,
+          "portfolio_weighted_score": -0.271752452813312,
+          "top_symbol": "4755.T"
+        },
+        "risk_adjusted": {
+          "configured_factor_count": 4,
+          "active_factor_count": 4,
+          "is_active_in_mode": true,
+          "portfolio_weighted_score": -0.3740816567902306,
+          "top_symbol": "4755.T"
+        },
+        "fundamental": {
+          "configured_factor_count": 10,
+          "active_factor_count": 7,
+          "is_active_in_mode": true,
+          "portfolio_weighted_score": 0.0,
+          "top_symbol": "4755.T"
+        }
+      }
+    },
+    "zero_exposure_report_file": "artifacts\\backfill_decision\\2026-03-02\\2026-03-02__82fc42a344\\zero_exposure_report.json"
+  },
+  "portfolio": {
+    "mode": "snapshot",
+    "cash_input": 166185.878663,
+    "nav_before": 392295.87774747267,
+    "positions_asof": "2026-02-27",
+    "snapshot_asof": "2026-02-27",
+    "snapshot_nav": 397965.8789681758,
+    "manual_cash_arg": 400000.0
+  },
+  "orders": {
+    "proposal_file": "artifacts\\backfill_decision\\2026-03-02\\2026-03-02__82fc42a344\\orders_proposal.csv",
+    "count": 0,
+    "min_trade_notional": 1000.0,
+    "lot_size": 100,
+    "missing_symbols": [],
+    "weights_sum_before_norm": 0.579808250345419,
+    "cap_diagnostics": {
+      "pre_cap_sum": 0.579808250345419,
+      "pre_cap_sum_raw": 0.579808250345419,
+      "pre_cap_max_single": 0.162509721665827,
+      "pre_cap_max_sector": 0.162509721665827,
+      "pre_cap_top_weights": [
+        {
+          "symbol": "4755.T",
+          "target_weight": 0.162509721665827
+        },
+        {
+          "symbol": "9501.T",
+          "target_weight": 0.1337325818172249
+        },
+        {
+          "symbol": "5401.T",
+          "target_weight": 0.1260626861227826
+        },
+        {
+          "symbol": "7201.T",
+          "target_weight": 0.0844089312164461
+        },
+        {
+          "symbol": "9434.T",
+          "target_weight": 0.0425949689493297
+        }
+      ],
+      "post_cap_sum": 0.579808250345419,
+      "post_cap_max_single": 0.162509721665827,
+      "post_cap_max_sector": 0.162509721665827,
+      "post_cap_top_weights": [
+        {
+          "symbol": "4755.T",
+          "target_weight": 0.162509721665827
+        },
+        {
+          "symbol": "9501.T",
+          "target_weight": 0.1337325818172249
+        },
+        {
+          "symbol": "5401.T",
+          "target_weight": 0.1260626861227826
+        },
+        {
+          "symbol": "7201.T",
+          "target_weight": 0.0844089312164461
+        },
+        {
+          "symbol": "9434.T",
+          "target_weight": 0.0425949689493297
+        }
+      ],
+      "max_single_position_pct": 0.25,
+      "max_sector_weight": 0.35
+    },
+    "drawdown_scale": 1.0,
+    "drawdown_status": "OK",
+    "peak_nav_input": 437520.4113302969
+  },
+  "diagnostics": {
+    "target_weights_zero_now": false,
+    "last_nonzero_asof": "2026-03-02",
+    "last_nonzero_row_sum": 0.5798082503454189,
+    "weights_sum_before_norm": 0.579808250345419
+  }
+}

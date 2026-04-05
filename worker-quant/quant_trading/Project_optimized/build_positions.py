@@ -9,12 +9,18 @@ def last_close(conn, symbol: str, asof: str) -> Optional[float]:
     ).fetchone()
     return float(row[0]) if row else None
 
-def latest_positions(conn, asof: str) -> Tuple[Optional[str], Dict[str, float], Dict[str, float]]:
-    row = conn.execute("SELECT asof FROM positions WHERE asof<=? ORDER BY asof DESC LIMIT 1", (asof,)).fetchone()
+def latest_positions(conn, asof: str, strategy_id: str = "default") -> Tuple[Optional[str], Dict[str, float], Dict[str, float]]:
+    row = conn.execute(
+        "SELECT asof FROM positions WHERE asof<=? AND strategy_id=? ORDER BY asof DESC LIMIT 1",
+        (asof, strategy_id),
+    ).fetchone()
     if not row:
         return None, {}, {}
     d = row[0]
-    rows = conn.execute("SELECT symbol, qty, COALESCE(avg_cost,0) FROM positions WHERE asof=?", (d,)).fetchall()
+    rows = conn.execute(
+        "SELECT symbol, qty, COALESCE(avg_cost,0) FROM positions WHERE asof=? AND strategy_id=?",
+        (d, strategy_id),
+    ).fetchall()
     qty = {s: float(q) for s,q,_ in rows}
     cost = {s: float(c) for s,_,c in rows}
     return d, qty, cost
@@ -24,12 +30,13 @@ def main():
     ap.add_argument("--db", default="japan_market.db")
     ap.add_argument("--run_id", required=True)
     ap.add_argument("--asof", required=True)
+    ap.add_argument("--strategy_id", default="default")
     args = ap.parse_args()
 
     conn = connect(args.db)
     ensure_trade_tables(conn)
     try:
-        prev_d, rows_out, missing_px = build_positions(conn, args.run_id, args.asof)
+        prev_d, rows_out, missing_px = build_positions(conn, args.run_id, args.asof, strategy_id=args.strategy_id)
         print(f"[OK] Built positions for {args.asof} from prev={prev_d} using run_id={args.run_id}")
         print(f"Positions count: {len(rows_out)}")
         if missing_px:
@@ -41,17 +48,17 @@ def main():
 
 
 
-def build_positions(conn, run_id: str, asof: str):
+def build_positions(conn, run_id: str, asof: str, strategy_id: str = "default"):
     """Core logic extracted for reuse (e.g., Streamlit or post_trade.py).
 
     Returns: (previous_positions_asof, rows_out, missing_px_symbols)
     """
     ensure_trade_tables(conn)
-    prev_d, qty, avg_cost = latest_positions(conn, asof)
+    prev_d, qty, avg_cost = latest_positions(conn, asof, strategy_id=strategy_id)
 
     fills = conn.execute(
-        "SELECT symbol, side, qty, price, fee, tax FROM fills WHERE run_id=? AND asof=?",
-        (run_id, asof),
+        "SELECT symbol, side, qty, price, fee, tax FROM fills WHERE run_id=? AND asof=? AND strategy_id=?",
+        (run_id, asof, strategy_id),
     ).fetchall()
 
     for sym, side, q, px, fee, tax in fills:
@@ -92,14 +99,14 @@ def build_positions(conn, run_id: str, asof: str):
         else:
             mv = q * px
             upnl = (px - avg_cost.get(sym, 0.0)) * q
-        rows_out.append((asof, sym, q, avg_cost.get(sym, None), px, mv, upnl))
+        rows_out.append((asof, strategy_id, sym, q, avg_cost.get(sym, None), px, mv, upnl))
 
     with conn:
-        conn.execute("DELETE FROM positions WHERE asof=?", (asof,))
+        conn.execute("DELETE FROM positions WHERE asof=? AND strategy_id=?", (asof, strategy_id))
         conn.executemany(
             """
-            INSERT INTO positions(asof, symbol, qty, avg_cost, market_price, market_value, unrealized_pnl)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO positions(asof, strategy_id, symbol, qty, avg_cost, market_price, market_value, unrealized_pnl)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows_out,
         )

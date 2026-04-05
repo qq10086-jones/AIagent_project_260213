@@ -1,0 +1,12 @@
+{
+  "be_tasks": [
+    { "id": "T-BE-1", "description": "Initialize Express and CORS", "verify": "server.js exists and responds to health-check" },
+    { "id": "T-BE-2", "description": "Implement GET /api/todos", "verify": "returns 200 with an array" },
+    { "id": "T-BE-3", "description": "Implement POST /api/todos", "verify": "saves a new todo and returns 201" }
+  ],
+  "fe_tasks": [
+    { "id": "T-FE-1", "description": "Setup UI boilerplate with Svelte/React", "verify": "index.html renders correctly" },
+    { "id": "T-FE-2", "description": "Create Todo List component", "verify": "lists items from BE" },
+    { "id": "T-FE-3", "description": "Add new todo form", "verify": "submitting form triggers POST to BE" }
+  ]
+}

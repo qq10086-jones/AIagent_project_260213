@@ -12,7 +12,8 @@
       "id": "arch_design",
       "role": "architect",
       "tool": "coding.delegate",
-      "gate": "policy"
+      "gate": "policy",
+      "prompt_script_id": "architect.system_spec.v2"
     },
     {
       "id": "impl_be",

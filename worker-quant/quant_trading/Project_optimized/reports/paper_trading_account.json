@@ -1,0 +1,23 @@
+{
+  "read_only": true,
+  "source_of_truth": "japan_market.db (positions + account_snapshots tables)",
+  "strategy_id": "sprint",
+  "account": {
+    "asof": "2026-04-03",
+    "cash": 347127.1724,
+    "positions_value": 52890.00244140625,
+    "nav": 400017.17484140623,
+    "run_id": "2026-04-03__bc9f466afc"
+  },
+  "positions": [
+    {
+      "asof": "2026-04-03",
+      "symbol": "4005.T",
+      "qty": 100.0,
+      "avg_cost": 528.200012,
+      "market_price": 528.9000244140625,
+      "market_value": 52890.00244140625,
+      "unrealized_pnl": 70.00124140624848
+    }
+  ]
+}

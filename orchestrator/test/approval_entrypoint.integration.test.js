@@ -51,6 +51,7 @@ test("approve entrypoint requeues waiting task and pushes it to stream", async (
       step_index: 0,
     }),
     markTaskQueued: async () => {},
+    updatePermissionAuditHumanDecision: async () => {},
     recordEvent: async (...args) => {
       calls.events.push(args);
     },
@@ -104,6 +105,7 @@ test("reject entrypoint fails waiting task and closes run when last pending task
     getTaskForRejection: async () => ({ task_id: "task-2", tool_name: "coding.delegate", run_id: "run-2", status: "waiting_approval" }),
     markTaskApprovalRejected: async () => {},
     countPendingTasksForRun: async () => 0,
+    updatePermissionAuditHumanDecision: async () => {},
     recordEvent: async (...args) => {
       calls.events.push(args);
     },
@@ -144,6 +146,7 @@ test("reject entrypoint returns 403 on invalid token", async () => {
     getTaskForRejection: async () => null,
     markTaskApprovalRejected: async () => {},
     countPendingTasksForRun: async () => 0,
+    updatePermissionAuditHumanDecision: async () => {},
     recordEvent: async () => {},
     workflowEngine: { handleTaskRejected: async () => {} },
     normalizeResultPayload: () => ({}),

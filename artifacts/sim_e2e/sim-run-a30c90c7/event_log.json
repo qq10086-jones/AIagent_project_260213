@@ -1,0 +1,354 @@
+[
+  {
+    "task_id": "task-bf2bfd06",
+    "event_type": "permission.council.advisory",
+    "payload": {
+      "council_advice": "allow",
+      "safety_verdict": "allow",
+      "context_verdict": "sufficient",
+      "risk_level": "low",
+      "risk_score": 0.45,
+      "advisory_summary": "Coding task appears routine, but execution should remain audited.",
+      "reasons": [],
+      "duration_ms": 1
+    },
+    "ts": "2026-04-05T13:50:21.242Z"
+  },
+  {
+    "task_id": "task-bf2bfd06",
+    "event_type": "task.created",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "run_id": "sim-run-a30c90c7",
+      "risk_level": "low"
+    },
+    "ts": "2026-04-05T13:50:21.242Z"
+  },
+  {
+    "task_id": "task-bf2bfd06",
+    "event_type": "tool_call",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "step_id": "pm_spec"
+    },
+    "ts": "2026-04-05T13:50:21.242Z"
+  },
+  {
+    "task_id": "task-bf2bfd06",
+    "event_type": "tool_result",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "ok": true,
+      "step_id": "pm_spec"
+    },
+    "ts": "2026-04-05T13:50:21.242Z"
+  },
+  {
+    "task_id": "task-6c6679de",
+    "event_type": "permission.council.advisory",
+    "payload": {
+      "council_advice": "allow",
+      "safety_verdict": "allow",
+      "context_verdict": "sufficient",
+      "risk_level": "medium",
+      "risk_score": 0.45,
+      "advisory_summary": "Coding task appears routine, but execution should remain audited.",
+      "reasons": [],
+      "duration_ms": 1
+    },
+    "ts": "2026-04-05T13:50:21.242Z"
+  },
+  {
+    "task_id": "task-6c6679de",
+    "event_type": "task.created",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "run_id": "sim-run-a30c90c7",
+      "risk_level": "medium"
+    },
+    "ts": "2026-04-05T13:50:21.242Z"
+  },
+  {
+    "task_id": "task-6c6679de",
+    "event_type": "tool_call",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "step_id": "arch_design"
+    },
+    "ts": "2026-04-05T13:50:21.242Z"
+  },
+  {
+    "task_id": "task-6c6679de",
+    "event_type": "tool_result",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "ok": true,
+      "step_id": "arch_design"
+    },
+    "ts": "2026-04-05T13:50:21.243Z"
+  },
+  {
+    "task_id": "task-1d2bc60a",
+    "event_type": "permission.council.advisory",
+    "payload": {
+      "council_advice": "allow",
+      "safety_verdict": "allow",
+      "context_verdict": "sufficient",
+      "risk_level": "medium",
+      "risk_score": 0.45,
+      "advisory_summary": "Coding task appears routine, but execution should remain audited.",
+      "reasons": [],
+      "duration_ms": 1
+    },
+    "ts": "2026-04-05T13:50:21.243Z"
+  },
+  {
+    "task_id": "task-1d2bc60a",
+    "event_type": "task.created",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "run_id": "sim-run-a30c90c7",
+      "risk_level": "medium"
+    },
+    "ts": "2026-04-05T13:50:21.243Z"
+  },
+  {
+    "task_id": "task-1d2bc60a",
+    "event_type": "tool_call",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "step_id": "impl_be"
+    },
+    "ts": "2026-04-05T13:50:21.243Z"
+  },
+  {
+    "task_id": "task-1d2bc60a",
+    "event_type": "tool_result",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "ok": true,
+      "step_id": "impl_be"
+    },
+    "ts": "2026-04-05T13:50:21.244Z"
+  },
+  {
+    "task_id": "task-ef427e10",
+    "event_type": "permission.council.advisory",
+    "payload": {
+      "council_advice": "allow",
+      "safety_verdict": "allow",
+      "context_verdict": "sufficient",
+      "risk_level": "medium",
+      "risk_score": 0.45,
+      "advisory_summary": "Coding task appears routine, but execution should remain audited.",
+      "reasons": [],
+      "duration_ms": 1
+    },
+    "ts": "2026-04-05T13:50:21.244Z"
+  },
+  {
+    "task_id": "task-ef427e10",
+    "event_type": "task.created",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "run_id": "sim-run-a30c90c7",
+      "risk_level": "medium"
+    },
+    "ts": "2026-04-05T13:50:21.244Z"
+  },
+  {
+    "task_id": "task-ef427e10",
+    "event_type": "tool_call",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "step_id": "impl_fe"
+    },
+    "ts": "2026-04-05T13:50:21.244Z"
+  },
+  {
+    "task_id": "task-ef427e10",
+    "event_type": "tool_result",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "ok": true,
+      "step_id": "impl_fe"
+    },
+    "ts": "2026-04-05T13:50:21.245Z"
+  },
+  {
+    "task_id": "task-fa1b2eb5",
+    "event_type": "permission.council.advisory",
+    "payload": {
+      "council_advice": "allow",
+      "safety_verdict": "allow",
+      "context_verdict": "sufficient",
+      "risk_level": "medium",
+      "risk_score": 0.45,
+      "advisory_summary": "Coding task appears routine, but execution should remain audited.",
+      "reasons": [],
+      "duration_ms": 1
+    },
+    "ts": "2026-04-05T13:50:21.245Z"
+  },
+  {
+    "task_id": "task-fa1b2eb5",
+    "event_type": "task.created",
+    "payload": {
+      "tool_name": "coding.execute",
+      "run_id": "sim-run-a30c90c7",
+      "risk_level": "medium"
+    },
+    "ts": "2026-04-05T13:50:21.245Z"
+  },
+  {
+    "task_id": "task-fa1b2eb5",
+    "event_type": "tool_call",
+    "payload": {
+      "tool_name": "coding.execute",
+      "step_id": "smoke_test"
+    },
+    "ts": "2026-04-05T13:50:21.245Z"
+  },
+  {
+    "task_id": "task-fa1b2eb5",
+    "event_type": "tool_result",
+    "payload": {
+      "tool_name": "coding.execute",
+      "ok": true,
+      "step_id": "smoke_test"
+    },
+    "ts": "2026-04-05T13:50:21.245Z"
+  },
+  {
+    "task_id": "task-78b29e1d",
+    "event_type": "permission.council.advisory",
+    "payload": {
+      "council_advice": "allow",
+      "safety_verdict": "allow",
+      "context_verdict": "sufficient",
+      "risk_level": "medium",
+      "risk_score": 0.45,
+      "advisory_summary": "Coding task appears routine, but execution should remain audited.",
+      "reasons": [],
+      "duration_ms": 1
+    },
+    "ts": "2026-04-05T13:50:21.246Z"
+  },
+  {
+    "task_id": "task-78b29e1d",
+    "event_type": "task.created",
+    "payload": {
+      "tool_name": "coding.execute",
+      "run_id": "sim-run-a30c90c7",
+      "risk_level": "medium"
+    },
+    "ts": "2026-04-05T13:50:21.246Z"
+  },
+  {
+    "task_id": "task-78b29e1d",
+    "event_type": "tool_call",
+    "payload": {
+      "tool_name": "coding.execute",
+      "step_id": "qa_verify"
+    },
+    "ts": "2026-04-05T13:50:21.246Z"
+  },
+  {
+    "task_id": "task-78b29e1d",
+    "event_type": "tool_result",
+    "payload": {
+      "tool_name": "coding.execute",
+      "ok": true,
+      "step_id": "qa_verify"
+    },
+    "ts": "2026-04-05T13:50:21.246Z"
+  },
+  {
+    "task_id": "task-9e757a64",
+    "event_type": "permission.council.advisory",
+    "payload": {
+      "council_advice": "allow",
+      "safety_verdict": "allow",
+      "context_verdict": "sufficient",
+      "risk_level": "medium",
+      "risk_score": 0.45,
+      "advisory_summary": "Coding task appears routine, but execution should remain audited.",
+      "reasons": [],
+      "duration_ms": 1
+    },
+    "ts": "2026-04-05T13:50:21.246Z"
+  },
+  {
+    "task_id": "task-9e757a64",
+    "event_type": "task.created",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "run_id": "sim-run-a30c90c7",
+      "risk_level": "medium"
+    },
+    "ts": "2026-04-05T13:50:21.246Z"
+  },
+  {
+    "task_id": "task-9e757a64",
+    "event_type": "tool_call",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "step_id": "release_pack"
+    },
+    "ts": "2026-04-05T13:50:21.246Z"
+  },
+  {
+    "task_id": "task-9e757a64",
+    "event_type": "tool_result",
+    "payload": {
+      "tool_name": "coding.delegate",
+      "ok": true,
+      "step_id": "release_pack"
+    },
+    "ts": "2026-04-05T13:50:21.248Z"
+  },
+  {
+    "task_id": "task-bf46d6b5",
+    "event_type": "permission.council.advisory",
+    "payload": {
+      "council_advice": "allow",
+      "safety_verdict": "allow",
+      "context_verdict": "sufficient",
+      "risk_level": "medium",
+      "risk_score": 0.2,
+      "advisory_summary": "No elevated safety risk detected.",
+      "reasons": [],
+      "duration_ms": 1
+    },
+    "ts": "2026-04-05T13:50:21.248Z"
+  },
+  {
+    "task_id": "task-bf46d6b5",
+    "event_type": "task.created",
+    "payload": {
+      "tool_name": "ops.deploy_preview",
+      "run_id": "sim-run-a30c90c7",
+      "risk_level": "medium"
+    },
+    "ts": "2026-04-05T13:50:21.248Z"
+  },
+  {
+    "task_id": "task-bf46d6b5",
+    "event_type": "tool_call",
+    "payload": {
+      "tool_name": "ops.deploy_preview",
+      "step_id": "deploy_preview"
+    },
+    "ts": "2026-04-05T13:50:21.248Z"
+  },
+  {
+    "task_id": "task-bf46d6b5",
+    "event_type": "tool_result",
+    "payload": {
+      "tool_name": "ops.deploy_preview",
+      "ok": true,
+      "step_id": "deploy_preview"
+    },
+    "ts": "2026-04-05T13:50:21.249Z"
+  }
+]

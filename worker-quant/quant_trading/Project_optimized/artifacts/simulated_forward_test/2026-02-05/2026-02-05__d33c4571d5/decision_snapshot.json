@@ -1,0 +1,128 @@
+{
+  "run_id": "2026-02-05__d33c4571d5",
+  "asof": "2026-02-05",
+  "strategy_id": "sprint",
+  "artifact_dir": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\artifacts\\simulated_forward_test\\2026-02-05\\2026-02-05__d33c4571d5",
+  "data": {
+    "db_path": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\state\\simulated_forward_test\\japan_market_sim.db",
+    "db_last_update": "2026-04-04T22:47:45",
+    "price_mode": "yfinance:auto_adjust=True"
+  },
+  "model_outputs": {
+    "reports_dir": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\reports\\simulated_forward_test",
+    "exported": [
+      "target_weights.csv",
+      "signal_mode_compare.csv",
+      "signal_mode_compare_report.json",
+      "signal_mode_compare_report.md",
+      "zero_exposure_report.json"
+    ],
+    "target_weights_file": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\artifacts\\simulated_forward_test\\2026-02-05\\2026-02-05__d33c4571d5\\target_weights.csv",
+    "target_weights_meta": {
+      "primary_mode": "sprint_momentum",
+      "asof": "2026-02-05",
+      "export_row_sum": 1.0,
+      "history_last_row_is_zero": false,
+      "last_nonzero_asof": "2026-02-05",
+      "last_nonzero_row_sum": 1.0,
+      "benchmark_state": "on",
+      "benchmark_scale": 1.0,
+      "selected_count": 1
+    },
+    "factor_family_contributions_file": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\artifacts\\simulated_forward_test\\2026-02-05\\2026-02-05__d33c4571d5\\factor_family_contributions.csv",
+    "factor_family_summary_file": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\artifacts\\simulated_forward_test\\2026-02-05\\2026-02-05__d33c4571d5\\factor_family_summary.json",
+    "factor_family_summary": {
+      "target_mode": "sprint_momentum",
+      "families": {
+        "price": {
+          "configured_factor_count": 15,
+          "active_factor_count": 15,
+          "is_active_in_mode": true,
+          "portfolio_weighted_score": 0.0,
+          "top_symbol": "4005.T"
+        },
+        "risk_adjusted": {
+          "configured_factor_count": 4,
+          "active_factor_count": 4,
+          "is_active_in_mode": false,
+          "portfolio_weighted_score": 0.0,
+          "top_symbol": "4005.T"
+        },
+        "fundamental": {
+          "configured_factor_count": 10,
+          "active_factor_count": 0,
+          "is_active_in_mode": false,
+          "portfolio_weighted_score": 0.0,
+          "top_symbol": "4005.T"
+        }
+      }
+    },
+    "zero_exposure_report_file": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\artifacts\\simulated_forward_test\\2026-02-05\\2026-02-05__d33c4571d5\\zero_exposure_report.json"
+  },
+  "portfolio": {
+    "mode": "snapshot",
+    "cash_input": 400000.0,
+    "nav_before": 400000.0,
+    "positions_asof": null,
+    "snapshot_asof": "2026-02-04",
+    "snapshot_nav": 400000.0,
+    "manual_cash_arg": 400000.0
+  },
+  "orders": {
+    "proposal_file": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\artifacts\\simulated_forward_test\\2026-02-05\\2026-02-05__d33c4571d5\\orders_proposal.csv",
+    "count": 0,
+    "min_trade_notional": 1000.0,
+    "lot_size": 100,
+    "missing_symbols": [],
+    "weights_sum_before_norm": 0.0,
+    "cap_diagnostics": {
+      "pre_cap_sum": 0.1,
+      "pre_cap_sum_raw": 0.1,
+      "pre_cap_max_single": 0.1,
+      "pre_cap_max_sector": 0.1,
+      "pre_cap_top_weights": [
+        {
+          "symbol": "4005.T",
+          "target_weight": 0.1
+        }
+      ],
+      "post_cap_sum": 0.1,
+      "post_cap_max_single": 0.1,
+      "post_cap_max_sector": 0.1,
+      "post_cap_top_weights": [
+        {
+          "symbol": "4005.T",
+          "target_weight": 0.1
+        }
+      ],
+      "max_single_position_pct": 0.5,
+      "max_sector_weight": 0.6
+    },
+    "drawdown_scale": 1.0,
+    "drawdown_status": "OK",
+    "peak_nav_input": 400000.0,
+    "position_sizing": "half_kelly",
+    "kelly": {
+      "win_rate": 0.0,
+      "avg_win": 0.0,
+      "avg_loss": 0.0,
+      "sample_count": 0,
+      "kelly_fraction": 0.5,
+      "min_position_pct": 0.05,
+      "max_position_pct": 0.5,
+      "fallback_position_pct": 0.1,
+      "min_samples": 30,
+      "cooldown_days": 5,
+      "cooldown_loss_streak": 3,
+      "cooldown_remaining_days": 0,
+      "edge": 0.0,
+      "suggested_weight": 0.1
+    }
+  },
+  "diagnostics": {
+    "target_weights_zero_now": false,
+    "last_nonzero_asof": "2026-02-05",
+    "last_nonzero_row_sum": 1.0,
+    "weights_sum_before_norm": 0.0
+  }
+}

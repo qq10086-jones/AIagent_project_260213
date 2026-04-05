@@ -17,6 +17,8 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sqlite3
+import sys
 import warnings
 from datetime import datetime, timezone
 from typing import Dict, List
@@ -25,8 +27,16 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 # vol_z 横截面在大盘股中方向高度一致，Spearman 输入可能为常数；属正常现象，无需告警
 warnings.filterwarnings("ignore", category=stats.ConstantInputWarning)
+
+import yaml
 
 from screener import ScreenConfig, screen
 from trade_schema import connect, ensure_learning_tables, ensure_trade_tables, save_screening_history
@@ -73,6 +83,104 @@ WINSOR_UPPER_Q: float = 0.98
 SECTOR_MIN_GROUP: int = 3
 
 
+# ── Factor tier helpers ──────────────────────────────────────
+
+def load_factor_tiers(config_path: str = "config.yaml") -> Dict[str, str]:
+    """Return {factor_name: tier} mapping from config.yaml factor_tiers.
+
+    Tier values: 'core', 'candidate', 'fundamental_pending', 'excluded'.
+    Factors not listed default to 'candidate'.
+    """
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+    tiers_cfg = cfg.get("factor_tiers", {})
+    mapping: Dict[str, str] = {}
+    for tier_name, factor_list in tiers_cfg.items():
+        if isinstance(factor_list, list):
+            for factor in factor_list:
+                mapping[str(factor)] = str(tier_name)
+    return mapping
+
+
+def load_promotion_rules(config_path: str = "config.yaml") -> dict:
+    """Return factor promotion/demotion rules from config.yaml."""
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+    return cfg.get("factor_promotion_rules", {})
+
+
+def evaluate_tier_transitions(
+    factor: str,
+    current_tier: str,
+    t_stat: float,
+    ic_mean: float,
+    n_obs: int,
+    rules: dict,
+) -> tuple[str, str]:
+    """Evaluate whether a factor should be promoted or demoted.
+
+    Returns (new_tier, event_type) where event_type is '' if no change.
+    """
+    min_obs = int(rules.get("min_observations", 100))
+    min_t = float(rules.get("min_t_stat", 1.5))
+    min_ic = float(rules.get("min_ic_mean", 0.01))
+    demote_t = float(rules.get("demotion_t_stat", 0.5))
+
+    if current_tier == "excluded":
+        return current_tier, ""
+
+    # Promotion: candidate -> core
+    if current_tier in ("candidate", "fundamental_pending"):
+        if n_obs >= min_obs and t_stat >= min_t and abs(ic_mean) >= min_ic:
+            return "core", "TIER_PROMOTED"
+
+    # Demotion: core -> candidate
+    if current_tier == "core":
+        if n_obs >= min_obs and t_stat < demote_t:
+            return "candidate", "TIER_DEMOTED"
+
+    return current_tier, ""
+
+
+def get_last_tier_review_date(
+    conn: sqlite3.Connection,
+    factor: str,
+) -> str | None:
+    row = conn.execute(
+        """
+        SELECT MAX(asof)
+        FROM learning_audit
+        WHERE factor_name=?
+          AND event_type IN ('TIER_REVIEW', 'TIER_PROMOTED', 'TIER_DEMOTED')
+        """,
+        (str(factor),),
+    ).fetchone()
+    if not row or row[0] is None:
+        return None
+    return str(row[0])
+
+
+def is_tier_review_due(
+    conn: sqlite3.Connection,
+    factor: str,
+    asof: str,
+    review_frequency_days: int,
+) -> tuple[bool, str | None, int | None]:
+    last_review_date = get_last_tier_review_date(conn, factor)
+    if not last_review_date:
+        return True, None, None
+    current_dt = pd.Timestamp(asof)
+    last_dt = pd.Timestamp(last_review_date)
+    days_since_last_review = int((current_dt - last_dt).days)
+    return days_since_last_review >= int(review_frequency_days), last_review_date, days_since_last_review
+
+
 def _rsi(series: pd.Series, n: int = 14) -> pd.Series:
     delta = series.diff()
     up = delta.clip(lower=0).rolling(n).mean()
@@ -95,13 +203,13 @@ def _log_slope(series: pd.Series, n: int = 60) -> pd.Series:
 
 def compute_features(px: pd.DataFrame, vol: pd.DataFrame = None) -> Dict[str, pd.DataFrame]:
     """Compute all 15 features on a (date x ticker) price DataFrame."""
-    ret = px.pct_change()
+    ret = px.pct_change(fill_method=None)
     feats: Dict[str, pd.DataFrame] = {}
 
     feats["ret1"] = ret
-    feats["ret5"] = px.pct_change(5)
-    feats["ret20"] = px.pct_change(20)
-    feats["ret60"] = px.pct_change(60)
+    feats["ret5"] = px.pct_change(5, fill_method=None)
+    feats["ret20"] = px.pct_change(20, fill_method=None)
+    feats["ret60"] = px.pct_change(60, fill_method=None)
     feats["vol20"] = ret.rolling(20).std()
     feats["vol60"] = ret.rolling(60).std()
     ma50 = px.rolling(50).mean()
@@ -113,7 +221,7 @@ def compute_features(px: pd.DataFrame, vol: pd.DataFrame = None) -> Dict[str, pd
     feats["rsi14"] = px.apply(_rsi)
     feats["slope60"] = px.apply(_log_slope)
 
-    feats["mom_12_1"] = px.pct_change(252) - px.pct_change(21)
+    feats["mom_12_1"] = px.pct_change(252, fill_method=None) - px.pct_change(21, fill_method=None)
     feats["high52w"] = (px / px.rolling(252).max().clip(lower=1e-6)) - 1.0
     feats["vol_adj_mom20"] = feats["ret20"] / (feats["vol20"] + 1e-9)
     feats["mom_consist"] = ret.rolling(63).apply(lambda x: float((x > 0).mean()), raw=True)
@@ -323,9 +431,11 @@ def load_feature_daily_scores(conn, asofs: list[str], factor_names: list[str]) -
 def main() -> None:
     ap = argparse.ArgumentParser(description="Compute factor IC and update factor_registry")
     ap.add_argument("--db", default="japan_market.db")
+    ap.add_argument("--config", default="config.yaml", help="Path to config.yaml for factor tiers")
     ap.add_argument("--H", type=int, default=20, help="Holding period in trading days")
     ap.add_argument("--rebalance_every", type=int, default=20, help="Fallback rebalance frequency")
     ap.add_argument("--lookback_periods", type=int, default=60, help="Recent rebalance periods to evaluate")
+    ap.add_argument("--asof_override", default=None, help="Logical review date override used for simulation")
     ap.add_argument(
         "--min_cross_section_n",
         type=int,
@@ -335,10 +445,21 @@ def main() -> None:
     ap.add_argument("--shadow", action="store_true", help="Compute IC but do not update live weights")
     args = ap.parse_args()
 
+    # Load factor tiers and promotion rules
+    tier_map = load_factor_tiers(args.config)
+    promo_rules = load_promotion_rules(args.config)
+    if tier_map:
+        excluded_factors = {f for f, t in tier_map.items() if t == "excluded"}
+        print(f"Factor tiers loaded: {len(tier_map)} factors mapped, {len(excluded_factors)} excluded")
+    else:
+        excluded_factors = set()
+        print("No factor_tiers in config; all factors evaluated")
+
     conn = connect(args.db)
     ensure_trade_tables(conn)
     ensure_learning_tables(conn)
     sector_map = load_sector_map(conn)
+    review_frequency_days = int(promo_rules.get("review_frequency_days", 30) or 30)
 
     print("Loading daily_prices from DB...")
     raw = pd.read_sql_query(
@@ -358,7 +479,7 @@ def main() -> None:
 
     print("Computing features...")
     feats = compute_features(px, vol)
-    fwd_ret = px.pct_change(args.H).shift(-args.H)
+    fwd_ret = px.pct_change(args.H, fill_method=None).shift(-args.H)
 
     min_history = 210
     fallback_eval_dates = px.index[min_history::args.rebalance_every]
@@ -422,6 +543,8 @@ def main() -> None:
         fwd = fwd_ret.loc[dt, available_symbols]
 
         for factor in FACTOR_NAMES:
+            if factor in excluded_factors:
+                continue
             logged = logged_scores.get(factor)
             if logged is not None and dt in logged.index:
                 f_raw = logged.loc[dt].reindex(available_symbols)
@@ -473,23 +596,28 @@ def main() -> None:
         print(f"Saved {len(signal_rows):,} rows to factor_signals")
     print(f"Used {used_dates} rebalance dates after screened-universe gating")
 
-    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    logical_asof = str(args.asof_override) if args.asof_override else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now_str = f"{logical_asof}T00:00:00Z"
     audit_rows: List[dict] = []
 
     print()
     print(
-        f"{'Factor':12s}  {'IC_mean':>8s}  {'IC_std':>7s}  {'ICIR':>6s}  "
+        f"{'Factor':12s}  {'Tier':>8s}  {'IC_mean':>8s}  {'IC_std':>7s}  {'ICIR':>6s}  "
         f"{'t-stat':>7s}  {'n':>4s}  {'xs_n':>6s}  {'Guard':>6s}  {'Weight':>7s}"
     )
-    print("-" * 86)
+    print("-" * 96)
+
+    tier_transitions: List[dict] = []
 
     for factor in FACTOR_NAMES:
+        if factor in excluded_factors:
+            continue
         ics = ic_series[factor]
         if not ics:
-            # vol_z 在大盘股横截面可能全部为常数（NaN Spearman），属正常统计现象
             print(f"{factor:20s}  (IC=NaN — 横截面常数或数据缺失，该因子不具备截面预测力)")
             continue
 
+        current_tier = tier_map.get(factor, "candidate")
         ic_arr = np.array(ics)
         batch_ic_mean = float(ic_arr.mean())
         batch_ic_std = float(ic_arr.std()) if len(ic_arr) > 1 else 0.01
@@ -509,39 +637,105 @@ def main() -> None:
         upd_weight = max(0.0, upd_icir)
         new_n_obs = n_obs + len(ics)
 
-        event_type = "IC_UPDATE" if (passes and not args.shadow) else "IC_SHADOW"
+        # Tier-aware update policy:
+        #   core + t-stat pass + not global shadow -> IC_UPDATE (production weight updated)
+        #   candidate / fundamental_pending -> IC_SHADOW (always shadow, even without --shadow)
+        is_core = current_tier == "core"
+        factor_is_shadow = not is_core or args.shadow
+        event_type = "IC_UPDATE" if (passes and not factor_is_shadow) else "IC_SHADOW"
+
+        review_due, last_review_date, days_since_last_review = is_tier_review_due(
+            conn=conn,
+            factor=factor,
+            asof=now_str[:10],
+            review_frequency_days=review_frequency_days,
+        )
+        transition_event = ""
+        new_tier = current_tier
+        if review_due:
+            new_tier, transition_event = evaluate_tier_transitions(
+                factor, current_tier, t_stat, upd_ic_mean, new_n_obs, promo_rules,
+            )
+        if transition_event:
+            tier_transitions.append({
+                "factor": factor,
+                "old_tier": current_tier,
+                "new_tier": new_tier,
+                "event": transition_event,
+                "t_stat": round(t_stat, 4),
+                "ic_mean": round(upd_ic_mean, 6),
+                "n_obs": new_n_obs,
+            })
+
+        audit_notes = {
+            "t_stat": round(float(t_stat), 6),
+            "n_periods": int(len(ics)),
+            "avg_cross_section_n": round(float(avg_cross_n), 6),
+            "min_cross_section_n": int(args.min_cross_section_n),
+            "skipped_periods": int(skipped_by_factor[factor]),
+            "icir": round(float(upd_icir), 6),
+            "guard": "PASS" if passes else "FAIL",
+            "shadow": bool(factor_is_shadow),
+            "tier": current_tier,
+            "review_due": bool(review_due),
+            "review_frequency_days": int(review_frequency_days),
+            "last_review_date": last_review_date,
+            "days_since_last_review": days_since_last_review,
+        }
+        if transition_event:
+            audit_notes["tier_transition"] = transition_event
+            audit_notes["new_tier"] = new_tier
+
         audit_rows.append(
             {
                 "asof": now_str[:10],
-                "event_type": event_type,
+                "event_type": transition_event if transition_event else event_type,
                 "factor_name": factor,
                 "old_value": old["ic_mean"],
                 "new_value": batch_ic_mean,
                 "ic_value": upd_ic_mean,
-                "notes": json.dumps(
-                    {
-                        "t_stat": round(float(t_stat), 6),
-                        "n_periods": int(len(ics)),
-                        "avg_cross_section_n": round(float(avg_cross_n), 6),
-                        "min_cross_section_n": int(args.min_cross_section_n),
-                        "skipped_periods": int(skipped_by_factor[factor]),
-                        "icir": round(float(upd_icir), 6),
-                        "guard": "PASS" if passes else "FAIL",
-                        "shadow": bool(args.shadow),
-                    },
-                    ensure_ascii=False,
-                ),
+                "notes": json.dumps(audit_notes, ensure_ascii=False),
             }
         )
+        if review_due:
+            review_event = transition_event or "TIER_REVIEW"
+            review_notes = {
+                "tier": current_tier,
+                "new_tier": new_tier,
+                "review_frequency_days": int(review_frequency_days),
+                "last_review_date": last_review_date,
+                "days_since_last_review": days_since_last_review,
+                "t_stat": round(float(t_stat), 6),
+                "ic_mean": round(float(upd_ic_mean), 6),
+                "n_observations": int(new_n_obs),
+            }
+            audit_rows.append(
+                {
+                    "asof": now_str[:10],
+                    "event_type": review_event,
+                    "factor_name": factor,
+                    "old_value": old["ic_mean"],
+                    "new_value": upd_ic_mean,
+                    "ic_value": upd_ic_mean,
+                    "notes": json.dumps(review_notes, ensure_ascii=False),
+                }
+            )
 
+        tier_tag = f"[{current_tier}]"
         guard_str = "PASS" if passes else "FAIL"
+        if transition_event:
+            transition_str = f" -> {new_tier}"
+        elif review_due:
+            transition_str = " [reviewed]"
+        else:
+            transition_str = " [review_skipped]"
         print(
-            f"{factor:12s}  {batch_ic_mean:+8.4f}  {batch_ic_std:7.4f}  "
+            f"{factor:12s}  {tier_tag:>8s}  {batch_ic_mean:+8.4f}  {batch_ic_std:7.4f}  "
             f"{upd_icir:+6.3f}  {t_stat:7.2f}  {len(ics):4d}  {avg_cross_n:6.1f}  "
-            f"{guard_str}  {upd_weight:7.4f}"
+            f"{guard_str}  {upd_weight:7.4f}{transition_str}"
         )
 
-        if not args.shadow and passes:
+        if not factor_is_shadow and passes:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO factor_registry
@@ -582,6 +776,17 @@ def main() -> None:
     print(f"Learning audit: {len(audit_rows)} entries written")
     if args.shadow:
         print("Shadow mode: factor_registry weights NOT updated (run without --shadow to apply)")
+
+    if tier_transitions:
+        print()
+        print("Tier transitions detected:")
+        for tt in tier_transitions:
+            print(f"  {tt['factor']}: {tt['old_tier']} -> {tt['new_tier']} ({tt['event']}, t={tt['t_stat']}, n={tt['n_obs']})")
+    elif tier_map:
+        print("No tier transitions this run")
+
+    if excluded_factors:
+        print(f"Excluded factors (skipped): {', '.join(sorted(excluded_factors))}")
 
     conn.close()
 

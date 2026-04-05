@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-04-05
+### Added
+- **SP-03 Integration**: Landed Structured Workplan as first-class execution context.
+- `orchestrator/contracts/coding_team_arch_handoff.schema.json`: Mandatory `workplan` field added with `be_tasks` and `fe_tasks`.
+- `scripts/verify_sp03_contract.js`: New script for validating architecture handoff integrity.
+- `canary_verification/todo_app_v1/`: Reference implementation of SP-03 task list and feedback notes.
+
+### Changed
+- `configs/prompt_scripts/registry.json`: Updated `architect.system_spec.v2`, `backend.impl.v1`, and `frontend.impl.v1` to enforce SP-03 task tracking.
+- Backend/Frontend implementers now REQUIRED to include `Task Status` in their `.notes.md` referencing workplan IDs.
+
+### Fixed
+- **EPERM Resolution**: Force-cleaned `pytest` cache locks in E: drive and configured `PYTEST_ADDOPTS="-p no:cacheprovider"` to prevent future file lock collisions.
+- Normalized project directory permissions for CI/CD readiness.
+
 ## 2026-02-28
 ### Added
 - Formal quant design doc: `docs/quant_design.md`.

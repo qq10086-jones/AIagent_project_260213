@@ -400,14 +400,17 @@ def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
 
 # ── DB 数据读取 ────────────────────────────────────────────────────────────
 
-def read_live_state(db_path: str) -> dict:
+def read_live_state(db_path: str, strategy_id: str = "default") -> dict:
     """读取当前仓位、挂单、账户状态。"""
     try:
         conn = sqlite3.connect(db_path)
         cur  = conn.cursor()
 
         # 仓位
-        cur.execute("SELECT symbol, qty, avg_cost, market_price, market_value, unrealized_pnl FROM positions")
+        cur.execute(
+            "SELECT symbol, qty, avg_cost, market_price, market_value, unrealized_pnl FROM positions WHERE strategy_id=?",
+            (strategy_id,),
+        )
         positions = [
             {"symbol": r[0], "qty": r[1], "avg_cost": r[2],
              "market_price": r[3], "market_value": r[4], "unrealized_pnl": r[5]}
@@ -417,9 +420,9 @@ def read_live_state(db_path: str) -> dict:
         # 挂单（仅 proposed/open）
         cur.execute("""
             SELECT order_id, symbol, side, qty, limit_price, status, created_ts
-            FROM orders WHERE status IN ('proposed','open','pending')
+            FROM orders WHERE strategy_id=? AND status IN ('proposed','open','pending')
             ORDER BY created_ts DESC
-        """)
+        """, (strategy_id,))
         orders = [
             {"order_id": r[0], "symbol": r[1], "side": r[2],
              "qty": r[3], "limit_price": r[4], "status": r[5], "created_ts": r[6]}
@@ -427,7 +430,10 @@ def read_live_state(db_path: str) -> dict:
         ]
 
         # 账户快照
-        cur.execute("SELECT asof, nav, cash FROM account_snapshots ORDER BY ts DESC LIMIT 1")
+        cur.execute(
+            "SELECT asof, nav, cash FROM account_snapshots WHERE strategy_id=? ORDER BY ts DESC LIMIT 1",
+            (strategy_id,),
+        )
         snap = cur.fetchone()
         account = {"asof": snap[0], "nav": snap[1], "cash": snap[2]} if snap else {}
 

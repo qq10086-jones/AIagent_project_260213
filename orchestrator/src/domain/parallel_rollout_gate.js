@@ -10,11 +10,13 @@ function loadJson(filePath) {
 }
 
 function resolveConfigPath(workspaceRoot, relativePath) {
-  const candidates = [
-    resolve(workspaceRoot || "", relativePath),
-    resolve(process.cwd(), relativePath),
-    resolve(process.cwd(), "..", relativePath),
-  ];
+  const normalizedWorkspaceRoot = String(workspaceRoot || "").replace(/\\/g, "/");
+  const isLegacyWorkspaceRoot = normalizedWorkspaceRoot === "/workspace" || normalizedWorkspaceRoot.endsWith("/workspace");
+  const candidates = [resolve(workspaceRoot || "", relativePath)];
+  if (!workspaceRoot || isLegacyWorkspaceRoot) {
+    candidates.push(resolve(process.cwd(), relativePath));
+    candidates.push(resolve(process.cwd(), "..", relativePath));
+  }
   const normalized = [...new Set(candidates)];
   return normalized.find((candidate) => existsSync(candidate)) || normalized[0];
 }

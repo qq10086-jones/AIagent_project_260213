@@ -94,8 +94,26 @@ export function createTaskEnqueuer({
       }
     }
 
+    // Council unanimous deny: pre-intercept before human approval to save reviewer time
+    if (advisory && advisory.council_advice === "deny") {
+      await recordEvent(task_id, "permission.council.denied", {
+        tool_name,
+        run_id,
+        advisory_summary: advisory.advisory_summary || "",
+        reasons: advisory.reasons || [],
+      });
+      return { task_id, deduplicated: false, waiting_approval: false, council_denied: true, advisory };
+    }
+
     if (requiresApproval) {
-      await recordEvent(task_id, "approval.requested", { tool_name, run_id, reasons: risk.reasons || [] });
+      await recordEvent(task_id, "approval.requested", {
+        tool_name,
+        run_id,
+        reasons: risk.reasons || [],
+        advisory_summary: advisory?.advisory_summary || null,
+        council_advice: advisory?.council_advice || null,
+        risk_score: advisory?.risk_score ?? null,
+      });
     } else {
       const taskStream = getTaskStream(tool_name);
       await enqueueToStream(redis, taskStream, groupTask, {

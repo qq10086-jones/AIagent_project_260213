@@ -1,0 +1,46 @@
+[
+  {
+    "workflow_run_id": "633ce018-9ae3-4ff0-b2d3-5e6492f87877",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T02:35:59.931Z"
+  },
+  {
+    "workflow_run_id": "983a1a92-d14e-4927-b85f-f8dde16853e9",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T02:37:03.057Z"
+  },
+  {
+    "workflow_run_id": "bd96d46c-2d13-445c-9d74-6a863210c537",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T02:37:42.946Z"
+  },
+  {
+    "workflow_run_id": "80aca722-47aa-4dcc-ae2e-f6ad3f955867",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T02:38:01.066Z"
+  }
+]

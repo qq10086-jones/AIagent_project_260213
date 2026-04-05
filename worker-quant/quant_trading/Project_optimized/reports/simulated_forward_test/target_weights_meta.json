@@ -1,0 +1,11 @@
+{
+  "primary_mode": "sprint_momentum",
+  "asof": "2026-02-05",
+  "export_row_sum": 1.0,
+  "history_last_row_is_zero": false,
+  "last_nonzero_asof": "2026-02-05",
+  "last_nonzero_row_sum": 1.0,
+  "benchmark_state": "on",
+  "benchmark_scale": 1.0,
+  "selected_count": 1
+}

@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "method": "local_preview",
+  "preview_url": "http://localhost:13099/sim-run-a30c90c7/",
+  "branch": "nexus/sim-run-a30c90c7",
+  "commit_sha": "e16331734b22d686",
+  "files_pushed": [
+    "app.js",
+    "package.json",
+    "public/index.html",
+    "public/app.js"
+  ],
+  "deployment_status": "deployed"
+}

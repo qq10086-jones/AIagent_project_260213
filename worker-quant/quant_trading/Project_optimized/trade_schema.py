@@ -30,6 +30,108 @@ def connect(db_path: str) -> sqlite3.Connection:
     return conn
 
 
+def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> list[dict[str, Any]]:
+    return [
+        {"name": str(row[1]), "type": str(row[2]), "notnull": int(row[3]), "default": row[4], "pk": int(row[5])}
+        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    ]
+
+
+def _table_pk_columns(conn: sqlite3.Connection, table_name: str) -> list[str]:
+    cols = _table_columns(conn, table_name)
+    return [row["name"] for row in sorted((c for c in cols if c["pk"] > 0), key=lambda item: item["pk"])]
+
+
+def _rebuild_positions_for_strategy_pk(conn: sqlite3.Connection) -> None:
+    expected_pk = ["asof", "strategy_id", "symbol"]
+    if not _table_exists(conn, "positions") or _table_pk_columns(conn, "positions") == expected_pk:
+        return
+    conn.execute("ALTER TABLE positions RENAME TO positions_legacy_dual_strategy")
+    conn.execute(
+        """
+        CREATE TABLE positions (
+          asof TEXT NOT NULL,
+          strategy_id TEXT DEFAULT 'default',
+          symbol TEXT NOT NULL,
+          qty REAL NOT NULL,
+          avg_cost REAL,
+          market_price REAL,
+          market_value REAL,
+          unrealized_pnl REAL,
+          PRIMARY KEY (asof, strategy_id, symbol)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO positions(asof, strategy_id, symbol, qty, avg_cost, market_price, market_value, unrealized_pnl)
+        SELECT asof,
+               COALESCE(strategy_id, 'default'),
+               symbol,
+               qty,
+               avg_cost,
+               market_price,
+               market_value,
+               unrealized_pnl
+        FROM positions_legacy_dual_strategy
+        """
+    )
+    conn.execute("DROP TABLE positions_legacy_dual_strategy")
+
+
+def _rebuild_account_snapshots_for_strategy_pk(conn: sqlite3.Connection) -> None:
+    expected_pk = ["asof", "strategy_id"]
+    if not _table_exists(conn, "account_snapshots") or _table_pk_columns(conn, "account_snapshots") == expected_pk:
+        return
+    conn.execute("ALTER TABLE account_snapshots RENAME TO account_snapshots_legacy_dual_strategy")
+    conn.execute(
+        """
+        CREATE TABLE account_snapshots (
+          asof TEXT NOT NULL,
+          strategy_id TEXT DEFAULT 'default',
+          ts   TEXT NOT NULL,
+          run_id TEXT,
+          cash REAL NOT NULL,
+          positions_value REAL NOT NULL,
+          nav REAL NOT NULL,
+          net_trade_cashflow REAL,
+          fees REAL,
+          tax REAL,
+          notes TEXT,
+          PRIMARY KEY (asof, strategy_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO account_snapshots(
+          asof, strategy_id, ts, run_id, cash, positions_value, nav, net_trade_cashflow, fees, tax, notes
+        )
+        SELECT asof,
+               COALESCE(strategy_id, 'default'),
+               ts,
+               run_id,
+               cash,
+               positions_value,
+               nav,
+               net_trade_cashflow,
+               fees,
+               tax,
+               notes
+        FROM account_snapshots_legacy_dual_strategy
+        """
+    )
+    conn.execute("DROP TABLE account_snapshots_legacy_dual_strategy")
+
+
 def ensure_trade_tables(conn: sqlite3.Connection) -> None:
     """Create trade/audit tables if missing. Idempotent."""
 
@@ -136,6 +238,7 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS decision_runs (
           run_id TEXT PRIMARY KEY,
           asof   TEXT NOT NULL,
+          strategy_id TEXT DEFAULT 'default',
           ts     TEXT NOT NULL,
           snapshot_path TEXT,
           status TEXT,
@@ -151,6 +254,7 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
           order_id TEXT PRIMARY KEY,
           run_id   TEXT NOT NULL,
           asof     TEXT NOT NULL,
+          strategy_id TEXT DEFAULT 'default',
           symbol   TEXT NOT NULL,
           side     TEXT NOT NULL,
           qty      REAL NOT NULL,
@@ -176,6 +280,7 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
           order_id TEXT,
           run_id   TEXT NOT NULL,
           asof     TEXT NOT NULL,
+          strategy_id TEXT DEFAULT 'default',
           ts       TEXT NOT NULL,
           symbol   TEXT NOT NULL,
           side     TEXT NOT NULL,
@@ -205,13 +310,14 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS positions (
           asof TEXT NOT NULL,
+          strategy_id TEXT DEFAULT 'default',
           symbol TEXT NOT NULL,
           qty REAL NOT NULL,
           avg_cost REAL,
           market_price REAL,
           market_value REAL,
           unrealized_pnl REAL,
-          PRIMARY KEY (asof, symbol)
+          PRIMARY KEY (asof, strategy_id, symbol)
         )
         """
     )
@@ -221,7 +327,8 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS account_snapshots (
-          asof TEXT PRIMARY KEY,
+          asof TEXT NOT NULL,
+          strategy_id TEXT DEFAULT 'default',
           ts   TEXT NOT NULL,
           run_id TEXT,
           cash REAL NOT NULL,
@@ -230,7 +337,8 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
           net_trade_cashflow REAL,
           fees REAL,
           tax REAL,
-          notes TEXT
+          notes TEXT,
+          PRIMARY KEY (asof, strategy_id)
         )
         """
     )
@@ -276,6 +384,29 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE account_state ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP")
     except Exception:
         pass
+    for ddl in [
+        "ALTER TABLE decision_runs ADD COLUMN strategy_id TEXT DEFAULT 'default'",
+        "ALTER TABLE orders ADD COLUMN strategy_id TEXT DEFAULT 'default'",
+        "ALTER TABLE fills ADD COLUMN strategy_id TEXT DEFAULT 'default'",
+        "ALTER TABLE positions ADD COLUMN strategy_id TEXT DEFAULT 'default'",
+        "ALTER TABLE account_snapshots ADD COLUMN strategy_id TEXT DEFAULT 'default'",
+    ]:
+        try:
+            conn.execute(ddl)
+        except Exception:
+            pass
+    _rebuild_positions_for_strategy_pk(conn)
+    _rebuild_account_snapshots_for_strategy_pk(conn)
+    for ddl in [
+        "CREATE INDEX IF NOT EXISTS idx_orders_strategy_asof ON orders(strategy_id, asof)",
+        "CREATE INDEX IF NOT EXISTS idx_fills_strategy_asof ON fills(strategy_id, asof)",
+        "CREATE INDEX IF NOT EXISTS idx_positions_strategy_asof ON positions(strategy_id, asof)",
+        "CREATE INDEX IF NOT EXISTS idx_account_snapshots_strategy_asof ON account_snapshots(strategy_id, asof)",
+    ]:
+        try:
+            conn.execute(ddl)
+        except Exception:
+            pass
     try:
         conn.execute("ALTER TABLE fills ADD COLUMN source TEXT")
     except Exception:
@@ -561,7 +692,7 @@ def get_latest_trading_day(conn: sqlite3.Connection) -> Optional[str]:
 
 def get_run_meta(conn: sqlite3.Connection, run_id: str) -> Optional[Dict[str, Any]]:
     row = conn.execute(
-        "SELECT run_id, asof, ts, status, snapshot_path FROM decision_runs WHERE run_id=?",
+        "SELECT run_id, asof, strategy_id, ts, status, snapshot_path FROM decision_runs WHERE run_id=?",
         (run_id,),
     ).fetchone()
     if not row:
@@ -569,9 +700,10 @@ def get_run_meta(conn: sqlite3.Connection, run_id: str) -> Optional[Dict[str, An
     return {
         "run_id": row[0],
         "asof": row[1],
-        "ts": row[2],
-        "status": row[3],
-        "snapshot_path": row[4],
+        "strategy_id": row[2] or "default",
+        "ts": row[3],
+        "status": row[4],
+        "snapshot_path": row[5],
     }
 
 

@@ -6,6 +6,10 @@ import assert from "node:assert/strict";
 
 import { createStepBuilder } from "../src/domain/workflow_step_builder.js";
 
+const PROMPT_SCRIPT_REGISTRY = JSON.parse(
+  fs.readFileSync("E:/AIagent_project_260213/orchestrator/configs/prompt_scripts/registry.json", "utf8")
+);
+
 function makeWorkspace() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ocn-step-context-"));
 }
@@ -191,12 +195,7 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
   const builder = createStepBuilder({
     workspaceRoot,
     registry: { project_types: {}, acceptance_suites: {} },
-    promptScriptRegistry: {
-      scripts: {
-        "backend.impl.v2": { script_id: "backend.impl.v2", role: "backend", llm_role: "backend", validation: {} },
-        "backend.impl.v1": { script_id: "backend.impl.v1", role: "backend", llm_role: "backend", validation: {} },
-      },
-    },
+    promptScriptRegistry: PROMPT_SCRIPT_REGISTRY,
     handoffContracts: { handoffs: {} },
     runtimeConfig: {
       execution: { diff_first_enabled: true },
@@ -235,6 +234,8 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
   assert.equal(payload.execution_mode_requested, "full_file_fallback");
   assert.equal(payload.prompt_script_id, "backend.impl.v1");
   assert.deepEqual(payload.expected_artifacts, ["impl/be_changes/server.js", "impl/be_changes/package.json", "impl/be_notes.md", "handoff/be_to_fe.json"]);
+  assert.match(payload.task_prompt, /be_changes_path=\"impl\/be_changes\"/, "backend prompt should explicitly require be_changes_path");
+  assert.match(payload.task_prompt, /api_contracts=\[\.\.\.\], shared_types=\[\.\.\.\], scope_constraints=\[\.\.\.\]/, "backend prompt should pin typed handoff array fields");
 });
 
 test("generic_app impl_be injects primary_minimax_lane and uses full_file_fallback", () => {

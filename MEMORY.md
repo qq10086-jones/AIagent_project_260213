@@ -1,15 +1,22 @@
 # Nexus Beta Quality Memory
 
-Date: 2026-03-29
-Version: v1.1
+Date: 2026-04-05
+Version: v1.2
+
+## Quality Scores (PM/QA Audit)
+- **Architecture**: 9.0 / 10 (High consistency with SP-03 Contract-driven path)
+- **Code Robustness**: 6.5 / 10 (Improved validation but core decoupling ongoing)
+- **Engineering/QA**: 7.0 / 10 (EPERM resolved, task-loop closed)
+- **Overall**: 6.5 / 10 (Steady progress towards production readiness)
 
 ## Facts
 
 - Coding workflow order is:
   `pm_spec -> arch_design -> impl_be -> impl_fe -> smoke_test -> qa_verify -> release_pack -> deploy_preview`
+- **SP-03 (Task Tracking)**: `arch_design` MUST produce `plan/workplan.json`. `impl_be` and `impl_fe` MUST reference these IDs in their `.notes.md`.
 - Final runnable backend root is `impl/be_changes/`.
 - Frontend produces files under `impl/fe_changes/public/`.
-- Before smoke or release run instructions are generated, frontend static files must be assembled into `impl/be_changes/public/`.
+- **Environment**: `PYTEST_ADDOPTS` must be set to `"-p no:cacheprovider"` on Windows to avoid file lock (EPERM) issues.
 
 ## Source Of Truth
 
@@ -17,15 +24,14 @@ Version: v1.1
   - `impl/be_changes/package.json`
   - `impl/be_changes/server.js`
   - `smoke/smoke_result.json` when present
-- `impl/be_notes.md` is supporting context only.
-- Never infer tech stack from the goal description alone.
+- `impl/be_notes.md` is supporting context only, BUT must contain the `Task Status` section for audit.
 
 ## Backend Contract
 
 - `impl_be` must always produce:
   - `impl/be_changes/server.js`
   - `impl/be_changes/package.json`
-  - `impl/be_notes.md`
+  - `impl/be_notes.md` (with SP-03 Task Status)
   - `handoff/be_to_fe.json`
 - `server.js` must respect `process.env.PORT`.
 - `server.js` must serve static files from `impl/be_changes/public/`.
@@ -36,8 +42,9 @@ Version: v1.1
 - `impl_fe` must always produce:
   - `impl/fe_changes/public/index.html`
   - `impl/fe_changes/public/app.js`
-  - `impl/fe_notes.md`
+  - `impl/fe_notes.md` (with SP-03 Task Status)
 - Same-origin relative API paths only.
+
 - Do not hardcode `localhost` in FE runtime calls.
 
 ## Smoke Test

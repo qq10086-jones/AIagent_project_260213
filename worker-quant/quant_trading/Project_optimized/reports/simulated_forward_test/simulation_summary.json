@@ -1,0 +1,55 @@
+{
+  "mode": "accelerated_forward",
+  "db_path": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\state\\simulated_forward_test\\japan_market_sim.db",
+  "reports_dir": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\reports\\simulated_forward_test",
+  "artifacts_dir": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\artifacts\\simulated_forward_test",
+  "state_dir": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\state\\simulated_forward_test",
+  "start_asof": "2026-02-03",
+  "end_asof": "2026-02-05",
+  "completed_days": 3,
+  "failed_days": 0,
+  "last_completed_asof": "2026-02-05",
+  "current_asof": null,
+  "updated_at_utc": "2026-04-04T15:53:21+00:00",
+  "last_run": {
+    "asof": "2026-02-05",
+    "returncode": 0,
+    "status": "completed"
+  },
+  "news_shadow": {
+    "asof": "2026-02-05",
+    "simulation": true,
+    "shadow_only": true,
+    "news_risk": "LOW",
+    "macro_sentiment": 0.0,
+    "would_have_applied": false,
+    "effective_sprint_gating": false,
+    "required_days": 30,
+    "observed_days": 3,
+    "remaining_days": 27,
+    "ready_for_gating_review": false,
+    "window_start_asof": "2026-02-03",
+    "window_end_asof": "2026-02-05",
+    "would_have_applied_days": 0,
+    "avg_macro_sentiment": 0.0,
+    "latest_observation": {
+      "asof": "2026-02-05",
+      "macro_sentiment": 0.0,
+      "news_risk": "LOW",
+      "would_have_applied": false
+    }
+  },
+  "promotion": {},
+  "latest_runtime_event": {
+    "ts_utc": "2026-04-04T15:53:20+00:00",
+    "level": "info",
+    "event": "sprint_followup_skipped",
+    "simulation": true,
+    "simulation_mode": "accelerated_forward",
+    "simulation_asof": "2026-02-05",
+    "simulation_state_path": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\state\\simulated_forward_test\\simulation_state.json",
+    "simulation_strict_pit": true,
+    "strategy_id": "sprint",
+    "reason": "harvest_specific_reports"
+  }
+}

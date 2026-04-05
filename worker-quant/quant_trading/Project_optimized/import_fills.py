@@ -99,6 +99,7 @@ def import_fills_df(
     venue: str = "SBI",
     force: bool = False,
     source: str = "manual_import",
+    strategy_id: str = "default",
 ) -> int:
     """Import fills into DB. Returns inserted row count."""
     ensure_trade_tables(conn)
@@ -149,15 +150,16 @@ def import_fills_df(
             conn.execute(
                 """
                 INSERT OR REPLACE INTO fills(
-                  fill_id, order_id, run_id, asof, ts, symbol, side, qty, price, fee, tax, venue, external_ref, source,
+                  fill_id, order_id, run_id, asof, strategy_id, ts, symbol, side, qty, price, fee, tax, venue, external_ref, source,
                   price_source, price_ts, price_mode, quote_open, quote_high, quote_low, quote_close, price_validated, validation_note
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     fill_id,
                     order_id,
                     run_id,
                     asof,
+                    strategy_id,
                     row["ts"],
                     row["symbol"],
                     row["side"],
@@ -209,9 +211,18 @@ def main():
         ensure_trade_tables(conn)
         meta = get_run_meta(conn, args.run_id)
         asof = args.asof or (meta.get("asof") if meta else None)
+        strategy_id = str((meta or {}).get("strategy_id", "default") or "default")
         if not asof:
             raise ValueError("asof is required (pass --asof or ensure decision_runs has asof for this run_id)")
-        n = import_fills_df(conn, args.run_id, asof, df, venue=args.venue, force=args.force)
+        n = import_fills_df(
+            conn,
+            args.run_id,
+            asof,
+            df,
+            venue=args.venue,
+            force=args.force,
+            strategy_id=strategy_id,
+        )
         print(f"✅ 成功导入: {n} 行数据到数据库。run_id={args.run_id} asof={asof}")
     except Exception as e:
         print(f"❌ 数据库操作失败: {e}")

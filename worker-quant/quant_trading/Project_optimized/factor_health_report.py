@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from compute_ic import load_factor_tiers, load_promotion_rules
 from evaluate_promotion import MODE_FACTOR_FAMILIES, _learning_gate_stats, _safe_float
 
 
@@ -47,25 +48,55 @@ def build_report(db_path: str, reports_dir: Path, target_mode: str) -> dict:
         columns=["family", "factor_count", "observed_factor_count", "mean_ic", "mean_t_stat", "positive_ic_ratio", "coverage_ratio"]
     )
 
+    tier_map = load_factor_tiers()
+    promo_rules = load_promotion_rules()
+    min_promo_obs = int(promo_rules.get("min_observations", 100))
+    min_promo_t = float(promo_rules.get("min_t_stat", 1.5))
+    min_promo_ic = float(promo_rules.get("min_ic_mean", 0.01))
+    demote_t = float(promo_rules.get("demotion_t_stat", 0.5))
+
     factor_rows = []
     for family_name in ["technical", "risk_adjusted", "fundamental"]:
         metrics = learning_stats.get("family_metrics", {}).get(family_name, {})
         for row in metrics.get("factors", []):
             n_obs = int(row.get("n_observations", 0) or 0)
             guard = row.get("guard")
+            factor_name = row.get("factor_name", "")
+            tier = tier_map.get(factor_name, "candidate")
+            ic_mean = _safe_float(row.get("ic_mean"))
+            t_stat_val = _safe_float(row.get("t_stat"))
+
+            # promotion_eligible: candidate/fundamental_pending that meets all promotion criteria
+            promotion_eligible = (
+                tier in ("candidate", "fundamental_pending")
+                and n_obs >= min_promo_obs
+                and t_stat_val >= min_promo_t
+                and abs(ic_mean) >= min_promo_ic
+            )
+            # demotion_risk: core factor with t-stat below demotion threshold
+            demotion_risk = (
+                tier == "core"
+                and n_obs >= min_promo_obs
+                and t_stat_val < demote_t
+            )
+
             factor_rows.append(
                 {
                     "family": family_name,
-                    "factor_name": row.get("factor_name"),
-                    "ic_mean": _safe_float(row.get("ic_mean")),
-                    "t_stat": _safe_float(row.get("t_stat")),
+                    "factor_name": factor_name,
+                    "tier": tier,
+                    "ic_mean": ic_mean,
+                    "t_stat": t_stat_val,
                     "guard": guard,
                     "n_observations": n_obs,
                     "production_eligible": bool(str(guard) == "PASS" and n_obs >= MIN_PRODUCTION_OBS),
+                    "promotion_eligible": promotion_eligible,
+                    "demotion_risk": demotion_risk,
                 }
             )
     factor_df = pd.DataFrame(factor_rows).sort_values(["family", "factor_name"]) if factor_rows else pd.DataFrame(
-        columns=["family", "factor_name", "ic_mean", "t_stat", "guard", "n_observations", "production_eligible"]
+        columns=["family", "factor_name", "tier", "ic_mean", "t_stat", "guard", "n_observations",
+                 "production_eligible", "promotion_eligible", "demotion_risk"]
     )
 
     eligible_factors = (
@@ -188,9 +219,15 @@ def build_report(db_path: str, reports_dir: Path, target_mode: str) -> dict:
         lines.append("No factor-level metrics available.")
     else:
         for _, row in factor_df.iterrows():
+            flags = []
+            if row.get("promotion_eligible"):
+                flags.append("PROMO_READY")
+            if row.get("demotion_risk"):
+                flags.append("DEMOTE_RISK")
+            flag_str = f" [{', '.join(flags)}]" if flags else ""
             lines.append(
-                f"- {row['factor_name']} | family={row['family']} | guard={row['guard']} | "
-                f"obs={int(row['n_observations'])} | eligible={bool(row['production_eligible'])}"
+                f"- {row['factor_name']} | tier={row.get('tier', '?')} | family={row['family']} | guard={row['guard']} | "
+                f"obs={int(row['n_observations'])} | eligible={bool(row['production_eligible'])}{flag_str}"
             )
     (reports_dir / "factor_health_report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     cleanup_lines = [

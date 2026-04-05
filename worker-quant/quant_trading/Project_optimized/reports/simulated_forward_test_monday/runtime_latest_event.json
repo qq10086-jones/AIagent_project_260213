@@ -1,0 +1,12 @@
+{
+  "ts_utc": "2026-04-04T15:57:06+00:00",
+  "level": "info",
+  "event": "sprint_followup_skipped",
+  "simulation": true,
+  "simulation_mode": "accelerated_forward",
+  "simulation_asof": "2026-02-02",
+  "simulation_state_path": "E:\\AIagent_project_260213\\worker-quant\\quant_trading\\Project_optimized\\state\\simulated_forward_test_monday\\simulation_state.json",
+  "simulation_strict_pit": true,
+  "strategy_id": "sprint",
+  "reason": "harvest_specific_reports"
+}

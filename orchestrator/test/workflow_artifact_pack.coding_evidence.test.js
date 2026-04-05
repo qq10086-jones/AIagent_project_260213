@@ -18,7 +18,7 @@ async function main() {
     project_type: "webapp_crm",
   };
 
-  const releaseRoot = path.join(workspaceRoot, "artifacts", "release", run.run_id);
+  const releaseRoot = path.join(workspaceRoot, "runtime", "artifacts", "release", run.run_id);
   fs.mkdirSync(path.join(releaseRoot, "summary"), { recursive: true });
   fs.mkdirSync(path.join(releaseRoot, "smoke"), { recursive: true });
   fs.mkdirSync(path.join(releaseRoot, "impl", "fe_changes", "public"), { recursive: true });
@@ -163,7 +163,7 @@ async function main() {
   assert.equal(manifest.runtime_evidence_summary.smoke_verdict, "pass");
   assert.equal(manifest.runtime_evidence_summary.smoke_root_status, 200);
   assert.equal(manifest.runtime_evidence_summary.smoke_api_status, 200);
-  assert.equal(manifest.runtime_evidence.smoke.path, `artifacts/release/${run.run_id}/smoke/smoke_result.json`);
+  assert.equal(manifest.runtime_evidence.smoke.path, `runtime/artifacts/release/${run.run_id}/smoke/smoke_result.json`);
   assert.match(summary, /Runtime Evidence/);
   assert.match(summary, /superpowers_configured_steps: 1/);
   assert.match(summary, /superpowers_steps_used: 1/);

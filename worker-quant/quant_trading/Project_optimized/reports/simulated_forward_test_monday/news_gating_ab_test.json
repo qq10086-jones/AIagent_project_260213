@@ -1,0 +1,10 @@
+{
+  "asof": "2026-02-02",
+  "simulation": true,
+  "with_news_gating_selected_count": 0,
+  "without_news_gating_selected_count": 0,
+  "news_risk": "LOW",
+  "macro_sentiment": 0.0,
+  "effective_sprint_gating": false,
+  "shadow_ready_for_gating_review": false
+}

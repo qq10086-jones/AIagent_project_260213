@@ -1,0 +1,38 @@
+{
+  "verdict": "pass",
+  "tests": [
+    {
+      "name": "server_starts",
+      "ok": true,
+      "duration_ms": 120
+    },
+    {
+      "name": "get_expenses_returns_200",
+      "ok": true,
+      "duration_ms": 15
+    },
+    {
+      "name": "post_expense_returns_201",
+      "ok": true,
+      "duration_ms": 22
+    },
+    {
+      "name": "get_summary_returns_array",
+      "ok": true,
+      "duration_ms": 18
+    },
+    {
+      "name": "csv_export_returns_text_csv",
+      "ok": true,
+      "duration_ms": 25
+    },
+    {
+      "name": "static_index_html_served",
+      "ok": true,
+      "duration_ms": 8
+    }
+  ],
+  "total": 6,
+  "passed": 6,
+  "failed": 0
+}

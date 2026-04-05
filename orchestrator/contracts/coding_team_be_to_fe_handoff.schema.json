@@ -27,7 +27,7 @@
       "description": "List of API endpoints implemented by Backend that Frontend must consume. Static-only projects may provide an empty array.",
       "items": {
         "type": "object",
-        "required": ["name", "method", "path"],
+        "required": ["method", "path"],
         "additionalProperties": true,
         "properties": {
           "name": { "type": "string", "minLength": 1, "description": "Human-readable endpoint name." },

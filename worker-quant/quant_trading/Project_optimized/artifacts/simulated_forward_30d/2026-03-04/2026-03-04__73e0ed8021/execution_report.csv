@@ -1,0 +1,3 @@
+﻿order_id,symbol,side,qty,order_type,limit_price,expected_value,status,created_ts,fill_qty,fill_notional,fee,tax,n_fills,vwap,qty_diff
+2026-03-04__73e0ed8021__001,4005.T,SELL,100.0,MKT,,47529.998779296875,filled,2026-04-05T01:15:01,100.0,47506.2338,47.506234,0.0,1,475.062338,0.0
+2026-03-04__73e0ed8021__000,5401.T,SELL,100.0,MKT,,60520.001220703125,filled,2026-04-05T01:15:01,100.0,60489.741200000004,60.489741,0.0,1,604.897412,0.0

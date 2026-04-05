@@ -177,3 +177,98 @@ The comparison report now includes actionable status, last non-zero asof, and sh
 
 Status note:
 `factor_health_report.py` now emits `factor_registry_cleanup_candidates.csv` and cleanup reports. Current production-eligible factor set contains only `mom_consist`; `ret20`, `rsi14`, `slope60`, and `vol_adj_mom20` are marked as exclusion candidates.
+
+## Production Risk Closure Tasks Added After Review (2026-04-03)
+
+These tasks are promoted ahead of broader model-improvement work. The current blocker is
+not pipeline survivability; it is incomplete risk-control closure.
+
+### [P0] R5. Upgrade stop-loss from detection to executable control
+
+- [x] **R5-1** Refactor `ss7_sqlite_news_overlay.py` so a stop-loss trigger creates an
+  explicit flatten action, not only a zero target-weight suggestion inside rebalance flow.
+- [x] **R5-2** Ensure the same stop-loss semantics are reflected consistently in
+  backtest stats, paper execution artifacts, and live trade advice outputs.
+- [ ] **R5-3** Add operator-facing fields that make stop-loss exits auditable:
+  `stop_exit_reason`, `stop_exit_price_ref`, `stop_exit_mode`, `stop_exit_triggered_at`.
+- [x] **R5-4** Add tests proving a triggered stop exits exposure even when the rest of the
+  optimizer would otherwise keep the position.
+
+Status target:
+Stop-loss should become a hard execution control with traceable evidence, not a soft
+portfolio preference.
+
+### [P0] R6. Enforce concentration limits as hard invariants
+
+- [x] **R6-1** Apply `max_single_position_pct` after optimizer output and renormalize only
+  within the allowed feasible region.
+- [x] **R6-2** Recheck both `max_single_position_pct` and `max_sector_weight` inside
+  `make_decision.py` before orders are proposed.
+- [x] **R6-3** Emit QA diagnostics showing the pre-cap and post-cap top weights plus any
+  violation that would have occurred without the hard guard.
+- [x] **R6-4** Add tests covering optimizer output, decision packaging, and live advice so
+  no downstream step can reintroduce an over-cap position.
+
+Status target:
+Single-name and sector concentration must be impossible by construction, not only
+discouraged by optimizer shape.
+
+### [P0] R7. Turn prolonged zero exposure into an operational response
+
+- [x] **R7-1** Add an alert path when `latest_zero_exposure_days` exceeds
+  `promotion.max_zero_exposure_days`.
+- [x] **R7-2** Classify the dominant zero-exposure cause explicitly:
+  `benchmark_regime`, `news_overlay`, `all_signal_weights_zero`, `lot/min_trade`, or
+  `risk-control_exit`.
+- [x] **R7-3** Add configurable fallback behavior so the runtime can drop to a safer
+  baseline path when zero exposure persists beyond the allowed window.
+- [x] **R7-4** Ensure `evaluate_promotion.py`, daily reports, and decision artifacts all
+  surface the alert/fallback state consistently.
+
+Status target:
+Repeated `paper_no_orders` days should be visible and actionable, not merely recorded.
+
+### [P1] R8. Reconcile governance text with current production truth
+
+- [x] **R8-1** Update operator-facing docs to state clearly that the current production
+  blocker is risk-control closure, not just factor expansion.
+- [ ] **R8-2** Keep mode-promotion work behind R5-R7 completion unless a new actionable
+  mode demonstrates non-zero weights with passing risk controls.
+- [x] **R8-3** Re-open the `available_ts` / PIT fail-closed review after the P0 risk tasks
+  are in place, so data-integrity fixes do not get buried under runtime noise.
+
+## 8.5+ Scorecard Tasks Added (2026-04-03)
+
+Reference governance:
+`docs/governance/GOVERNANCE_v1_85_SCORECARD.md`
+
+### [P0] S1. Raise the weakest dimensions above 8.5 with evidence, not narrative
+
+- [ ] **S1-1** Risk management:
+  add stop-loss audit fields and verify benchmark regime does not collapse reduced-risk
+  exposure into permanent flat mode.
+- [x] **S1-2** Execution quality:
+  eliminate repeated `paper_no_orders` as the default state for all compared modes.
+- [x] **S1-3** Signal quality:
+  produce at least one actionable mode with non-zero latest target weights.
+- [ ] **S1-4** Data quality:
+  resolve `available_ts` / PIT fail-closed policy for live-scoring inputs.
+- [x] **S1-5** Operations maturity:
+  replace pure print-based runtime narration with structured logging and machine-readable
+  alert outputs.
+
+### [P1] S2. Evidence-complete upgrade path
+
+- [x] **S2-1** Align production governance with the governed live factor subset so
+  `t-stat` is measured on active production factors rather than the full theoretical
+  family list.
+- [x] **S2-2** Add a documented `backtest_sharpe_tolerance` config path and pass it
+  through `daily_run.py -> evaluate_promotion.py` so near-threshold Sharpe decisions are
+  explicit and reproducible.
+- [ ] **S2-3** Add stop-loss audit fields to daily artifacts and reports.
+- [ ] **S2-4** Add external notification delivery on top of runtime JSONL alerts.
+
+- [ ] **S2-1** Add a release checklist that maps each dimension to tests, reports, and
+  runtime evidence.
+- [ ] **S2-2** Do not claim `8.5+` in any dimension unless the latest reports satisfy the
+  corresponding governance thresholds.

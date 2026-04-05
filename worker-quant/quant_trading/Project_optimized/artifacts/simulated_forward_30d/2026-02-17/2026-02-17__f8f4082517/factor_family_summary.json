@@ -1,0 +1,26 @@
+{
+  "target_mode": "sprint_momentum",
+  "families": {
+    "price": {
+      "configured_factor_count": 15,
+      "active_factor_count": 15,
+      "is_active_in_mode": true,
+      "portfolio_weighted_score": 1.231653667943533e-16,
+      "top_symbol": "4005.T"
+    },
+    "risk_adjusted": {
+      "configured_factor_count": 4,
+      "active_factor_count": 4,
+      "is_active_in_mode": false,
+      "portfolio_weighted_score": -1.249000902703301e-16,
+      "top_symbol": "7201.T"
+    },
+    "fundamental": {
+      "configured_factor_count": 10,
+      "active_factor_count": 0,
+      "is_active_in_mode": false,
+      "portfolio_weighted_score": 0.0,
+      "top_symbol": "7201.T"
+    }
+  }
+}

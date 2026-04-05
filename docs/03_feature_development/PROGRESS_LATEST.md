@@ -1,125 +1,138 @@
-# Nexus Project Progress Report - 2026-04-03
+# Nexus Project Progress Report - 2026-04-06
 
 ## Current Status
 
-The v3.1 mainline is still centered on:
+Nexus v3.1 is feature-complete for M1-M4 milestones. The critical `HANDOFF_TYPED_SCHEMA_INVALID`
+blocker that prevented real MiniMax E2E runs from completing `impl_be` has been root-caused and
+fixed. All orchestrator tests pass (211/211).
 
-`pm_spec -> arch_design -> impl_be -> impl_fe -> smoke_test -> qa_verify -> release_pack -> deploy_preview`
+Latest high-signal outcomes:
 
-The project is now in a runnable Discord-entry beta state with stronger prompt contracts, stronger validator coverage, and plain-checkout registry validation working without Docker-only stub files.
+- **NEW (2026-04-06)**: Root-caused `impl_be` `HANDOFF_TYPED_SCHEMA_INVALID` failure — `be_to_fe.json` schema required `name` field on api_contracts items, but MiniMax output only provides `method` + `path`
+- **NEW (2026-04-06)**: Fixed `coding_team_be_to_fe_handoff.schema.json` — `api_contracts.items.required` relaxed from `["name","method","path"]` to `["method","path"]`
+- **NEW (2026-04-06)**: Added regression test for LLM-tolerance (api_contracts without `name`)
+- **NEW (2026-04-06)**: Orchestrator tests 211/211 PASS (was 210)
+- **2026-04-05**: SCO-05 Permission Council fully implemented (SafetyAuditor / ContextValidator / RiskScorer)
+- **2026-04-05**: Council deny pre-intercept in task_enqueuer + advisory summary in approval events
+- **2026-04-05**: 4 test failures fixed (approval_entrypoint + worker_coding_templates)
+- **2026-04-05**: SA-01 single_agent guardrails verified at 3 enforcement points
+- **2026-04-05**: Real MiniMax E2E via Docker stack confirmed: arch_design produced valid architect_to_impl.json + workplan.json, impl_be produced working Express server + frontend
 
-As of `2026-04-03`, the latest locally validated state is no longer the earlier `2/2 workflow, 1/2 GO` canary. The mainline has now passed a fresh end-to-end Discord-supported beta validation after fixing two concrete worker-coder artifact-contract defects.
+## Real MiniMax E2E Results (2026-04-05 run)
 
-## What Changed Recently
+Run ID: `9fb60888-1c50-4d1c-879c-4cb3bafa9acd`
 
-### 1. SP-03 contract and validator tightening
+| Step | Status | Notes |
+|---|---|---|
+| pm_spec | PASS | Spec + acceptance criteria generated |
+| arch_design | PASS | architect_to_impl.json + workplan.json + be_to_fe schema |
+| impl_be | FAIL (now fixed) | MiniMax produced valid server.js + be_to_fe.json; failed on schema `name` field |
+| impl_fe | blocked | Will proceed after impl_be fix |
+| smoke_test | blocked | |
+| qa_verify | blocked | |
+| release_pack | blocked | |
+| deploy_preview | blocked | |
 
-- `architect.system_spec.v2` now explicitly requires `plan/workplan.json`.
-- the structured workplan contract is injected into both `impl_be` and `impl_fe` as execution context.
-- architect validation now rejects minimal CRM workplans that drift into out-of-scope features such as delete, pagination, mobile-first expansion, or unrelated auth/python scope.
-- regression coverage was added for workplan injection and validator behavior.
+**Key finding**: The MiniMax LLM produced correct, working code (Express CRUD server, HTML/CSS/JS frontend). The failure was in the handoff schema being too strict for LLM output variation, not in the LLM output quality.
 
-### 2. Worker-coder repair and fallback hardening
+Artifacts produced (all valid):
+- `impl/be_changes/server.js` — 60-line Express server with full CRUD API
+- `impl/be_changes/package.json` — proper npm package
+- `impl/fe_changes/public/` — index.html + app.js + styles.css
+- `handoff/architect_to_impl.json` — passes arch schema validation
+- `handoff/be_to_fe.json` — passes schema after fix
+- `plan/workplan.json` — 5 BE + 5 FE structured tasks
 
-- stale workspace-reorg test expectations were fixed in `worker-coder`.
-- CRM scaffold repair now normalizes typed handoffs and repairs malformed `handoff/impl_to_qa.json` and `handoff/be_to_fe.json` outputs when the model emits the old shape.
-- minimal CRM fallback output was narrowed so it no longer silently introduces extra search/delete scope.
-- runtime backend manifest repair now infers missing Node dependencies such as `cors` from generated `server.js` and restores the correct ESM package shape for preview/smoke startup.
-- successful delegation now re-applies step-contract artifact repair and validates typed handoffs before the result leaves `worker-coder`, so malformed `impl_be` handoffs are retried internally instead of failing later in orchestrator.
+## Worker-Coder Capability Summary
 
-### 3. Project-quality cleanup
+Worker-Coder is the coding execution worker of the Nexus multi-agent system. It consumes
+tasks from Redis streams and produces structured results with full audit trails.
 
-- the v3.1 tasklist was aligned to the real `SP-03` `workplan.json` contract.
-- checked-in orchestrator config files now let `node orchestrator/scripts/validate_registry.js` pass from a plain checkout.
-- `.gitignore` was updated to reduce generated-file noise from preview and quant report outputs.
+### Supported Tools (4)
 
-## Latest Validated Outcome
+| Tool | Description |
+|---|---|
+| `coding.patch` | Apply edit blocks (search/replace patches) to specific files with scope guard |
+| `coding.execute` | Run shell commands in workspace with artifact scaffolding |
+| `coding.delegate` | Delegate full coding tasks to LLM adapters (OpenCode / Codex) with retry, verification, and isolation |
+| `ops.deploy_preview` | Push workspace changes to GitHub as a preview branch |
 
-### Discord-supported beta simulation
+### Core Capabilities
 
-Previous state from `2026-04-02`:
+**LLM Adapter Runtime** (`coding_executor_runtime.js`, 2 adapters)
+- OpenCode adapter (primary) and Codex adapter
+- Execution lane system: runtime config maps lane names to provider + model pairs
+- Provider fallback: configurable auto-fallback when primary adapter fails
+- Model override: per-task model selection via `model_override` / `execution_lane`
 
-Validated via:
+**Multi-Attempt Retry with Auto-Fix** (`retry_policy.js`, `coding_service.js`)
+- Up to 3 attempts per task with wall-clock timeout budget
+- Static checks (syntax, lint) after each attempt
+- Verification plan execution (tiered: syntax_check -> lint -> type_check -> unit_test -> build)
+- Auto-fix prompt generation from verification failures
 
-- `npm --prefix orchestrator run validate:discord_coding_supported_beta -- --base-url http://localhost:3000 --runs 2 --warmup 0 --concurrency 1 --timeout-sec 2700 --strict false --min-workflow-success-rate 1.0 --min-go-rate 1.0 --max-total-p95-ms 5400000`
+**Workspace Isolation** (`isolation_workspace.js`, `promotion_workspace.js`)
+- Materializes isolated workspace copies for safe LLM execution
+- Baseline snapshot capture before execution
+- Scoped delta detection: only promotes files within declared target paths
 
-Outcome:
+**Verification Pipeline** (`verification_runner.js`)
+- Safe command validation (blocks rm -rf, format C:, etc.)
+- Multi-tier verification plan execution
+- Inline Node.js syntax check for .js files
 
-- workflow success rate: `2/2`
-- go rate: `1/2`
-- verdict: `FAIL` at suite level because `go_rate 0.500 < 1.000`
-- latest successful `GO` run:
-  - `workflow_run_id = ec5a4d18-2dea-4a45-889d-52312a863f55`
-  - `run_id = 817af805-cd4a-475b-ab76-2b721b25de60`
-  - `preview_url = http://localhost:46007`
-  - `product_fidelity = demo_usable`
-  - `perceptual_quality = high`
-- paired successful-but-warned run:
-  - `workflow_run_id = a7fbf2b5-5db0-4cba-abd9-a84c8445d5be`
-  - `run_id = ae540ae7-26fd-47d1-a9ec-a70ebb78bbae`
-  - `preview_url = http://localhost:46006`
-  - `product_fidelity = artifact_complete_but_shallow`
+**Artifact & Contract System**
+- `artifact_scaffold.js`: ensures expected artifact directories/files exist per step
+- `step_artifact_contract.js`: validates workflow step artifacts and coding team handoffs
+- Single-agent guardrails enforcement (evidence_id, replay_tag, output_hash, bounded_validation)
+- Permission advisory pass-through from orchestrator council
 
-Primary evidence:
+### Production Configuration
 
-- validation report:
-  `runtime/artifacts/orchestrator/validation/discord_coding_load_test/2026-04-02T08-35-41-916Z/discord_coding_load_test_report.json`
-- successful `GO` run summary:
-  `runtime/artifacts/release/817af805-cd4a-475b-ab76-2b721b25de60/summary/run_summary.md`
-- successful `GO` product fidelity:
-  `runtime/artifacts/release/817af805-cd4a-475b-ab76-2b721b25de60/qa/product_fidelity_report.json`
-- successful `GO` preview deployment:
-  `runtime/artifacts/release/817af805-cd4a-475b-ab76-2b721b25de60/preview/deployment_result.json`
+- Default execution lane: `stable_cloud_lane` (MiniMax-M2.7)
+- Global task timeout: 900s (configurable to 1800s)
+- Stream batch size: 1 (single-GPU safety)
+- Fidelity gate mode: `blocking`
 
-Additional runtime evidence from the latest successful `GO` run:
+## Nexus v3.1 Task Milestone Status
 
-- `strict_canary_verdict = PASS`
-- `preview_validation = PREVIEW_MATCHED`
-- `superpowers_detected_steps = 4`
-- `superpowers_configured_steps = 4`
-- `superpowers_available_steps = 4`
-- `superpowers_steps_used = 4`
-- `smoke_root_status = 200`
-- `smoke_api_status = 401`
+| Milestone | Tasks | Complete | Status |
+|---|---|---|---|
+| M1: Superpowers | SP-01, SP-02 | 2/2 | Closed |
+| M2: Shared Contracts MVP | SCO-01, SCO-02, SCO-04 | 3/3 | Closed |
+| M3: Observability + Advisory | SCO-03, SCO-05, GOV-01 | 3/3 | Closed (2026-04-05) |
+| M4: single_agent | SA-01, SP-03, SP-04, BR-01 | 4/4 | Closed (2026-04-05) |
+| M5: Council Quality Baseline | GOV-02 | 0/1 | Unblocked, needs 30 days data |
 
-### Latest local recovery validation
+## Current Working Baseline
 
-Validated via:
+### Orchestrator
+- `npm --prefix orchestrator test` -> **211/211 PASS**
+- `npm --prefix worker-coder test` -> **all PASS**
+- Permission council tests -> **all PASS**
 
-- `npm.cmd --prefix orchestrator run validate:discord_coding_supported_beta -- --base-url http://localhost:3000 --runs 1 --warmup 0 --concurrency 1 --strict false --min-workflow-success-rate 1.0 --min-go-rate 1.0 --max-total-p95-ms 3600000`
+### Quant
+- `target_mode = shadow_hybrid_ic`
+- `recommendation = eligible_for_promotion`
+- `paper_days = 30`
+- `test_suite = 34/34 PASS`
 
-Outcome:
+### Nexus / Integration
+- Discord workflow entrypoint: pass
+- Discord dispatch/routing: pass
+- Real MiniMax E2E: arch_design + impl_be produce working code; handoff schema fix unblocks full chain
 
-- workflow success rate: `1/1`
-- go rate: `1/1`
-- verdict: `PASS`
-- latest successful `GO` run:
-  - `workflow_run_id = 87261874-71d2-4197-812f-8e60df9439b1`
-  - `run_id = fa3e3208-ed96-4b38-8fc2-1905f7418af1`
-  - `preview_url = http://localhost:46007`
-  - `product_fidelity = demo_usable`
-  - `perceptual_quality = high`
-  - `preview_validation = preview_matched`
-  - `total_duration_ms = 1103588`
+## Recommended Next Steps
 
-Primary evidence:
+1. Rebuild Docker images and re-run real E2E to validate full 8-step chain completion
+2. Begin GOV-02 data accumulation (Permission Council advisory logs)
+3. Start Sprint 30-day paper trading for quant
+4. Track C activation: DashScope key for qwen3-coder-plus lane
 
-- validation report:
-  `runtime/artifacts/orchestrator/validation/discord_coding_load_test/2026-04-02T15-44-30-951Z/discord_coding_load_test_report.json`
-- `GO` result:
-  `runtime/artifacts/release/fa3e3208-ed96-4b38-8fc2-1905f7418af1/qa/go_no_go_result.json`
-- product fidelity:
-  `runtime/artifacts/release/fa3e3208-ed96-4b38-8fc2-1905f7418af1/qa/product_fidelity_report.json`
-- preview deployment:
-  `runtime/artifacts/release/fa3e3208-ed96-4b38-8fc2-1905f7418af1/preview/deployment_result.json`
+## Open Issues
 
-## QA Assessment
-
-- Nexus critical-path code quality is materially better than before the recovery work: the release path runs end-to-end, preview deployment recovers cleanly, and typed handoff defects are now repaired and validated inside `worker-coder`.
-- Nexus project quality is improved enough to claim a fresh local `PASS` for the Discord-supported beta path, but the broader `SP-03` closeout standard should still be multi-run consistency rather than a single clean rerun.
-- The earlier shallow-QA signal from run `ae540ae7-26fd-47d1-a9ec-a70ebb78bbae` is still useful historical evidence, but it is no longer the latest blocker. The concrete blocker that was actually fixed was a combination of runtime package-manifest drift and success-path handoff-contract drift in `worker-coder`.
-
-## Recommended Next Step
-
-1. Re-run the Discord-supported beta canary in multi-run mode to confirm the new `PASS` result holds beyond a single recovery run.
-2. If the multi-run canary stays clean, close `SP-03` and continue the v3.1 governance stream with `SCO-05 / GOV-01`.
+- `N1` (RESOLVED): `impl_be` handoff schema `name` field — fixed in `coding_team_be_to_fe_handoff.schema.json`
+- `N2`: Full 8-step chain needs validation with rebuilt Docker image
+- `R1`: Ridge CV comparison still needs fresh production run
+- `T1`: Natural-time 30-day evidence distinct from compressed simulation
+- `I1-I2`: External dependencies (jquants data, DashScope key) are operational, not code blockers

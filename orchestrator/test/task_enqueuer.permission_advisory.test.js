@@ -60,6 +60,107 @@ async function main() {
   const streamPayload = JSON.parse(streamWrites[0].message.payload);
   assert.equal(streamPayload.permission_advisory.council_advice, "allow");
 
+  // --- Council deny pre-intercept ---
+  const denyEvents = [];
+  const denyUpserted = [];
+  const denyStreamWrites = [];
+
+  const denyEnqueuer = createTaskEnqueuer({
+    pool: {},
+    redis: {},
+    registry: {},
+    analyzeTaskRisk: () => ({ risk_level: "high", requires_approval: true, reasons: ["destructive_command"] }),
+    validateTaskInputAgainstRegistry: () => ({ ok: true, errors: [] }),
+    getToolSpec: () => ({}),
+    upsertTask: async (task) => { denyUpserted.push(task); },
+    getTaskStream: () => "stream:task:coding",
+    findTaskIdByIdempotencyKey: async () => null,
+    enqueueToStream: async (_redis, stream, group, message) => {
+      denyStreamWrites.push({ stream, group, message });
+    },
+    bindTaskToContext: () => {},
+    recordEvent: async (taskId, eventType, payload) => {
+      denyEvents.push({ taskId, eventType, payload });
+    },
+    insertWorkflowDefinition: async () => {},
+    makeIdempotencyKey: () => "idem-deny-1",
+    groupTask: "cg:workers",
+    evaluatePermissionAdvisory: () => ({
+      council_advice: "deny",
+      safety_verdict: "deny",
+      context_verdict: "sufficient",
+      risk_level: "high",
+      risk_score: 0.98,
+      advisory_summary: "Critical risk indicators detected: destructive_command",
+      reasons: ["destructive_command"],
+      duration_ms: 2,
+    }),
+    insertPermissionAuditRecord: async () => {},
+  });
+
+  const denied = await denyEnqueuer.enqueueTask({
+    tool_name: "coding.execute",
+    payload: { command: "rm -rf /" },
+    run_id: "run-deny-1",
+    context: null,
+  });
+
+  assert.equal(denied.council_denied, true);
+  assert.equal(denied.waiting_approval, false);
+  assert.equal(denied.advisory?.council_advice, "deny");
+  assert.equal(denyStreamWrites.length, 0, "deny should not enqueue to stream");
+  assert.equal(denyEvents.some((e) => e.eventType === "permission.council.denied"), true);
+  const denyEvent = denyEvents.find((e) => e.eventType === "permission.council.denied");
+  assert.ok(denyEvent.payload.advisory_summary.includes("destructive_command"));
+
+  // --- Approval event carries advisory summary ---
+  const approvalEvents = [];
+
+  const approvalEnqueuer = createTaskEnqueuer({
+    pool: {},
+    redis: {},
+    registry: {},
+    analyzeTaskRisk: () => ({ risk_level: "high", requires_approval: true, reasons: ["sensitive_path_or_secret"] }),
+    validateTaskInputAgainstRegistry: () => ({ ok: true, errors: [] }),
+    getToolSpec: () => ({}),
+    upsertTask: async () => {},
+    getTaskStream: () => "stream:task:coding",
+    findTaskIdByIdempotencyKey: async () => null,
+    enqueueToStream: async () => {},
+    bindTaskToContext: () => {},
+    recordEvent: async (taskId, eventType, payload) => {
+      approvalEvents.push({ taskId, eventType, payload });
+    },
+    insertWorkflowDefinition: async () => {},
+    makeIdempotencyKey: () => "idem-approval-1",
+    groupTask: "cg:workers",
+    evaluatePermissionAdvisory: () => ({
+      council_advice: "review",
+      safety_verdict: "review",
+      context_verdict: "sufficient",
+      risk_level: "high",
+      risk_score: 0.75,
+      advisory_summary: "Human approval recommended: sensitive_path_or_secret",
+      reasons: ["sensitive_path_or_secret"],
+      duration_ms: 1,
+    }),
+    insertPermissionAuditRecord: async () => {},
+  });
+
+  const approved = await approvalEnqueuer.enqueueTask({
+    tool_name: "coding.execute",
+    payload: { command: "cat /etc/passwd" },
+    run_id: "run-approval-1",
+    context: null,
+  });
+
+  assert.equal(approved.waiting_approval, true);
+  const approvalRequestedEvent = approvalEvents.find((e) => e.eventType === "approval.requested");
+  assert.ok(approvalRequestedEvent, "approval.requested event must exist");
+  assert.equal(approvalRequestedEvent.payload.advisory_summary, "Human approval recommended: sensitive_path_or_secret");
+  assert.equal(approvalRequestedEvent.payload.council_advice, "review");
+  assert.equal(approvalRequestedEvent.payload.risk_score, 0.75);
+
   console.log("task_enqueuer.permission_advisory.test.js: all tests passed");
 }
 

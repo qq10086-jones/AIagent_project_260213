@@ -338,7 +338,7 @@
           "role": "architect",
           "tool": "coding.delegate",
           "gate": "policy",
-          "prompt_script_id": "architect.system_spec.v1"
+          "prompt_script_id": "architect.system_spec.v2"
         },
         {
           "id": "impl_be",

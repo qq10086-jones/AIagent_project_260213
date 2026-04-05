@@ -15,17 +15,39 @@ function writeFile(workspaceRoot, relPath, content) {
   fs.writeFileSync(abs, content, "utf8");
 }
 
+function primeImplFeArtifactRoot(workspaceRoot, artifactRoot) {
+  writeFile(
+    workspaceRoot,
+    path.join(artifactRoot, "handoff", "be_to_fe.json"),
+    JSON.stringify({
+      from_step: "impl_be",
+      to_step: "impl_fe",
+      be_changes_path: "impl/be_changes",
+      api_contracts: [
+        { name: "List Customers", method: "GET", path: "/api/customers", response_shape: "customer list", auth_required: true },
+      ],
+      shared_types: [{ name: "Customer", description: "CRM customer record" }],
+      scope_constraints: ["Advanced filtering is out of scope."],
+    }, null, 2),
+  );
+  writeFile(workspaceRoot, path.join(artifactRoot, "impl", "be_changes", "server.js"), "export const serverReady = true;\n");
+  writeFile(workspaceRoot, path.join(artifactRoot, "impl", "be_notes.md"), "# Backend Notes\n");
+}
+
 function shouldSkipSpawn(result) {
   return String(result?.error || "").includes("spawn EPERM");
 }
 
 async function testVerificationCommandPasses() {
   const workspaceRoot = makeWorkspace();
+  const artifactRoot = "artifacts/release/run-pass";
   writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "const value = 1;\n");
+  primeImplFeArtifactRoot(workspaceRoot, artifactRoot);
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
     task_prompt: "update frontend file",
+    artifact_root: artifactRoot,
     step_id: "impl_fe",
     target_paths: ["workspace/sandbox/crm_site/"],
     provider: "opencode",
@@ -54,11 +76,14 @@ async function testVerificationCommandPasses() {
 
 async function testVerificationCommandFails() {
   const workspaceRoot = makeWorkspace();
+  const artifactRoot = "artifacts/release/run-fail";
   writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "const value = 1;\n");
+  primeImplFeArtifactRoot(workspaceRoot, artifactRoot);
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
     task_prompt: "update frontend file",
+    artifact_root: artifactRoot,
     step_id: "impl_fe",
     target_paths: ["workspace/sandbox/crm_site/"],
     provider: "opencode",
@@ -87,11 +112,14 @@ async function testVerificationCommandFails() {
 
 async function testVerificationPlanPasses() {
   const workspaceRoot = makeWorkspace();
+  const artifactRoot = "artifacts/release/run-plan-pass";
   writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "const value = 1;\n");
+  primeImplFeArtifactRoot(workspaceRoot, artifactRoot);
 
   const result = await CodingService.delegateTask({
     workspaceRoot,
     task_prompt: "update frontend file",
+    artifact_root: artifactRoot,
     step_id: "impl_fe",
     target_paths: ["workspace/sandbox/crm_site/"],
     provider: "opencode",

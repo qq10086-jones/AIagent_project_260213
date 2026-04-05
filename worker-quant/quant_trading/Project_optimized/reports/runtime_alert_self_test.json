@@ -1,0 +1,9 @@
+{
+  "ran": true,
+  "success": true,
+  "detail": "discord:http_204",
+  "tested_at_utc": "2026-04-04T15:22:05+00:00",
+  "webhook_configured": true,
+  "self_test_ready": true,
+  "payload_event": "alert_webhook_self_test"
+}

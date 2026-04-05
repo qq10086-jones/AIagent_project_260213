@@ -62,7 +62,7 @@ def build_report(reports_dir: Path, max_zero_exposure_days: int = 3) -> dict:
                 "last_nonzero_asof": meta.get("last_nonzero_asof"),
                 "last_nonzero_row_sum": float(meta.get("last_nonzero_row_sum", 0.0) or 0.0),
                 "export_row_sum": float(meta.get("export_row_sum", 0.0) or 0.0),
-                "actionable_now": not bool(meta.get("history_last_row_is_zero", False)),
+                "actionable_now": float(meta.get("export_row_sum", 0.0) or 0.0) > 1e-9,
             }
         )
     meta_df = pd.DataFrame(meta_rows)
@@ -84,7 +84,7 @@ def build_report(reports_dir: Path, max_zero_exposure_days: int = 3) -> dict:
     zero_cause = str(zero_exposure.get("primary_cause", "") or "")
     latest_weights_zero = bool(zero_exposure.get("latest_weights_zero", False))
     zero_days = int(zero_exposure.get("days_since_last_nonzero", 0) or 0) if latest_weights_zero else 0
-    zero_exposure_alert = bool(latest_weights_zero and zero_days >= int(max_zero_exposure_days))
+    zero_exposure_alert = bool(latest_weights_zero and zero_days > int(max_zero_exposure_days))
     report = {
         "recommended_mode": str(best["mode"]),
         "recommendation_note": (
@@ -104,6 +104,7 @@ def build_report(reports_dir: Path, max_zero_exposure_days: int = 3) -> dict:
             "latest_zero_exposure_days": zero_days,
             "max_zero_exposure_days_allowed": int(max_zero_exposure_days),
             "zero_exposure_alert": zero_exposure_alert,
+            "zero_exposure_primary_cause": zero_cause,
             "best_sharpe_mode": str(df.sort_values("sharpe", ascending=False).iloc[0]["mode"]),
             "best_return_mode": str(df.sort_values("total_return_pct", ascending=False).iloc[0]["mode"]),
             "lowest_drawdown_mode": str(df.sort_values("max_drawdown_pct", ascending=True).iloc[0]["mode"]),

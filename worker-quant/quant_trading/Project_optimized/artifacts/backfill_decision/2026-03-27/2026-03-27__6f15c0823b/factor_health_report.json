@@ -1,0 +1,88 @@
+{
+  "target_mode": "shadow_hybrid_ic",
+  "families_expected": {
+    "technical": [
+      "mom_consist",
+      "ma_gap",
+      "rsi14",
+      "vol_adj_mom20",
+      "ret20",
+      "slope60"
+    ],
+    "risk_adjusted": [
+      "sharpe_20",
+      "sharpe_60",
+      "sortino_60",
+      "vol_stability"
+    ],
+    "fundamental": [
+      "value_bp",
+      "roa_op",
+      "cfo_assets",
+      "accruals_inv",
+      "margin_op",
+      "growth_rev_yoy",
+      "growth_op_yoy",
+      "guidance_delta",
+      "leverage_safety",
+      "dividend_yield"
+    ]
+  },
+  "aggregate_learning": {
+    "mean_ic": 0.05130083116521289,
+    "mean_t_stat": 1.1657503,
+    "positive_ic_ratio": 1.0,
+    "min_family_t_stat": 1.0467980000000001
+  },
+  "production_eligibility_rule": {
+    "guard_must_pass": true,
+    "min_observations": 80
+  },
+  "production_eligible_factors": [
+    "sharpe_60",
+    "ma_gap",
+    "mom_consist"
+  ],
+  "cleanup_summary": {
+    "eligible_count": 3,
+    "exclude_count": 17,
+    "exclude_candidates": [
+      "accruals_inv",
+      "cfo_assets",
+      "dividend_yield",
+      "growth_op_yoy",
+      "growth_rev_yoy",
+      "guidance_delta",
+      "leverage_safety",
+      "margin_op",
+      "roa_op",
+      "value_bp",
+      "sharpe_20",
+      "sortino_60",
+      "vol_stability",
+      "ret20",
+      "rsi14",
+      "slope60",
+      "vol_adj_mom20"
+    ]
+  },
+  "backtest_metrics": {
+    "total_return_pct": 19.44755612351952,
+    "annual_vol_pct": 13.919729878327235,
+    "sharpe": 1.492804022802991,
+    "sortino": 2.464253270173264,
+    "max_drawdown_pct": -9.57593588958472,
+    "avg_turnover_notional": 25808.672555569,
+    "avg_turnover_pct": 6.45216813889225,
+    "turnover_cv": 0.7523738095232881,
+    "avg_cost_paid": 38.715818121992974
+  },
+  "promotion_recommendation": "hold",
+  "qa_stats": {
+    "eligible_factor_count": 3,
+    "actionable_mode_count": 4,
+    "latest_zero_exposure_days": 0,
+    "latest_weights_zero": false,
+    "latest_zero_exposure_cause": "actionable_nonzero_target"
+  }
+}

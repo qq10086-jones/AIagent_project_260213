@@ -1,0 +1,23 @@
+{
+  "event_count": 1,
+  "summary": {
+    "event_count": 1,
+    "all_events": {
+      "avg_ret_1d_pct": -0.13131775721253458,
+      "avg_ret_3d_pct": -1.3788614979882596,
+      "avg_ret_5d_pct": 1.1162159646605163
+    },
+    "positive_guidance": {
+      "count": 1,
+      "avg_ret_1d_pct": -0.13131775721253458,
+      "avg_ret_3d_pct": -1.3788614979882596,
+      "avg_ret_5d_pct": 1.1162159646605163
+    },
+    "negative_guidance": {
+      "count": 0,
+      "avg_ret_1d_pct": 0.0,
+      "avg_ret_3d_pct": 0.0,
+      "avg_ret_5d_pct": 0.0
+    }
+  }
+}

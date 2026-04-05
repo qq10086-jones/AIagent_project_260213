@@ -1,0 +1,12 @@
+{
+  "verdict": "GO",
+  "reasons": [],
+  "checks": {
+    "all_steps_succeeded": true,
+    "smoke_test_passed": true,
+    "qa_criteria_met": true,
+    "artifacts_complete": true,
+    "fidelity_gate": "demo_usable"
+  },
+  "generated_at": "2026-04-05T13:50:21.247Z"
+}

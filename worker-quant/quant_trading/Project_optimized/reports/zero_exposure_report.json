@@ -1,33 +1,8 @@
 {
-  "signal_mode": "ridge",
-  "has_history": true,
-  "latest_asof": "2026-04-03",
-  "latest_weight_sum": 0.0,
-  "latest_weights_zero": true,
-  "last_nonzero_asof": "2026-03-27",
-  "last_nonzero_weight_sum": 0.5556623681162868,
-  "days_since_last_nonzero": 5,
-  "rebalance_every_trading_days": 10,
-  "next_rebalance_asof_estimate": null,
-  "latest_state": {
-    "benchmark_state": "off",
-    "benchmark_scale": 0.25,
-    "risk_off": false,
-    "drawdown_state": "on",
-    "dd_scale": 1.0,
-    "rebalance_due": false,
-    "news_gate": 0.0,
-    "vol_target_scale": 1.0,
-    "stop_loss_count": 0
-  },
-  "benchmark_diagnostics": {
-    "price": 55620.0,
-    "fast_ma": 55599.5,
-    "slow_ma": 56582.166666666664,
-    "enter_line": 56016.344999999994,
-    "exit_line": 56155.495,
-    "fast_minus_slow_pct": -0.017367073842465053,
-    "price_minus_slow_pct": -0.01700476887594149
-  },
-  "primary_cause": "benchmark_regime_capped_exposure"
+  "signal_mode": "sprint_momentum",
+  "latest_weights_zero": false,
+  "days_since_last_nonzero": 0,
+  "primary_cause": "benchmark_regime",
+  "last_nonzero_asof": "2026-04-03",
+  "last_nonzero_row_sum": 0.25
 }

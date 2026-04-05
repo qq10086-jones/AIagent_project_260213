@@ -1,0 +1,25 @@
+{
+  "api_base": "http://localhost:3000",
+  "endpoints": {
+    "list": "GET /api/expenses?month=&category=",
+    "create": "POST /api/expenses",
+    "update": "PUT /api/expenses/:id",
+    "delete": "DELETE /api/expenses/:id",
+    "summary": "GET /api/summary/monthly",
+    "export_csv": "GET /api/export/csv?from=&to="
+  },
+  "shared_types": [
+    {
+      "name": "Expense",
+      "fields": [
+        "id",
+        "amount",
+        "description",
+        "category",
+        "date",
+        "created_at"
+      ]
+    }
+  ],
+  "static_dir": "public/"
+}

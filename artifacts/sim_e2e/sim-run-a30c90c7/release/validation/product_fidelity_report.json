@@ -1,0 +1,23 @@
+{
+  "classification": "demo_usable",
+  "gate_mode": "blocking",
+  "domain_pack": "crm",
+  "noun_check": {
+    "required": [
+      "expense",
+      "category"
+    ],
+    "found": [
+      "expense",
+      "category",
+      "dashboard",
+      "chart"
+    ],
+    "missing": []
+  },
+  "forbidden_noun_check": {
+    "forbidden": [],
+    "found": []
+  },
+  "generated_at": "2026-04-05T13:50:21.247Z"
+}

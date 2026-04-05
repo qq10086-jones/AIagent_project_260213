@@ -42,5 +42,170 @@
     "summary": "Workflow workflow_finalization_v0 completed successfully",
     "release_root": "C:/Users/linweiye/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
     "created_at": "2026-04-01T05:44:12.088Z"
+  },
+  {
+    "workflow_run_id": "207ac893-dace-42a2-b545-2f65bfc9e1b3",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T07:46:07.053Z"
+  },
+  {
+    "workflow_run_id": "70ecbc36-02d4-47b6-9b32-5f6b428590fc",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T07:46:11.504Z"
+  },
+  {
+    "workflow_run_id": "f89aa48a-ba3e-4516-b89c-c5dadfa02503",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T07:46:15.414Z"
+  },
+  {
+    "workflow_run_id": "b102c1a7-c9e2-4948-8c5c-38014f055304",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T07:46:21.697Z"
+  },
+  {
+    "workflow_run_id": "eeb5ac78-3a33-462b-a0fe-963332546560",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T07:55:57.067Z"
+  },
+  {
+    "workflow_run_id": "5849a070-4ad1-4e95-b510-cc5597c41eca",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T07:56:04.216Z"
+  },
+  {
+    "workflow_run_id": "07db92d1-63e9-43ff-8644-79304dce43ff",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T07:56:11.056Z"
+  },
+  {
+    "workflow_run_id": "64e50108-dd2b-4c89-b9e4-690dc27c49e0",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T07:56:11.932Z"
+  },
+  {
+    "workflow_run_id": "ca8d29be-ef5e-499d-9885-6d3025e5b354",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T07:56:17.214Z"
+  },
+  {
+    "workflow_run_id": "8baa20b1-e15e-493a-8b4a-623e25ffebf6",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T08:00:26.576Z"
+  },
+  {
+    "workflow_run_id": "37807a5b-2f66-48b7-94e7-040a88c16567",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T08:02:14.637Z"
+  },
+  {
+    "workflow_run_id": "c815f696-b81d-4ca0-ae37-4ff91c34df46",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T13:39:01.731Z"
+  },
+  {
+    "workflow_run_id": "44476f41-e8e9-42d9-b251-d9e599a8c504",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T13:39:07.217Z"
+  },
+  {
+    "workflow_run_id": "32a87ce4-72f0-439e-94bb-1362df5f4899",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T15:30:52.961Z"
+  },
+  {
+    "workflow_run_id": "6e428341-2480-4f97-927e-819e946e5f2b",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-05T15:31:23.125Z"
   }
 ]

@@ -1,0 +1,16 @@
+{
+  "be_tasks": [
+    {
+      "id": "T-BE-1",
+      "description": "Implement login endpoint in server.js",
+      "verify": "POST /api/login returns 200 with token"
+    }
+  ],
+  "fe_tasks": [
+    {
+      "id": "T-FE-1",
+      "description": "Wire login form to POST /api/login",
+      "verify": "Submitting login calls /api/login and renders success state"
+    }
+  ]
+}

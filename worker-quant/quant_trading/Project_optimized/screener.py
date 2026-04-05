@@ -294,7 +294,8 @@ def screen(
     vol = vol.reindex(close.index)
 
     # metrics
-    ret1 = close.pct_change()
+    # Avoid deprecated forward-fill behavior; missing bars should stay missing.
+    ret1 = close.pct_change(fill_method=None)
     vol_d = ret1.rolling(cfg.vol_window).std()
 
     adv = (close * vol).rolling(cfg.adv_window).mean()   # proxy currency volume

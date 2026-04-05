@@ -541,8 +541,8 @@ export const CodingService = {
             finalFallbackFrom = finalFallbackFrom || result?.diagnostics?.fallback_from || null;
 
             const scaffoldExpectedArtifacts = buildStepContractExpectedArtifacts({
-                stepId,
-                expectedArtifacts,
+                stepId: step_id,
+                expectedArtifacts: expected_artifacts,
             });
             let artifactScaffold = null;
             if (result?.ok) {
@@ -658,7 +658,7 @@ export const CodingService = {
                 ? validateWorkflowStepArtifacts({
                     workspaceRoot,
                     artifactRoot: artifact_root,
-                    stepId,
+                    stepId: step_id,
                 })
                 : { checked: false, ok: true };
             const handoffValidation = result?.ok && handoff

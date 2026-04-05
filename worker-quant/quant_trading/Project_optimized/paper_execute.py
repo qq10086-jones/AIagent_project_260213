@@ -7,6 +7,7 @@ positions / NAV / execution report so the paper account can move end to end.
 from __future__ import annotations
 
 import argparse
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -22,6 +23,39 @@ from market_data_utils import (
     latest_db_date,
     refresh_intraday_if_needed,
 )
+
+
+def post_trade_analytics(conn, run_id: str, strategy_id: str = "default") -> dict:
+    rows = conn.execute(
+        """
+        SELECT side, qty, price, COALESCE(fee,0), COALESCE(price_validated,0), COALESCE(quote_close, price)
+        FROM fills
+        WHERE run_id=? AND strategy_id=?
+        """,
+        (run_id, strategy_id),
+    ).fetchall()
+    fill_count = len(rows)
+    total_commission = 0.0
+    validated = 0
+    slippages = []
+    for side, qty, price, fee, price_validated, quote_close in rows:
+        total_commission += float(fee or 0.0)
+        validated += int(price_validated or 0)
+        price = float(price or 0.0)
+        ref = float(quote_close or price or 0.0)
+        if price > 0.0 and ref > 0.0:
+            direction = 1.0 if str(side).upper() == "BUY" else -1.0
+            slippages.append(direction * (price / ref - 1.0) * 10000.0)
+    avg_slippage_bps = float(sum(slippages) / len(slippages)) if slippages else 0.0
+    fill_validation_rate = float(validated / fill_count) if fill_count else 1.0
+    return {
+        "run_id": run_id,
+        "strategy_id": strategy_id,
+        "fill_count": fill_count,
+        "avg_slippage_bps": avg_slippage_bps,
+        "total_commission": total_commission,
+        "fill_validation_rate": fill_validation_rate,
+    }
 
 
 def _resolve_run_id(conn, run_id: str | None) -> str:
@@ -41,30 +75,30 @@ def _resolve_run_id(conn, run_id: str | None) -> str:
     return str(row[0])
 
 
-def _existing_cash_snapshot(conn, asof: str) -> float | None:
+def _existing_cash_snapshot(conn, asof: str, strategy_id: str = "default") -> float | None:
     row = conn.execute(
         """
         SELECT cash
         FROM account_snapshots
-        WHERE asof=?
+        WHERE asof=? AND strategy_id=?
         LIMIT 1
         """,
-        (asof,),
+        (asof, strategy_id),
     ).fetchone()
     if not row or row[0] is None:
         return None
     return float(row[0])
 
 
-def _load_orders(conn, run_id: str) -> list[tuple]:
+def _load_orders(conn, run_id: str, strategy_id: str = "default") -> list[tuple]:
     return conn.execute(
         """
         SELECT order_id, symbol, side, qty, order_type, limit_price
         FROM orders
-        WHERE run_id=? AND status IN ('proposed', 'partial')
+        WHERE run_id=? AND strategy_id=? AND status IN ('proposed', 'partial')
         ORDER BY created_ts, order_id
         """,
-        (run_id,),
+        (run_id, strategy_id),
     ).fetchall()
 
 
@@ -155,12 +189,13 @@ def simulate_fills(
     slippage_bps: float,
     fee_bps: float,
     fill_ratio: float,
+    strategy_id: str = "default",
 ) -> tuple[pd.DataFrame, list[str]]:
     rows = []
     missing = []
     ts = f"{asof} 09:00:00" if price_mode == "open" else f"{asof} 15:00:00"
 
-    for order_id, symbol, side, qty, _order_type, _limit_price in _load_orders(conn, run_id):
+    for order_id, symbol, side, qty, _order_type, _limit_price in _load_orders(conn, run_id, strategy_id=strategy_id):
         quote = _market_quote(conn, str(symbol), asof, price_mode)
         if quote is None:
             missing.append(str(symbol))
@@ -226,6 +261,7 @@ def main():
     ap.add_argument("--initial_cash", type=float, default=0.0, help="used only for first account snapshot")
     ap.add_argument("--refresh_data", action="store_true", help="refresh market data before paper execution")
     ap.add_argument("--refresh_lookback", type=int, default=30, help="lookback days used when refresh_data is enabled")
+    ap.add_argument("--reports_dir", default="reports")
     args = ap.parse_args()
 
     if not (0.0 <= args.fill_ratio <= 1.0):
@@ -237,6 +273,7 @@ def main():
         run_id = _resolve_run_id(conn, args.run_id)
         meta = get_run_meta(conn, run_id)
         asof = args.asof or (meta.get("asof") if meta else None)
+        strategy_id = str((meta or {}).get("strategy_id", "default") or "default")
         if not asof:
             raise ValueError("asof is required (pass --asof or ensure decision_runs has asof for this run_id)")
     finally:
@@ -273,7 +310,8 @@ def main():
     ensure_trade_tables(conn)
     try:
         meta = get_run_meta(conn, run_id)
-        order_count = len(_load_orders(conn, run_id))
+        strategy_id = str((meta or {}).get("strategy_id", "default") or "default")
+        order_count = len(_load_orders(conn, run_id, strategy_id=strategy_id))
         fills_df, missing = simulate_fills(
             conn,
             run_id=run_id,
@@ -282,6 +320,7 @@ def main():
             slippage_bps=float(args.slippage_bps),
             fee_bps=float(args.fee_bps),
             fill_ratio=float(args.fill_ratio),
+            strategy_id=strategy_id,
         )
 
         inserted = 0
@@ -294,18 +333,23 @@ def main():
                 venue="PAPER",
                 force=False,
                 source="paper_simulator",
+                strategy_id=strategy_id,
             )
 
-        prev_asof, rows_out, missing_px = build_positions(conn, run_id, asof)
-        starting_cash = _existing_cash_snapshot(conn, asof)
+        prev_asof, rows_out, missing_px = build_positions(conn, run_id, asof, strategy_id=strategy_id)
+        starting_cash = _existing_cash_snapshot(conn, asof, strategy_id=strategy_id)
         if starting_cash is None:
             starting_cash = float(args.initial_cash)
-        snap = build_account_snapshot(conn, run_id, asof, initial_cash=starting_cash)
+        snap = build_account_snapshot(conn, run_id, asof, initial_cash=starting_cash, strategy_id=strategy_id)
 
         artifact_dir = resolve_run_artifact_dir(meta.get("snapshot_path") if meta else None)
         if artifact_dir is None:
             artifact_dir = Path("artifacts/decision") / asof / run_id
         md_path, csv_path = generate_execution_report(conn, run_id, asof, artifact_dir)
+        analytics = post_trade_analytics(conn, run_id, strategy_id=strategy_id)
+        reports_dir = Path(args.reports_dir)
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        (reports_dir / "execution_quality.json").write_text(json.dumps(analytics, ensure_ascii=False, indent=2), encoding="utf-8")
         run_status = _update_run_status_after_paper(conn, run_id, order_count=order_count, fills_inserted=inserted)
 
         print("=" * 70)
@@ -314,6 +358,8 @@ def main():
         print(f"asof: {asof}")
         print(f"run_status: {run_status}")
         print(f"fills_inserted: {inserted}")
+        print(f"avg_slippage_bps: {analytics['avg_slippage_bps']:.2f}")
+        print(f"fill_validation_rate: {analytics['fill_validation_rate']:.2%}")
         print(f"positions: {len(rows_out)} (prev_positions_asof={prev_asof})")
         print(f"nav: {snap['nav']:,.2f} cash={snap['cash_end']:,.2f} positions_value={snap['positions_value']:,.2f}")
         if missing:

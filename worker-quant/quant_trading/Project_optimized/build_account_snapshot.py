@@ -12,17 +12,17 @@ except Exception:
 def now_iso():
     return datetime.now().isoformat(timespec="seconds")
 
-def get_prev_snapshot(conn, asof: str):
+def get_prev_snapshot(conn, asof: str, strategy_id: str = "default"):
     row = conn.execute(
-        "SELECT asof, cash, nav FROM account_snapshots WHERE asof < ? ORDER BY asof DESC LIMIT 1",
-        (asof,)
+        "SELECT asof, cash, nav FROM account_snapshots WHERE asof < ? AND strategy_id=? ORDER BY asof DESC LIMIT 1",
+        (asof, strategy_id)
     ).fetchone()
     return row  # (asof, cash, nav) or None
 
-def get_trade_cashflow(conn, run_id: str, asof: str):
+def get_trade_cashflow(conn, run_id: str, asof: str, strategy_id: str = "default"):
     rows = conn.execute(
-        "SELECT side, qty, price, COALESCE(fee,0), COALESCE(tax,0) FROM fills WHERE run_id=? AND asof=?",
-        (run_id, asof)
+        "SELECT side, qty, price, COALESCE(fee,0), COALESCE(tax,0) FROM fills WHERE run_id=? AND asof=? AND strategy_id=?",
+        (run_id, asof, strategy_id)
     ).fetchall()
 
     buy_notional = sell_notional = 0.0
@@ -57,22 +57,22 @@ def get_cash_ledger_delta(conn, asof: str) -> float:
     except Exception:
         return 0.0
 
-def get_positions_value(conn, asof: str):
+def get_positions_value(conn, asof: str, strategy_id: str = "default"):
     # prefer market_value if present; if null, treat as 0 (dashboard will warn separately)
     row = conn.execute(
-        "SELECT COALESCE(SUM(COALESCE(market_value, 0)), 0) FROM positions WHERE asof=?",
-        (asof,)
+        "SELECT COALESCE(SUM(COALESCE(market_value, 0)), 0) FROM positions WHERE asof=? AND strategy_id=?",
+        (asof, strategy_id)
     ).fetchone()
     return float(row[0]) if row else 0.0
 
 
-def build_account_snapshot(conn, run_id: str, asof: str, initial_cash: float = 0.0) -> dict:
+def build_account_snapshot(conn, run_id: str, asof: str, initial_cash: float = 0.0, strategy_id: str = "default") -> dict:
     """Write account_snapshots for asof, using prior snapshot cash as starting point.
 
     Returns a dict ...
     """
     ensure_trade_tables(conn)
-    prev = get_prev_snapshot(conn, asof)
+    prev = get_prev_snapshot(conn, asof, strategy_id=strategy_id)
     if prev is None:
         cash_start = float(initial_cash)
         prev_asof = None
@@ -80,21 +80,22 @@ def build_account_snapshot(conn, run_id: str, asof: str, initial_cash: float = 0
         prev_asof, cash_start, _prev_nav = prev
         cash_start = float(cash_start)
 
-    net_cf, fees, tax, buy_notional, sell_notional, nfills = get_trade_cashflow(conn, run_id, asof)
+    net_cf, fees, tax, buy_notional, sell_notional, nfills = get_trade_cashflow(conn, run_id, asof, strategy_id=strategy_id)
     cash_ledger_delta = get_cash_ledger_delta(conn, asof)
     cash_end = cash_start + net_cf + cash_ledger_delta
-    pos_val = get_positions_value(conn, asof)
+    pos_val = get_positions_value(conn, asof, strategy_id=strategy_id)
     nav = cash_end + pos_val
 
     with conn:
+        conn.execute("DELETE FROM account_snapshots WHERE asof=? AND strategy_id=?", (asof, strategy_id))
         conn.execute(
             """
-            INSERT OR REPLACE INTO account_snapshots(
-              asof, ts, run_id, cash, positions_value, nav, net_trade_cashflow, fees, tax, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO account_snapshots(
+              asof, strategy_id, ts, run_id, cash, positions_value, nav, net_trade_cashflow, fees, tax, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                asof, now_iso(), run_id,
+                asof, strategy_id, now_iso(), run_id,
                 cash_end, pos_val, nav, net_cf, fees, tax,
                 f"cash_start={cash_start}; prev_asof={prev_asof}; buy={buy_notional}; sell={sell_notional}; fills={nfills}; cash_ledger_delta={cash_ledger_delta}"
             )
@@ -103,6 +104,7 @@ def build_account_snapshot(conn, run_id: str, asof: str, initial_cash: float = 0
     return {
         "asof": asof,
         "run_id": run_id,
+        "strategy_id": strategy_id,
         "prev_asof": prev_asof,
         "cash_start": cash_start,
         "net_trade_cashflow": net_cf,
@@ -123,12 +125,19 @@ def main():
     ap.add_argument("--run_id", required=True)
     ap.add_argument("--asof", required=True)  # YYYY-MM-DD
     ap.add_argument("--initial_cash", type=float, default=0.0, help="Used only if no previous snapshot exists")
+    ap.add_argument("--strategy_id", default="default")
     args = ap.parse_args()
 
     conn = connect(args.db)
     ensure_trade_tables(conn)
     try:
-        res = build_account_snapshot(conn, args.run_id, args.asof, initial_cash=float(args.initial_cash))
+        res = build_account_snapshot(
+            conn,
+            args.run_id,
+            args.asof,
+            initial_cash=float(args.initial_cash),
+            strategy_id=args.strategy_id,
+        )
         print("✅ account_snapshot saved")
         print(f"asof={res['asof']} run_id={res['run_id']}")
         print(f"cash_start={res['cash_start']:,.0f} net_trade_cf={res['net_trade_cashflow']:,.0f} cash_ledger={res['cash_ledger_delta']:,.0f} cash_end={res['cash_end']:,.0f}")

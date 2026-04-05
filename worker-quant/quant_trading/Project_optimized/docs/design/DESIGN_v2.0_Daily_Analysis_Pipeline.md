@@ -338,3 +338,143 @@ aspirational notes when the two differ.
   - paper-loop diagnosis
   - signal-to-weight diagnosis
 - The next phase should not prioritize expanding factor count.
+
+## Risk-Control Addendum (2026-04-03)
+
+This addendum should override any older wording that frames the project as mainly blocked
+by research breadth or infrastructure survivability. The latest local evidence shows the
+main gap is risk-control execution fidelity.
+
+### Current validated truth
+
+- the pipeline runs end to end on this machine
+- governance now blocks promotion for the right reasons
+- the strategy is still not production-ready because key controls are only partially
+  enforced or enforced too late in the chain
+
+### P0 design gaps
+
+1. Stop-loss handling is not yet an independent execution guarantee.
+   Current behavior identifies `stop_loss_tickers` and sets their target weights to zero,
+   but this still depends on portfolio construction and rebalance flow. The intended design
+   must include:
+   - stop trigger detection
+   - explicit flatten instruction
+   - auditable exit reason in reports and artifacts
+   - consistent behavior across backtest, paper, and live advice
+
+2. Concentration control is not yet symmetric.
+   Sector cap exists in the optimizer path, but `max_single_position_pct` is not yet
+   treated as a hard post-optimization invariant. The design must require:
+   - hard single-name cap after optimization
+   - hard sector cap after optimization
+   - recheck before order generation
+   - QA failure when either cap is violated
+
+3. Zero exposure still lacks a mandatory runtime response.
+   Current governance can detect `latest_zero_exposure_days > threshold`, but design does
+   not yet require the system to react. The intended runtime behavior should be:
+   - alert when the zero-exposure window is breached
+   - report the dominant cause
+   - optionally auto-fallback to a safer baseline mode
+   - prevent silent repeated `paper_no_orders` loops
+
+### Production-safety priorities
+
+Before new alpha expansion work, the project should satisfy all of the following:
+
+- stop-loss exits are executable and traceable
+- single-name and sector caps are both hard-checked
+- prolonged zero exposure emits alert plus fallback behavior
+- promotion remains blocked until at least one actionable mode exports non-zero weights
+- reports distinguish benchmark de-risking, news suppression, lot-size suppression, and
+  hard risk-control exits as separate causes
+
+### Deferred until after P0 closure
+
+These remain valid but are not the current lead items:
+
+- expanding IC universe size
+- continuous regime scoring
+- richer news-overlay shaping
+- optimizer sophistication upgrades
+- additional factor families beyond the currently eligible set
+
+## Governance Addendum (2026-04-03)
+
+The project now uses an explicit score-based governance target:
+
+- reference: `docs/governance/GOVERNANCE_v1_85_SCORECARD.md`
+- policy: no dimension may be claimed as `8.5+` based on design intent alone
+- rule: implementation readiness without validated runtime evidence is capped below `8.5`
+
+This changes how roadmap work is prioritized:
+
+1. design quality alone is no longer sufficient for a high score
+2. every claimed maturity gain must be tied to reports, tests, or paper-trading evidence
+3. the weakest dimensions now govern the release narrative:
+   - risk management
+   - execution quality
+   - signal quality
+   - operations maturity
+
+### Immediate design consequence
+
+The project should be managed against a two-part bar:
+
+- `code-complete`
+- `evidence-complete`
+
+Until both are satisfied, the design may be improved, but the score should not be raised
+to the user-facing `8.5+` target.
+
+## Execution Addendum (2026-04-03, later)
+
+The latest implementation adds a practical constraint that was previously only implicit:
+the exported portfolio must be executable for the configured account size.
+
+### New runtime rule
+
+- `target_weights.csv` now exports the latest actionable non-zero target row rather than
+  blindly exporting the latest history row when the latest row is zero because of
+  benchmark de-risking on a non-rebalance day
+- decision packaging applies a second-stage `lot-feasible concentration` pass after
+  single-name and sector caps
+- this pass is allowed to compress a fragmented low-weight basket into a smaller subset of
+  affordable names so long as it remains inside:
+  - `max_single_position_pct`
+  - `max_sector_weight`
+  - lot-size and min-trade constraints
+
+### Why this matters
+
+- for a `JPY 400,000` account, a mathematically valid 50-name weight vector can still be
+  operationally non-tradable because most names cannot clear one JP board lot
+- therefore execution quality must be measured on `lot-feasible target weights`, not only
+  optimizer output
+
+### Required artifacts
+
+- `target_weights.csv`: executable target row used by decision packaging
+- `target_weights_latest.csv`: the latest raw history row, even if zero
+- `target_weights_last_nonzero.csv`: the last non-zero target row for audit
+- decision snapshot `lot_feasibility` diagnostics
+- `reports/runtime_events.jsonl`: machine-readable daily runtime events and fallback traces
+
+## Governance Addendum (2026-04-03)
+
+The promotion layer now distinguishes between:
+
+- theoretical mode factor families
+- governed production-eligible factors
+
+For `shadow_hybrid_ic`, runtime weighting and promotion gating must use the governed
+production subset once at least three factors satisfy:
+
+- latest learning guard = `PASS`
+- `n_observations >= 80`
+
+This avoids penalizing the production signal for stale or ineligible factors that are
+still tracked for research. Promotion also now supports a configured
+`backtest_sharpe_tolerance` so boundary-case Sharpe estimates are handled explicitly in
+code and governance output rather than by manual interpretation.

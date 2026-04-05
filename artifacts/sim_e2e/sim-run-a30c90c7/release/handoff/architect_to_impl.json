@@ -1,0 +1,51 @@
+{
+  "decisions": [
+    {
+      "adr_id": "ADR-001",
+      "title": "Use SQLite for zero-config persistence",
+      "status": "accepted",
+      "rationale": "Single-file database eliminates setup complexity for a personal tool"
+    },
+    {
+      "adr_id": "ADR-002",
+      "title": "Chart.js over D3 for visualization",
+      "status": "accepted",
+      "rationale": "Lower complexity, sufficient for bar/pie charts, CDN-friendly"
+    },
+    {
+      "adr_id": "ADR-003",
+      "title": "TailwindCSS via CDN instead of build step",
+      "status": "accepted",
+      "rationale": "Eliminates frontend build toolchain; acceptable for demo-scale app"
+    }
+  ],
+  "shared_types": [
+    {
+      "name": "Expense",
+      "fields": [
+        "id",
+        "amount",
+        "description",
+        "category",
+        "date",
+        "created_at"
+      ]
+    },
+    {
+      "name": "MonthlySummary",
+      "fields": [
+        "month",
+        "total",
+        "by_category"
+      ]
+    }
+  ],
+  "api_contract": {
+    "base_url": "http://localhost:3000",
+    "endpoints": [
+      "/api/expenses",
+      "/api/summary/monthly",
+      "/api/export/csv"
+    ]
+  }
+}

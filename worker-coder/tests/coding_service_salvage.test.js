@@ -53,6 +53,14 @@ function scaffoldArchDesign(workspaceRoot, artifactRoot) {
   const root = path.join(workspaceRoot, artifactRoot);
   writeText(root, "plan/interfaces.md", "# Interfaces\n## GET /api/customers\n");
   writeText(root, "plan/workplan.md", "# Workplan\n- BE: server.js\n");
+  writeJson(root, "plan/workplan.json", {
+    be_tasks: [
+      { id: "T-BE-1", description: "List customers", verify: "GET /api/customers returns data" },
+    ],
+    fe_tasks: [
+      { id: "T-FE-1", description: "Render customer list", verify: "frontend renders customer list" },
+    ],
+  });
   // risk_report: risks = [{level,title,mitigation}], decision_log = string[]
   writeJson(root, "risk/risk_report.json", {
     risks: [{ level: "low", title: "scope creep", mitigation: "strict contract" }],
@@ -61,7 +69,15 @@ function scaffoldArchDesign(workspaceRoot, artifactRoot) {
   // architect_to_impl: modules/interfaces/risks = string[], decisions = [{adr_id,title,status}]
   writeJson(root, "handoff/architect_to_impl.json", {
     from_step: "arch_design",
-    to_steps: ["impl_be", "impl_fe"],
+    to_steps: ["impl_be", "impl_fe", "qa_verify"],
+    workplan: {
+      be_tasks: [
+        { id: "T-BE-1", description: "List customers", verify: "GET /api/customers returns data" },
+      ],
+      fe_tasks: [
+        { id: "T-FE-1", description: "Render customer list", verify: "frontend renders customer list" },
+      ],
+    },
     modules: ["server"],
     interfaces: ["GET /api/customers"],
     decisions: [{ adr_id: "ADR-001", title: "Use REST", status: "accepted" }],

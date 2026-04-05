@@ -1,0 +1,105 @@
+{
+  "overall_status": "pass_with_warnings",
+  "checks": [
+    {
+      "check_id": "det_1",
+      "layer": "deterministic",
+      "description": "backend entry exists",
+      "status": "pass",
+      "detail": "Observed impl/be_changes/server.js with Express routes for /api/auth/login and /api/customers"
+    },
+    {
+      "check_id": "det_2",
+      "layer": "deterministic",
+      "description": "runtime smoke root check",
+      "status": "pass",
+      "detail": "smoke/smoke_result.json records root_check.status=200 and root_check.passed=true"
+    },
+    {
+      "check_id": "det_3",
+      "layer": "deterministic",
+      "description": "runtime smoke customer list check",
+      "status": "pass",
+      "detail": "smoke/smoke_result.json records api_check.endpoint=/api/customers status=200 passed=true"
+    },
+    {
+      "check_id": "det_4",
+      "layer": "deterministic",
+      "description": "runtime smoke create check",
+      "status": "pass",
+      "detail": "smoke/smoke_result.json records create_check.endpoint=/api/customers status=201 passed=true"
+    },
+    {
+      "check_id": "sem_1",
+      "layer": "semantic",
+      "description": "delivery frontend matches CRM scope",
+      "status": "pass",
+      "detail": "impl/be_changes/public/index.html renders Customer CRM login and customer list/detail/form flows"
+    },
+    {
+      "check_id": "sem_2",
+      "layer": "semantic",
+      "description": "workspace contains legacy frontend artifacts outside delivery path",
+      "status": "warning",
+      "detail": "impl/fe_changes/app.js still contains Bean & Brew coffee-site content and is not the shipped frontend entrypoint"
+    }
+  ],
+  "verified_artifacts": [
+    "impl/be_changes/server.js",
+    "impl/be_changes/package.json",
+    "impl/be_changes/public/index.html",
+    "impl/be_notes.md",
+    "handoff/be_to_fe.json",
+    "handoff/impl_to_qa.json",
+    "smoke/smoke_result.json",
+    "release/release_notes.md",
+    "release/README.md",
+    "release/start.sh",
+    "release/start.ps1"
+  ],
+  "journey_checks": [
+    {
+      "journey_id": "j1",
+      "description": "login then load customer list",
+      "status": "pass",
+      "evidence": [
+        "impl/be_changes/public/index.html calls /api/auth/login and then /api/csrf-token",
+        "smoke/smoke_result.json records auth_check.status=200",
+        "smoke/smoke_result.json records api_check.status=200 for /api/customers"
+      ]
+    },
+    {
+      "journey_id": "j2",
+      "description": "create customer from the CRM form",
+      "status": "pass",
+      "evidence": [
+        "impl/be_changes/public/index.html saveCustomer() sends POST /api/customers with CSRF-Token header",
+        "smoke/smoke_result.json records create_check.status=201"
+      ]
+    },
+    {
+      "journey_id": "j3",
+      "description": "full FE ownership is aligned with delivery path",
+      "status": "warning",
+      "evidence": [
+        "The delivered UI is under impl/be_changes/public while impl/fe_changes still contains non-CRM legacy content"
+      ]
+    }
+  ],
+  "rubric_citations": [
+    {
+      "term": "demo_usable",
+      "criterion": "Primary user journey is functional",
+      "evidence": "Runtime smoke passes login, list customers, and create customer against the delivered server",
+      "pass": true
+    },
+    {
+      "term": "contract_consistent",
+      "criterion": "QA handoff and release handoff reflect the shipped artifact set",
+      "evidence": "handoff/impl_to_qa.json now points to qa_verify and references handoff/be_to_fe.json as the contract source",
+      "pass": true
+    }
+  ],
+  "generated_at": "2026-04-05T00:00:00Z",
+  "step_id": "qa_verify"
+}

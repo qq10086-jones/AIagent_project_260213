@@ -1,0 +1,101 @@
+{
+  "recommended_mode": "shadow_hybrid_ic",
+  "recommendation_note": "Recommendation is based on current comparison metrics.",
+  "ranking": [
+    {
+      "mode": "shadow_hybrid_ic",
+      "final_equity": 477790.2244940781,
+      "total_return_pct": 19.44755612351952,
+      "max_drawdown_pct": -9.57593588958472,
+      "annual_vol_pct": 13.919729878327235,
+      "sharpe": 1.492804022802991,
+      "sortino": 2.464253270173264,
+      "avg_turnover_notional": 25808.672555569,
+      "avg_turnover_pct": 6.45216813889225,
+      "turnover_cv": 0.7523738095232881,
+      "avg_cost_paid": 38.715818121992974,
+      "score": 8.11136606699658,
+      "current_weights_zero": false,
+      "last_nonzero_asof": "2026-04-03",
+      "last_nonzero_row_sum": 0.10795532620378179,
+      "export_row_sum": 0.10795532620378179,
+      "actionable_now": true
+    },
+    {
+      "mode": "shadow_eq",
+      "final_equity": 471416.0196663908,
+      "total_return_pct": 17.854004916597695,
+      "max_drawdown_pct": -10.370682227156935,
+      "annual_vol_pct": 14.706989308724363,
+      "sharpe": 1.3104991912189408,
+      "sortino": 2.1263380603880884,
+      "avg_turnover_notional": 26529.02651086318,
+      "avg_turnover_pct": 6.632256627715795,
+      "turnover_cv": 0.8303945273491207,
+      "avg_cost_paid": 39.79643662332303,
+      "score": 7.166025495541316,
+      "current_weights_zero": false,
+      "last_nonzero_asof": "2026-04-03",
+      "last_nonzero_row_sum": 0.08543939554577706,
+      "export_row_sum": 0.08543939554577706,
+      "actionable_now": true
+    },
+    {
+      "mode": "shadow_ic",
+      "final_equity": 471416.0196663908,
+      "total_return_pct": 17.854004916597695,
+      "max_drawdown_pct": -10.370682227156935,
+      "annual_vol_pct": 14.706989308724363,
+      "sharpe": 1.3104991912189408,
+      "sortino": 2.1263380603880884,
+      "avg_turnover_notional": 26529.02651086318,
+      "avg_turnover_pct": 6.632256627715795,
+      "turnover_cv": 0.8303945273491207,
+      "avg_cost_paid": 39.79643662332303,
+      "score": 7.166025495541316,
+      "current_weights_zero": false,
+      "last_nonzero_asof": "2026-04-03",
+      "last_nonzero_row_sum": 0.08543939554577706,
+      "export_row_sum": 0.08543939554577706,
+      "actionable_now": true
+    },
+    {
+      "mode": "ridge",
+      "final_equity": 407194.4104967891,
+      "total_return_pct": 1.798602624197272,
+      "max_drawdown_pct": -13.780216322104266,
+      "annual_vol_pct": 13.644749246269203,
+      "sharpe": 0.2130873732690965,
+      "sortino": 0.3350927800250981,
+      "avg_turnover_notional": 29512.83185840708,
+      "avg_turnover_pct": 7.37820796460177,
+      "turnover_cv": 0.8993367142234009,
+      "avg_cost_paid": 44.272600945831016,
+      "score": 1.495687740760839,
+      "current_weights_zero": true,
+      "last_nonzero_asof": "2026-03-31",
+      "last_nonzero_row_sum": 0.08879441389814671,
+      "export_row_sum": 0.08879441389814671,
+      "actionable_now": true
+    }
+  ],
+  "summary": {
+    "mode_count": 4,
+    "actionable_mode_count": 4,
+    "all_modes_zero_now": false,
+    "latest_zero_exposure_days": 0,
+    "max_zero_exposure_days_allowed": 3,
+    "zero_exposure_alert": false,
+    "zero_exposure_primary_cause": "actionable_nonzero_target",
+    "best_sharpe_mode": "shadow_hybrid_ic",
+    "best_return_mode": "shadow_hybrid_ic",
+    "lowest_drawdown_mode": "ridge"
+  },
+  "qa": {
+    "status": "ok",
+    "checks": {
+      "all_modes_actionable": true,
+      "zero_exposure_within_limit": true
+    }
+  }
+}

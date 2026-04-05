@@ -1,0 +1,7 @@
+symbol,target_weight,family,family_score,weighted_contribution,factor_count_configured,factor_count_active,is_active_in_mode
+7201.T,0.1,fundamental,0.0,0.0,10,0,False
+4005.T,0.1,fundamental,0.0,0.0,10,0,False
+4005.T,0.1,price,0.4242640247129981,0.042426402471299814,15,15,True
+7201.T,0.1,price,-0.42426402471299757,-0.04242640247129976,15,15,True
+4005.T,0.1,risk_adjusted,0.35355337941070375,0.035355337941070375,4,4,False
+7201.T,0.1,risk_adjusted,-0.3535533794107036,-0.03535533794107036,4,4,False

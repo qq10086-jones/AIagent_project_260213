@@ -33,6 +33,17 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from trade_schema import connect, ensure_learning_tables, ensure_trade_tables, save_factor_signal_snapshot
 
+# ── Extracted modules (canonical definitions live there) ─────
+from portfolio_optimizer import (
+    project_to_simplex,
+    shrink_cov,
+    solve_long_only_meanvar,
+    apply_sector_cap,
+    apply_single_name_cap,
+)
+from model_ridge import rsi, slope_log_price, make_features, make_target, PanelRidge
+from execution_model import ExecConfig, execute_rebalance, lot_size, _round_to_lot
+
 
 # =========================================================
 # 1) Utils
@@ -49,63 +60,9 @@ def max_drawdown(equity_curve: pd.Series) -> float:
     dd = equity_curve / peak - 1.0
     return float(dd.min())
 
-def project_to_simplex(v: np.ndarray) -> np.ndarray:
-    """Project to simplex: w>=0, sum(w)=1."""
-    v = np.asarray(v, dtype=float)
-    if v.size == 0:
-        return v
-    if np.isclose(v.sum(), 1.0) and np.all(v >= 0):
-        return v
-
-    u = np.sort(v)[::-1]
-    cssv = np.cumsum(u)
-    rho = np.where(u * np.arange(1, len(u) + 1) > (cssv - 1))[0]
-    if len(rho) == 0:
-        w = np.zeros_like(v)
-        w[int(np.argmax(v))] = 1.0
-        return w
-    rho = int(rho[-1])
-    theta = (cssv[rho] - 1.0) / (rho + 1)
-    w = np.maximum(v - theta, 0.0)
-    s = float(w.sum())
-    if s <= 0:
-        w = np.zeros_like(v)
-        w[int(np.argmax(v))] = 1.0
-        return w
-    return w / s
-
-def shrink_cov(S: np.ndarray, delta: float = 0.5) -> np.ndarray:
-    S = np.asarray(S, dtype=float)
-    diag = np.diag(np.diag(S))
-    return (1.0 - float(delta)) * S + float(delta) * diag
-
 # =========================================================
-# 2) Features / Target
+# 2) Features / Target — imported from model_ridge.py
 # =========================================================
-
-def rsi(close: pd.Series, period: int = 14) -> pd.Series:
-    diff = close.diff()
-    up = diff.clip(lower=0)
-    down = (-diff).clip(lower=0)
-    ru = up.ewm(alpha=1/period, adjust=False).mean()
-    rd = down.ewm(alpha=1/period, adjust=False).mean()
-    rs = ru / (rd + 1e-12)
-    return 100.0 - (100.0 / (1.0 + rs))
-
-def slope_log_price(close: pd.Series, window: int = 60) -> pd.Series:
-    arr = close.to_numpy(dtype=float)
-    y = np.log(np.clip(arr, 1e-12, None))
-    w = int(window)
-    if w < 2:
-        return pd.Series(np.full_like(y, np.nan, dtype=float), index=close.index)
-    x = np.arange(w, dtype=float)
-    x = x - x.mean()
-    denom = float((x * x).sum()) + 1e-12
-    numer = np.convolve(y, x[::-1], mode="valid")
-    out = np.full_like(y, np.nan, dtype=float)
-    out[w - 1:] = numer / denom
-    out[~np.isfinite(out)] = np.nan
-    return pd.Series(out, index=close.index)
 
 
 def atr(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 20) -> pd.Series:
@@ -142,261 +99,15 @@ def dynamic_stop_loss_pct(
         stop_pct *= 0.70
     return float(np.clip(stop_pct, float(min_pct), float(max_pct)))
 
-def make_features(prices: pd.DataFrame, volumes: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-    feats = {}
-    for tkr in prices.columns:
-        c = prices[tkr]
-        df = pd.DataFrame(index=prices.index)
-
-        # ── original 10 factors ──────────────────────────────────────────
-        df["ret1"]    = c.pct_change()
-        df["ret5"]    = c.pct_change(5)
-        df["ret20"]   = c.pct_change(20)
-        df["ret60"]   = c.pct_change(60)
-        df["vol20"]   = df["ret1"].rolling(20).std()
-        df["vol60"]   = df["ret1"].rolling(60).std()
-        ma50          = c.rolling(50).mean()
-        ma200         = c.rolling(200).mean()
-        df["ma_gap"]  = (ma50 / (ma200 + 1e-12)) - 1.0
-        df["z_20"]    = (c - c.rolling(20).mean()) / (c.rolling(20).std() + 1e-12)
-        df["rsi14"]   = rsi(c, 14) / 100.0
-        df["slope60"] = slope_log_price(c, 60)
-
-        # ── NEW: academic alpha factors ───────────────────────────────────
-        # 1) 12-1 momentum: 12-month return minus most recent 1-month.
-        #    Bypasses short-term reversal; strongest documented factor in Japan
-        #    (Jegadeesh & Titman 1993, replication: Japanese market)
-        df["mom_12_1"]      = c.pct_change(252) - c.pct_change(21)
-
-        # 2) 52-week high ratio (George & Hwang 2004): anchoring bias premium.
-        #    Stocks near 52-week high outperform; investors anchor to that level
-        df["high52w"]       = (c / c.rolling(252).max().clip(lower=1e-6)) - 1.0
-
-        # 3) Volatility-adjusted momentum (Sharpe ratio proxy).
-        #    Risk-normalised momentum is more robust across vol regimes
-        df["vol_adj_mom20"] = df["ret20"] / (df["vol20"] + 1e-12)
-
-        # 4) Momentum consistency: fraction of trading days up in past 63 days (3 months).
-        #    Captures persistent up-trend vs noisy momentum
-        df["mom_consist"]   = df["ret1"].rolling(63).apply(
-            lambda x: float((x > 0).mean()), raw=True
-        )
-
-        # 5) Volume anomaly: log-volume z-score vs 60-day baseline.
-        #    High volume + price move = confirmed signal (Blume et al. 1994)
-        if volumes is not None and tkr in volumes.columns:
-            v      = volumes[tkr].replace(0, np.nan)
-            log_v  = np.log(v.clip(lower=1.0))
-            df["vol_z"] = (log_v - log_v.rolling(60).mean()) / (log_v.rolling(60).std() + 1e-12)
-        else:
-            df["vol_z"] = 0.0
-
-        feats[tkr] = df
-    out = pd.concat(feats, axis=1).sort_index()
-    return out
-
-def make_target(prices: pd.DataFrame, H: int = 20) -> pd.DataFrame:
-    """Target: forward return / vol20 (risk-adjusted forward)."""
-    ret1 = prices.pct_change()
-    fwd = prices.shift(-int(H)) / prices - 1.0
-    vol20 = ret1.rolling(20).std()
-    return fwd / (vol20 + 1e-12)
+# make_features, make_target → model_ridge.py
+# PanelRidge → model_ridge.py
+# solve_long_only_meanvar → portfolio_optimizer.py
 
 # =========================================================
-# 3) Model + Optimizer
+# 4) Execution model — imported from execution_model.py
 # =========================================================
 
-class PanelRidge:
-    """Ridge with z-score standardization + intercept."""
-    def __init__(self, alpha: float = 50.0):
-        self.alpha = float(alpha)
-        self.mean_: Optional[np.ndarray] = None
-        self.std_: Optional[np.ndarray] = None
-        self.beta_: Optional[np.ndarray] = None
-
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
-        X = np.asarray(X, dtype=float)
-        y = np.asarray(y, dtype=float)
-        self.mean_ = np.nanmean(X, axis=0)
-        self.std_ = np.nanstd(X, axis=0) + 1e-12
-        Xs = (X - self.mean_) / self.std_
-        Xd = np.concatenate([np.ones((Xs.shape[0], 1)), Xs], axis=1)
-        n_feat = Xd.shape[1]
-        I = np.eye(n_feat, dtype=float)
-        I[0, 0] = 0.0
-        A = Xd.T @ Xd + self.alpha * I
-        b = Xd.T @ y
-        self.beta_ = np.linalg.solve(A, b)
-
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        if self.beta_ is None or self.mean_ is None or self.std_ is None:
-            raise RuntimeError("Model not fitted.")
-        X = np.asarray(X, dtype=float)
-        Xs = (X - self.mean_) / self.std_
-        Xd = np.concatenate([np.ones((Xs.shape[0], 1)), Xs], axis=1)
-        return Xd @ self.beta_
-
-def solve_long_only_meanvar(
-    mu: np.ndarray,
-    Sigma: np.ndarray,
-    w_prev: np.ndarray,
-    lam: float = 5.0,
-    gamma: float = 50.0,
-    n_iter: int = 300
-) -> np.ndarray:
-    """
-    long-only mean-variance with turnover smoothing:
-      min_w  -mu'w + lam*w' Sigma w + gamma*||w-w_prev||^2
-      s.t. w>=0, sum(w)=1
-    """
-    mu = np.asarray(mu, dtype=float)
-    Sigma = np.asarray(Sigma, dtype=float)
-    w = np.asarray(w_prev, dtype=float).copy()
-
-    eig_max = float(np.linalg.eigvalsh(Sigma).max())
-    L = 2.0 * float(lam) * max(eig_max, 1e-12) + 2.0 * float(gamma)
-    step = 1.0 / L
-
-    for _ in range(int(n_iter)):
-        grad = (-mu) + 2.0 * float(lam) * (Sigma @ w) + 2.0 * float(gamma) * (w - w_prev)
-        w_new = project_to_simplex(w - step * grad)
-        if float(np.linalg.norm(w_new - w)) < 1e-8:
-            w = w_new
-            break
-        w = w_new
-    return w
-
-# =========================================================
-# 4) Execution model (capital-dependent)
-# =========================================================
-
-@dataclass
-class ExecConfig:
-    initial_capital: float = 200_000.0
-    lot_size_default: int = 1                  # JP stocks often 100; set to 100 if needed
-    lot_size_by_ticker: Optional[Dict[str,int]] = None
-    fee_bps: float = 3.0                      # proportional fee on traded notional
-    slippage_bps: float = 0.0                 # proportional slippage on traded notional
-    impact_k: float = 0.0                     # nonlinear impact coefficient (bps * sqrt(trade/ADV))
-    adv_lookback: int = 20                    # average daily volume lookback (days)
-    max_adv_frac: float = 1.0                 # <=1: cap daily traded shares to frac * ADV; set e.g. 0.05 for 5%
-    cash_rate_daily: float = 0.0              # cash yield per day (set if you want)
-    target_vol_annual_pct: float = 0.0        # 0 disables vol targeting; 0.16 means 16% annual vol budget
-    vol_target_lookback: int = 20
-    vol_target_min_scale: float = 0.35
-    vol_target_max_scale: float = 1.0
-
-def lot_size(ticker: str, cfg: ExecConfig) -> int:
-    if cfg.lot_size_by_ticker and ticker in cfg.lot_size_by_ticker:
-        return int(cfg.lot_size_by_ticker[ticker])
-    return int(cfg.lot_size_default)
-
-def _round_to_lot(shares: int, lot: int) -> int:
-    if lot <= 1:
-        return int(shares)
-    return int((shares // lot) * lot)
-
-def execute_rebalance(
-    prices: pd.Series,
-    volumes: Optional[pd.Series],
-    target_w: pd.Series,
-    holdings: pd.Series,
-    cash: float,
-    cfg: ExecConfig
-) -> Tuple[pd.Series, float, float, float]:
-    """
-    Rebalance at close price.
-    Returns: new_holdings, new_cash, traded_notional, total_cost
-    """
-    tickers = list(target_w.index)
-    px = prices.reindex(tickers).astype(float)
-    px = px.replace([np.inf, -np.inf], np.nan).ffill().bfill()
-    px = px.clip(lower=1e-6)
-
-    # Current portfolio value
-    cur_val = float((holdings.reindex(tickers).fillna(0).astype(float) * px).sum() + cash)
-    if not np.isfinite(cur_val) or cur_val <= 0:
-        cur_val = max(float(cash), 1e-6)
-
-    # Desired dollar allocation. Preserve cash buffer when target weights sum to < 1.
-    target_w = target_w.fillna(0.0).clip(lower=0.0)
-    sw = float(target_w.sum())
-    if sw <= 1e-12:
-        target_w = target_w * 0.0
-    elif sw > 1.0 + 1e-12:
-        target_w = target_w / sw
-    target_val = target_w * cur_val
-
-    # Convert to desired shares with lots
-    desired_shares = {}
-    for t in tickers:
-        lot = lot_size(t, cfg)
-        raw = int(target_val[t] // px[t])
-        desired_shares[t] = _round_to_lot(raw, lot)
-
-    desired = pd.Series(desired_shares, index=tickers, dtype=int)
-    cur = holdings.reindex(tickers).fillna(0).astype(int)
-
-    # Liquidity constraint (optional): cap traded shares by ADV * frac
-    trade = desired - cur
-    if volumes is not None and cfg.max_adv_frac < 1.0:
-        adv = volumes.reindex(tickers).fillna(0.0).astype(float)
-        cap = (adv * float(cfg.max_adv_frac)).fillna(0.0)
-        # cap is in shares/day (since Volume is shares)
-        trade = trade.clip(lower=-cap, upper=cap).round().astype(int)
-        desired = cur + trade
-
-    # Compute trade notional and costs
-    trade_notional = float((trade.abs().astype(float) * px).sum())
-    fee = trade_notional * (float(cfg.fee_bps) / 10000.0)
-    slip = trade_notional * (float(cfg.slippage_bps) / 10000.0)
-
-    impact = 0.0
-    if volumes is not None and float(cfg.impact_k) > 0.0:
-        adv = volumes.reindex(tickers).fillna(0.0).astype(float)
-        adv_notional = float((adv * px).mean())  # crude proxy (mean across tickers)
-        denom = max(adv_notional, 1e-6)
-        # impact in dollars: (k bps) * sqrt(trade_notional/ADV_notional) * trade_notional
-        impact_bps = float(cfg.impact_k) * math.sqrt(trade_notional / denom)
-        impact = trade_notional * (impact_bps / 10000.0)
-
-    total_cost = fee + slip + impact
-
-    # Update cash and holdings (assume buys consume cash, sells add cash)
-    cash_after_trades = cash - float((trade.astype(float) * px).sum()) - total_cost
-
-    # If cash becomes negative, scale down buys (simple and robust)
-    if cash_after_trades < -1e-6:
-        # reduce buys proportionally until cash >= 0
-        buys = trade.clip(lower=0)
-        buy_notional = float((buys.astype(float) * px).sum())
-        if buy_notional > 1e-6:
-            scale = max((cash - total_cost) / buy_notional, 0.0)
-            adj_trade = trade.copy()
-            for t in tickers:
-                if adj_trade[t] > 0:
-                    lot = lot_size(t, cfg)
-                    adj = int(adj_trade[t] * scale)
-                    adj_trade[t] = _round_to_lot(adj, lot)
-            trade = adj_trade
-            desired = cur + trade
-            trade_notional = float((trade.abs().astype(float) * px).sum())
-            fee = trade_notional * (float(cfg.fee_bps) / 10000.0)
-            slip = trade_notional * (float(cfg.slippage_bps) / 10000.0)
-            # recompute impact with new trade_notional (keep same formula)
-            impact = 0.0
-            if volumes is not None and float(cfg.impact_k) > 0.0:
-                adv = volumes.reindex(tickers).fillna(0.0).astype(float)
-                adv_notional = float((adv * px).mean())
-                denom = max(adv_notional, 1e-6)
-                impact_bps = float(cfg.impact_k) * math.sqrt(trade_notional / denom)
-                impact = trade_notional * (impact_bps / 10000.0)
-            total_cost = fee + slip + impact
-            cash_after_trades = cash - float((trade.astype(float) * px).sum()) - total_cost
-
-    new_holdings = desired.astype(int)
-    new_cash = float(cash_after_trades)
-    return new_holdings, new_cash, trade_notional, total_cost
+# execute_rebalance, lot_size, _round_to_lot → execution_model.py
 
 
 # =========================================================
@@ -441,6 +152,8 @@ class NewsConfig:
     k_absF: float = 1.0                # encourage exposure when |F| is strong & coherent
     k_U: float = 3.0                   # penalize disagreement
     k_A: float = 0.6                   # penalize attention (gap/jump risk)
+    shadow_only: bool = False
+    sprint_gating: bool = False
 
 def _sigmoid(x: float) -> float:
     if x >= 0:
@@ -682,6 +395,35 @@ def apply_news_overlay_to_weights(
     g_port = float((w_target.fillna(0.0).clip(lower=0.0) * g).sum() / (float(w_target.sum()) + 1e-12))
     return w_new, g_port
 
+
+def record_news_gate_shadow(db_path: Optional[str], asof: str, gate_value: float, would_have_applied: bool) -> None:
+    if not db_path:
+        return
+    try:
+        with connect(db_path) as conn:
+            ensure_learning_tables(conn)
+            conn.execute(
+                """
+                INSERT INTO learning_audit(asof, event_type, factor_name, old_value, new_value, ic_value, notes)
+                VALUES (?, 'news_shadow_gate', 'news_gate', NULL, ?, NULL, ?)
+                """,
+                (
+                    str(asof),
+                    float(gate_value),
+                    json.dumps(
+                        {
+                            "factor": "news_gate",
+                            "gate_value": float(gate_value),
+                            "would_have_applied": bool(would_have_applied),
+                        },
+                        ensure_ascii=False,
+                    ),
+                ),
+            )
+            conn.commit()
+    except Exception:
+        pass
+
 # =========================================================
 # 5) Data download
 # =========================================================
@@ -788,6 +530,7 @@ class BTConfig:
     rebalance_every: int = 20
 
     alpha: float = 10.0
+    ridge_alpha_cv: bool = False
     lam: float = 2.0
     gamma: float = 10.0
     shrink_delta: float = 0.5
@@ -821,6 +564,7 @@ class BTConfig:
     max_dd_half: float = 0.12        # 组合回撤超过12%：降至半仓
     max_dd_full: float = 0.18        # 组合回撤超过18%：全部平仓退场
     max_dd_reentry_cooldown_days: int = 20
+    max_single_position_pct: float = 0.25
 
     # 行业集中度约束
     max_sector_weight: float = 0.35  # 单一行业最大权重
@@ -836,6 +580,7 @@ class BTConfig:
 
 SHADOW_SIGNAL_FACTORS: List[str] = [
     "mom_consist",
+    "ma_gap",
     "rsi14",
     "vol_adj_mom20",
     "ret20",
@@ -885,6 +630,7 @@ HYBRID_FUNDAMENTAL_FACTORS: List[str] = [
 
 SHADOW_IC_WEIGHTS: Dict[str, float] = {
     "mom_consist": 2.168137,
+    "ma_gap": 1.945000,
     "rsi14": 2.104142,
     "vol_adj_mom20": 2.036905,
     "ret20": 1.912044,
@@ -942,12 +688,98 @@ FACTOR_WINSOR_UPPER_Q: float = 0.98
 FACTOR_SECTOR_MIN_GROUP: int = 3
 
 
-def hybrid_factor_setup(use_fundamental_features: bool) -> tuple[List[str], Dict[str, float]]:
+def normalize_positive_weight_map(weight_map: Dict[str, float]) -> Dict[str, float]:
+    positive = {str(name): float(max(0.0, weight)) for name, weight in weight_map.items()}
+    total = float(sum(positive.values()))
+    if total <= 1e-12:
+        equal_weight = 1.0 / max(len(positive), 1)
+        return {str(name): equal_weight for name in positive}
+    return {str(name): float(weight / total) for name, weight in positive.items()}
+
+
+def blend_weight_maps(
+    primary_map: Dict[str, float],
+    fallback_map: Dict[str, float],
+    primary_ratio: float = 0.70,
+) -> Dict[str, float]:
+    names = list(dict.fromkeys([*primary_map.keys(), *fallback_map.keys()]))
+    if not names:
+        return {}
+    p_map = normalize_positive_weight_map(primary_map)
+    f_map = normalize_positive_weight_map(fallback_map)
+    p_ratio = min(max(float(primary_ratio), 0.0), 1.0)
+    f_ratio = 1.0 - p_ratio
+    blended = {
+        str(name): p_ratio * float(p_map.get(name, 0.0)) + f_ratio * float(f_map.get(name, 0.0))
+        for name in names
+    }
+    return normalize_positive_weight_map(blended)
+
+
+def hybrid_factor_setup(use_fundamental_features: bool, db_path: Optional[str] = None) -> tuple[List[str], Dict[str, float]]:
     factor_names = list(SHADOW_SIGNAL_FACTORS) + list(HYBRID_RISK_ADJUSTED_FACTORS)
     if use_fundamental_features:
         factor_names.extend(HYBRID_FUNDAMENTAL_FACTORS)
-    weight_map = {name: HYBRID_BASE_WEIGHTS[name] for name in factor_names if name in HYBRID_BASE_WEIGHTS}
+    eligible_factors, registry_weight_map = load_production_eligible_factors(db_path, factor_names, min_observations=80)
+    governed_names = [name for name in factor_names if name in set(eligible_factors)]
+    if len(governed_names) >= 3:
+        factor_names = governed_names
+    base_weight_map = {name: HYBRID_BASE_WEIGHTS[name] for name in factor_names if name in HYBRID_BASE_WEIGHTS}
+    if len(governed_names) >= 3:
+        weight_map = normalize_positive_weight_map(base_weight_map)
+    else:
+        weight_map = normalize_positive_weight_map(base_weight_map)
     return factor_names, weight_map
+
+
+def load_production_eligible_factors(
+    db_path: Optional[str],
+    factor_names: List[str],
+    min_observations: int = 80,
+) -> tuple[List[str], Dict[str, float]]:
+    if not db_path or not factor_names:
+        return [], {}
+    try:
+        with sqlite3.connect(db_path) as conn:
+            placeholders = ",".join("?" for _ in factor_names)
+            registry_rows = conn.execute(
+                f"""
+                SELECT factor_name, n_observations, weight
+                FROM factor_registry
+                WHERE factor_name IN ({placeholders})
+                """,
+                factor_names,
+            ).fetchall()
+            audit_rows = conn.execute(
+                f"""
+                SELECT factor_name, notes
+                FROM learning_audit
+                WHERE factor_name IN ({placeholders})
+                ORDER BY created_at DESC, id DESC
+                """,
+                factor_names,
+            ).fetchall()
+    except Exception:
+        return [], {}
+
+    obs_by_factor = {str(name): int(n_obs or 0) for name, n_obs, _weight in registry_rows}
+    registry_weight_by_factor = {str(name): float(_weight or 0.0) for name, _n_obs, _weight in registry_rows}
+    guard_by_factor: Dict[str, str] = {}
+    for factor_name, notes in audit_rows:
+        key = str(factor_name)
+        if key in guard_by_factor:
+            continue
+        try:
+            payload = json.loads(notes or "{}")
+            guard_by_factor[key] = str(payload.get("guard", ""))
+        except Exception:
+            guard_by_factor[key] = ""
+    eligible = []
+    for factor_name in factor_names:
+        if obs_by_factor.get(factor_name, 0) >= int(min_observations) and guard_by_factor.get(factor_name) == "PASS":
+            eligible.append(str(factor_name))
+    weight_map = {name: registry_weight_by_factor.get(name, 0.0) for name in eligible}
+    return eligible, weight_map
 
 
 def load_feature_daily_panels(
@@ -1105,43 +937,115 @@ def benchmark_regime_scale(
     }
     return state, scale_map[state]
 
-# ── sector cap helper ─────────────────────────────────────────────────────────
-def apply_sector_cap(
-    w: np.ndarray,
-    tickers: List[str],
-    sector_map: Dict[str, str],
-    max_weight: float = 0.35,
-) -> np.ndarray:
-    """Iteratively redistribute weight from over-concentrated sectors.
+# apply_sector_cap, apply_single_name_cap → portfolio_optimizer.py
 
-    One iteration suffices unless two sectors both exceed limit simultaneously;
-    three iterations is conservative and always converges.
-    """
-    w = w.copy()
-    for _ in range(3):
-        sectors = [sector_map.get(t, "Unknown") for t in tickers]
-        changed = False
-        for sec in set(sectors):
-            idx = [i for i, s in enumerate(sectors) if s == sec]
-            sec_w = w[idx].sum()
-            if sec_w > max_weight + 1e-9:
-                excess_per = (sec_w - max_weight) / len(idx)
-                w[idx] -= excess_per
-                # proportionally redistribute excess to other tickers
-                other = [i for i in range(len(tickers)) if i not in idx]
-                if other:
-                    other_w = w[other].sum()
-                    extra = sec_w - max_weight
-                    if other_w > 1e-9:
-                        w[other] += extra * (w[other] / other_w)
-                changed = True
-        w = np.clip(w, 0.0, None)
-        s = w.sum()
-        if s > 1e-9:
-            w /= s
-        if not changed:
+
+def latest_nonzero_target_from_history(
+    target_hist: List[np.ndarray],
+    tickers: List[str],
+) -> pd.Series:
+    """Recover the latest non-zero pre-overlay target for flat, non-rebalance days."""
+    for row in reversed(target_hist):
+        arr = np.asarray(row, dtype=float)
+        arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+        if float(np.abs(arr).sum()) > 1e-9:
+            return pd.Series(arr, index=tickers, dtype=float)
+    return pd.Series(0.0, index=tickers, dtype=float)
+
+
+def compress_to_lot_feasible_target(
+    w_target: pd.Series,
+    prices: pd.Series,
+    nav_before: float,
+    lot_size_default: int,
+    sector_map: Optional[Dict[str, str]],
+    max_single_position_pct: float,
+    max_sector_weight: float,
+) -> pd.Series:
+    """Compress fragmented weights into a lot-feasible subset for small accounts."""
+    out = w_target.fillna(0.0).clip(lower=0.0).astype(float)
+    if out.empty or nav_before <= 1e-9:
+        return out * 0.0
+    gross_budget = min(float(out.sum()), 1.0)
+    if gross_budget <= 1e-9:
+        return out * 0.0
+
+    price_map = prices.reindex(out.index).astype(float).replace([np.inf, -np.inf], np.nan).dropna()
+    price_map = price_map[price_map > 0.0]
+    if price_map.empty:
+        return out * 0.0
+
+    candidates = []
+    for symbol, weight in out.sort_values(ascending=False).items():
+        price = float(price_map.get(symbol, np.nan))
+        if not np.isfinite(price) or price <= 0.0:
+            continue
+        lot_notional = float(price) * float(lot_size(symbol, ExecConfig(lot_size_default=lot_size_default)))
+        min_weight = lot_notional / max(float(nav_before), 1e-9)
+        if min_weight > float(max_single_position_pct) + 1e-12:
+            continue
+        candidates.append(
+            {
+                "symbol": str(symbol),
+                "target_weight": float(weight),
+                "min_weight": float(min_weight),
+                "sector": sector_map.get(symbol, "Unknown") if sector_map else "Unknown",
+            }
+        )
+    if not candidates:
+        return out * 0.0
+
+    selected = []
+    sector_used: Dict[str, float] = {}
+    remaining = gross_budget
+    for row in candidates:
+        sector_name = str(row["sector"])
+        sector_left = float(max_sector_weight) - float(sector_used.get(sector_name, 0.0))
+        if row["min_weight"] > sector_left + 1e-12:
+            continue
+        if row["min_weight"] > remaining + 1e-12:
+            continue
+        selected.append({**row, "alloc_weight": float(row["min_weight"])})
+        sector_used[sector_name] = float(sector_used.get(sector_name, 0.0)) + float(row["min_weight"])
+        remaining -= float(row["min_weight"])
+
+    if not selected:
+        return out * 0.0
+
+    for _ in range(10):
+        if remaining <= 1e-9:
             break
-    return w
+        capacity_rows = []
+        capacity_sum = 0.0
+        for row in selected:
+            sector_name = str(row["sector"])
+            single_left = float(max_single_position_pct) - float(row["alloc_weight"])
+            sector_left = float(max_sector_weight) - float(sector_used.get(sector_name, 0.0))
+            cap = max(min(single_left, sector_left), 0.0)
+            desired_extra = max(float(row["target_weight"]) - float(row["alloc_weight"]), 0.0)
+            effective_cap = min(cap, desired_extra if desired_extra > 1e-12 else cap)
+            if effective_cap > 1e-12:
+                priority = max(float(row["target_weight"]), 1e-12)
+                capacity_rows.append((row, effective_cap, priority))
+                capacity_sum += priority
+        if not capacity_rows:
+            break
+        used_this_round = 0.0
+        for row, cap, priority in capacity_rows:
+            add = min(remaining * (priority / capacity_sum), cap)
+            if add <= 1e-12:
+                continue
+            row["alloc_weight"] = float(row["alloc_weight"]) + float(add)
+            sector_used[row["sector"]] = float(sector_used.get(row["sector"], 0.0)) + float(add)
+            used_this_round += float(add)
+        if used_this_round <= 1e-12:
+            break
+        remaining -= used_this_round
+
+    compressed = pd.Series(0.0, index=out.index, dtype=float)
+    for row in selected:
+        compressed.loc[row["symbol"]] = float(row["alloc_weight"])
+    return compressed
 
 
 def apply_portfolio_vol_target(
@@ -1353,7 +1257,7 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     else:
         extra_feature_panels = {}
         print("   [fundamental] live fundamental factors disabled; hybrid mode uses technical + risk-adjusted factors only")
-    hybrid_factor_names, hybrid_weight_map = hybrid_factor_setup(use_fundamental_features)
+    hybrid_factor_names, hybrid_weight_map = hybrid_factor_setup(use_fundamental_features, db_path=bt.db_path)
     atr_df = pd.DataFrame(
         {tkr: atr(trade_high[tkr], trade_low[tkr], trade_px[tkr], window=bt.atr_window) for tkr in trade_tickers},
         index=trade_px.index,
@@ -1424,6 +1328,7 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         return np.vstack(X_list), np.asarray(y_list, dtype=float)
 
     model = PanelRidge(alpha=bt.alpha)
+    cv_results_log: List[dict] = []
     learn_conn = None
     if bt.db_path:
         try:
@@ -1448,6 +1353,7 @@ def backtest(bt: BTConfig, ex: ExecConfig):
     equity_val = []
 
     # logs
+    base_target_hist = []
     w_target_hist = []
     risk_off_hist = []
     news_gate_hist = []
@@ -1586,7 +1492,8 @@ def backtest(bt: BTConfig, ex: ExecConfig):
 
         # compute target weights
         if risk_off or dd_scale == 0.0:
-            w_target = pd.Series(0.0, index=trade_tickers)
+            base_target = pd.Series(0.0, index=trade_tickers)
+            w_target = base_target.copy()
         else:
             if rebalance_due:
                 # safe training window ends at i-H (exclusive of i-H+1..i which would leak)
@@ -1596,7 +1503,11 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 stacked = panel_stack(train_dates)
                 if stacked is not None:
                     Xtr, ytr = stacked
-                    model.fit(Xtr, ytr)
+                    if bt.ridge_alpha_cv:
+                        cv_info = model.fit_with_cv(Xtr, ytr)
+                        cv_results_log.append({"date": str(dt.date()), **cv_info})
+                    else:
+                        model.fit(Xtr, ytr)
 
                 # predict risk-adjusted return
                 row = feats.loc[dt]
@@ -1656,37 +1567,40 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                     w_prev = np.ones(n, dtype=float) / n
 
                 w_opt = solve_long_only_meanvar(mu, Sigma, w_prev=w_prev, lam=bt.lam, gamma=bt.gamma)
+                w_opt = apply_single_name_cap(w_opt, bt.max_single_position_pct)
                 # 行业集中度约束（≤35%每行业）
                 if sector_map:
                     w_opt = apply_sector_cap(w_opt, trade_tickers, sector_map, bt.max_sector_weight)
-                w_target = pd.Series(w_opt, index=trade_tickers)
+                w_opt = apply_single_name_cap(w_opt, bt.max_single_position_pct)
+                base_target = pd.Series(w_opt, index=trade_tickers)
                 # 应用止损：将触发止损的持仓权重置0
                 for tkr in stop_loss_tickers:
-                    if tkr in w_target.index:
-                        w_target[tkr] = 0.0
+                    if tkr in base_target.index:
+                        base_target[tkr] = 0.0
 
                 # 应用最大回撤缩减（多余部分保留为现金）
-                w_target = w_target * dd_scale
+                w_target = base_target * dd_scale
             else:
-                # no rebalance: keep implicit target as current weights (no trade)
+                # no rebalance: keep current holdings weights; if already flat, carry the
+                # latest actionable pre-overlay target so reduced-risk regimes can re-enter.
                 px_t = trade_px.loc[dt].astype(float).clip(lower=1e-6)
                 cur_val_vec = holdings.astype(float) * px_t
                 cur_total = float(cur_val_vec.sum() + cash)
                 if cur_total > 1e-9:
-                    w_target = (cur_val_vec / cur_total).astype(float)
+                    base_target = (cur_val_vec / cur_total).astype(float)
                 else:
-                    w_target = pd.Series(0.0, index=trade_tickers)
+                    base_target = latest_nonzero_target_from_history(base_target_hist, trade_tickers)
                 # 非调仓日也应用止损和回撤控制
                 for tkr in stop_loss_tickers:
-                    if tkr in w_target.index:
-                        w_target[tkr] = 0.0
-                w_target = w_target * dd_scale
+                    if tkr in base_target.index:
+                        base_target[tkr] = 0.0
+                w_target = base_target * dd_scale
 
 
         # ---- apply news overlay (gate/scale target weights) ----
         news_gate = 1.0
         if bt.news.enabled and (F_news is not None):
-            w_target, news_gate = apply_news_overlay_to_weights(
+            gated_target, news_gate = apply_news_overlay_to_weights(
                 w_target=w_target,
                 dt=dt,
                 F=F_news,
@@ -1694,6 +1608,10 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 U=U_news,
                 cfg=bt.news
             )
+            if bt.news.shadow_only:
+                record_news_gate_shadow(bt.db_path, str(dt.date()), news_gate, would_have_applied=news_gate < 0.999)
+            else:
+                w_target = gated_target
 
         vol_target_scale = 1.0
         forecast_vol = float("nan")
@@ -1706,6 +1624,15 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 min_scale=ex.vol_target_min_scale,
                 max_scale=ex.vol_target_max_scale,
             )
+        w_target = compress_to_lot_feasible_target(
+            w_target=w_target,
+            prices=px_t_cur,
+            nav_before=max(cur_equity_abs, 1e-9),
+            lot_size_default=int(ex.lot_size_default),
+            sector_map=sector_map,
+            max_single_position_pct=float(bt.max_single_position_pct),
+            max_sector_weight=float(bt.max_sector_weight),
+        )
 
         # execute at close
         px_today = trade_px.loc[dt].astype(float)
@@ -1721,7 +1648,8 @@ def backtest(bt: BTConfig, ex: ExecConfig):
             target_w=w_target,
             holdings=holdings,
             cash=cash,
-            cfg=ex
+            cfg=ex,
+            forced_exit_tickers=sorted(stop_loss_tickers),
         )
 
         # PnL next day: holdings carry to next close (simple close-to-close)
@@ -1742,6 +1670,8 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         equity_idx.append(next_dt)
         equity_val.append(port_val_after / float(ex.initial_capital))
 
+        base_target_hist.append(base_target.reindex(trade_tickers).fillna(0.0).to_numpy(dtype=float))
+        base_target_hist.append(base_target.reindex(trade_tickers).fillna(0.0).to_numpy(dtype=float))
         w_target_hist.append(w_target.reindex(trade_tickers).fillna(0.0).to_numpy(dtype=float))
         risk_off_hist.append(bool(risk_off))
         benchmark_state_hist.append(str(benchmark_state))
@@ -1880,7 +1810,8 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         rebalance_due = bool((end_i - start_i) % int(bt.rebalance_every) == 0)
 
         if regime_scale == 0.0:
-            w_target = pd.Series(0.0, index=trade_tickers)
+            base_target = pd.Series(0.0, index=trade_tickers)
+            w_target = base_target.copy()
         else:
             # Use the same rebalance cadence logic as the main loop.
             if rebalance_due:
@@ -1890,7 +1821,10 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 stacked = panel_stack(train_dates)
                 if stacked is not None:
                     Xtr, ytr = stacked
-                    model.fit(Xtr, ytr)
+                    if bt.ridge_alpha_cv:
+                        model.fit_with_cv(Xtr, ytr)
+                    else:
+                        model.fit(Xtr, ytr)
 
                 row = feats.loc[dt]
                 composite_row = merge_feature_row(row, trade_tickers, extra_feature_panels, dt)
@@ -1944,28 +1878,30 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                     w_prev = np.ones(n, dtype=float) / n
 
                 w_opt = solve_long_only_meanvar(mu, Sigma, w_prev=w_prev, lam=bt.lam, gamma=bt.gamma)
+                w_opt = apply_single_name_cap(w_opt, bt.max_single_position_pct)
                 if sector_map:
                     w_opt = apply_sector_cap(w_opt, trade_tickers, sector_map, bt.max_sector_weight)
-                w_target = pd.Series(w_opt, index=trade_tickers)
+                w_opt = apply_single_name_cap(w_opt, bt.max_single_position_pct)
+                base_target = pd.Series(w_opt, index=trade_tickers)
                 for tkr in stop_loss_tickers:
-                    if tkr in w_target.index:
-                        w_target[tkr] = 0.0
-                w_target = w_target * regime_scale
+                    if tkr in base_target.index:
+                        base_target[tkr] = 0.0
+                w_target = base_target * regime_scale
             else:
                 cur_val_vec = holdings.astype(float) * px_t_cur
                 cur_total = float(cur_val_vec.sum() + cash)
                 if cur_total > 1e-9:
-                    w_target = (cur_val_vec / cur_total).astype(float)
+                    base_target = (cur_val_vec / cur_total).astype(float)
                 else:
-                    w_target = pd.Series(0.0, index=trade_tickers)
+                    base_target = latest_nonzero_target_from_history(base_target_hist, trade_tickers)
                 for tkr in stop_loss_tickers:
-                    if tkr in w_target.index:
-                        w_target[tkr] = 0.0
-                w_target = w_target * regime_scale
+                    if tkr in base_target.index:
+                        base_target[tkr] = 0.0
+                w_target = base_target * regime_scale
 
         news_gate = 1.0
         if bt.news.enabled and (F_news is not None):
-            w_target, news_gate = apply_news_overlay_to_weights(
+            gated_target, news_gate = apply_news_overlay_to_weights(
                 w_target=w_target,
                 dt=dt,
                 F=F_news,
@@ -1973,6 +1909,10 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 U=U_news,
                 cfg=bt.news
             )
+            if bt.news.shadow_only:
+                record_news_gate_shadow(bt.db_path, str(dt.date()), news_gate, would_have_applied=news_gate < 0.999)
+            else:
+                w_target = gated_target
 
         vol_target_scale = 1.0
         forecast_vol = float("nan")
@@ -1985,6 +1925,15 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 min_scale=ex.vol_target_min_scale,
                 max_scale=ex.vol_target_max_scale,
             )
+        w_target = compress_to_lot_feasible_target(
+            w_target=w_target,
+            prices=px_t_cur,
+            nav_before=max(cur_equity_abs, 1e-9),
+            lot_size_default=int(ex.lot_size_default),
+            sector_map=sector_map,
+            max_single_position_pct=float(bt.max_single_position_pct),
+            max_sector_weight=float(bt.max_sector_weight),
+        )
 
         w_target_hist.append(w_target.reindex(trade_tickers).fillna(0.0).to_numpy(dtype=float))
         risk_off_hist.append(bool(risk_off))
@@ -2040,6 +1989,14 @@ def backtest(bt: BTConfig, ex: ExecConfig):
             "forecast_vol_annual": forecast_vol_hist,
             "target_weight_sum": target_weight_sum_hist,
             "stop_loss_count": [len(s) for s in stop_loss_log],
+            "stop_exit_tickers": [";".join(sorted(map(str, s))) if s else "" for s in stop_loss_log],
+            "stop_exit_reason": ["stop_loss_triggered" if s else "" for s in stop_loss_log],
+            "stop_exit_mode": [str(bt.stop_loss_mode) if s else "" for s in stop_loss_log],
+            "stop_exit_price_ref": ["close_vs_entry" if s else "" for s in stop_loss_log],
+            "stop_exit_triggered_at": [
+                pd.Timestamp(dt).strftime("%Y-%m-%d") if s else ""
+                for dt, s in zip(w_df.index, stop_loss_log)
+            ],
         },
         index=w_df.index
     )
@@ -2303,21 +2260,22 @@ def build_zero_exposure_report(
     latest_dd_scale = float(latest_stats.get("dd_scale", 1.0) or 0.0)
     latest_rebalance_due = bool(latest_stats.get("rebalance_due", False))
     latest_stop_loss_count = int(latest_stats.get("stop_loss_count", 0) or 0)
+    latest_news_gate = float(latest_stats.get("news_gate", 1.0) or 0.0)
 
     if latest_weight_sum > 1e-9:
         primary_cause = "actionable_nonzero_target"
+    elif latest_stop_loss_count > 0 or latest_dd_scale <= 1e-12:
+        primary_cause = "risk_control_exit"
     elif latest_risk_off:
-        primary_cause = "benchmark_risk_off"
+        primary_cause = "benchmark_regime"
+    elif latest_news_gate <= 1e-6:
+        primary_cause = "news_overlay"
     elif latest_benchmark_scale < 1.0:
-        primary_cause = "benchmark_regime_capped_exposure"
-    elif latest_dd_scale <= 1e-12:
-        primary_cause = "drawdown_risk_off"
+        primary_cause = "benchmark_regime"
     elif not latest_rebalance_due and last_nonzero_dt is not None:
         primary_cause = "awaiting_next_rebalance_after_flatten"
-    elif latest_stop_loss_count > 0:
-        primary_cause = "stop_loss_flattened_positions"
     else:
-        primary_cause = "zero_target_from_signal_or_optimizer"
+        primary_cause = "all_signal_weights_zero"
 
     report = {
         "signal_mode": signal_mode,
@@ -2342,6 +2300,11 @@ def build_zero_exposure_report(
             "news_gate": float(latest_stats.get("news_gate", 1.0) or 0.0),
             "vol_target_scale": float(latest_stats.get("vol_target_scale", 1.0) or 0.0),
             "stop_loss_count": latest_stop_loss_count,
+            "stop_exit_tickers": str(latest_stats.get("stop_exit_tickers", "") or ""),
+            "stop_exit_reason": str(latest_stats.get("stop_exit_reason", "") or ""),
+            "stop_exit_mode": str(latest_stats.get("stop_exit_mode", "") or ""),
+            "stop_exit_price_ref": str(latest_stats.get("stop_exit_price_ref", "") or ""),
+            "stop_exit_triggered_at": str(latest_stats.get("stop_exit_triggered_at", "") or ""),
         },
         "benchmark_diagnostics": {
             "price": float(latest_stats.get("benchmark_price", np.nan)),
@@ -2353,6 +2316,15 @@ def build_zero_exposure_report(
             "price_minus_slow_pct": float(latest_stats.get("benchmark_price_minus_slow_pct", np.nan)),
         },
         "primary_cause": primary_cause,
+        "zero_exposure_alert": False,
+        "stop_exit_audit": {
+            "count": latest_stop_loss_count,
+            "tickers": str(latest_stats.get("stop_exit_tickers", "") or ""),
+            "reason": str(latest_stats.get("stop_exit_reason", "") or ""),
+            "mode": str(latest_stats.get("stop_exit_mode", "") or ""),
+            "price_ref": str(latest_stats.get("stop_exit_price_ref", "") or ""),
+            "triggered_at": str(latest_stats.get("stop_exit_triggered_at", "") or ""),
+        },
     }
     return report
 
@@ -2410,6 +2382,8 @@ if __name__ == "__main__":
         max_dd_half=float(os.getenv("SS7_MAX_DD_HALF", "0.12")),
         max_dd_full=float(os.getenv("SS7_MAX_DD_FULL", "0.18")),
         max_dd_reentry_cooldown_days=int(os.getenv("SS7_MAX_DD_REENTRY_COOLDOWN_DAYS", "20")),
+        max_single_position_pct=float(os.getenv("SS7_MAX_SINGLE_POSITION_PCT", "0.25")),
+        max_sector_weight=float(os.getenv("SS7_MAX_SECTOR_WEIGHT", "0.35")),
         target_vol_annual_pct=float(os.getenv("SS7_TARGET_VOL_ANNUAL_PCT", "0.0")),
         vol_target_lookback=int(os.getenv("SS7_VOL_TARGET_LOOKBACK", "20")),
         vol_target_min_scale=float(os.getenv("SS7_VOL_TARGET_MIN_SCALE", "0.35")),
@@ -2421,14 +2395,17 @@ if __name__ == "__main__":
         ],
     )
 
+    bt.ridge_alpha_cv = os.getenv("SS7_RIDGE_ALPHA_CV", "0") == "1"
+
     # ---- optional: News overlay (external gating/risk layer) ----
     # Preferred: SS7_NEWS_DB=<path/to/japan_market.db> (reads feature_daily directly)
     # Fallback:  SS7_NEWS_CSV=<path/to/news.csv> + SS7_NEWS_ON=1
-    bt.news.enabled = (os.getenv("SS7_NEWS_ON", "0") == "1")
+    news_on_raw = os.getenv("SS7_NEWS_ON", "0")
+    bt.news.enabled = (news_on_raw == "1")
     bt.news.db_path = os.getenv("SS7_NEWS_DB", None) or None
     bt.news.csv_path = os.getenv("SS7_NEWS_CSV", None)
-    if bt.news.db_path:
-        bt.news.enabled = True  # DB path alone is sufficient to enable overlay
+    if bt.news.db_path and news_on_raw not in {"0", "false", "False"}:
+        bt.news.enabled = True
     bt.news.half_life_days = float(os.getenv("SS7_NEWS_HALF_LIFE_DAYS", str(bt.news.half_life_days)))
     bt.news.lookback_days = int(os.getenv("SS7_NEWS_LOOKBACK_DAYS", str(bt.news.lookback_days)))
     bt.news.A_max = float(os.getenv("SS7_NEWS_A_MAX", str(bt.news.A_max)))
@@ -2438,6 +2415,8 @@ if __name__ == "__main__":
     bt.news.k_absF = float(os.getenv("SS7_NEWS_K_ABSF", str(bt.news.k_absF)))
     bt.news.k_U = float(os.getenv("SS7_NEWS_K_U", str(bt.news.k_U)))
     bt.news.k_A = float(os.getenv("SS7_NEWS_K_A", str(bt.news.k_A)))
+    bt.news.shadow_only = os.getenv("SS7_NEWS_SHADOW_ONLY", "0") == "1"
+    bt.news.sprint_gating = os.getenv("SS7_NEWS_SPRINT_GATING", "0") == "1"
 
     print("=" * 70)
     try:
@@ -2482,17 +2461,20 @@ if __name__ == "__main__":
     latest_dt = pd.Timestamp(primary["w_df"].index[-1]) if len(primary["w_df"]) else None
     export_weights, export_dt, latest_is_zero = latest_actionable_weights(primary["w_df"])
     pd.DataFrame(
-        {"symbol": latest_weights.index, "target_weight": latest_weights.values}
+        {"symbol": export_weights.index, "target_weight": export_weights.values}
     ).to_csv(out_dir / "target_weights.csv", index=False)
+    pd.DataFrame(
+        {"symbol": latest_weights.index, "target_weight": latest_weights.values}
+    ).to_csv(out_dir / "target_weights_latest.csv", index=False)
     pd.DataFrame(
         {"symbol": export_weights.index, "target_weight": export_weights.values}
     ).to_csv(out_dir / "target_weights_last_nonzero.csv", index=False)
     target_meta = {
         "primary_mode": bt.signal_mode,
-        "exported_asof": latest_dt.strftime("%Y-%m-%d") if latest_dt is not None else None,
+        "exported_asof": export_dt.strftime("%Y-%m-%d") if export_dt is not None else None,
         "history_last_asof": latest_dt.strftime("%Y-%m-%d") if latest_dt is not None else None,
         "history_last_row_is_zero": latest_is_zero,
-        "export_row_sum": float(latest_weights.sum()) if len(latest_weights) else 0.0,
+        "export_row_sum": float(export_weights.sum()) if len(export_weights) else 0.0,
         "last_nonzero_asof": export_dt.strftime("%Y-%m-%d") if export_dt is not None else None,
         "last_nonzero_row_sum": float(export_weights.sum()) if len(export_weights) else 0.0,
     }
@@ -2540,6 +2522,11 @@ if __name__ == "__main__":
         "news_gate",
         "vol_target_scale",
         "stop_loss_count",
+        "stop_exit_tickers",
+        "stop_exit_reason",
+        "stop_exit_mode",
+        "stop_exit_price_ref",
+        "stop_exit_triggered_at",
     ]:
         zero_lines.append(f"- {key}: {latest_state.get(key)}")
     zero_lines.extend(["", "## Benchmark Diagnostics", ""])
@@ -2580,8 +2567,11 @@ if __name__ == "__main__":
         latest_mode_dt = pd.Timestamp(r["w_df"].index[-1]) if len(r["w_df"]) else None
         mode_export_weights, mode_export_dt, mode_latest_is_zero = latest_actionable_weights(r["w_df"])
         pd.DataFrame(
-            {"symbol": latest_mode_weights.index, "target_weight": latest_mode_weights.values}
+            {"symbol": mode_export_weights.index, "target_weight": mode_export_weights.values}
         ).to_csv(out_dir / f"target_weights_{r['mode']}.csv", index=False)
+        pd.DataFrame(
+            {"symbol": latest_mode_weights.index, "target_weight": latest_mode_weights.values}
+        ).to_csv(out_dir / f"target_weights_{r['mode']}_latest.csv", index=False)
         pd.DataFrame(
             {"symbol": mode_export_weights.index, "target_weight": mode_export_weights.values}
         ).to_csv(out_dir / f"target_weights_{r['mode']}_last_nonzero.csv", index=False)
@@ -2589,10 +2579,10 @@ if __name__ == "__main__":
             json.dumps(
                 {
                     "mode": r["mode"],
-                    "exported_asof": latest_mode_dt.strftime("%Y-%m-%d") if latest_mode_dt is not None else None,
+                    "exported_asof": mode_export_dt.strftime("%Y-%m-%d") if mode_export_dt is not None else None,
                     "history_last_asof": latest_mode_dt.strftime("%Y-%m-%d") if latest_mode_dt is not None else None,
                     "history_last_row_is_zero": mode_latest_is_zero,
-                    "export_row_sum": float(latest_mode_weights.sum()) if len(latest_mode_weights) else 0.0,
+                    "export_row_sum": float(mode_export_weights.sum()) if len(mode_export_weights) else 0.0,
                     "last_nonzero_asof": mode_export_dt.strftime("%Y-%m-%d") if mode_export_dt is not None else None,
                     "last_nonzero_row_sum": float(mode_export_weights.sum()) if len(mode_export_weights) else 0.0,
                 },
@@ -2601,6 +2591,29 @@ if __name__ == "__main__":
             ),
             encoding="utf-8",
         )
+
+    # Ridge CV comparison output (T5-3)
+    if bt.ridge_alpha_cv and cv_results_log:
+        cv_alphas = [r.get("best_alpha", 50.0) for r in cv_results_log if "best_alpha" in r]
+        cv_ics = [r.get("best_ic", float("nan")) for r in cv_results_log if np.isfinite(r.get("best_ic", float("nan")))]
+        cv_comparison = {
+            "ridge_alpha_cv": True,
+            "fixed_alpha": 50.0,
+            "cv_refit_count": len(cv_results_log),
+            "mean_best_alpha": float(np.mean(cv_alphas)) if cv_alphas else None,
+            "median_best_alpha": float(np.median(cv_alphas)) if cv_alphas else None,
+            "mean_cv_ic": float(np.mean(cv_ics)) if cv_ics else None,
+            "alpha_distribution": {str(a): int(cv_alphas.count(a)) for a in sorted(set(cv_alphas))} if cv_alphas else {},
+            "primary_mode_sharpe": primary.get("sharpe", 0.0),
+            "primary_mode_return_pct": primary.get("total_return_pct", 0.0),
+        }
+        (out_dir / "ridge_cv_comparison.json").write_text(
+            json.dumps(cv_comparison, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"\nRidge CV comparison saved to {out_dir / 'ridge_cv_comparison.json'}")
+        print(f"  Mean best alpha: {cv_comparison['mean_best_alpha']}, median: {cv_comparison['median_best_alpha']}")
+        print(f"  Mean CV IC: {cv_comparison['mean_cv_ic']}")
 
     print("\nSummary")
     print(f"Primary mode: {bt.signal_mode}")

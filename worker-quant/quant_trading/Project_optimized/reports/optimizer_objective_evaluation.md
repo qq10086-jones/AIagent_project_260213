@@ -1,8 +1,8 @@
 # Optimizer Objective Evaluation
 
-- Target mode: ridge
+- Target mode: shadow_hybrid_ic
 - Recommendation: defer_optimizer_sharpe_objective
-- Sharpe: 0.0000
-- Mean IC: 0.0236
-- Mean t-stat: 0.9757
-- Turnover CV: 0.0000
+- Sharpe: 1.4928
+- Mean IC: 0.0513
+- Mean t-stat: 1.1658
+- Turnover CV: 0.7524

@@ -20,6 +20,7 @@ from compute_ic import (
 )
 from trade_schema import connect, ensure_trade_tables, get_latest_trading_day
 from market_data_utils import refresh_market_data_if_needed, latest_db_date
+from kelly_sizer import compute_kelly_params
 
 
 @dataclass
@@ -75,32 +76,32 @@ def _last_close(conn: sqlite3.Connection, symbol: str, asof: str) -> Tuple[Optio
     return row[0], float(row[1])
 
 
-def _latest_positions(conn: sqlite3.Connection, asof: str) -> Tuple[Optional[str], Dict[str, float]]:
+def _latest_positions(conn: sqlite3.Connection, asof: str, strategy_id: str = "default") -> Tuple[Optional[str], Dict[str, float]]:
     # pick latest positions date <= asof
     row = conn.execute(
-        "SELECT asof FROM positions WHERE asof<=? ORDER BY asof DESC LIMIT 1",
-        (asof,),
+        "SELECT asof FROM positions WHERE asof<=? AND strategy_id=? ORDER BY asof DESC LIMIT 1",
+        (asof, strategy_id),
     ).fetchone()
     if not row:
         return None, {}
     pos_date = row[0]
     rows = conn.execute(
-        "SELECT symbol, qty FROM positions WHERE asof=?",
-        (pos_date,),
+        "SELECT symbol, qty FROM positions WHERE asof=? AND strategy_id=?",
+        (pos_date, strategy_id),
     ).fetchall()
     return pos_date, {sym: float(q) for sym, q in rows}
 
 
-def _latest_account_snapshot(conn: sqlite3.Connection, asof: str) -> Tuple[Optional[str], Optional[float], Optional[float]]:
+def _latest_account_snapshot(conn: sqlite3.Connection, asof: str, strategy_id: str = "default") -> Tuple[Optional[str], Optional[float], Optional[float]]:
     row = conn.execute(
         """
         SELECT asof, cash, nav
         FROM account_snapshots
-        WHERE asof<=?
+        WHERE asof<=? AND strategy_id=?
         ORDER BY asof DESC
         LIMIT 1
         """,
-        (asof,),
+        (asof, strategy_id),
     ).fetchone()
     if not row:
         return None, None, None
@@ -153,6 +154,289 @@ def _load_sector_map(conn: sqlite3.Connection) -> Dict[str, str]:
     except Exception:
         return {}
     return {str(symbol): str(sector or "Unknown") for symbol, sector in rows}
+
+
+def _apply_single_name_cap(weights: pd.Series, max_weight: float) -> pd.Series:
+    out = weights.astype(float).copy()
+    max_weight = float(max_weight)
+    if out.empty:
+        return out
+    if max_weight <= 0.0:
+        return out * 0.0
+    if max_weight >= 1.0:
+        return out
+    for _ in range(10):
+        over = out > max_weight + 1e-12
+        if not bool(over.any()):
+            break
+        excess = float((out[over] - max_weight).sum())
+        out.loc[over] = max_weight
+        under = out < max_weight - 1e-12
+        capacity = (max_weight - out.loc[under]).clip(lower=0.0)
+        capacity_sum = float(capacity.sum())
+        alloc = min(excess, capacity_sum)
+        if capacity_sum <= 1e-12 or alloc <= 1e-12:
+            break
+        out.loc[under] += alloc * (capacity / capacity_sum)
+        out = out.clip(lower=0.0)
+    return out
+
+
+def _apply_sector_cap(
+    weights: pd.Series,
+    sector_map: Dict[str, str],
+    max_weight: float,
+    max_single_weight: float | None = None,
+) -> pd.Series:
+    out = weights.astype(float).copy()
+    max_weight = float(max_weight)
+    if out.empty or not sector_map or max_weight <= 0.0 or max_weight >= 1.0:
+        return out
+    sectors = pd.Series({idx: sector_map.get(idx, "Unknown") for idx in out.index}, dtype=object)
+    for _ in range(10):
+        changed = False
+        for sector_name, idx in sectors.groupby(sectors).groups.items():
+            idx = list(idx)
+            sector_weight = float(out.loc[idx].sum())
+            if sector_weight <= max_weight + 1e-12:
+                continue
+            excess = sector_weight - max_weight
+            out.loc[idx] *= max_weight / max(sector_weight, 1e-12)
+            other_idx = [name for name in out.index if name not in idx]
+            if other_idx:
+                other_sectors = pd.Series({name: sectors.loc[name] for name in other_idx}, dtype=object)
+                sector_capacity = {}
+                for other_sector, sec_idx in other_sectors.groupby(other_sectors).groups.items():
+                    sec_idx = list(sec_idx)
+                    current_weight = float(out.loc[sec_idx].sum())
+                    sector_capacity[other_sector] = max(max_weight - current_weight, 0.0)
+                total_capacity = float(sum(sector_capacity.values()))
+                alloc = min(excess, total_capacity)
+                if alloc > 1e-12 and total_capacity > 1e-12:
+                    for other_sector, sec_idx in other_sectors.groupby(other_sectors).groups.items():
+                        sec_idx = list(sec_idx)
+                        sector_alloc = alloc * (sector_capacity.get(other_sector, 0.0) / total_capacity)
+                        stock_cap_limit = max_weight if max_single_weight is None else min(max_weight, float(max_single_weight))
+                        stock_capacity = (stock_cap_limit - out.loc[sec_idx]).clip(lower=0.0)
+                        stock_capacity_sum = float(stock_capacity.sum())
+                        if stock_capacity_sum > 1e-12 and sector_alloc > 1e-12:
+                            out.loc[sec_idx] += sector_alloc * (stock_capacity / stock_capacity_sum)
+            changed = True
+        out = out.clip(lower=0.0)
+        if not changed:
+            break
+    return out
+
+
+def enforce_target_weight_limits(
+    target_weights: pd.DataFrame,
+    sector_map: Dict[str, str],
+    max_single_position_pct: float = 0.25,
+    max_sector_weight: float = 0.35,
+) -> tuple[pd.DataFrame, dict]:
+    weights = target_weights.copy()
+    if weights.empty:
+        return weights, {
+            "pre_cap_sum": 0.0,
+            "post_cap_sum": 0.0,
+            "pre_cap_max_single": 0.0,
+            "post_cap_max_single": 0.0,
+            "pre_cap_max_sector": 0.0,
+            "post_cap_max_sector": 0.0,
+            "pre_cap_top_weights": [],
+            "post_cap_top_weights": [],
+        }
+
+    weights["symbol"] = weights["symbol"].astype(str).str.strip()
+    weights["target_weight"] = pd.to_numeric(weights["target_weight"], errors="coerce").fillna(0.0).clip(lower=0.0)
+    grouped = weights.groupby("symbol", as_index=True)["target_weight"].sum().sort_values(ascending=False)
+    pre_sum_raw = float(grouped.sum())
+    gross = min(pre_sum_raw, 1.0)
+    if pre_sum_raw > 1.0 + 1e-12:
+        grouped = grouped / pre_sum_raw
+        gross = 1.0
+
+    pre_sector = grouped.groupby(grouped.index.map(lambda s: sector_map.get(s, "Unknown"))).sum() if not grouped.empty else pd.Series(dtype=float)
+    diagnostics = {
+        "pre_cap_sum": float(grouped.sum()),
+        "pre_cap_sum_raw": pre_sum_raw,
+        "pre_cap_max_single": float(grouped.max()) if not grouped.empty else 0.0,
+        "pre_cap_max_sector": float(pre_sector.max()) if not pre_sector.empty else 0.0,
+        "pre_cap_top_weights": [
+            {"symbol": str(symbol), "target_weight": float(weight)}
+            for symbol, weight in grouped.head(5).items()
+        ],
+    }
+
+    if gross > 1e-12:
+        normalized = grouped / gross
+        single_cap_norm = min(float(max_single_position_pct) / gross, 1.0)
+        sector_cap_norm = min(float(max_sector_weight) / gross, 1.0)
+        for _ in range(6):
+            prev = normalized.copy()
+            normalized = _apply_single_name_cap(normalized, single_cap_norm)
+            normalized = _apply_sector_cap(
+                normalized,
+                sector_map,
+                sector_cap_norm,
+                max_single_weight=single_cap_norm,
+            )
+            if normalized.equals(prev):
+                break
+        grouped = normalized * gross
+
+    post_sector = grouped.groupby(grouped.index.map(lambda s: sector_map.get(s, "Unknown"))).sum() if not grouped.empty else pd.Series(dtype=float)
+    diagnostics.update(
+        {
+            "post_cap_sum": float(grouped.sum()),
+            "post_cap_max_single": float(grouped.max()) if not grouped.empty else 0.0,
+            "post_cap_max_sector": float(post_sector.max()) if not post_sector.empty else 0.0,
+            "post_cap_top_weights": [
+                {"symbol": str(symbol), "target_weight": float(weight)}
+                for symbol, weight in grouped.sort_values(ascending=False).head(5).items()
+            ],
+            "max_single_position_pct": float(max_single_position_pct),
+            "max_sector_weight": float(max_sector_weight),
+        }
+    )
+
+    out = grouped.rename("target_weight").reset_index()
+    return out, diagnostics
+
+
+def enforce_lot_feasible_weights(
+    target_weights: pd.DataFrame,
+    prices: Dict[str, float],
+    nav_before: float,
+    lot_size: int,
+    min_trade_notional: float,
+    sector_map: Dict[str, str],
+    max_single_position_pct: float = 0.25,
+    max_sector_weight: float = 0.35,
+) -> tuple[pd.DataFrame, dict]:
+    weights = target_weights.copy()
+    if weights.empty or nav_before <= 1e-9:
+        return weights, {
+            "gross_budget": 0.0,
+            "selected_count": 0,
+            "selected_symbols": [],
+            "lot_feasible": False,
+            "skipped_expensive_count": 0,
+            "budget_left": 0.0,
+        }
+
+    weights["symbol"] = weights["symbol"].astype(str).str.strip()
+    weights["target_weight"] = pd.to_numeric(weights["target_weight"], errors="coerce").fillna(0.0).clip(lower=0.0)
+    weights = weights[weights["symbol"].isin(prices.keys())].copy()
+    if weights.empty:
+        return weights, {
+            "gross_budget": 0.0,
+            "selected_count": 0,
+            "selected_symbols": [],
+            "lot_feasible": False,
+            "skipped_expensive_count": 0,
+            "budget_left": 0.0,
+        }
+
+    gross_budget = min(float(weights["target_weight"].sum()), 1.0)
+    min_weight_floor = float(min_trade_notional) / max(float(nav_before), 1e-9)
+    rows = []
+    for _, row in weights.sort_values(["target_weight", "symbol"], ascending=[False, True]).iterrows():
+        symbol = str(row["symbol"])
+        price = float(prices.get(symbol, 0.0) or 0.0)
+        if price <= 0.0:
+            continue
+        lot_notional = float(price) * int(lot_size)
+        min_weight = max(lot_notional / max(float(nav_before), 1e-9), min_weight_floor)
+        rows.append(
+            {
+                "symbol": symbol,
+                "target_weight": float(row["target_weight"]),
+                "min_weight": float(min_weight),
+                "sector": sector_map.get(symbol, "Unknown"),
+            }
+        )
+    if not rows:
+        return weights.iloc[0:0].copy(), {
+            "gross_budget": gross_budget,
+            "selected_count": 0,
+            "selected_symbols": [],
+            "lot_feasible": False,
+            "skipped_expensive_count": 0,
+            "budget_left": gross_budget,
+        }
+
+    rows = sorted(rows, key=lambda r: (-r["target_weight"], r["min_weight"], r["symbol"]))
+    selected: list[dict] = []
+    sector_used: Dict[str, float] = {}
+    remaining = gross_budget
+    skipped_expensive = 0
+    for row in rows:
+        if row["min_weight"] > float(max_single_position_pct) + 1e-12:
+            skipped_expensive += 1
+            continue
+        sector_name = str(row["sector"])
+        sector_left = float(max_sector_weight) - float(sector_used.get(sector_name, 0.0))
+        if row["min_weight"] > sector_left + 1e-12:
+            continue
+        if row["min_weight"] > remaining + 1e-12:
+            continue
+        selected.append({**row, "alloc_weight": float(row["min_weight"])})
+        sector_used[sector_name] = float(sector_used.get(sector_name, 0.0)) + float(row["min_weight"])
+        remaining -= float(row["min_weight"])
+
+    if not selected:
+        return weights.iloc[0:0].copy(), {
+            "gross_budget": gross_budget,
+            "selected_count": 0,
+            "selected_symbols": [],
+            "lot_feasible": False,
+            "skipped_expensive_count": skipped_expensive,
+            "budget_left": gross_budget,
+        }
+
+    for _ in range(10):
+        if remaining <= 1e-9:
+            break
+        capacity_rows = []
+        capacity_sum = 0.0
+        for row in selected:
+            sector_name = str(row["sector"])
+            single_left = float(max_single_position_pct) - float(row["alloc_weight"])
+            sector_left = float(max_sector_weight) - float(sector_used.get(sector_name, 0.0))
+            cap = max(min(single_left, sector_left), 0.0)
+            desired_extra = max(float(row["target_weight"]) - float(row["alloc_weight"]), 0.0)
+            effective_cap = min(cap, desired_extra if desired_extra > 1e-12 else cap)
+            if effective_cap > 1e-12:
+                capacity_rows.append((row, effective_cap, max(float(row["target_weight"]), 1e-12)))
+                capacity_sum += max(float(row["target_weight"]), 1e-12)
+        if not capacity_rows:
+            break
+        used_this_round = 0.0
+        for row, cap, priority in capacity_rows:
+            add = min(remaining * (priority / capacity_sum), cap)
+            if add <= 1e-12:
+                continue
+            row["alloc_weight"] = float(row["alloc_weight"]) + float(add)
+            sector_used[row["sector"]] = float(sector_used.get(row["sector"], 0.0)) + float(add)
+            used_this_round += float(add)
+        if used_this_round <= 1e-12:
+            break
+        remaining -= used_this_round
+
+    out = pd.DataFrame(
+        [{"symbol": row["symbol"], "target_weight": float(row["alloc_weight"])} for row in selected]
+    ).sort_values("target_weight", ascending=False)
+    diagnostics = {
+        "gross_budget": gross_budget,
+        "selected_count": int(len(selected)),
+        "selected_symbols": [str(row["symbol"]) for row in selected],
+        "selected_min_weight_sum": float(sum(float(row["min_weight"]) for row in selected)),
+        "budget_left": float(max(remaining, 0.0)),
+        "lot_feasible": bool(len(selected) > 0),
+        "skipped_expensive_count": int(skipped_expensive),
+    }
+    return out, diagnostics
 
 
 def _load_price_windows(
@@ -337,9 +621,12 @@ def build_orders(
     cash_jpy: float,
     lot_size: int,
     min_trade_notional: float,
+    max_single_position_pct: float = 0.25,
+    max_sector_weight: float = 0.35,
+    strategy_id: str = "default",
 ) -> Tuple[List[OrderRow], Dict]:
     # current positions
-    pos_date, pos = _latest_positions(conn, asof)
+    pos_date, pos = _latest_positions(conn, asof, strategy_id=strategy_id)
     target_symbols = [str(sym) for sym in target_weights["symbol"]]
     order_universe = list(dict.fromkeys(target_symbols + list(pos.keys())))
 
@@ -364,18 +651,31 @@ def build_orders(
         nav_positions += float(q) * float(p)
     nav_before = float(cash_jpy) + float(nav_positions)
 
-    # Preserve cash buffer when target weights sum to less than 1.
-    # Only renormalize if the requested gross exposure exceeds 100%.
+    sector_map = _load_sector_map(conn)
     tw = target_weights.copy()
     tw["symbol"] = tw["symbol"].astype(str)
     tw = tw[tw["symbol"].isin(px.keys())].copy()
+    tw_capped, cap_diagnostics = enforce_target_weight_limits(
+        tw,
+        sector_map=sector_map,
+        max_single_position_pct=max_single_position_pct,
+        max_sector_weight=max_sector_weight,
+    )
+    tw_tradeable, lot_diagnostics = enforce_lot_feasible_weights(
+        tw_capped,
+        prices=px,
+        nav_before=nav_before,
+        lot_size=lot_size,
+        min_trade_notional=min_trade_notional,
+        sector_map=sector_map,
+        max_single_position_pct=max_single_position_pct,
+        max_sector_weight=max_sector_weight,
+    )
     target_weight_map = {
         str(r["symbol"]): max(float(r["target_weight"]), 0.0)
-        for _, r in tw.iterrows()
+        for _, r in tw_tradeable.iterrows()
     }
     wsum = float(sum(target_weight_map.values()))
-    if wsum > 1.0 + 1e-12:
-        target_weight_map = {sym: w / wsum for sym, w in target_weight_map.items()}
 
     orders: List[OrderRow] = []
     for sym in order_universe:
@@ -415,21 +715,53 @@ def build_orders(
         "missing_symbols": missing,
         "price_dates_sample": {k: px_date[k] for k in list(px_date)[:5]},
         "weights_sum_before_norm": wsum,
+        "cap_diagnostics": cap_diagnostics,
+        "lot_feasibility": lot_diagnostics,
         "lot_size": lot_size,
         "order_universe_size": len(order_universe),
     }
     return orders, info
 
 
-def write_db(conn: sqlite3.Connection, run_id: str, asof: str, snapshot_path: str, orders: List[OrderRow]) -> None:
+def apply_kelly_sizing(
+    target_weights: pd.DataFrame,
+    suggested_weight: float,
+    max_positions: int,
+) -> pd.DataFrame:
+    if target_weights.empty:
+        return target_weights.copy()
+    gross_cap = max(float(suggested_weight), 0.0) * max(int(max_positions), 1)
+    if gross_cap <= 0.0:
+        return target_weights.iloc[0:0].copy()
+    tw = target_weights.copy()
+    tw["target_weight"] = pd.to_numeric(tw["target_weight"], errors="coerce").fillna(0.0)
+    tw = tw[tw["target_weight"] > 0.0].sort_values("target_weight", ascending=False).head(max(int(max_positions), 1)).copy()
+    if tw.empty:
+        return tw
+    total = float(tw["target_weight"].sum())
+    if total <= 1e-12:
+        return tw.iloc[0:0].copy()
+    tw["target_weight"] = tw["target_weight"] / total * gross_cap
+    tw["target_weight"] = tw["target_weight"].clip(upper=float(suggested_weight))
+    return tw[tw["target_weight"] > 0.0].copy()
+
+
+def write_db(
+    conn: sqlite3.Connection,
+    run_id: str,
+    asof: str,
+    snapshot_path: str,
+    orders: List[OrderRow],
+    strategy_id: str = "default",
+) -> None:
     ts = _now_iso()
     with conn:
         conn.execute(
             """
-            INSERT OR REPLACE INTO decision_runs(run_id, asof, ts, snapshot_path, status, notes)
-            VALUES (?, ?, ?, ?, 'proposed', NULL)
+            INSERT OR REPLACE INTO decision_runs(run_id, asof, strategy_id, ts, snapshot_path, status, notes)
+            VALUES (?, ?, ?, ?, ?, 'proposed', NULL)
             """,
-            (run_id, asof, ts, snapshot_path),
+            (run_id, asof, strategy_id, ts, snapshot_path),
         )
 
         for i, o in enumerate(orders):
@@ -437,13 +769,13 @@ def write_db(conn: sqlite3.Connection, run_id: str, asof: str, snapshot_path: st
             conn.execute(
                 """
                 INSERT OR REPLACE INTO orders(
-                  order_id, run_id, asof, symbol, side, qty, order_type, limit_price, tif,
+                  order_id, run_id, asof, strategy_id, symbol, side, qty, order_type, limit_price, tif,
                   reason, expected_fee, expected_slippage, expected_value, status, created_ts
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'DAY', ?, NULL, NULL, ?, 'proposed', ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'DAY', ?, NULL, NULL, ?, 'proposed', ?)
                 """,
                 (
-                    order_id, run_id, asof, o.symbol, o.side, o.qty,
+                    order_id, run_id, asof, strategy_id, o.symbol, o.side, o.qty,
                     o.suggested_type, o.suggested_limit, o.comment,
                     float(o.est_notional), ts
                 ),
@@ -463,6 +795,11 @@ def main():
     ap.add_argument("--dd_half", type=float, default=0.12, help="drawdown threshold for half-position (default 12%%)")
     ap.add_argument("--dd_full", type=float, default=0.18, help="drawdown threshold for full exit (default 18%%)")
     ap.add_argument("--min_trade", type=float, default=5000.0, help="ignore trades smaller than this notional (JPY)")
+    ap.add_argument("--max_single_position_pct", type=float, default=0.25)
+    ap.add_argument("--max_sector_weight", type=float, default=0.35)
+    ap.add_argument("--strategy_id", default="default")
+    ap.add_argument("--position_sizing", default="equal_weight")
+    ap.add_argument("--max_positions", type=int, default=12)
     ap.add_argument("--out_dir", default="artifacts/decision")
     args = ap.parse_args()
 
@@ -543,7 +880,7 @@ def main():
 
     try:
         target_mode = _infer_target_mode(reports_dir, target_meta)
-        snapshot_asof, snapshot_cash, snapshot_nav = _latest_account_snapshot(conn, asof)
+        snapshot_asof, snapshot_cash, snapshot_nav = _latest_account_snapshot(conn, asof, strategy_id=args.strategy_id)
         effective_cash = float(snapshot_cash) if snapshot_cash is not None else float(args.cash)
         portfolio_mode = "snapshot" if snapshot_cash is not None else "manual"
 
@@ -554,7 +891,10 @@ def main():
         peak_nav = args.peak_nav
         if peak_nav is None:
             try:
-                row = conn.execute("SELECT MAX(nav) FROM account_snapshots").fetchone()
+                row = conn.execute(
+                    "SELECT MAX(nav) FROM account_snapshots WHERE strategy_id=?",
+                    (args.strategy_id,),
+                ).fetchone()
                 if row and row[0] is not None:
                     peak_nav = float(row[0])
                     print(f"Auto-fetched peak_nav from account_snapshots: {peak_nav:,.0f}")
@@ -563,7 +903,7 @@ def main():
 
         if peak_nav is not None and peak_nav > 0:
             # Estimate current NAV from DB positions + cash
-            _, cur_pos = _latest_positions(conn, asof)
+            _, cur_pos = _latest_positions(conn, asof, strategy_id=args.strategy_id)
             cur_nav = float(effective_cash)
             for sym, qty in cur_pos.items():
                 _, px = _last_close(conn, sym, asof)
@@ -573,16 +913,30 @@ def main():
             if drawdown < -args.dd_full:
                 dd_scale = 0.0
                 dd_status = f"FULL_EXIT (DD={drawdown:.1%} < -{args.dd_full:.0%})"
-                print(f"⛔ 最大回撤触发全平仓: 当前NAV={cur_nav:,.0f} 峰值={peak_nav:,.0f} 回撤={drawdown:.1%}")
+                print(f"[risk] full exit triggered by drawdown: nav={cur_nav:,.0f} peak={peak_nav:,.0f} dd={drawdown:.1%}")
             elif drawdown < -args.dd_half:
                 dd_scale = 0.5
                 dd_status = f"HALF_POSITION (DD={drawdown:.1%} < -{args.dd_half:.0%})"
-                print(f"⚠️  回撤触发半仓: 当前NAV={cur_nav:,.0f} 峰值={peak_nav:,.0f} 回撤={drawdown:.1%}")
+                print(f"[risk] half position triggered by drawdown: nav={cur_nav:,.0f} peak={peak_nav:,.0f} dd={drawdown:.1%}")
+
+        if args.position_sizing == "half_kelly":
+            kelly = compute_kelly_params(conn, strategy_id=args.strategy_id, lookback_days=60, asof=asof)
+            target_weights = apply_kelly_sizing(
+                target_weights,
+                suggested_weight=float(kelly.get("suggested_weight", 0.0) or 0.0),
+                max_positions=int(args.max_positions),
+            )
+        else:
+            kelly = {}
 
         # build orders
         orders, info = build_orders(
             conn, asof, target_weights, cash_jpy=effective_cash,
-            lot_size=args.lot, min_trade_notional=args.min_trade
+            lot_size=args.lot,
+            min_trade_notional=args.min_trade,
+            max_single_position_pct=args.max_single_position_pct,
+            max_sector_weight=args.max_sector_weight,
+            strategy_id=args.strategy_id,
         )
         family_contrib_df, family_contrib_summary = build_factor_family_contributions(
             conn=conn,
@@ -626,6 +980,7 @@ def main():
         snapshot = {
             "run_id": run_id,
             "asof": asof,
+            "strategy_id": args.strategy_id,
             "artifact_dir": str(out_run),
             "data": {
                 "db_path": args.db,
@@ -658,9 +1013,12 @@ def main():
                 "lot_size": args.lot,
                 "missing_symbols": info["missing_symbols"],
                 "weights_sum_before_norm": info["weights_sum_before_norm"],
+                "cap_diagnostics": info["cap_diagnostics"],
                 "drawdown_scale": dd_scale,
                 "drawdown_status": dd_status,
                 "peak_nav_input": peak_nav,
+                "position_sizing": args.position_sizing,
+                "kelly": kelly,
             },
             "diagnostics": {
                 "target_weights_zero_now": bool(float(target_meta.get("export_row_sum", 0.0) or 0.0) <= 1e-12),
@@ -674,7 +1032,7 @@ def main():
         snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
 
         # write DB
-        write_db(conn, run_id, asof, str(snapshot_path), orders)
+        write_db(conn, run_id, asof, str(snapshot_path), orders, strategy_id=args.strategy_id)
         print("=" * 70)
         print("Decision packaged (manual execution mode)")
         print(f"run_id: {run_id}")
@@ -687,12 +1045,12 @@ def main():
         return
 
         print("=" * 70)
-        print("✅ Decision packaged (manual execution mode)")
+        print("[ok] Decision packaged (manual execution mode)")
         print(f"run_id: {run_id}")
         print(f"snapshot: {snapshot_path}")
         print(f"orders:   {orders_csv}  (count={len(orders)})")
         if info["missing_symbols"]:
-            print(f"⚠️ missing prices for: {info['missing_symbols']}")
+            print(f"[warn] missing prices for: {info['missing_symbols']}")
         print("=" * 70)
 
     finally:

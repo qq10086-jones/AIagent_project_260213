@@ -2,13 +2,43 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "coding_team_arch_handoff.schema.json",
   "type": "object",
-  "required": ["from_step", "to_steps", "modules", "interfaces", "decisions", "risks"],
+  "required": ["from_step", "to_steps", "modules", "interfaces", "decisions", "risks", "workplan"],
   "properties": {
     "from_step": { "type": "string", "minLength": 1 },
     "to_steps": {
       "type": "array",
       "minItems": 1,
       "items": { "type": "string", "minLength": 1 }
+    },
+    "workplan": {
+      "type": "object",
+      "required": ["be_tasks", "fe_tasks"],
+      "properties": {
+        "be_tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "verify"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "description": { "type": "string", "minLength": 1 },
+              "verify": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "fe_tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "verify"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "description": { "type": "string", "minLength": 1 },
+              "verify": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
     },
     "modules": {
       "type": "array",

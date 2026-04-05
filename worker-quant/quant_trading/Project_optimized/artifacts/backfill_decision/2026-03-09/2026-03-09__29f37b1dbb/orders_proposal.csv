@@ -1,0 +1,3 @@
+symbol,side,qty,suggested_type,suggested_limit,est_notional,comment
+4755.T,SELL,100,MKT,,78630.00,rebalance
+9434.T,SELL,100,MKT,,21380.00,rebalance

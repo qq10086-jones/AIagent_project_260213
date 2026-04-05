@@ -1,0 +1,29 @@
+{
+  "install_ok": true,
+  "server_started": true,
+  "root_check": {
+    "status": 200,
+    "content_type": "text/html; charset=UTF-8",
+    "passed": true
+  },
+  "api_check": {
+    "endpoint": "/api/customers",
+    "status": 200,
+    "response_sample": "{\"data\":[{\"id\":\"cust_1136beb4-3b8f-4e60-a583-b1e77c51304f\",\"name\":\"Smoke Test User\",\"email\":\"smoke@example.com\",\"phone\":\"10086\",\"company\":\"Nexus QA\",\"notes\":\"created by verify_crm_site runtime smoke\",",
+    "passed": true,
+    "skipped": false
+  },
+  "auth_check": {
+    "endpoint": "/api/auth/login",
+    "status": 200,
+    "passed": true
+  },
+  "create_check": {
+    "endpoint": "/api/customers",
+    "status": 201,
+    "passed": true
+  },
+  "errors": [],
+  "verdict": "pass",
+  "evidence_level": "l1_l2"
+}

@@ -1,0 +1,26 @@
+{
+  "target_mode": "shadow_hybrid_ic",
+  "families": {
+    "price": {
+      "configured_factor_count": 15,
+      "active_factor_count": 15,
+      "is_active_in_mode": true,
+      "portfolio_weighted_score": -0.154591582325549,
+      "top_symbol": "4755.T"
+    },
+    "risk_adjusted": {
+      "configured_factor_count": 4,
+      "active_factor_count": 4,
+      "is_active_in_mode": true,
+      "portfolio_weighted_score": -0.2321620158650546,
+      "top_symbol": "4755.T"
+    },
+    "fundamental": {
+      "configured_factor_count": 10,
+      "active_factor_count": 10,
+      "is_active_in_mode": true,
+      "portfolio_weighted_score": 0.04040437869595149,
+      "top_symbol": "5401.T"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "mode": "accelerated_forward",
+  "start_asof": "2026-02-02",
+  "end_asof": "2026-02-02",
+  "current_index": 1,
+  "current_asof": null,
+  "completed_days": 1,
+  "failed_days": 0,
+  "started_at_utc": "2026-04-04T15:54:43+00:00",
+  "last_completed_asof": "2026-02-02",
+  "trading_dates_total": 1,
+  "updated_at_utc": "2026-04-04T15:57:06+00:00"
+}

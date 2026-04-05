@@ -6,13 +6,13 @@ update:
 
 fundamental:
   enabled: true
-  source: "jquants_v2"            # stable default: yfinance | jquants_v2 (optional enhancement) | csv | noop
+  source: "yfinance"              # stable default: yfinance (免费可靠) | jquants_v2 (需 pip install jquantsapi) | csv | noop
   run_on_main_path: false
   blocking: false
   allow_stale_on_failure: true
   csv_path: null
-  fail_closed: false
-  require_available_ts: false
+  fail_closed: false              # 基本面失败不阻塞主链路（实盘安全优先）
+  require_available_ts: false     # 允许无 timestamp 的旧数据（防冷启动失败）
   use_in_live_scoring: true   # 基本面因子进入 ss7 模型评分（P0修复 2026-03-26）
   use_in_learning: true
 
@@ -29,12 +29,47 @@ screener:
   lot_cost_position_budget_frac: 1.0
   max_cost_per_lot_floor: 50000
 
+strategy_profiles:
+  sprint:
+    enabled: true
+    strategy_id: "sprint"
+    capital_allocation_pct: 1.0
+    activation_threshold: 0
+    max_positions: 3
+    top_k: 20
+    min_adv_floor: 5000000
+    max_cost_per_lot: 100000
+    signal_mode: "sprint_momentum"
+    position_sizing: "half_kelly"
+    max_single_position_pct: 0.50
+    max_sector_weight: 0.60
+    benchmark_off_scale: 0.25       # regime=off 时允许 25% 暴露（试探性建仓）
+    benchmark_caution_scale: 0.60   # regime=caution 时 60% 暴露
+    use_vix_confirmation: false     # 1552.T 数据不可靠，禁用 VIX 确认，纯 MA regime
+    vix_ticker: "1552.T"
+    vix_off_threshold: 30.0
+    vix_missing_policy: "ma_only"   # VIX 缺失时退化为 MA-only，避��隐式治理分歧
+  harvest:
+    enabled: false
+    strategy_id: "harvest"
+    capital_allocation_pct: 0.70
+    activation_threshold: 2000000
+    max_positions: 12
+    top_k: 50
+    min_adv_floor: 2000000
+    max_cost_per_lot: 500000
+    signal_mode: "shadow_hybrid_ic"
+    position_sizing: "equal_weight"
+    max_single_position_pct: 0.15
+    max_sector_weight: 0.30
+
 model:
   # IC 实测结论 (2026-03-26 更新，universe扩展后重新计算):
   #   P1修复后 universe 60+只，IC 统计功效改善，等本次 compute_ic --shadow 完成后重新评估
   #   signal_mode 维持 ridge，等 paper_days≥30 + IC t-stat≥1.5 + Sharpe≥1.5 后再切换
-  signal_mode: "ridge"
+  signal_mode: "shadow_hybrid_ic"
   compare_signal_modes: ["ridge", "shadow_eq", "shadow_ic", "shadow_hybrid_ic"]
+  ridge_alpha_cv: false        # true: 用 TimeSeriesSplit CV 选最优 alpha; false: 固定 alpha=50
   excluded_factors: ["ret20", "rsi14", "slope60", "vol_adj_mom20"]
   start: "2020-01-01"
   end: null
@@ -78,6 +113,8 @@ model:
   # 若要完全禁用 news overlay，将 enabled 改为 false
   news:
     enabled: true
+    shadow_only: true
+    sprint_gating: false           # 治理要求: shadow 运行满 30 天后才可启用 (GOVERNANCE_v2 6.1)
     lookback_hours: 26.0          # 覆盖盘前 + 盘中，略超 24h 防漏
     sources: "kabutan,google,gdelt"   # 优先级顺序；均免费
     csv_path: ""                  # 保留兼容字段，DB 模式不需要
@@ -92,8 +129,23 @@ risk_adjusted:
   enabled: true
   factors: ["sharpe_20", "sharpe_60", "sortino_60", "vol_stability"]
 
+factor_tiers:
+  core: ["mom_consist", "ma_gap", "sharpe_60"]
+  candidate: ["high52w", "mom_12_1", "ret60", "vol_z"]
+  fundamental_pending: ["roa_op", "cfo_assets", "accruals_inv", "margin_op", "leverage_safety"]
+  excluded: ["ret20", "rsi14", "slope60", "vol_adj_mom20", "ret1", "ret5", "vol20", "vol60", "z_20"]
+
+factor_promotion_rules:
+  min_observations: 100
+  min_t_stat: 1.5
+  min_ic_mean: 0.01
+  demotion_t_stat: 0.5
+  demotion_lookback_periods: 60
+  review_frequency_days: 30
+
 promotion:
   min_backtest_sharpe: 1.5    # P2修复：提高晋升门槛（1.0→1.5），防止过早切换信号模式（2026-03-26）
+  backtest_sharpe_tolerance: 0.01
   min_production_ic: 0.02     # 要求 IC 均值 > 2%（之前0=无门槛，等于没有保护）
   min_t_stat: 1.5
   max_drawdown_pct: 20.0
@@ -104,6 +156,8 @@ promotion:
   min_eligible_factors: 3
   max_zero_exposure_days: 3
   require_actionable_mode: true
+  zero_exposure_fallback_mode: "shadow_hybrid_ic"
+  zero_exposure_disable_news_on_fallback: true
 
 decision:
   cash: 400000          # 与 exec.initial_capital 保持一致
@@ -118,6 +172,29 @@ paper:
   fee_bps: 10.0
   fill_ratio: 1.0
   initial_cash: 400000  # 与 exec.initial_capital 保持一致
+
+alerts:
+  enabled: true
+  min_level: "warning"
+  webhook_url: "https://discord.com/api/webhooks/1490007156299399374/ikW0cyloS5weHbXFG11NtynR31lNy8Wy9ZhBgQnBPPRc8-Qo1BWjScpjPzTVyG2vjjVU"
+  webhook_env: "WORKER_QUANT_ALERT_WEBHOOK_URL"
+
+simulation:
+  enabled: false
+  mode: "accelerated_forward"
+  start_asof: "2026-02-03"
+  end_asof: "2026-03-31"
+  tick_seconds: 60
+  trading_day_per_tick: 1
+  strict_pit: true
+  resume: true
+  use_cloned_db: true
+  reset_runtime_state: true
+  cloned_db_path: "state/simulated_forward/japan_market_sim.db"
+  reports_dir: "reports/simulated_forward"
+  artifacts_dir: "artifacts/simulated_forward"
+  state_dir: "state/simulated_forward"
+  stop_on_error: true
 
 obsidian:
   vault: '/app/quant_trading/quantum investment'

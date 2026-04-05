@@ -1,0 +1,39 @@
+{
+  "from_step": "arch_design",
+  "to_steps": [
+    "impl_be",
+    "impl_fe"
+  ],
+  "modules": [
+    "auth-service"
+  ],
+  "interfaces": [
+    "POST /api/login"
+  ],
+  "decisions": [
+    {
+      "adr_id": "ADR-001",
+      "title": "Use Postgres",
+      "status": "accepted"
+    }
+  ],
+  "risks": [
+    "auth migration"
+  ],
+  "workplan": {
+    "be_tasks": [
+      {
+        "id": "T-BE-1",
+        "description": "Implement login endpoint in server.js",
+        "verify": "POST /api/login returns 200 with token"
+      }
+    ],
+    "fe_tasks": [
+      {
+        "id": "T-FE-1",
+        "description": "Wire login form to POST /api/login",
+        "verify": "Submitting login calls /api/login and renders success state"
+      }
+    ]
+  }
+}

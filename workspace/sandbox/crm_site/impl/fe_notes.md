@@ -2,59 +2,45 @@
 
 ## UI Decisions
 
-1. **Multi-page SPA-style Navigation**: Separate HTML pages (login.html, index.html, customer.html, customer-form.html) with shared app.js.
+1. **Hash-Based Routing**: Implemented client-side routing using window.location.hash. Routes: `#/customers` (list), `#/customers/:id` (detail), `#/customers/new` (add form), `#/customers/:id/edit` (edit form).
 
-2. **Session-based Authentication**: Login form posts to /api/auth/login. Session cookie is managed by browser automatically (same-origin fetch with credentials).
+2. **XSS Protection**: Using DOMPurify library loaded from CDN to sanitize all user-generated content before rendering. The `sanitize()` function is used for customer data, and `escapeHtml()` for table cell content.
 
-3. **CSRF Token Management**: After successful login, frontend fetches CSRF token from /api/csrf-token and stores it globally (window.currentCsrfToken). All POST/PUT/DELETE requests include the CSRF token in the 'CSRF-Token' header.
+3. **Session-based Authentication**: Login posts to /api/auth/login with credentials: admin/admin123. Session cookie managed by browser via fetch with `credentials: 'include'`.
 
-4. **401 Handling**: All API calls check for 401 responses and redirect to login.html when unauthorized.
+4. **CSRF Token Management**: After login, frontend fetches CSRF token from /api/csrf-token. Token stored globally and included in all POST/PUT/DELETE requests via 'CSRF-Token' header.
 
-5. **Relative API Paths**: All API calls use relative paths via API_BASE = '/api'. No hardcoded localhost URLs.
+5. **Customer List View**: Table layout with columns: Name, Email, Phone, Company, Actions. Search input with 300ms debounce. Pagination with Previous/Next buttons and page info.
 
-6. **Error Handling**: Toast notifications for success/error feedback, inline error messages for form validation.
+6. **Customer Detail View**: Displays all customer fields with edit/delete buttons. Uses hash-based navigation links.
 
-7. **Loading States**: Loading indicators shown while fetching data.
+7. **Add/Edit Form**: Shared form for create and update. Hidden id field distinguishes mode. Client-side validation for required fields (name, email).
 
-## Authentication Flow
+8. **Delete Confirmation Modal**: Modal overlay prevents accidental deletion. Shows customer name before confirming delete action.
 
-1. User navigates to any protected page
-2. If not authenticated (no session), API call returns 401
-3. Frontend detects 401 and redirects to login.html
-4. User enters credentials and submits login form
-5. On success, frontend fetches CSRF token and stores it
-6. Frontend redirects to index.html (customer list)
-7. All subsequent API calls include session cookie and CSRF token
+9. **Toast Notifications**: Success/error feedback using fixed position toast that auto-dismisses after 3 seconds.
+
+10. **Relative API Paths**: All API calls use relative paths (/api/...). No hardcoded localhost URLs.
+
+11. **Responsive Design**: CSS media query for mobile viewports (max-width: 600px) adjusts table font size, padding, and stacks detail rows.
 
 ## File Structure
 
 ```
 impl/fe_changes/public/
-├── login.html           # Login form page
-├── index.html           # Customer list page (protected)
-├── customer.html        # Customer detail page (protected)
-├── customer-form.html   # Add/Edit customer form (protected)
-├── app.js               # API client and page logic
-└── css/
-    └── styles.css       # All styling
+├── index.html    # Complete HTML shell with inline CSS and DOMPurify CDN
+└── app.js        # Hash-based router, API client, view handlers
 ```
 
 ## Run Instructions
 
-### Development Mode
-
 ```bash
-cd workspace/sandbox/crm_site/impl/be_changes
+cd workspace/sandbox/crm_site
 npm install
-npm start
+node impl/be_changes/server.js
 ```
 
-Server runs on http://localhost:3000
-
-### Login Credentials
-
-- Username: admin
-- Password: admin123
+Open http://localhost:3000 and login with admin/admin123.
 
 ## API Contract Compliance
 
@@ -62,60 +48,39 @@ Frontend uses only endpoints defined in handoff/be_to_fe.json:
 
 ### Authentication Endpoints
 - POST /api/auth/login - Login with username/password
-- POST /api/auth/logout - Logout (requires auth + CSRF)
 - GET /api/csrf-token - Get CSRF token (requires auth)
+- POST /api/auth/logout - Logout (requires auth)
 
 ### Customer Endpoints
-- GET /api/customers - List with pagination/search (requires auth)
+- GET /api/customers - List with pagination (page, limit, search) and auth
 - GET /api/customers/:id - Get detail (requires auth)
 - POST /api/customers - Create (requires auth + CSRF)
 - PUT /api/customers/:id - Update (requires auth + CSRF)
-- DELETE /api/customers/:id - Delete (requires auth)
+- DELETE /api/customers/:id - Delete (requires auth + CSRF)
 
-## Customer Data Fields
+## Hash Routes
 
-All customer fields from backend are displayed:
-- id, name, email, phone, company, notes, createdAt, updatedAt
-
-## API Response Shapes
-
-### GET /api/customers
-```json
-{
-  "data": [{ "id", "name", "email", "phone", "company", "notes", "createdAt", "updatedAt" }],
-  "pagination": { "page", "limit", "total", "totalPages" }
-}
-```
-
-### GET /api/customers/:id
-```json
-{ "success": true, "data": { "id", "name", "email", ... } }
-```
-
-### POST /api/customers (requires CSRF)
-```json
-// Request: { "name", "email", "phone?", "company?", "notes?" }
-// Response: { "success": true, "data": { created customer } }
-```
-
-### PUT /api/customers/:id (requires CSRF)
-```json
-// Request: { "name?", "email?", ... }
-// Response: { "success": true, "data": { updated customer } }
-```
-
-### DELETE /api/customers/:id (requires CSRF)
-```json
-// Response: 204 No Content
-```
+| Route | View | Description |
+|-------|------|-------------|
+| #/customers | CustomerListView | List customers with search and pagination |
+| #/customers/:id | CustomerDetailView | Show customer details |
+| #/customers/new | CustomerFormView (add mode) | Add new customer form |
+| #/customers/:id/edit | CustomerFormView (edit mode) | Edit existing customer form |
 
 ## User Journeys
 
-1. **Login**: Navigate to site -> Redirected to login.html -> Enter credentials -> Redirect to customer list
-2. **View Customer List**: Load index.html -> See paginated list of customers
-3. **Search Customers**: Enter search term -> List filters by name/email
-4. **View Customer Detail**: Click View -> Navigate to customer.html?id=xxx
-5. **Add Customer**: Click Add Customer -> Fill form -> Submit -> Redirect to detail
-6. **Edit Customer**: Click Edit -> Modify fields -> Submit -> Redirect to detail
-7. **Delete Customer**: Click Delete -> Confirm -> Remove from list
-8. **Logout**: Click Logout -> Session destroyed -> Redirect to login
+1. **Login**: Enter admin/admin123 -> Session established, CSRF token loaded -> Redirects to #/customers
+2. **View Customer List**: See table of customers with search bar and pagination
+3. **Search Customers**: Type in search -> List filters by name/email with 300ms debounce
+4. **View Customer Detail**: Click View button -> Navigates to #/customers/:id
+5. **Add Customer**: Click "+ Add Customer" or navigate to #/customers/new -> Form shown -> Fill and Save -> Redirects to customer detail
+6. **Edit Customer**: Click Edit button or navigate to #/customers/:id/edit -> Form pre-populated -> Modify and Save -> Redirects to detail
+7. **Delete Customer**: Click Delete -> Modal confirmation -> Confirm -> Customer removed, redirects to list
+8. **Pagination**: Use Previous/Next buttons to navigate pages
+9. **Logout**: Click Logout -> Session destroyed -> Back to login
+
+## DOMPurify Integration
+
+DOMPurify is loaded from CDN: `https://unpkg.com/dompurify@3.0.6/dist/purify.min.js`
+
+Used for sanitizing customer data (name, email, phone, company, notes) before rendering to prevent XSS attacks. Script tags in customer data will render as text, not execute.

@@ -1,0 +1,46 @@
+[
+  {
+    "workflow_run_id": "8d91fa41-9f22-4514-87c8-8de9bf5a7974",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-05T02:35:59.920Z"
+  },
+  {
+    "workflow_run_id": "5b073ee8-3b74-4cec-adba-f3653cde387e",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-05T02:37:03.048Z"
+  },
+  {
+    "workflow_run_id": "428d3e23-20e0-47c5-9c76-8eba7832ae16",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-05T02:37:42.937Z"
+  },
+  {
+    "workflow_run_id": "feb62c25-0c6b-4294-926c-3fbcd28a8693",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-05T02:38:01.058Z"
+  }
+]

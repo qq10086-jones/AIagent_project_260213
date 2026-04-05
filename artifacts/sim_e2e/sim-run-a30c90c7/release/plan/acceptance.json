@@ -1,0 +1,11 @@
+{
+  "criteria": [
+    "All CRUD operations work correctly via REST API",
+    "Category filter shows correct breakdown",
+    "Monthly chart renders with real data",
+    "CSV export produces valid RFC 4180 output",
+    "Dashboard loads within 2 seconds"
+  ],
+  "source": "pm_spec",
+  "generated_at": "2026-04-05T13:50:21.242Z"
+}

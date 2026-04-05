@@ -155,6 +155,7 @@ TARGET_UNIVERSE: List[Tuple[str, str, str]] = [
     ("1321.T", "Nikkei 225 ETF", "Benchmark"),
     ("1570.T", "Nikkei Lev", "Benchmark_2x"),
     ("1306.T", "TOPIX ETF", "Benchmark_TOPIX"),
+    ("1552.T", "VIX Short-Term Futures ETF", "Benchmark_VIX"),
 ]
 
 def _date_to_str(d: date) -> str:
@@ -186,6 +187,17 @@ def load_universe(path: str) -> List[Tuple[str, str, str]]:
             out.append((it[0], it[1], it[2] if len(it) > 2 else ""))
     return out
 
+
+def _get_db_latest_trade_date(db_path: str) -> date | None:
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT MAX(date) FROM daily_prices").fetchone()
+    if not row or row[0] is None:
+        return None
+    try:
+        return datetime.strptime(str(row[0]), "%Y-%m-%d").date()
+    except Exception:
+        return None
+
 def update_database(db_path: str = "japan_market.db", default_lookback_days: int = 730, universe_path: Optional[str]=None) -> None:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -200,6 +212,15 @@ def update_database(db_path: str = "japan_market.db", default_lookback_days: int
         ensure_news_tables(conn)
 
     universe = load_universe(universe_path) if universe_path else TARGET_UNIVERSE
+    today = date.today()
+    db_latest_trade_date = _get_db_latest_trade_date(db_path)
+    if db_latest_trade_date is not None and db_latest_trade_date >= (today - timedelta(days=1)):
+        print(
+            "Price DB already holds the latest expected trade date "
+            f"({db_latest_trade_date}); skipping remote yfinance refresh."
+        )
+        db.close()
+        return
 
     # 1) Update ticker metadata
     now = datetime.now()
@@ -210,7 +231,6 @@ def update_database(db_path: str = "japan_market.db", default_lookback_days: int
 
     # 2) Incremental start dates
     latest_map: Dict[str, date] = {sym: db.get_latest_date(sym) for sym in tickers}
-    today = date.today()
 
     start_map: Dict[str, date] = {}
     for sym in tickers:
@@ -243,6 +263,16 @@ def update_database(db_path: str = "japan_market.db", default_lookback_days: int
         db.set_meta("universe_size", str(len(tickers)))
     except Exception:
         pass
+
+    if data is None or getattr(data, "empty", False):
+        print(
+            "WARN remote price download returned empty data for the entire batch; "
+            "keeping existing cached DB prices unchanged."
+        )
+        if db_latest_trade_date is not None:
+            print(f"Latest cached trade date remains {db_latest_trade_date}.")
+        db.close()
+        return
 
     total_rows = 0
     for sym in tickers:

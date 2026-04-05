@@ -225,6 +225,12 @@ function createMemoryPool() {
       if (text.startsWith("INSERT INTO assets") || text.startsWith("UPDATE runs SET")) {
         return { rows: [] };
       }
+      if (text.startsWith("INSERT INTO waterfall_stage_log")) {
+        return { rows: [] };
+      }
+      if (text.startsWith("INSERT INTO routing_decision_log")) {
+        return { rows: [] };
+      }
       throw new Error(`Unhandled SQL in memory pool: ${text}`);
     },
   };
@@ -311,7 +317,26 @@ function writePmArtifacts(rootAbs) {
 function writeArchArtifacts(rootAbs) {
   writeText(path.join(rootAbs, "plan", "arch.md"), "# Module Breakdown\n\n## Interfaces\n\n## Dependency Choices\n\n## Risk Notes\n");
   writeText(path.join(rootAbs, "plan", "interfaces.md"), "# POST /api/login\n\nRequest: { email, password }\nResponse: { token }\n");
-  writeText(path.join(rootAbs, "plan", "workplan.md"), "module breakdown interfaces dependency choices risk notes");
+  writeText(
+    path.join(rootAbs, "plan", "workplan.md"),
+    "## BE Tasks\n- [ ] T-BE-1: Implement login endpoint in server.js | verify: POST /api/login returns 200 with token\n\n## FE Tasks\n- [ ] T-FE-1: Wire login form to POST /api/login | verify: submitting login calls /api/login and renders success state\n"
+  );
+  writeJson(path.join(rootAbs, "plan", "workplan.json"), {
+    be_tasks: [
+      {
+        id: "T-BE-1",
+        description: "Implement login endpoint in server.js",
+        verify: "POST /api/login returns 200 with token",
+      },
+    ],
+    fe_tasks: [
+      {
+        id: "T-FE-1",
+        description: "Wire login form to POST /api/login",
+        verify: "Submitting login calls /api/login and renders success state",
+      },
+    ],
+  });
   writeJson(path.join(rootAbs, "risk", "risk_report.json"), {
     risks: [{ level: "medium", title: "auth", mitigation: "staged rollout" }],
     decision_log: ["Use Postgres"],
@@ -323,6 +348,22 @@ function writeArchArtifacts(rootAbs) {
     interfaces: ["POST /api/login"],
     decisions: [{ adr_id: "ADR-001", title: "Use Postgres", status: "accepted" }],
     risks: ["auth migration"],
+    workplan: {
+      be_tasks: [
+        {
+          id: "T-BE-1",
+          description: "Implement login endpoint in server.js",
+          verify: "POST /api/login returns 200 with token",
+        },
+      ],
+      fe_tasks: [
+        {
+          id: "T-FE-1",
+          description: "Wire login form to POST /api/login",
+          verify: "Submitting login calls /api/login and renders success state",
+        },
+      ],
+    },
   });
 }
 
@@ -578,8 +619,8 @@ test("parallelization gate keeps coding_team_v0 sequential when rollout master i
   assert.match(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_be").status, /^(queued|waiting_approval)$/);
   assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_fe").status, "pending");
 
-  const gateEvent = harness.events.find((e) => e.event_name === "workflow.parallelization.gate_decided" && e.payload?.effective_exposure_decision_source === "static_eligibility_denied");
-  assert.ok(gateEvent, "gate event with static_eligibility_denied must be emitted");
+  const gateEvent = harness.events.find((e) => e.event_name === "workflow.parallelization.gate_decided" && e.payload?.effective_exposure_decision_source === "rollout_master_disabled");
+  assert.ok(gateEvent, "gate event with rollout_master_disabled must be emitted");
   assert.equal(gateEvent.payload?.mode, "sequential");
 });
 
@@ -607,7 +648,7 @@ test("parallelization gate keeps coding_team_v0 sequential even with registry fe
   assert.match(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_be").status, /^(queued|waiting_approval)$/);
   assert.equal(harness.pool.state.workflow_steps.find((s) => s.step_id === "impl_fe").status, "pending");
 
-  const gateEvent = harness.events.find((e) => e.event_name === "workflow.parallelization.gate_decided" && e.payload?.effective_exposure_decision_source === "static_eligibility_denied");
-  assert.ok(gateEvent, "gate event with static_eligibility_denied must be emitted");
+  const gateEvent = harness.events.find((e) => e.event_name === "workflow.parallelization.gate_decided" && e.payload?.effective_exposure_decision_source === "rollout_master_disabled");
+  assert.ok(gateEvent, "gate event with rollout_master_disabled must be emitted");
   assert.equal(gateEvent.payload?.mode, "sequential");
 });

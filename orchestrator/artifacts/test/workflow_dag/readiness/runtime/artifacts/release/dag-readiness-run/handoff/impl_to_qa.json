@@ -1,0 +1,16 @@
+{
+  "from_steps": [
+    "impl_be",
+    "impl_fe"
+  ],
+  "to_step": "qa_verify",
+  "be_changes_path": "impl/be_changes",
+  "fe_changes_path": "impl/fe_changes",
+  "run_instructions": "Start backend, start frontend, verify login flow.",
+  "known_limitations": [
+    "no email verification"
+  ],
+  "api_contracts_path": "handoff/be_to_fe.json",
+  "run_id": "dag-readiness-run",
+  "workflow_run_id": "dag-readiness-run"
+}

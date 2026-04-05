@@ -1,0 +1,13 @@
+{
+  "read_only": true,
+  "source_of_truth": "japan_market.db (positions + account_snapshots tables)",
+  "strategy_id": "sprint",
+  "account": {
+    "asof": "2026-02-02",
+    "cash": 400000.0,
+    "positions_value": 0.0,
+    "nav": 400000.0,
+    "run_id": "2026-02-02__cf529ec13a"
+  },
+  "positions": []
+}

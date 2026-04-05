@@ -1,27 +1,88 @@
 {
-  "target_mode": "ridge",
+  "target_mode": "shadow_hybrid_ic",
   "baseline_mode": "ridge",
-  "recommendation": "hold",
+  "recommendation": "eligible_for_promotion",
   "patch_note": "Sharpe is treated as a governance metric and promotion gate in this patch. It is not used here as a standalone regression target.",
   "target_metrics": {
-    "sharpe": 0.0,
-    "sortino": 0.0,
-    "max_drawdown_pct": 0.0,
-    "avg_turnover_notional": 0.0,
-    "turnover_cv": 0.0,
-    "total_return_pct": 0.0,
-    "annual_vol_pct": 0.0
+    "sharpe": 1.492804022802991,
+    "sortino": 2.464253270173264,
+    "max_drawdown_pct": -9.57593588958472,
+    "avg_turnover_notional": 25808.672555569,
+    "turnover_cv": 0.7523738095232881,
+    "total_return_pct": 19.44755612351952,
+    "annual_vol_pct": 13.919729878327235
   },
   "paper_stats": {
-    "mode": "ridge",
-    "decision_run_count": 3,
-    "paper_days": 1,
+    "mode": "shadow_hybrid_ic",
+    "decision_run_count": 35,
+    "paper_days": 30,
     "paper_asofs": [
+      "2026-02-19",
+      "2026-02-20",
+      "2026-02-24",
+      "2026-02-25",
+      "2026-02-26",
+      "2026-02-27",
+      "2026-03-02",
+      "2026-03-03",
+      "2026-03-04",
+      "2026-03-05",
+      "2026-03-06",
+      "2026-03-09",
+      "2026-03-10",
+      "2026-03-11",
+      "2026-03-12",
+      "2026-03-13",
+      "2026-03-16",
+      "2026-03-17",
+      "2026-03-18",
+      "2026-03-19",
+      "2026-03-23",
+      "2026-03-24",
+      "2026-03-25",
+      "2026-03-26",
+      "2026-03-27",
+      "2026-03-30",
+      "2026-03-31",
+      "2026-04-01",
+      "2026-04-02",
       "2026-04-03"
     ],
     "recent_runs": [
       {
-        "run_id": "2026-04-03__4c96467faf",
+        "run_id": "2026-03-30__00c0adfee0",
+        "asof": "2026-03-30",
+        "status": "paper_no_orders",
+        "paper_executed": true,
+        "has_fills": false,
+        "has_snapshot": true
+      },
+      {
+        "run_id": "2026-03-31__65ee8a30c4",
+        "asof": "2026-03-31",
+        "status": "paper_no_orders",
+        "paper_executed": true,
+        "has_fills": false,
+        "has_snapshot": true
+      },
+      {
+        "run_id": "2026-04-01__f444e07c6f",
+        "asof": "2026-04-01",
+        "status": "paper_filled",
+        "paper_executed": true,
+        "has_fills": true,
+        "has_snapshot": true
+      },
+      {
+        "run_id": "2026-04-02__e6c5bb5afb",
+        "asof": "2026-04-02",
+        "status": "paper_filled",
+        "paper_executed": true,
+        "has_fills": true,
+        "has_snapshot": true
+      },
+      {
+        "run_id": "2026-04-03__b94260b2ef",
         "asof": "2026-04-03",
         "status": "paper_no_orders",
         "paper_executed": false,
@@ -29,7 +90,15 @@
         "has_snapshot": false
       },
       {
-        "run_id": "2026-04-03__91c55d384b",
+        "run_id": "2026-04-03__08f78a392e",
+        "asof": "2026-04-03",
+        "status": "paper_filled",
+        "paper_executed": true,
+        "has_fills": true,
+        "has_snapshot": false
+      },
+      {
+        "run_id": "2026-04-03__4e4e290880",
         "asof": "2026-04-03",
         "status": "paper_no_orders",
         "paper_executed": false,
@@ -37,7 +106,23 @@
         "has_snapshot": false
       },
       {
-        "run_id": "2026-04-03__6182eb6a07",
+        "run_id": "2026-04-03__49347176c0",
+        "asof": "2026-04-03",
+        "status": "paper_filled",
+        "paper_executed": true,
+        "has_fills": true,
+        "has_snapshot": false
+      },
+      {
+        "run_id": "2026-04-03__79a55678a4",
+        "asof": "2026-04-03",
+        "status": "paper_filled",
+        "paper_executed": true,
+        "has_fills": true,
+        "has_snapshot": false
+      },
+      {
+        "run_id": "2026-04-03__e090e9e561",
         "asof": "2026-04-03",
         "status": "paper_no_orders",
         "paper_executed": true,
@@ -47,121 +132,295 @@
     ]
   },
   "learning_stats": {
-    "mode": "ridge",
-    "factor_count": 5,
+    "mode": "shadow_hybrid_ic",
+    "factor_count": 20,
     "family_metrics": {
       "technical": {
-        "factor_count": 5,
-        "observed_factor_count": 5,
-        "mean_ic": 0.023567375097683873,
-        "mean_t_stat": 0.9757408,
+        "factor_count": 6,
+        "observed_factor_count": 6,
+        "mean_ic": 0.02261138126636554,
+        "mean_t_stat": 1.2450518333333334,
         "positive_ic_ratio": 1.0,
         "factors": [
           {
             "factor_name": "mom_consist",
-            "ic_mean": 0.010054339594129958,
-            "t_stat": 2.058778,
+            "ic_mean": 0.010696102261510115,
+            "t_stat": 2.697631,
             "guard": "PASS",
-            "n_observations": 218
+            "n_observations": 273
+          },
+          {
+            "factor_name": "ma_gap",
+            "ic_mean": 0.01718964944239371,
+            "t_stat": 1.664641,
+            "guard": "PASS",
+            "n_observations": 105
           },
           {
             "factor_name": "rsi14",
             "ic_mean": 0.02694153013332967,
-            "t_stat": 0.604236,
+            "t_stat": 0.202965,
             "guard": "FAIL",
             "n_observations": 50
           },
           {
             "factor_name": "vol_adj_mom20",
             "ic_mean": 0.03311356044042312,
-            "t_stat": 0.544001,
+            "t_stat": 0.886035,
             "guard": "FAIL",
             "n_observations": 50
           },
           {
             "factor_name": "ret20",
             "ic_mean": 0.030052345788930374,
-            "t_stat": 0.620537,
+            "t_stat": 0.866219,
             "guard": "FAIL",
             "n_observations": 50
           },
           {
             "factor_name": "slope60",
             "ic_mean": 0.017675099531606245,
-            "t_stat": 1.051152,
+            "t_stat": 1.15282,
             "guard": "FAIL",
             "n_observations": 50
+          }
+        ]
+      },
+      "risk_adjusted": {
+        "factor_count": 4,
+        "observed_factor_count": 4,
+        "mean_ic": 0.09433500601348391,
+        "mean_t_stat": 1.0467980000000001,
+        "positive_ic_ratio": 1.0,
+        "factors": [
+          {
+            "factor_name": "sharpe_20",
+            "ic_mean": 0.06079771174320672,
+            "t_stat": 0.780921,
+            "guard": "FAIL",
+            "n_observations": 2
+          },
+          {
+            "factor_name": "sharpe_60",
+            "ic_mean": 0.07657374052903146,
+            "t_stat": 1.679702,
+            "guard": "PASS",
+            "n_observations": 225
+          },
+          {
+            "factor_name": "sortino_60",
+            "ic_mean": 0.04521072796934866,
+            "t_stat": 1.341873,
+            "guard": "FAIL",
+            "n_observations": 2
+          },
+          {
+            "factor_name": "vol_stability",
+            "ic_mean": 0.1947578438123488,
+            "t_stat": 0.384696,
+            "guard": "FAIL",
+            "n_observations": 2
+          }
+        ]
+      },
+      "fundamental": {
+        "factor_count": 10,
+        "observed_factor_count": 0,
+        "mean_ic": 0.0,
+        "mean_t_stat": 0.0,
+        "positive_ic_ratio": 0.0,
+        "factors": [
+          {
+            "factor_name": "value_bp",
+            "ic_mean": 0.0,
+            "t_stat": 0.0,
+            "guard": null,
+            "n_observations": 0
+          },
+          {
+            "factor_name": "roa_op",
+            "ic_mean": 0.0,
+            "t_stat": 0.0,
+            "guard": null,
+            "n_observations": 0
+          },
+          {
+            "factor_name": "cfo_assets",
+            "ic_mean": 0.0,
+            "t_stat": 0.0,
+            "guard": null,
+            "n_observations": 0
+          },
+          {
+            "factor_name": "accruals_inv",
+            "ic_mean": 0.0,
+            "t_stat": 0.0,
+            "guard": null,
+            "n_observations": 0
+          },
+          {
+            "factor_name": "margin_op",
+            "ic_mean": 0.0,
+            "t_stat": 0.0,
+            "guard": null,
+            "n_observations": 0
+          },
+          {
+            "factor_name": "growth_rev_yoy",
+            "ic_mean": 0.0,
+            "t_stat": 0.0,
+            "guard": null,
+            "n_observations": 0
+          },
+          {
+            "factor_name": "growth_op_yoy",
+            "ic_mean": 0.0,
+            "t_stat": 0.0,
+            "guard": null,
+            "n_observations": 0
+          },
+          {
+            "factor_name": "guidance_delta",
+            "ic_mean": 0.0,
+            "t_stat": 0.0,
+            "guard": null,
+            "n_observations": 0
+          },
+          {
+            "factor_name": "leverage_safety",
+            "ic_mean": 0.0,
+            "t_stat": 0.0,
+            "guard": null,
+            "n_observations": 0
+          },
+          {
+            "factor_name": "dividend_yield",
+            "ic_mean": 0.0,
+            "t_stat": 0.0,
+            "guard": null,
+            "n_observations": 0
           }
         ]
       }
     },
     "aggregate": {
-      "mean_ic": 0.023567375097683873,
-      "mean_t_stat": 0.9757408,
+      "mean_ic": 0.05130083116521289,
+      "mean_t_stat": 1.1657503,
       "positive_ic_ratio": 1.0,
-      "min_family_t_stat": 0.9757408
+      "min_family_t_stat": 1.0467980000000001
+    }
+  },
+  "governed_learning_stats": {
+    "family_metrics": {
+      "technical": {
+        "factor_count": 2,
+        "observed_factor_count": 2,
+        "mean_ic": 0.013942875851951912,
+        "mean_t_stat": 2.181136,
+        "positive_ic_ratio": 1.0,
+        "factors": [
+          {
+            "factor_name": "mom_consist",
+            "ic_mean": 0.010696102261510115,
+            "t_stat": 2.697631,
+            "guard": "PASS",
+            "n_observations": 273
+          },
+          {
+            "factor_name": "ma_gap",
+            "ic_mean": 0.01718964944239371,
+            "t_stat": 1.664641,
+            "guard": "PASS",
+            "n_observations": 105
+          }
+        ]
+      },
+      "risk_adjusted": {
+        "factor_count": 1,
+        "observed_factor_count": 1,
+        "mean_ic": 0.07657374052903146,
+        "mean_t_stat": 1.679702,
+        "positive_ic_ratio": 1.0,
+        "factors": [
+          {
+            "factor_name": "sharpe_60",
+            "ic_mean": 0.07657374052903146,
+            "t_stat": 1.679702,
+            "guard": "PASS",
+            "n_observations": 225
+          }
+        ]
+      }
+    },
+    "aggregate": {
+      "mean_ic": 0.03481983074431176,
+      "mean_t_stat": 2.0139913333333332,
+      "positive_ic_ratio": 1.0,
+      "min_family_t_stat": 1.679702
     }
   },
   "qa_stats": {
-    "eligible_factor_count": 1,
-    "actionable_mode_count": 0,
-    "latest_zero_exposure_days": 5,
-    "latest_weights_zero": true
+    "eligible_factor_count": 3,
+    "actionable_mode_count": 4,
+    "latest_zero_exposure_days": 0,
+    "latest_weights_zero": false,
+    "latest_zero_exposure_cause": "actionable_nonzero_target"
   },
   "gates": {
     "production_ic": {
       "passed": true,
-      "actual": 0.023567375097683873,
+      "actual": 0.03481983074431176,
       "threshold": 0.02
     },
     "t_stat": {
-      "passed": false,
-      "actual": 0.9757408,
+      "passed": true,
+      "actual": 1.679702,
       "threshold": 1.5
     },
     "backtest_sharpe": {
-      "passed": false,
-      "actual": 0.0,
-      "threshold": 1.5
+      "passed": true,
+      "actual": 1.492804022802991,
+      "threshold": 1.5,
+      "tolerance": 0.01
     },
     "max_drawdown": {
       "passed": true,
-      "actual": 0.0,
+      "actual": -9.57593588958472,
       "threshold": 20.0
     },
     "sharpe_vs_baseline": {
-      "passed": false,
-      "actual": 0.0,
+      "passed": true,
+      "actual": 1.2797166495338945,
       "threshold": 0.1,
       "baseline_mode": "ridge",
-      "baseline_sharpe": 0.0
+      "baseline_sharpe": 0.2130873732690965
     },
     "paper_days": {
-      "passed": false,
-      "actual": 1,
+      "passed": true,
+      "actual": 30,
       "threshold": 30
     },
     "eligible_factors": {
-      "passed": false,
-      "actual": 1,
+      "passed": true,
+      "actual": 3,
       "threshold": 3
     },
     "zero_exposure_window": {
-      "passed": false,
-      "actual": 5,
+      "passed": true,
+      "actual": 0,
       "threshold": 3,
-      "latest_weights_zero": true
+      "latest_weights_zero": false
     },
     "actionable_mode_available": {
-      "passed": false,
-      "actual": 0,
+      "passed": true,
+      "actual": 4,
       "threshold": 1
     },
     "turnover_stability": {
-      "passed": false,
-      "actual": 0.0,
+      "passed": true,
+      "actual": 0.7523738095232881,
       "threshold": 2.5,
-      "avg_turnover_notional": 0.0
+      "avg_turnover_notional": 25808.672555569
     }
   }
 }

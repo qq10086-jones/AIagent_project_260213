@@ -1,0 +1,17 @@
+{
+  "asof": "2026-02-02",
+  "simulation": true,
+  "benchmark_ticker": "1321.T",
+  "px_b": 54750.0,
+  "fast_ma": 55120.5,
+  "slow_ma": 53068.5,
+  "vix_ticker": "1552.T",
+  "vix_value": null,
+  "sprint_final_state": "caution",
+  "sprint_scale": 0.4,
+  "ma_state": "caution",
+  "diagnosis": "MA regime only",
+  "enter_line": 52537.815,
+  "exit_line": 55671.705,
+  "vix_missing_policy": "ma_only"
+}

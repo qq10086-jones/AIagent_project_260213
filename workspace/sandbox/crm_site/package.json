@@ -8,7 +8,8 @@
     "typecheck": "node scripts/verify_crm_site.mjs typecheck",
     "test": "node scripts/verify_crm_site.mjs test",
     "build": "node scripts/verify_crm_site.mjs build",
-    "start": "node impl/be_changes/server.js"
+    "start": "node impl/be_changes/server.js",
+    "release:verify": "npm run lint && npm run build && npm run test"
   },
   "dependencies": {
     "express": "^4.18.2",

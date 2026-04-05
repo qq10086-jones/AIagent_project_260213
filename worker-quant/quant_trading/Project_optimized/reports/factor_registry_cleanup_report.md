@@ -1,9 +1,24 @@
-# Factor Registry Cleanup Candidates: ridge
+# Factor Registry Cleanup Candidates: shadow_hybrid_ic
 
-- Eligible count: 1
-- Exclude count: 4
+- Eligible count: 3
+- Exclude count: 17
 
-- mom_consist | action=keep | reason=eligible | guard=PASS | obs=218
+- accruals_inv | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=None | obs=0
+- cfo_assets | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=None | obs=0
+- dividend_yield | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=None | obs=0
+- growth_op_yoy | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=None | obs=0
+- growth_rev_yoy | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=None | obs=0
+- guidance_delta | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=None | obs=0
+- leverage_safety | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=None | obs=0
+- margin_op | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=None | obs=0
+- roa_op | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=None | obs=0
+- value_bp | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=None | obs=0
+- sharpe_20 | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=FAIL | obs=2
+- sharpe_60 | action=keep | reason=eligible | guard=PASS | obs=225
+- sortino_60 | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=FAIL | obs=2
+- vol_stability | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=FAIL | obs=2
+- ma_gap | action=keep | reason=eligible | guard=PASS | obs=105
+- mom_consist | action=keep | reason=eligible | guard=PASS | obs=273
 - ret20 | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=FAIL | obs=50
 - rsi14 | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=FAIL | obs=50
 - slope60 | action=exclude_from_production | reason=insufficient_observations_and_guard_fail | guard=FAIL | obs=50

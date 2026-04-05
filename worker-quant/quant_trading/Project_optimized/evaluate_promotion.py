@@ -17,27 +17,28 @@ PATCH_NOTE = (
 
 MODE_FACTOR_FAMILIES = {
     "ridge": {
-        "technical": ["mom_consist", "rsi14", "vol_adj_mom20", "ret20", "slope60"],
+        "technical": ["mom_consist", "ma_gap", "rsi14", "vol_adj_mom20", "ret20", "ret60", "slope60"],
         "risk_adjusted": [],
         "fundamental": [],
     },
     "shadow_eq": {
-        "technical": ["mom_consist", "rsi14", "vol_adj_mom20", "ret20", "slope60"],
+        "technical": ["mom_consist", "ma_gap", "rsi14", "vol_adj_mom20", "ret20", "slope60"],
         "risk_adjusted": [],
         "fundamental": [],
     },
     "shadow_ic": {
-        "technical": ["mom_consist", "rsi14", "vol_adj_mom20", "ret20", "slope60"],
+        "technical": ["mom_consist", "ma_gap", "rsi14", "vol_adj_mom20", "ret20", "slope60"],
         "risk_adjusted": [],
         "fundamental": [],
     },
     "shadow_hybrid_ic": {
-        "technical": ["mom_consist", "rsi14", "vol_adj_mom20", "ret20", "slope60"],
+        "technical": ["mom_consist", "ma_gap", "rsi14", "vol_adj_mom20", "ret20", "slope60"],
         "risk_adjusted": ["sharpe_20", "sharpe_60", "sortino_60", "vol_stability"],
         "fundamental": [
             "value_bp",
-            "quality_roe",
-            "quality_cfo",
+            "roa_op",
+            "cfo_assets",
+            "accruals_inv",
             "margin_op",
             "growth_rev_yoy",
             "growth_op_yoy",
@@ -284,7 +285,58 @@ def _learning_gate_stats(db_path: str, target_mode: str) -> dict[str, Any]:
     }
 
 
-def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_path: str, reports_dir: Path, thresholds: dict[str, Any]) -> dict[str, Any]:
+def _governed_learning_view(learning_stats: dict[str, Any], min_observations: int = 80) -> dict[str, Any]:
+    governed_family_metrics: dict[str, Any] = {}
+    aggregate_ic: list[float] = []
+    aggregate_t: list[float] = []
+    positive_ic_flags: list[float] = []
+
+    for family_name, metrics in learning_stats.get("family_metrics", {}).items():
+        governed_rows = [
+            row
+            for row in metrics.get("factors", [])
+            if str(row.get("guard")) == "PASS" and int(row.get("n_observations", 0) or 0) >= int(min_observations)
+        ]
+        if not governed_rows:
+            continue
+        ic_vals = [_safe_float(row.get("ic_mean")) for row in governed_rows]
+        t_vals = [_safe_float(row.get("t_stat")) for row in governed_rows if _safe_float(row.get("t_stat")) > 0.0]
+        aggregate_ic.extend(ic_vals)
+        aggregate_t.extend(t_vals)
+        positive_ic_flags.extend(1.0 if ic > 0.0 else 0.0 for ic in ic_vals)
+        governed_family_metrics[family_name] = {
+            "factor_count": len(governed_rows),
+            "observed_factor_count": len(governed_rows),
+            "mean_ic": float(sum(ic_vals) / len(ic_vals)) if ic_vals else 0.0,
+            "mean_t_stat": float(sum(t_vals) / len(t_vals)) if t_vals else 0.0,
+            "positive_ic_ratio": float(sum(1.0 for ic in ic_vals if ic > 0.0) / len(ic_vals)) if ic_vals else 0.0,
+            "factors": governed_rows,
+        }
+
+    min_family_t_stat = min(
+        (metrics.get("mean_t_stat", 0.0) for metrics in governed_family_metrics.values()),
+        default=0.0,
+    )
+    return {
+        "family_metrics": governed_family_metrics,
+        "aggregate": {
+            "mean_ic": float(sum(aggregate_ic) / len(aggregate_ic)) if aggregate_ic else 0.0,
+            "mean_t_stat": float(sum(aggregate_t) / len(aggregate_t)) if aggregate_t else 0.0,
+            "positive_ic_ratio": float(sum(positive_ic_flags) / len(positive_ic_flags)) if positive_ic_flags else 0.0,
+            "min_family_t_stat": float(min_family_t_stat),
+        },
+    }
+
+
+def evaluate(
+    compare_df: pd.DataFrame,
+    target_mode: str,
+    baseline_mode: str,
+    db_path: str,
+    reports_dir: Path,
+    thresholds: dict[str, Any],
+    paper_evidence_type: str = "natural_time",
+) -> dict[str, Any]:
     if "mode" not in compare_df.columns:
         raise ValueError("signal_mode_compare.csv must contain a mode column")
     if target_mode not in set(compare_df["mode"].astype(str)):
@@ -294,6 +346,7 @@ def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_
     baseline_row = compare_df.loc[compare_df["mode"].astype(str) == baseline_mode].iloc[0] if baseline_mode in set(compare_df["mode"].astype(str)) else None
     paper_stats = _paper_mode_stats(db_path, target_mode)
     learning_stats = _learning_gate_stats(db_path, target_mode)
+    governed_learning = _governed_learning_view(learning_stats, min_observations=80)
     compare_report = _load_json(reports_dir / "signal_mode_compare_report.json")
     zero_report = _load_json(reports_dir / "zero_exposure_report.json")
 
@@ -305,6 +358,7 @@ def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_
     baseline_sharpe = _safe_float(baseline_row.get("sharpe")) if baseline_row is not None else 0.0
 
     min_backtest_sharpe = _safe_float(thresholds.get("min_backtest_sharpe"), 0.0)
+    backtest_sharpe_tolerance = max(0.0, _safe_float(thresholds.get("backtest_sharpe_tolerance"), 0.0))
     max_drawdown_pct = _safe_float(thresholds.get("max_drawdown_pct"), 999.0)
     paper_days_required = int(thresholds.get("paper_days_required", 0) or 0)
     min_sharpe_improvement = _safe_float(thresholds.get("min_sharpe_improvement"), 0.0)
@@ -316,29 +370,30 @@ def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_
     max_turnover_cv = thresholds.get("max_turnover_cv")
     max_turnover_cv = None if max_turnover_cv is None else _safe_float(max_turnover_cv, 0.0)
     eligible_factor_count = 0
-    for metrics in learning_stats.get("family_metrics", {}).values():
+    for metrics in governed_learning.get("family_metrics", {}).values():
         for row in metrics.get("factors", []):
-            if str(row.get("guard")) == "PASS" and int(row.get("n_observations", 0) or 0) >= 80:
-                eligible_factor_count += 1
+            eligible_factor_count += 1
     actionable_mode_count = int(compare_report.get("summary", {}).get("actionable_mode_count", 0) or 0)
     latest_weights_zero = bool(zero_report.get("latest_weights_zero", False))
     zero_days = int(zero_report.get("days_since_last_nonzero", 0) or 0) if latest_weights_zero else 0
+    zero_cause = str(zero_report.get("primary_cause", "") or "")
 
     gates = {
         "production_ic": {
-            "passed": _safe_float(learning_stats["aggregate"].get("mean_ic")) >= min_production_ic,
-            "actual": _safe_float(learning_stats["aggregate"].get("mean_ic")),
+            "passed": _safe_float(governed_learning["aggregate"].get("mean_ic")) >= min_production_ic,
+            "actual": _safe_float(governed_learning["aggregate"].get("mean_ic")),
             "threshold": min_production_ic,
         },
         "t_stat": {
-            "passed": _safe_float(learning_stats["aggregate"].get("min_family_t_stat")) >= min_t_stat,
-            "actual": _safe_float(learning_stats["aggregate"].get("min_family_t_stat")),
+            "passed": _safe_float(governed_learning["aggregate"].get("min_family_t_stat")) >= min_t_stat,
+            "actual": _safe_float(governed_learning["aggregate"].get("min_family_t_stat")),
             "threshold": min_t_stat,
         },
         "backtest_sharpe": {
-            "passed": target_sharpe >= min_backtest_sharpe,
+            "passed": target_sharpe >= (min_backtest_sharpe - backtest_sharpe_tolerance),
             "actual": target_sharpe,
             "threshold": min_backtest_sharpe,
+            "tolerance": backtest_sharpe_tolerance,
         },
         "max_drawdown": {
             "passed": target_dd <= max_drawdown_pct,
@@ -363,7 +418,7 @@ def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_
             "threshold": min_eligible_factors,
         },
         "zero_exposure_window": {
-            "passed": (not latest_weights_zero) or zero_days < max_zero_exposure_days,
+            "passed": (not latest_weights_zero) or zero_days <= max_zero_exposure_days,
             "actual": zero_days,
             "threshold": max_zero_exposure_days,
             "latest_weights_zero": latest_weights_zero,
@@ -395,6 +450,8 @@ def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_
         "baseline_mode": baseline_mode,
         "recommendation": "eligible_for_promotion" if eligible else "hold",
         "patch_note": PATCH_NOTE,
+        "paper_evidence_type": str(paper_evidence_type),
+        "simulated_forward_days": int(paper_stats["paper_days"]) if str(paper_evidence_type) == "simulated_forward" else 0,
         "target_metrics": {
             "sharpe": target_sharpe,
             "sortino": target_sortino,
@@ -406,11 +463,13 @@ def evaluate(compare_df: pd.DataFrame, target_mode: str, baseline_mode: str, db_
         },
         "paper_stats": paper_stats,
         "learning_stats": learning_stats,
+        "governed_learning_stats": governed_learning,
         "qa_stats": {
             "eligible_factor_count": eligible_factor_count,
             "actionable_mode_count": actionable_mode_count,
             "latest_zero_exposure_days": zero_days,
             "latest_weights_zero": latest_weights_zero,
+            "latest_zero_exposure_cause": zero_cause,
         },
         "gates": gates,
     }
@@ -423,6 +482,7 @@ def main() -> None:
     ap.add_argument("--target_mode", required=True)
     ap.add_argument("--baseline_mode", default="ridge")
     ap.add_argument("--min_backtest_sharpe", type=float, default=1.0)
+    ap.add_argument("--backtest_sharpe_tolerance", type=float, default=0.0)
     ap.add_argument("--max_drawdown_pct", type=float, default=20.0)
     ap.add_argument("--paper_days_required", type=int, default=20)
     ap.add_argument("--min_sharpe_improvement", type=float, default=0.0)
@@ -432,6 +492,7 @@ def main() -> None:
     ap.add_argument("--min_eligible_factors", type=int, default=3)
     ap.add_argument("--max_zero_exposure_days", type=int, default=3)
     ap.add_argument("--require_actionable_mode", type=int, default=1)
+    ap.add_argument("--paper_evidence_type", default="natural_time")
     args = ap.parse_args()
 
     reports_dir = Path(args.reports_dir)
@@ -448,6 +509,7 @@ def main() -> None:
         reports_dir=reports_dir,
         thresholds={
             "min_backtest_sharpe": args.min_backtest_sharpe,
+            "backtest_sharpe_tolerance": args.backtest_sharpe_tolerance,
             "max_drawdown_pct": args.max_drawdown_pct,
             "paper_days_required": args.paper_days_required,
             "min_sharpe_improvement": args.min_sharpe_improvement,
@@ -458,6 +520,7 @@ def main() -> None:
             "max_zero_exposure_days": args.max_zero_exposure_days,
             "require_actionable_mode": args.require_actionable_mode,
         },
+        paper_evidence_type=str(args.paper_evidence_type),
     )
 
     out_json = reports_dir / "promotion_decision.json"

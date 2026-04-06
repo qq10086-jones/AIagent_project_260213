@@ -52,12 +52,14 @@ function main() {
   assert.ok(scaffolded.artifacts.baseline_manifest);
   assert.ok(scaffolded.artifacts.isolated_workspace_manifest);
   assert.equal(
-    fs.existsSync(path.join(scaffolded.isolatedWorkspaceRoot, "sandbox", "crm_site", "app.js")),
+    fs.existsSync(path.join(scaffolded.isolatedWorkspaceRoot, "workspace", "sandbox", "crm_site", "app.js")),
     true,
+    "app.js should exist under workspace/sandbox/crm_site/ in isolated workspace",
   );
   assert.equal(
-    fs.existsSync(path.join(scaffolded.isolatedWorkspaceRoot, "sandbox", "crm_site", "components", "Card.js")),
+    fs.existsSync(path.join(scaffolded.isolatedWorkspaceRoot, "workspace", "sandbox", "crm_site", "components", "Card.js")),
     true,
+    "Card.js should exist under workspace/sandbox/crm_site/components/ in isolated workspace",
   );
 
   const baselineManifest = JSON.parse(fs.readFileSync(scaffolded.artifacts.baseline_manifest, "utf8"));

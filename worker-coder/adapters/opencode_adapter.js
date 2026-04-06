@@ -77,7 +77,7 @@ function detectSuperpowersPlugin({ cwd }) {
   for (const candidate of pluginPathCandidates) {
     try {
       if (fs.existsSync(candidate)) pluginHints.push(candidate);
-    } catch {}
+    } catch (_fsErr) { /* candidate path inaccessible */ }
   }
 
   for (const configPath of getOpenCodeConfigCandidates(cwd)) {
@@ -97,7 +97,7 @@ function detectSuperpowersPlugin({ cwd }) {
           detected_paths: pluginHints,
         };
       }
-    } catch {}
+    } catch (_cfgErr) { /* config not readable or invalid JSON */ }
   }
 
   return {
@@ -545,7 +545,7 @@ function runProcess({ command, args = [], cwd, timeoutMs = 600000, stdinText = "
       timedOut = true;
       try {
         child.kill("SIGKILL");
-      } catch {}
+      } catch (_killErr) { /* process may already be dead */ }
     }, timeoutMs);
 
     child.stdout.on("data", (d) => {

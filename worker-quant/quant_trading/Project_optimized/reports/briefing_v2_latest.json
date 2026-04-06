@@ -1,13 +1,12 @@
 {
+  "date": "2026-04-06",
   "generated_at": "2026-04-06 16:02 JST",
-  "asof": "2026-04-06",
   "session": {
     "time_jst": "16:02",
     "session": "closed",
     "mins_to_close": 0,
     "trading": false
   },
-  "mode": "market",
   "regime": {
     "trend": "SIDEWAYS",
     "vol_level": "NORMAL",
@@ -35,6 +34,7 @@
     "market_ret_pct": 0.63,
     "sentiment": "strong"
   },
+  "positions": [],
   "candidates": [
     {
       "rank": 1,
@@ -310,118 +310,13 @@
       }
     }
   ],
-  "macro_news": [
-    {
-      "category": "TRADE",
-      "summary": "「相互関税」巨額還付の視界不良 発動から1年、違法判決もトランプ氏は代替を準備 トランプ関税1年 -",
-      "score": -0.4
-    },
-    {
-      "category": "TRADE",
-      "summary": "関税影響、日米合意でダメージ緩和もイラン情勢が影 強硬手段控えるとの見方 トランプ関税1年 - 産経",
-      "score": -0.4
-    },
-    {
-      "category": "TRADE",
-      "summary": "看板政策、米政権の「足かせ」に トランプ関税発動1年 企業収益悪化／巨額の返還訴訟 - 北海道新聞デ",
-      "score": -0.4
-    },
-    {
-      "category": "TRADE",
-      "summary": "看板政策、米政権の「足かせ」に トランプ関税発動1年 企業収益悪化／巨額の返還訴訟 - 47news",
-      "score": -0.4
-    },
-    {
-      "category": "TRADE",
-      "summary": "カンパチ無関税の対象拡大、重油不足で輸入遅れ - nna.jp",
-      "score": -0.4
-    },
-    {
-      "category": "TRADE",
-      "summary": "学者が斬る・視点争点：追加関税で対米輸出額は大幅減 早川和伸 - 週刊エコノミスト Online",
-      "score": -0.4
-    },
-    {
-      "category": "TRADE",
-      "summary": "トランプ関税対策の米国輸入車の第1弾は1200万円のトラック トヨタが導入するタンドラってどんなクル",
-      "score": -0.4
-    },
-    {
-      "category": "TRADE",
-      "summary": "世界経済入門2026：トランプ関税の“根っこ”は自由貿易で傷ついた米国製造業労働者の痛みだ 伊藤萬里",
-      "score": -0.4
-    }
+  "orders": [],
+  "risk_alerts": [
+    "宏观负面：存在 TRADE 类负面新闻，详见二节情报"
   ],
-  "screener_meta": {
-    "count": 13,
-    "hard_vetoed_count": 0,
-    "downweighted_count": 4
-  },
-  "live_state": {
-    "positions": [],
-    "orders": [],
-    "account": {
-      "asof": "2026-04-06",
-      "nav": 400000.0,
-      "cash": 400000.0
-    }
-  },
-  "db_signals": [
-    {
-      "asof": "2026-04-06",
-      "symbol": "9501.T",
-      "score": 23.511272846338024,
-      "name": "Tokyo Electric Power",
-      "sector": "Utility"
-    },
-    {
-      "asof": "2026-04-06",
-      "symbol": "5401.T",
-      "score": 23.493686627464978,
-      "name": "Nippon Steel",
-      "sector": "Steel"
-    },
-    {
-      "asof": "2026-04-06",
-      "symbol": "9432.T",
-      "score": 23.38025154709049,
-      "name": "NTT",
-      "sector": "Telecom"
-    },
-    {
-      "asof": "2026-04-06",
-      "symbol": "4755.T",
-      "score": 22.978073629349257,
-      "name": "Rakuten Group",
-      "sector": "Internet"
-    },
-    {
-      "asof": "2026-04-06",
-      "symbol": "9434.T",
-      "score": 22.97685341944851,
-      "name": "SoftBank Corp",
-      "sector": "Telecom"
-    },
-    {
-      "asof": "2026-04-06",
-      "symbol": "7201.T",
-      "score": 22.61654344678109,
-      "name": "Nissan Motor",
-      "sector": "Auto"
-    },
-    {
-      "asof": "2026-04-06",
-      "symbol": "4005.T",
-      "score": 22.27420118314907,
-      "name": "Sumitomo Chemical",
-      "sector": "Chemical"
-    },
-    {
-      "asof": "2026-04-06",
-      "symbol": "7211.T",
-      "score": 21.89386260486195,
-      "name": "Mitsubishi Motors",
-      "sector": "Auto"
-    }
-  ]
+  "account": {
+    "asof": "2026-04-06",
+    "nav": 400000.0,
+    "cash": 400000.0
+  }
 }

@@ -1,4 +1,4 @@
 family,factor_count,observed_factor_count,mean_ic,mean_t_stat,positive_ic_ratio,coverage_ratio
 fundamental,10,0,0.0,0.0,0.0,0.0
-risk_adjusted,4,4,0.09433500601348391,1.0467980000000001,1.0,1.0
-technical,6,6,0.02261138126636554,1.2450518333333334,1.0,1.0
+risk_adjusted,4,4,0.09443167860082398,1.0899997499999998,1.0,1.0
+technical,6,6,0.022458457738995935,1.0411025,1.0,1.0

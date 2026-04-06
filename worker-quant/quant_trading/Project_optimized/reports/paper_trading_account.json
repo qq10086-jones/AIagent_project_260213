@@ -3,21 +3,21 @@
   "source_of_truth": "japan_market.db (positions + account_snapshots tables)",
   "strategy_id": "sprint",
   "account": {
-    "asof": "2026-04-03",
-    "cash": 347127.1724,
-    "positions_value": 52890.00244140625,
-    "nav": 400017.17484140623,
-    "run_id": "2026-04-03__bc9f466afc"
+    "asof": "2026-04-06",
+    "cash": 346449.767064,
+    "positions_value": 53470.001220703125,
+    "nav": 399919.76828470314,
+    "run_id": "2026-04-06__98ecff92d9"
   },
   "positions": [
     {
-      "asof": "2026-04-03",
+      "asof": "2026-04-06",
       "symbol": "4005.T",
       "qty": 100.0,
-      "avg_cost": 528.200012,
-      "market_price": 528.9000244140625,
-      "market_value": 52890.00244140625,
-      "unrealized_pnl": 70.00124140624848
+      "avg_cost": 534.967362,
+      "market_price": 534.7000122070312,
+      "market_value": 53470.001220703125,
+      "unrealized_pnl": -26.734979296873007
     }
   ]
 }

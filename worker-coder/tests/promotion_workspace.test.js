@@ -35,7 +35,7 @@ function main() {
   assert.equal(shadow.ok, true);
   assert.equal(shadow.applied, false);
   assert.equal(
-    fs.readFileSync(path.join(root, "sandbox", "crm_site", "app.js"), "utf8"),
+    fs.readFileSync(path.join(root, "workspace", "sandbox", "crm_site", "app.js"), "utf8"),
     "export const value = 1;\n",
   );
 
@@ -51,7 +51,7 @@ function main() {
   assert.equal(promoted.ok, true);
   assert.equal(promoted.applied, true);
   assert.equal(
-    fs.readFileSync(path.join(root, "sandbox", "crm_site", "app.js"), "utf8"),
+    fs.readFileSync(path.join(root, "workspace", "sandbox", "crm_site", "app.js"), "utf8"),
     "export const value = 2;\n",
   );
 

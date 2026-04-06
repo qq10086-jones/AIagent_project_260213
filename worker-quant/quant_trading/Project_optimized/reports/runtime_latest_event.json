@@ -1,8 +1,9 @@
 {
-  "ts_utc": "2026-04-05T01:45:59+00:00",
+  "ts_utc": "2026-04-06T06:17:01+00:00",
   "level": "info",
   "event": "sprint_followup_skipped",
-  "simulation": false,
+  "simulation": true,
+  "simulation_asof": "2026-04-06",
   "simulation_strict_pit": true,
   "strategy_id": "sprint",
   "reason": "harvest_specific_reports"

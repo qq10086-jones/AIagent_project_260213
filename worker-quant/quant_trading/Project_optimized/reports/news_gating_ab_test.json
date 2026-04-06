@@ -1,10 +1,10 @@
 {
-  "asof": "2026-04-03",
-  "simulation": false,
+  "asof": "2026-04-06",
+  "simulation": true,
   "with_news_gating_selected_count": 1,
   "without_news_gating_selected_count": 1,
   "news_risk": "LOW",
-  "macro_sentiment": 0.06666666666666668,
+  "macro_sentiment": 0.0,
   "effective_sprint_gating": false,
   "shadow_ready_for_gating_review": false
 }

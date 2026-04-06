@@ -20,6 +20,7 @@ import {
 } from './scoped_delta.js';
 import {
     materializeIsolationWorkspace,
+    cleanupIsolationWorkspace,
 } from './isolation_workspace.js';
 import {
     promoteIsolatedChanges,
@@ -55,6 +56,27 @@ import {
     validateWorkflowStepArtifacts,
     validateCodingTeamHandoff,
 } from './step_artifact_contract.js';
+
+import {
+    EXEC_TIMEOUT_MS,
+    ARTIFACTS_DIR,
+    RUNS_DIR,
+    SUPPORTED_PROVIDERS,
+    DEFAULT_PROVIDER_RESOLVED,
+    MIN_WALL_CLOCK_S,
+    MAX_WALL_CLOCK_S,
+    FALLBACK_WALL_CLOCK_S,
+    ErrorCode,
+} from './constants.js';
+
+// --- Request ID tracing ---
+function makeRequestId(taskId, runId) {
+    return `[req:${String(runId || "?").slice(0, 8)}/${String(taskId || "?")}]`;
+}
+
+function buildRunDir(workspaceRoot, runId) {
+    return path.join(workspaceRoot, ARTIFACTS_DIR, RUNS_DIR, runId || 'default');
+}
 
 export function salvageWorkflowArtifactFailure({ workspaceRoot, artifactRoot, expectedArtifacts, stepId, taskPrompt, result }) {
     const safeStepId = String(stepId || "");
@@ -169,6 +191,7 @@ export const CodingService = {
      */
     applyPatch: async (params) => {
         const { workspaceRoot, file_path, edit_block, task_id, run_id, target_paths = [] } = params;
+        const reqId = makeRequestId(task_id, run_id);
 
         const scopeCheck = validateRequestedWrite({
             workspaceRoot,
@@ -179,7 +202,7 @@ export const CodingService = {
             return {
                 success: false,
                 message: scopeCheck.error,
-                error_code: "E_UNAUTHORIZED_WRITE",
+                error_code: ErrorCode.UNAUTHORIZED_WRITE,
             };
         }
 
@@ -187,7 +210,7 @@ export const CodingService = {
 
         if (result.success) {
             try {
-                const runDir = path.join(workspaceRoot, 'artifacts', 'runs', run_id || 'default');
+                const runDir = buildRunDir(workspaceRoot, run_id);
                 if (!fs.existsSync(runDir)) fs.mkdirSync(runDir, { recursive: true });
 
                 // 1. Record in timeline
@@ -211,7 +234,7 @@ export const CodingService = {
                     taskDir,
                 });
             } catch (fsErr) {
-                console.error("[CodingService] Artifact logging failed:", fsErr.message);
+                console.error(`${reqId} [CodingService] Artifact logging failed:`, fsErr.message, fsErr.stack);
             }
         }
         return result;
@@ -222,9 +245,19 @@ export const CodingService = {
      */
     executeCommand: async (params) => {
         const { workspaceRoot, command, artifact_root = "", expected_artifacts = [], step_id = "", task_prompt = "", run_id, task_id } = params;
+        const reqId = makeRequestId(task_id, run_id);
+
+        const cmdCheck = validateSafeCommand(command);
+        if (!cmdCheck.ok) {
+            return {
+                ok: false,
+                error: cmdCheck.error,
+                error_code: ErrorCode.COMMAND_VALIDATION_FAILED,
+            };
+        }
 
         return new Promise((resolve) => {
-            exec(command, { cwd: workspaceRoot, timeout: 30000 }, (error, stdout, stderr) => {
+            exec(command, { cwd: workspaceRoot, timeout: EXEC_TIMEOUT_MS }, (error, stdout, stderr) => {
                 const status = error ? "FAIL" : "PASS";
                 let scaffold = null;
                 if (!error) {
@@ -238,15 +271,15 @@ export const CodingService = {
                 }
                 
                 try {
-                    const runDir = path.join(workspaceRoot, 'artifacts', 'runs', run_id || 'default');
+                    const runDir = buildRunDir(workspaceRoot, run_id);
                     if (!fs.existsSync(runDir)) fs.mkdirSync(runDir, { recursive: true });
-                    
+
                     const timelinePath = path.join(runDir, 'timeline.md');
                     const timestamp = new Date().toISOString();
                     const logEntry = `- ${timestamp} | task: ${task_id || 'unknown'} | Executed: \\\`${command}\\\` | STATUS: ${status}\n`;
                     fs.appendFileSync(timelinePath, logEntry);
                 } catch (fsErr) {
-                    console.warn("[CodingService] Failed to write timeline log:", fsErr.message);
+                    console.warn(`${reqId} [CodingService] Failed to write timeline log:`, fsErr.message);
                 }
 
                 if (error) {
@@ -306,6 +339,7 @@ export const CodingService = {
             context_envelope = null,
             on_runtime_event = null,
         } = params;
+        const reqId = makeRequestId(task_id, run_id);
         const taskContract = buildTaskContractMetadata({
             taskClass: task_class,
             betaTemplateId: beta_template_id,
@@ -313,8 +347,7 @@ export const CodingService = {
         });
 
         const providerRequested = String(provider || "auto").toLowerCase();
-        const supportedProviders = new Set(["auto", "opencode", "codex"]);
-        if (!supportedProviders.has(providerRequested)) {
+        if (!SUPPORTED_PROVIDERS.has(providerRequested)) {
             const failureMemory = persistCodingFailureMemory({
                 workspaceRoot,
                 runId: run_id,
@@ -325,7 +358,7 @@ export const CodingService = {
                 targetPaths: target_paths,
                 failedPhase: "provider_validation",
                 terminalOutcome: "failed",
-                errorCode: "E_PROVIDER_UNAVAILABLE",
+                errorCode: ErrorCode.PROVIDER_UNAVAILABLE,
                 error: `Unsupported provider '${providerRequested}'. Use auto/opencode/codex.`,
                 attemptedFixes: [],
                 filesChanged: [],
@@ -338,14 +371,14 @@ export const CodingService = {
                 ok: false,
                 error: `Unsupported provider '${providerRequested}'. Use auto/opencode/codex.`,
                 diagnostics: {
-                    error_code: "E_PROVIDER_UNAVAILABLE",
+                    error_code: ErrorCode.PROVIDER_UNAVAILABLE,
                     provider_requested: providerRequested,
                     task_contract: taskContract,
                     coding_failure_memory: failureMemory,
                 }
             };
         }
-        const preferredProvider = providerRequested === "auto" ? "opencode" : providerRequested;
+        const preferredProvider = providerRequested === "auto" ? DEFAULT_PROVIDER_RESOLVED : providerRequested;
         const effectiveTargetPaths = Array.isArray(execution_adapter_packet?.target_paths) && execution_adapter_packet.target_paths.length > 0
             ? execution_adapter_packet.target_paths
             : target_paths;
@@ -366,7 +399,7 @@ export const CodingService = {
                     targetPaths: effectiveTargetPaths,
                     failedPhase: "scope_guard",
                     terminalOutcome: "failed",
-                    errorCode: "E_UNAUTHORIZED_WRITE",
+                    errorCode: ErrorCode.UNAUTHORIZED_WRITE,
                     error: scopeRootsCheck.error,
                     attemptedFixes: [],
                     filesChanged: [],
@@ -379,7 +412,7 @@ export const CodingService = {
                     ok: false,
                     error: scopeRootsCheck.error,
                     diagnostics: {
-                        error_code: "E_UNAUTHORIZED_WRITE",
+                        error_code: ErrorCode.UNAUTHORIZED_WRITE,
                         provider_requested: providerRequested,
                         target_paths: effectiveTargetPaths,
                         task_contract: taskContract,
@@ -389,12 +422,13 @@ export const CodingService = {
             }
         }
 
-        const runDir = path.join(workspaceRoot, 'artifacts', 'runs', run_id || 'default');
+        const runDir = buildRunDir(workspaceRoot, run_id);
         const taskDir = path.join(runDir, `task_${task_id || 'unknown'}`);
         try {
             if (!fs.existsSync(runDir)) fs.mkdirSync(runDir, { recursive: true });
             if (!fs.existsSync(taskDir)) fs.mkdirSync(taskDir, { recursive: true });
         } catch (e) {
+            console.error(`${reqId} Failed to prepare artifacts dir:`, e.message, e.stack);
             return { ok: false, error: `Failed to prepare artifacts dir: ${e.message}` };
         }
         let isolationScaffold = null;
@@ -405,6 +439,8 @@ export const CodingService = {
                 targetPaths: effectiveTargetPaths,
             });
         } catch (err) {
+            console.error(`${reqId} Isolation workspace materialization failed:`, err.message, err.stack);
+            cleanupIsolationWorkspace(taskDir);
             isolationScaffold = {
                 enabled: false,
                 mode: "error",
@@ -436,8 +472,8 @@ export const CodingService = {
         const sameErrorRepeatLimitSafe = clampInt(same_error_repeat_limit, 1, 3, 2);
         const rawWallClock = Number(wall_clock_timeout_s || 0);
         const wallClockTimeoutSafe = rawWallClock > 0
-            ? Math.max(60, Math.min(3600, Math.trunc(rawWallClock)))
-            : Math.max(max_runtime_s || 300, 300);
+            ? Math.max(MIN_WALL_CLOCK_S, Math.min(MAX_WALL_CLOCK_S, Math.trunc(rawWallClock)))
+            : Math.max(max_runtime_s || FALLBACK_WALL_CLOCK_S, FALLBACK_WALL_CLOCK_S);
         const attemptRecords = [];
         const errorCounts = new Map();
         let finalSummary = null;
@@ -470,7 +506,7 @@ export const CodingService = {
                     phase: "retry_budget",
                     summaryText: "wall clock timeout reached before another repair attempt could start",
                     testResult: "skipped",
-                    errorCode: "E_WALL_CLOCK_TIMEOUT",
+                    errorCode: ErrorCode.WALL_CLOCK_TIMEOUT,
                     error: `wall_clock_timeout_s budget exhausted after ${Date.now() - startedMs}ms`,
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
@@ -562,7 +598,9 @@ export const CodingService = {
             try {
                 fs.writeFileSync(stdoutPath, redactedStdout, "utf8");
                 fs.writeFileSync(stderrPath, redactedStderr, "utf8");
-            } catch {}
+            } catch (logErr) {
+                console.warn(`${reqId} Failed to write delegate stdout/stderr logs:`, logErr.message);
+            }
 
             const gitSummary = await gatherGitSummary(executionWorkspaceRoot, taskDir, executionBaselineSnapshot, effectiveTargetPaths);
             const finalGitSummary = result?.ok
@@ -605,7 +643,7 @@ export const CodingService = {
                     phase: "scope_guard",
                     summaryText: "blocked unauthorized write outside target_paths",
                     testResult: "skipped",
-                    errorCode: "E_UNAUTHORIZED_WRITE",
+                    errorCode: ErrorCode.UNAUTHORIZED_WRITE,
                     error: changedScopeCheck.error,
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
@@ -709,7 +747,7 @@ export const CodingService = {
                     phase: "artifact_contract",
                     summaryText: `step artifact validation failed: ${roleValidation.detail || roleValidation.code || "unknown artifact validation error"}`,
                     testResult: "failed",
-                    errorCode: roleValidation.code || "E_WORKFLOW_ARTIFACT_INVALID",
+                    errorCode: roleValidation.code || ErrorCode.WORKFLOW_ARTIFACT_INVALID,
                     error: roleValidation.detail || "workflow step artifact validation failed",
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
@@ -743,7 +781,7 @@ export const CodingService = {
                     phase: "artifact_contract",
                     summaryText: `typed handoff validation failed: ${handoffValidation.detail || handoffValidation.code || "unknown handoff validation error"}`,
                     testResult: "failed",
-                    errorCode: handoffValidation.code || "E_HANDOFF_INVALID",
+                    errorCode: handoffValidation.code || ErrorCode.HANDOFF_INVALID,
                     error: handoffValidation.detail || "workflow handoff validation failed",
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
@@ -776,7 +814,7 @@ export const CodingService = {
                     phase: "static_check",
                     summaryText: "static checks failed after delegation",
                     testResult: "failed",
-                    errorCode: "E_STATIC_CHECK_FAILED",
+                    errorCode: ErrorCode.STATIC_CHECK_FAILED,
                     error: staticCheck.error || "static check failed",
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
@@ -805,7 +843,7 @@ export const CodingService = {
                     phase: "verification",
                     summaryText: "verification command failed after delegation",
                     testResult: "failed",
-                    errorCode: verification.errorCode || "E_VERIFICATION_FAILED",
+                    errorCode: verification.errorCode || ErrorCode.VERIFICATION_FAILED,
                     error: verification.error || "verification command failed",
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
@@ -834,7 +872,7 @@ export const CodingService = {
                     phase: "delegate",
                     summaryText: `${result.provider_used || preferredProvider} delegation failed: ${result.error || "unknown error"}`,
                     testResult: "skipped",
-                    errorCode: result?.diagnostics?.error_code || "E_DELEGATE_FAILED",
+                    errorCode: result?.diagnostics?.error_code || ErrorCode.DELEGATE_FAILED,
                     error: redactSensitiveText(result.error || "") || `${result.provider_used || preferredProvider} delegation failed`,
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
@@ -884,7 +922,7 @@ export const CodingService = {
                         phase: "promotion",
                         summaryText: "isolated execution succeeded but promotion into main workspace failed",
                         testResult: "passed",
-                        errorCode: "E_PROMOTION_FAILED",
+                        errorCode: ErrorCode.PROMOTION_FAILED,
                         error: promotion.error || "promotion failed",
                         taskClass: taskContract.task_class,
                         betaTemplateId: taskContract.beta_template_id,
@@ -996,7 +1034,7 @@ export const CodingService = {
                     attemptRecords.push({
                         attempt: attemptIndex,
                         phase: finalSummary?.diagnostics?.failed_phase || "delegate",
-                error_code: finalSummary?.diagnostics?.error_code || "E_DELEGATE_FAILED",
+                error_code: finalSummary?.diagnostics?.error_code || ErrorCode.DELEGATE_FAILED,
                 error: String(finalSummary?.error || ""),
                         command_used: finalSummary?.command_used || null,
                         verification_command: verification_command || null,
@@ -1046,7 +1084,14 @@ export const CodingService = {
             const status = finalSummary?.ok ? "PASS" : "FAIL";
             const line = `- ${new Date().toISOString()} | task: ${task_id || 'unknown'} | Delegated: ${finalSummary?.provider_used || preferredProvider} (requested=${providerRequested}${finalFallbackFrom ? `,fallback_from=${finalFallbackFrom}` : ""}) | STATUS: ${status}\n`;
             fs.appendFileSync(timelinePath, line);
-        } catch {}
+        } catch (tlErr) {
+            console.warn(`${reqId} Failed to write delegate timeline:`, tlErr.message);
+        }
+
+        // Cleanup isolation workspace on completion (success or failure)
+        if (isolationScaffold?.enabled) {
+            cleanupIsolationWorkspace(taskDir);
+        }
 
         return finalSummary;
     },
@@ -1056,7 +1101,7 @@ export const CodingService = {
      */
     startTask: async (task_prompt, workspaceRoot) => {
         const run_id = crypto.randomUUID();
-        const runDir = path.join(workspaceRoot, 'artifacts', 'runs', run_id);
+        const runDir = buildRunDir(workspaceRoot, run_id);
 
         try {
             if (!fs.existsSync(runDir)) fs.mkdirSync(runDir, { recursive: true });

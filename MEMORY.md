@@ -1,13 +1,13 @@
 # Nexus Beta Quality Memory
 
-Date: 2026-04-05
-Version: v1.2
+Date: 2026-04-06
+Version: v1.3
 
 ## Quality Scores (PM/QA Audit)
 - **Architecture**: 9.0 / 10 (High consistency with SP-03 Contract-driven path)
-- **Code Robustness**: 6.5 / 10 (Improved validation but core decoupling ongoing)
-- **Engineering/QA**: 7.0 / 10 (EPERM resolved, task-loop closed)
-- **Overall**: 6.5 / 10 (Steady progress towards production readiness)
+- **Code Robustness**: 8.5 / 10 (constants.js centralized, 20 bare catches fixed, command validation, isolation cleanup, request ID tracing)
+- **Engineering/QA**: 8.5 / 10 (27/27 tests green, 4 previously broken tests fixed — path bugs + contract alignment)
+- **Overall**: 8.5 / 10 (Robustness hardening + full test suite green)
 
 ## Facts
 

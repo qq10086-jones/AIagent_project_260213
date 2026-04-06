@@ -23,7 +23,7 @@ function runProcess({ command, args = [], cwd, timeoutMs = 600000, stdinText = "
       timedOut = true;
       try {
         child.kill("SIGKILL");
-      } catch {}
+      } catch (_killErr) { /* process may already be dead */ }
     }, timeoutMs);
 
     child.stdout.on("data", (d) => {

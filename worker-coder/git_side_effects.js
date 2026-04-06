@@ -3,9 +3,11 @@ import path from "path";
 import { execFile } from "child_process";
 import https from "https";
 
+import { GIT_EXEC_TIMEOUT_MS } from './constants.js';
+
 function execFileCapture(command, args, cwd) {
   return new Promise((resolve) => {
-    execFile(command, args, { cwd, timeout: 20000 }, (error, stdout, stderr) => {
+    execFile(command, args, { cwd, timeout: GIT_EXEC_TIMEOUT_MS }, (error, stdout, stderr) => {
       resolve({
         ok: !error,
         stdout: String(stdout || ""),
@@ -24,7 +26,8 @@ function writeAutoCommitArtifact(taskDir, payload) {
       generated_at: new Date().toISOString(),
       ...payload,
     }, null, 2), "utf8");
-  } catch {
+  } catch (err) {
+    console.warn("[git_side_effects] Failed to write auto-commit artifact:", err.message);
     logPath = null;
   }
   return {
@@ -144,7 +147,7 @@ function githubApiRequest(method, path, body, token) {
       res.on("data", (c) => raw += c);
       res.on("end", () => {
         try { resolve({ status: res.statusCode, body: JSON.parse(raw) }); }
-        catch { resolve({ status: res.statusCode, body: raw }); }
+        catch (_parseErr) { resolve({ status: res.statusCode, body: raw }); }
       });
     });
     req.on("error", reject);
@@ -242,8 +245,8 @@ export async function pushBranchToGitHub({
     if (prRes.status === 201 && prRes.body?.html_url) {
       prUrl = prRes.body.html_url;
     }
-  } catch {
-    // PR 创建失败不影响交付
+  } catch (prErr) {
+    console.warn("[git_side_effects] PR creation failed (non-blocking):", prErr.message);
   }
 
   const summaryLines = [

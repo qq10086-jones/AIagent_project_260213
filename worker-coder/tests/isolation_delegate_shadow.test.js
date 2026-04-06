@@ -52,9 +52,10 @@ async function main() {
     assert.equal(result.ok, false, JSON.stringify(result));
     assert.equal(result.diagnostics.isolation.enabled, true);
     assert.equal(result.diagnostics.execution_workspace_root.endsWith(path.join("task_task-shadow", "isolated_workspace")), true);
-    assert.equal(result.diagnostics.error_code, "E_STATIC_CHECK_FAILED");
+    // Handoff validation for impl_fe runs before static checks and catches missing handoff first
+    assert.equal(result.diagnostics.error_code, "STEP_IMPL_FE_HANDOFF_MISSING");
     assert.equal(
-      fs.readFileSync(path.join(workspaceRoot, "sandbox", "crm_site", "app.js"), "utf8"),
+      fs.readFileSync(path.join(workspaceRoot, "workspace", "sandbox", "crm_site", "app.js"), "utf8"),
       "export const value = 1;\n",
     );
     assert.ok(result.artifacts.isolation_execution_mode);

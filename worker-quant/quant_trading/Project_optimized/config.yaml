@@ -166,7 +166,7 @@ decision:
   out_dir: "artifacts/decision"
 
 paper:
-  enabled: true
+  enabled: false
   price_mode: "latest"
   slippage_bps: 5.0
   fee_bps: 10.0

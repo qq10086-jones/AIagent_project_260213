@@ -50,7 +50,10 @@ const GLOBAL_TASK_TIMEOUT_MS = Math.max(30000, Number(process.env.CODER_GLOBAL_T
 // Set to 1 for single-GPU (ollama) setups to prevent concurrent LLM saturation.
 // Increase for multi-GPU or cloud provider setups.
 const STREAM_BATCH_SIZE = Math.max(1, Math.min(20, Number(process.env.CODER_STREAM_BATCH_SIZE || RUNTIME_CODER.stream_batch_size || 1)));
-const MAX_RESULT_OUTPUT_BYTES = 48 * 1024;
+import {
+  MAX_RESULT_OUTPUT_BYTES,
+  STALE_TASK_MIN_IDLE_MS as STALE_IDLE_MS_CONST,
+} from './constants.js';
 
 console.log(
   `[runtime-config] path=${RUNTIME.path || "none"} provider_default=${DEFAULT_PROVIDER} model_default=${DEFAULT_MODEL || "none"} execution_lane_default=${DEFAULT_EXECUTION_LANE || "none"} allow_provider_fallback=${DEFAULT_ALLOW_PROVIDER_FALLBACK} global_timeout_ms=${GLOBAL_TASK_TIMEOUT_MS} stream_batch_size=${STREAM_BATCH_SIZE}`
@@ -241,7 +244,9 @@ async function processTask(msgId, task, lifecycle) {
   let payload = {};
   try {
     payload = JSON.parse(rawPayload || "{}");
-  } catch {}
+  } catch (parseErr) {
+    console.warn(`[worker] Failed to parse task payload for ${task_id}:`, parseErr.message);
+  }
 
   let output = {};
   let error = null;
@@ -427,7 +432,8 @@ async function processMessages(messages) {
       let parsedPayload = {};
       try {
         parsedPayload = JSON.parse(task.payload || "{}");
-      } catch {
+      } catch (parseErr) {
+        console.warn(`[worker] Failed to parse stream payload for ${task.task_id}:`, parseErr.message);
         parsedPayload = {};
       }
       
@@ -474,7 +480,7 @@ async function processMessages(messages) {
   }
 
   let claimStartId = "0-0";
-  const STALE_TASK_MIN_IDLE_MS = 60000; // 1 min timeout for claiming dead worker's tasks
+  const STALE_TASK_MIN_IDLE_MS = STALE_IDLE_MS_CONST;
 
   while (true) {
     try {

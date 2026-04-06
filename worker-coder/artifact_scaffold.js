@@ -863,7 +863,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (rel === "plan/workplan.json" && ext === ".json") {
       let parsed = null;
-      try { parsed = JSON.parse(raw); } catch {}
+      try { parsed = JSON.parse(raw); } catch (_e) { /* malformed JSON */ }
       const beTasks = Array.isArray(parsed?.be_tasks) ? parsed.be_tasks : [];
       const feTasks = Array.isArray(parsed?.fe_tasks) ? parsed.fe_tasks : [];
       const taskText = JSON.stringify(parsed || {}).toLowerCase();
@@ -889,7 +889,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (rel === "impl/be_changes/package.json" && ext === ".json") {
       let parsed = null;
-      try { parsed = JSON.parse(raw); } catch {}
+      try { parsed = JSON.parse(raw); } catch (_e) { /* malformed JSON */ }
       const serverPath = path.join(rootAbs, "impl", "be_changes", "server.js");
       const serverSource = fs.existsSync(serverPath) ? fs.readFileSync(serverPath, "utf8") : "";
       const expectedManifest = inferRuntimePackageManifest({ projectType, serverSource });
@@ -933,7 +933,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (file === "acceptance.json" && ext === ".json") {
       let parsed = null;
-      try { parsed = JSON.parse(raw); } catch {}
+      try { parsed = JSON.parse(raw); } catch (_e) { /* malformed JSON */ }
       if (!(Array.isArray(parsed?.criteria) && parsed.criteria.length > 0 && Array.isArray(parsed?.artifacts) && parsed.artifacts.length > 0 && typeof parsed?.owner === "string" && parsed.owner.trim() && typeof parsed?.version === "string" && parsed.version.trim())) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "acceptance_schema_repaired" };
@@ -941,7 +941,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (rel === "handoff/pm_to_architect.json" && ext === ".json") {
       let parsed = null;
-      try { parsed = JSON.parse(raw); } catch {}
+      try { parsed = JSON.parse(raw); } catch (_e) { /* malformed JSON */ }
       const criteria = Array.isArray(parsed?.acceptance?.criteria) ? parsed.acceptance.criteria : [];
       if (!(typeof parsed?.from_step === "string" && parsed.from_step.trim()
         && Array.isArray(parsed?.to_steps) && parsed.to_steps.length > 0
@@ -954,7 +954,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (rel === "handoff/be_to_fe.json" && ext === ".json") {
       let parsed = null;
-      try { parsed = JSON.parse(raw); } catch {}
+      try { parsed = JSON.parse(raw); } catch (_e) { /* malformed JSON */ }
       const normalized = normalizeBeToFeHandoff(parsed);
       const apiContracts = Array.isArray(normalized?.api_contracts) ? normalized.api_contracts : [];
       const sharedTypes = Array.isArray(normalized?.shared_types) ? normalized.shared_types : [];
@@ -979,7 +979,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (rel === "handoff/architect_to_impl.json" && ext === ".json") {
       let parsed = null;
-      try { parsed = JSON.parse(raw); } catch {}
+      try { parsed = JSON.parse(raw); } catch (_e) { /* malformed JSON */ }
       const decisions = Array.isArray(parsed?.decisions) ? parsed.decisions : [];
       const risks = Array.isArray(parsed?.risks) ? parsed.risks : [];
       const staticMismatch = projectType === "single_file_html" && (
@@ -1001,7 +1001,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (file === "risk_report.json" && ext === ".json") {
       let parsed = null;
-      try { parsed = JSON.parse(raw); } catch {}
+      try { parsed = JSON.parse(raw); } catch (_e) { /* malformed JSON */ }
       if (!(Array.isArray(parsed?.risks) && parsed.risks.length > 0 && Array.isArray(parsed?.decision_log) && parsed.decision_log.length > 0)) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "risk_report_schema_repaired" };
@@ -1015,7 +1015,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (rel === "handoff/impl_to_qa.json" && ext === ".json") {
       let parsed = null;
-      try { parsed = JSON.parse(raw); } catch {}
+      try { parsed = JSON.parse(raw); } catch (_e) { /* malformed JSON */ }
       const fromSteps = Array.isArray(parsed?.from_steps) ? parsed.from_steps.filter((item) => typeof item === "string" && item.trim()) : [];
       const knownLimitations = Array.isArray(parsed?.known_limitations)
         ? parsed.known_limitations.filter((item) => typeof item === "string" && item.trim())
@@ -1047,7 +1047,7 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     }
     if (rel === "release/artifact_manifest.json" && ext === ".json") {
       let parsed = null;
-      try { parsed = JSON.parse(raw); } catch {}
+      try { parsed = JSON.parse(raw); } catch (_e) { /* malformed JSON */ }
       const artifacts = Array.isArray(parsed?.artifacts) ? parsed.artifacts : [];
       const artifactsValid = artifacts.length > 0 && artifacts.every((item) =>
         item

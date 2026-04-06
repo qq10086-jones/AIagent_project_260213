@@ -106,7 +106,9 @@ export function writePromptContractArtifact({
       ...diagnostics,
     }, null, 2), "utf8");
     relPath = path.relative(workspaceRoot, outPath).replace(/\\/g, "/");
-  } catch {}
+  } catch (writeErr) {
+    console.warn("[prompt_contract] Failed to write prompt contract artifact:", writeErr.message);
+  }
   return {
     prompt,
     path: relPath,

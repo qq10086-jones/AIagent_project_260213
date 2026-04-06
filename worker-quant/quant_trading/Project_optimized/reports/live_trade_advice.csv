@@ -1,1 +1,2 @@
-﻿
+﻿symbol,action,side,qty,suggested_limit_price,ref_price,current_qty,current_weight_pct,target_weight_pct,delta_weight_pct,delta_value,reason
+4005.T,HOLD,HOLD,0,,527.7000122070312,0.0,0.0,25.0,25.0,0.0,Current 0.00% vs target 25.00%.

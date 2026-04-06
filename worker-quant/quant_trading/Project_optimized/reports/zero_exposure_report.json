@@ -3,6 +3,6 @@
   "latest_weights_zero": false,
   "days_since_last_nonzero": 0,
   "primary_cause": "benchmark_regime",
-  "last_nonzero_asof": "2026-04-03",
+  "last_nonzero_asof": "2026-04-06",
   "last_nonzero_row_sum": 0.25
 }

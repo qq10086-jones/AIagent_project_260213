@@ -12,4 +12,4 @@
 
 ## Ranking
 
-1. sprint_momentum | score=0.0000 | sharpe=0.0000 | return=0.00% | maxDD=0.00% | turnover=0.00% | actionable_now=True | last_nonzero_asof=2026-04-03
+1. sprint_momentum | score=0.0000 | sharpe=0.0000 | return=0.00% | maxDD=0.00% | turnover=0.00% | actionable_now=True | last_nonzero_asof=2026-04-06

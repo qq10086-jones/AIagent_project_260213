@@ -80,6 +80,17 @@ export function resolveIsolationMode(mode = process.env.CODER_ISOLATION_MODE || 
   return safeMode(mode);
 }
 
+export function cleanupIsolationWorkspace(taskDir) {
+  const isolatedWorkspaceRoot = path.join(taskDir, "isolated_workspace");
+  try {
+    if (fs.existsSync(isolatedWorkspaceRoot)) {
+      fs.rmSync(isolatedWorkspaceRoot, { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.warn("[isolation_workspace] Cleanup failed for", isolatedWorkspaceRoot, ":", err.message);
+  }
+}
+
 export function materializeIsolationWorkspace({
   workspaceRoot,
   taskDir,

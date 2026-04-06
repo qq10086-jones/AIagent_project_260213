@@ -47,19 +47,32 @@ workspace/scratch/
 workspace/tmp/
 external/vendor-cache/
 
+# Database files (all)
+*.db
+*.db-shm
+*.db-wal
+
+# Large binary archives
+*.tgz
+
+# Large reference repos (CC source tarballs, node_modules inside)
+claude_code_src/
+claude_code_study/claude_code_src/
+claude_code_study/claw-code/
+openclaw/
+
 # Quant local runtime artifacts
-/japan_market.db
-worker-quant/quant_trading/Project_optimized/japan_market.db
 worker-quant/quant_trading/Project_optimized/daily_run.bat
 worker-quant/quant_trading/Project_optimized/logs/
 worker-quant/quant_trading/Project_optimized/.yf_cache/
 worker-quant/quant_trading/Project_optimized/artifacts/decision/
-worker-quant/quant_trading/Project_optimized/reports/briefing_latest.json
-worker-quant/quant_trading/Project_optimized/reports/briefing_latest.md
-worker-quant/quant_trading/Project_optimized/reports/briefing_v2_latest.json
-worker-quant/quant_trading/Project_optimized/reports/briefing_v2_latest.md
-worker-quant/quant_trading/Project_optimized/reports/random_subset_2021_03_11/
+worker-quant/quant_trading/Project_optimized/backups/
+worker-quant/quant_trading/Project_optimized/state/
+worker-quant/quant_trading/Project_optimized/=
 workspace/sandbox/crm_site/handoff/
 workspace/sandbox/crm_site/impl/be_changes/package.json
 workspace/sandbox/crm_site/impl/be_changes/public/
 workspace/sandbox/crm_site/impl/fe_changes/public/
+
+# Root-level sandbox (test artifacts)
+sandbox/

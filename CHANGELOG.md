@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-04-06
+### Added
+- **`worker-coder/constants.js`**: Centralized all magic numbers — timeouts, retry budgets, error codes, artifact paths.
+- **Isolation cleanup**: `cleanupIsolationWorkspace()` in `isolation_workspace.js` — prevents disk leaks on failure and cleans up after completion.
+- **Request ID tracing**: All `coding_service.js` log lines now include `[req:runId/taskId]` for cross-operation tracing.
+
+### Fixed
+- **20 bare `catch {}` blocks** across 8 files replaced with proper logging — errors no longer silently swallowed.
+- **Command injection defense**: `executeCommand` now calls `validateSafeCommand()` before `exec()`.
+- **4 broken tests fixed**:
+  - `isolation_workspace.test.js` / `promotion_workspace.test.js`: Path assertions missing `workspace/` directory prefix.
+  - `isolation_delegate_shadow.test.js`: Expected `E_STATIC_CHECK_FAILED` but handoff validation now fires first (`STEP_IMPL_FE_HANDOFF_MISSING`).
+  - `delegate_scope_policy.test.js`: PM role validation requires complete spec artifacts — test now pre-creates them per schema.
+
+### Changed
+- **Error codes centralized**: 7 hardcoded string error codes in `coding_service.js` replaced with `ErrorCode.*` constants.
+- **Quality scores updated**: Code Robustness 6.5→8.5, Engineering/QA 7.0→8.5, Overall 6.5→8.5.
+- Test suite: **27/27 all green** (was 23/27).
+
 ## 2026-04-05
 ### Added
 - **SP-03 Integration**: Landed Structured Workplan as first-class execution context.

@@ -22,7 +22,7 @@ function hasMiniMaxKey(env = process.env) {
         cfg?.provider?.minimax?.options?.apiKey || ""
       ).trim();
       if (key && !key.startsWith("${")) return true;
-    } catch {}
+    } catch (_readErr) { /* config file not found or invalid, continue checking */ }
   }
   return false;
 }

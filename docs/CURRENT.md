@@ -57,11 +57,25 @@
 
 ---
 
-## 最新进度报告
+## 最新进度报告（日常）
 
 - **当前状态**: [`03_feature_development/PROGRESS_LATEST.md`](03_feature_development/PROGRESS_LATEST.md)
 - **最近一次验证**: [`03_feature_development/PROGRESS_LATEST.md`](03_feature_development/PROGRESS_LATEST.md)
   - verdict = `PASS / GO` | `superpowers_configured_steps = 6` | 当前主线 = `SP-03`
+
+> `03_feature_development/` 存放日常进度记录，由员工按开发节奏更新。
+
+---
+
+## 里程碑审计报告
+
+按项目重大节点触发的全量审计，**不随日常进度更新**。
+
+| 报告 | 日期 | 范围 |
+|------|------|------|
+| [中期审计 v3.1](04_milestones/2026-04-06_midterm_review.md) | 2026-04-06 | 全项目 6 大子系统，完成度 88%，272/272 测试全绿 |
+
+> 下一次审计触发条件：M5 关闭 或 重大架构变更。
 
 ---
 
@@ -79,3 +93,5 @@
 - 更新本页 `CURRENT.md` 中的链接指向最新版本
 - 历史文档**不删除**，只更新导航指针
 - 每次里程碑完成后更新"最新进度报告"行
+- **日常进度** → 更新 `03_feature_development/PROGRESS_LATEST.md`
+- **里程碑审计** → 新增 `04_milestones/YYYY-MM-DD_*.md`，两者互不干扰

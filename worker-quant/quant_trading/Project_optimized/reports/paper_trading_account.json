@@ -4,9 +4,9 @@
   "strategy_id": "sprint",
   "account": {
     "asof": "2026-04-06",
-    "cash": 347127.1724,
-    "positions_value": 53320.001220703125,
-    "nav": 400447.1736207031,
+    "cash": 158410.0,
+    "positions_value": 242360.00366210938,
+    "nav": 400770.0036621094,
     "run_id": "2026-04-06__d4836dc9cd"
   },
   "positions": [
@@ -14,19 +14,28 @@
       "asof": "2026-04-06",
       "symbol": "4005.T",
       "qty": 100.0,
-      "avg_cost": 528.200012,
+      "avg_cost": 528.8,
       "market_price": 533.2000122070312,
       "market_value": 53320.001220703125,
-      "unrealized_pnl": 500.0000207031235
+      "unrealized_pnl": 440.00122070312955
     },
     {
-      "asof": "2026-04-03",
-      "symbol": "4005.T",
+      "asof": "2026-04-06",
+      "symbol": "7267.T",
       "qty": 100.0,
-      "avg_cost": 528.200012,
-      "market_price": 528.9000244140625,
-      "market_value": 52890.00244140625,
-      "unrealized_pnl": 70.00124140624848
+      "avg_cost": 1259.5,
+      "market_price": 1262.0,
+      "market_value": 126200.0,
+      "unrealized_pnl": 250.0
+    },
+    {
+      "asof": "2026-04-06",
+      "symbol": "9432.T",
+      "qty": 400.0,
+      "avg_cost": 156.9,
+      "market_price": 157.10000610351562,
+      "market_value": 62840.00244140625,
+      "unrealized_pnl": 80.00244140624773
     }
   ]
 }

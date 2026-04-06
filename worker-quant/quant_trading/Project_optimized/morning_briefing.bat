@@ -24,7 +24,7 @@ python db_update.py --db japan_market.db >> "%LOG%" 2>&1
 
 REM Step 2: Generate full briefing report using yesterday's model output + today's fresh prices
 echo [2/3] Generating briefing report... >> "%LOG%"
-python quant_briefing.py --mode full >> "%LOG%" 2>&1
+python quant_briefing.py --mode full --strategy_id sprint >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 
 REM Step 3: Copy latest briefing to a stable known location for easy access

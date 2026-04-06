@@ -73,7 +73,12 @@ def build_account_snapshot(conn, run_id: str, asof: str, initial_cash: float = 0
     """
     ensure_trade_tables(conn)
     prev = get_prev_snapshot(conn, asof, strategy_id=strategy_id)
-    if prev is None:
+    
+    # If initial_cash is explicitly provided (> 0), use it as an override
+    if initial_cash > 0:
+        cash_start = float(initial_cash)
+        prev_asof = prev[0] if prev else None
+    elif prev is None:
         cash_start = float(initial_cash)
         prev_asof = None
     else:

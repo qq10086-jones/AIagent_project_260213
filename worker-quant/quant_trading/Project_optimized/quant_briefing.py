@@ -347,9 +347,12 @@ def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
     except ImportError:
         return positions
 
-    VOL_MULT   = 6.0    # 与 config.yaml SS7_STOP_LOSS_VOL_MULT 一致
+    VOL_MULT   = 6.0    # 与 config.yaml stop_loss_vol_mult 一致
     STOP_FLOOR = 0.06   # 6% 最低止损线
     STOP_CAP   = 0.20   # 20% 最大止损线
+    TP_MULT    = 8.0    # 止盈 ATR 乘数（风险回报比 > 1）
+    TP_FLOOR   = 0.08   # 8% 最低止盈线
+    TP_CAP     = 0.30   # 30% 最大止盈线
 
     enriched = []
     for p in positions:
@@ -360,6 +363,9 @@ def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
         stop_price   = None
         stop_pct     = None
         stop_triggered = False
+        tp_price     = None
+        tp_pct       = None
+        tp_triggered = False
         atr_note     = ""
 
         if cost and cur and sym:
@@ -376,18 +382,26 @@ def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
                     ], axis=1).max(axis=1)
                     atr14 = float(tr.iloc[-14:].mean()) if len(tr) >= 14 else float(tr.mean())
                     atr_pct = atr14 / float(cost)
+                    # 止损
                     stop_pct = min(STOP_CAP, max(STOP_FLOOR, atr_pct * VOL_MULT))
                     stop_price = round(float(cost) * (1 - stop_pct), 1)
                     stop_triggered = float(cur) < stop_price
-                    atr_note = f"ATR14={atr14:.1f} → 止损线{stop_pct*100:.1f}%"
+                    # 止盈
+                    tp_pct = min(TP_CAP, max(TP_FLOOR, atr_pct * TP_MULT))
+                    tp_price = round(float(cost) * (1 + tp_pct), 1)
+                    tp_triggered = float(cur) >= tp_price
+                    atr_note = f"ATR14={atr14:.1f} → 止损{stop_pct*100:.1f}%/止盈{tp_pct*100:.1f}%"
             except Exception:
                 pass
 
         updated = dict(p)
-        updated["stop_loss_price"]  = stop_price
-        updated["stop_loss_pct"]    = round(stop_pct * 100, 1) if stop_pct else None
-        updated["stop_triggered"]   = stop_triggered
-        updated["stop_note"]        = atr_note
+        updated["stop_loss_price"]   = stop_price
+        updated["stop_loss_pct"]     = round(stop_pct * 100, 1) if stop_pct else None
+        updated["stop_triggered"]    = stop_triggered
+        updated["take_profit_price"] = tp_price
+        updated["take_profit_pct"]   = round(tp_pct * 100, 1) if tp_pct else None
+        updated["tp_triggered"]      = tp_triggered
+        updated["stop_note"]         = atr_note
         # pnl_pct
         if cost and cur:
             try:
@@ -400,17 +414,31 @@ def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
 
 # ── DB 数据读取 ────────────────────────────────────────────────────────────
 
-def read_live_state(db_path: str, strategy_id: str = "default") -> dict:
+def read_live_state(db_path: str, strategy_id: str = "default", asof: str = None) -> dict:
     """读取当前仓位、挂单、账户状态。"""
     try:
         conn = sqlite3.connect(db_path)
         cur  = conn.cursor()
 
-        # 仓位
-        cur.execute(
-            "SELECT symbol, qty, avg_cost, market_price, market_value, unrealized_pnl FROM positions WHERE strategy_id=?",
-            (strategy_id,),
-        )
+        # 仓位 — 取 <= asof 的最新日期
+        if asof:
+            latest_pos_date = cur.execute(
+                "SELECT MAX(asof) FROM positions WHERE strategy_id=? AND asof<=?",
+                (strategy_id, asof)
+            ).fetchone()[0]
+        else:
+            latest_pos_date = cur.execute(
+                "SELECT MAX(asof) FROM positions WHERE strategy_id=?",
+                (strategy_id,)
+            ).fetchone()[0]
+
+        query_pos = "SELECT symbol, qty, avg_cost, market_price, market_value, unrealized_pnl FROM positions WHERE strategy_id=?"
+        params_pos = [strategy_id]
+        if latest_pos_date:
+            query_pos += " AND asof=?"
+            params_pos.append(latest_pos_date)
+            
+        cur.execute(query_pos, params_pos)
         positions = [
             {"symbol": r[0], "qty": r[1], "avg_cost": r[2],
              "market_price": r[3], "market_value": r[4], "unrealized_pnl": r[5]}
@@ -418,22 +446,29 @@ def read_live_state(db_path: str, strategy_id: str = "default") -> dict:
         ]
 
         # 挂单（仅 proposed/open）
-        cur.execute("""
-            SELECT order_id, symbol, side, qty, limit_price, status, created_ts
-            FROM orders WHERE strategy_id=? AND status IN ('proposed','open','pending')
-            ORDER BY created_ts DESC
-        """, (strategy_id,))
+        query_ord = "SELECT order_id, symbol, side, qty, limit_price, status, created_ts FROM orders WHERE strategy_id=? AND status IN ('proposed','open','pending')"
+        params_ord = [strategy_id]
+        if asof:
+            query_ord += " AND asof=?"
+            params_ord.append(asof)
+        query_ord += " ORDER BY created_ts DESC"
+        
+        cur.execute(query_ord, params_ord)
         orders = [
             {"order_id": r[0], "symbol": r[1], "side": r[2],
              "qty": r[3], "limit_price": r[4], "status": r[5], "created_ts": r[6]}
             for r in cur.fetchall()
         ]
 
-        # 账户快照
-        cur.execute(
-            "SELECT asof, nav, cash FROM account_snapshots WHERE strategy_id=? ORDER BY ts DESC LIMIT 1",
-            (strategy_id,),
-        )
+        # 账户快照 — 取 <= asof 的最新
+        query_snap = "SELECT asof, nav, cash FROM account_snapshots WHERE strategy_id=?"
+        params_snap = [strategy_id]
+        if asof:
+            query_snap += " AND asof<=?"
+            params_snap.append(asof)
+        query_snap += " ORDER BY asof DESC, ts DESC LIMIT 1"
+        
+        cur.execute(query_snap, params_snap)
         snap = cur.fetchone()
         account = {"asof": snap[0], "nav": snap[1], "cash": snap[2]} if snap else {}
 
@@ -674,9 +709,10 @@ def _run_preflight(db_path: str) -> None:
             print(f"[preflight] ⚠️ {step['name']} 失败: {e}，继续")
 
 
-def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = False) -> dict:
+def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = False, strategy_id: str = "default", asof: str = None) -> dict:
     now   = now_jst()
-    asof  = date.today().isoformat()
+    if asof is None:
+        asof = date.today().isoformat()
     session = market_session_status(now)
 
     # ── 自动预刷新（新闻 + 基本面），可用 --no-refresh 跳过 ─────────────────
@@ -688,6 +724,7 @@ def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = F
         "asof": asof,
         "session": session,
         "mode": mode,
+        "strategy_id": strategy_id,
     }
 
     # ── Regime 检测（所有模式都执行）────────────────────────────────────────
@@ -751,7 +788,7 @@ def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = F
         }
 
         # 仓位 & 挂单（含 ATR 止损计算）
-        live = read_live_state(DB_PATH)
+        live = read_live_state(DB_PATH, strategy_id=strategy_id, asof=asof)
         if live.get("positions"):
             live["positions"] = _enrich_positions_with_stop_loss(live["positions"])
         report["live_state"] = live
@@ -871,23 +908,35 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
     candidates = report.get("candidates", [])
     account   = live.get("account", {})
 
-    # 持仓对象（v2 规范字段）
+    # 持仓对象（v2 规范字段）— 使用 _enrich_positions_with_stop_loss 计算的完整数据
     pos_v2 = []
     for p in positions:
-        pnl_pct = None
-        try:
-            pnl_pct = round(p["unrealized_pnl"] / (p["avg_cost"] * p["qty"]) * 100, 2) \
-                      if p.get("avg_cost") and p.get("qty") else None
-        except Exception:
-            pass
+        pnl_pct = p.get("pnl_pct")
+        if pnl_pct is None:
+            try:
+                pnl_pct = round(p["unrealized_pnl"] / (p["avg_cost"] * p["qty"]) * 100, 2) \
+                          if p.get("avg_cost") and p.get("qty") else None
+            except Exception:
+                pass
+        action = "HOLD"
+        if p.get("stop_triggered"):
+            action = "STOP_LOSS"
+        elif p.get("tp_triggered"):
+            action = "TAKE_PROFIT"
         pos_v2.append({
-            "symbol":        p.get("symbol"),
-            "qty":           p.get("qty"),
-            "cost_price":    p.get("avg_cost"),
-            "current_price": p.get("market_price"),
-            "pnl_pct":       pnl_pct,
-            "stop_triggered": False,   # 动态止损由 live_trade_advisor 负责，此处保守默认
-            "action_hint":   "HOLD",
+            "symbol":            p.get("symbol"),
+            "qty":               p.get("qty"),
+            "cost_price":        p.get("avg_cost"),
+            "current_price":     p.get("market_price"),
+            "pnl_pct":           pnl_pct,
+            "stop_loss_price":   p.get("stop_loss_price"),
+            "stop_loss_pct":     p.get("stop_loss_pct"),
+            "stop_triggered":    p.get("stop_triggered", False),
+            "take_profit_price": p.get("take_profit_price"),
+            "take_profit_pct":   p.get("take_profit_pct"),
+            "tp_triggered":      p.get("tp_triggered", False),
+            "stop_note":         p.get("stop_note", ""),
+            "action_hint":       action,
         })
 
     # 操作指令：从挂单提取
@@ -984,15 +1033,21 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
     # ── 三、持仓健康度 ────────────────────────────────────────────────────
     lines += ["## 三、持仓健康度", ""]
     if pos_v2:
-        lines.append("| 代码 | 持股数 | 成本价 | 当前价 | 浮盈亏% | 止损线 |")
-        lines.append("|------|--------|--------|--------|---------|--------|")
+        lines.append("| 代码 | 持股数 | 成本价 | 当前价 | 浮盈亏% | 止损线 | 止盈线 | 状态 |")
+        lines.append("|------|--------|--------|--------|---------|--------|--------|------|")
         for p in pos_v2:
             pnl_str = f"{p['pnl_pct']:+.2f}%" if p["pnl_pct"] is not None else "N/A"
-            stop_str = f"¥{p.get('stop_loss_price','N/A')}" if p.get('stop_loss_price') else "N/A"
-            triggered_icon = " ⚠️止损" if p.get('stop_triggered') else ""
+            stop_str = f"¥{p['stop_loss_price']:.0f}(-{p['stop_loss_pct']}%)" if p.get('stop_loss_price') else "N/A"
+            tp_str = f"¥{p['take_profit_price']:.0f}(+{p['take_profit_pct']}%)" if p.get('take_profit_price') else "N/A"
+            if p.get('stop_triggered'):
+                status = "⚠️止损"
+            elif p.get('tp_triggered'):
+                status = "🎯止盈"
+            else:
+                status = "HOLD"
             lines.append(
-                f"| {p['symbol']} | {p['qty']} | {p['cost_price']} "
-                f"| {p['current_price']} | {pnl_str} | {stop_str}{triggered_icon} |"
+                f"| {p['symbol']} | {p['qty']:.0f} | {p['cost_price']:.1f} "
+                f"| {p['current_price']:.1f} | {pnl_str} | {stop_str} | {tp_str} | {status} |"
             )
     else:
         lines.append("- 当前空仓")
@@ -1112,6 +1167,8 @@ def main():
     ap.add_argument("--no-refresh", action="store_true",
                     help="跳过自动数据刷新（新闻/基本面），直接用现有DB数据生成报告")
     ap.add_argument("--db", default=DB_PATH)
+    ap.add_argument("--strategy_id", default="default", help="Strategy ID to report on (e.g. default, sprint)")
+    ap.add_argument("--asof", default=None, help="Target date (YYYY-MM-DD). Defaults to today.")
     args = ap.parse_args()
 
     try:
@@ -1129,7 +1186,7 @@ def main():
         sys.exit(1)
 
     print(f"[briefing] 生成中... mode={args.mode}  {now_jst().strftime('%H:%M JST')}")
-    report = build_briefing(args.mode, extra, skip_preflight=args.no_refresh)
+    report = build_briefing(args.mode, extra, skip_preflight=args.no_refresh, strategy_id=args.strategy_id, asof=args.asof)
     json_p, md_p = write_report(report)          # 始终写 v1（保持兼容）
     if args.output_version == "v2" or True:      # v2 默认同时输出
         write_report_v2(report)
@@ -1145,11 +1202,14 @@ def main():
               f"({mkt.get('market_ret_pct','N/A')}%)  情绪: {mkt.get('sentiment')}")
         print(f"候选池: {report.get('screener_meta',{}).get('count',0)}只  "
               f"降权: {report.get('screener_meta',{}).get('downweighted_count',0)}只")
+        positions = report.get("live_state", {}).get("positions", [])
         orders = report.get("live_state", {}).get("orders", [])
+        if positions:
+            print(f"持仓: {len(positions)}只 " + ", ".join(p['symbol'] for p in positions))
         if orders:
             for o in orders:
                 print(f"挂单: {o['symbol']} {o['side']} {o['qty']}股 @ {o['limit_price']} [{o['status']}]")
-        else:
+        if not positions and not orders:
             print("当前: 空仓无挂单")
 
 

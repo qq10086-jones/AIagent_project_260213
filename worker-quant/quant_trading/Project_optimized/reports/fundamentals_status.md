@@ -5,8 +5,8 @@
 - Configured source: yfinance
 - Attempted refresh: False
 - Message: Refresh skipped on main path; using latest cached fundamentals from DB.
-- Latest source in DB: yfinance
-- Latest available_ts: 2026-04-06T08:31:48
+- Latest source in DB: yfinance_deep
+- Latest available_ts: 2026-04-07T00:18:09
 - Latest symbol coverage: 97
 - Null available_ts rows: 0
 - fail_closed: False
@@ -15,6 +15,6 @@
 
 ## Source Coverage
 
-- yfinance: rows=964 | symbols=97 | latest_available_ts=2026-04-06T08:31:48
-- yfinance_deep: rows=4 | symbols=2 | latest_available_ts=2026-04-02T14:26:59
+- yfinance_deep: rows=34 | symbols=4 | latest_available_ts=2026-04-07T00:18:09
+- yfinance: rows=1061 | symbols=97 | latest_available_ts=2026-04-06T23:16:39
 - csv: rows=1 | symbols=1 | latest_available_ts=2026-03-01T08:00:00

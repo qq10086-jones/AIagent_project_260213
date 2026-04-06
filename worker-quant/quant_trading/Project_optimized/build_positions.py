@@ -11,7 +11,7 @@ def last_close(conn, symbol: str, asof: str) -> Optional[float]:
 
 def latest_positions(conn, asof: str, strategy_id: str = "default") -> Tuple[Optional[str], Dict[str, float], Dict[str, float]]:
     row = conn.execute(
-        "SELECT asof FROM positions WHERE asof<=? AND strategy_id=? ORDER BY asof DESC LIMIT 1",
+        "SELECT asof FROM positions WHERE asof < ? AND strategy_id=? ORDER BY asof DESC LIMIT 1",
         (asof, strategy_id),
     ).fetchone()
     if not row:

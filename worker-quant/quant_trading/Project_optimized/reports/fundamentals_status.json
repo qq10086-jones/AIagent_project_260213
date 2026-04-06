@@ -7,23 +7,23 @@
   "allow_stale_on_failure": true,
   "attempted_refresh": false,
   "message": "Refresh skipped on main path; using latest cached fundamentals from DB.",
-  "latest_source": "yfinance",
-  "latest_rows": 969,
+  "latest_source": "yfinance_deep",
+  "latest_rows": 1096,
   "latest_symbols": 97,
   "null_available_ts_rows": 0,
-  "latest_available_ts": "2026-04-06T08:31:48",
+  "latest_available_ts": "2026-04-07T00:18:09",
   "sources": [
     {
-      "source": "yfinance",
-      "rows": 964,
-      "symbols": 97,
-      "latest_available_ts": "2026-04-06T08:31:48"
+      "source": "yfinance_deep",
+      "rows": 34,
+      "symbols": 4,
+      "latest_available_ts": "2026-04-07T00:18:09"
     },
     {
-      "source": "yfinance_deep",
-      "rows": 4,
-      "symbols": 2,
-      "latest_available_ts": "2026-04-02T14:26:59"
+      "source": "yfinance",
+      "rows": 1061,
+      "symbols": 97,
+      "latest_available_ts": "2026-04-06T23:16:39"
     },
     {
       "source": "csv",
@@ -32,5 +32,5 @@
       "latest_available_ts": "2026-03-01T08:00:00"
     }
   ],
-  "reported_at_utc": "2026-04-06T07:32:44+00:00"
+  "reported_at_utc": "2026-04-06T23:02:10+00:00"
 }

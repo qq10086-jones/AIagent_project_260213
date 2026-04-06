@@ -117,7 +117,17 @@
       "Bash(python -c \":*)",
       "Bash(PYTHONIOENCODING=utf-8 python daily_run.py)",
       "Bash(PYTHONIOENCODING=utf-8 python quant_briefing.py --mode market)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python alert_webhook_self_test.py --config config.yaml --reports_dir reports)",
+      "Bash(PYTHONIOENCODING=utf-8 python daily_run.py --config config.yaml)",
+      "Bash(PYTHONIOENCODING=utf-8 python quant_briefing.py --mode full --output-version v2)",
+      "Bash(schtasks:*)",
+      "Bash(cmd.exe:*)",
+      "Read(//d/python/**)",
+      "Bash(/d/python/python.exe --version)",
+      "Bash(powershell.exe:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python quant_briefing.py --mode full)",
+      "Bash(docker --version)"
     ]
   }
 }

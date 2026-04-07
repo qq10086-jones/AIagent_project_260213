@@ -4,7 +4,7 @@
   "webhook_env": "WORKER_QUANT_ALERT_WEBHOOK_URL",
   "webhook_configured": true,
   "webhook_kind": "discord",
-  "webhook_target": "https://discord.com/api/webhooks/1490007156299399374/ikW0cyloS5w...",
+  "webhook_target": "https://discordapp.com/api/webhooks/1491092751926956225/ud69bCTK...",
   "self_test_ready": true,
-  "reported_at_utc": "2026-04-07T08:57:40+00:00"
+  "reported_at_utc": "2026-04-07T23:16:20+00:00"
 }

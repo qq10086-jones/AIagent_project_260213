@@ -1167,7 +1167,7 @@ def main():
     ap.add_argument("--no-refresh", action="store_true",
                     help="跳过自动数据刷新（新闻/基本面），直接用现有DB数据生成报告")
     ap.add_argument("--db", default=DB_PATH)
-    ap.add_argument("--strategy_id", default="default", help="Strategy ID to report on (e.g. default, sprint)")
+    ap.add_argument("--strategy_id", default="sprint", help="Strategy ID to report on (e.g. default, sprint)")
     ap.add_argument("--asof", default=None, help="Target date (YYYY-MM-DD). Defaults to today.")
     args = ap.parse_args()
 

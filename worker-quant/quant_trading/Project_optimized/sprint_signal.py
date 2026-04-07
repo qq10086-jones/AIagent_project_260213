@@ -92,6 +92,58 @@ def sprint_exit_check(row: pd.Series, holding_days: int, benchmark_state: str) -
     return False, ""
 
 
+def sprint_exit_check_v2(
+    row: pd.Series,
+    holding_days: int,
+    benchmark_state: str,
+    *,
+    avg_cost: float | None = None,
+    current_price: float | None = None,
+    high_since_entry: float | None = None,
+    atr_pct: float | None = None,
+    stop_loss_config: dict | None = None,
+) -> tuple[bool, str]:
+    """Extended exit check with price stop-loss and trailing protect.
+
+    Superset of sprint_exit_check(). When avg_cost/current_price are not
+    provided, degrades gracefully to the original 3-condition check.
+    """
+    # 条件 1-3: 原有逻辑
+    should_exit, reason = sprint_exit_check(row, holding_days, benchmark_state)
+    if should_exit:
+        return True, reason
+
+    # 需要价格数据才能执行后续检查
+    if avg_cost is None or current_price is None or avg_cost <= 0.0:
+        return False, ""
+
+    cfg = stop_loss_config or {}
+    vol_mult = float(cfg.get("stop_loss_vol_mult", 3.0))
+    min_pct = float(cfg.get("stop_loss_min_pct", 0.04))
+    max_pct = float(cfg.get("stop_loss_max_pct", 0.12))
+    trailing_activate_pct = float(cfg.get("trailing_activate_pct", 0.03))
+    trailing_stop_pct = float(cfg.get("trailing_stop_pct", 0.02))
+
+    # 条件 4: 价格止损
+    if atr_pct is not None and atr_pct > 0.0:
+        stop_pct = min(max(atr_pct * vol_mult, min_pct), max_pct)
+    else:
+        stop_pct = min_pct  # fallback: 用最低止损线
+    stop_price = avg_cost * (1.0 - stop_pct)
+    if current_price <= stop_price:
+        return True, "price_stop_loss"
+
+    # 条件 5: 移动止盈保护
+    if high_since_entry is not None and high_since_entry > 0.0:
+        activate_price = avg_cost * (1.0 + trailing_activate_pct)
+        if high_since_entry >= activate_price:
+            trail_price = high_since_entry * (1.0 - trailing_stop_pct)
+            if current_price < trail_price:
+                return True, "trailing_protect"
+
+    return False, ""
+
+
 def _load_prev_regime_state(reports_dir: Path) -> str:
     """Read previous Sprint regime state from the last regime_diagnosis.json."""
     try:

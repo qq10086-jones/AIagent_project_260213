@@ -21,6 +21,7 @@ from compute_ic import (
 from trade_schema import connect, ensure_trade_tables, get_latest_trading_day
 from market_data_utils import refresh_market_data_if_needed, latest_db_date
 from kelly_sizer import compute_kelly_params
+from sprint_signal import sprint_exit_check_v2
 
 
 @dataclass
@@ -106,6 +107,114 @@ def _latest_account_snapshot(conn: sqlite3.Connection, asof: str, strategy_id: s
     if not row:
         return None, None, None
     return str(row[0]), float(row[1]), float(row[2])
+
+
+def _compute_atr_pct(conn: sqlite3.Connection, symbol: str, asof: str, window: int = 20) -> Optional[float]:
+    """计算 ATR 占收盘价百分比。数据不足时返回 None。"""
+    rows = conn.execute(
+        """
+        SELECT high, low, close FROM daily_prices
+        WHERE symbol=? AND date<=?
+        ORDER BY date DESC
+        LIMIT ?
+        """,
+        (symbol, asof, window + 1),
+    ).fetchall()
+    if len(rows) < 2:
+        return None
+    # rows are newest-first; reverse for chronological order
+    rows = list(reversed(rows))
+    true_ranges = []
+    for i in range(1, len(rows)):
+        h, l, _ = float(rows[i][0]), float(rows[i][1]), float(rows[i][2])
+        prev_c = float(rows[i - 1][2])
+        tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
+        true_ranges.append(tr)
+    if not true_ranges:
+        return None
+    atr = sum(true_ranges) / len(true_ranges)
+    latest_close = float(rows[-1][2])
+    if latest_close <= 0:
+        return None
+    return atr / latest_close
+
+
+def _get_positions_with_cost(
+    conn: sqlite3.Connection, asof: str, strategy_id: str = "default"
+) -> Dict[str, Dict]:
+    """读取持仓含 avg_cost 和 high_since_entry。"""
+    row = conn.execute(
+        "SELECT asof FROM positions WHERE asof<=? AND strategy_id=? ORDER BY asof DESC LIMIT 1",
+        (asof, strategy_id),
+    ).fetchone()
+    if not row:
+        return {}
+    pos_date = row[0]
+    rows = conn.execute(
+        """
+        SELECT symbol, qty, avg_cost, market_price,
+               COALESCE(high_since_entry, market_price) as high_since_entry
+        FROM positions WHERE asof=? AND strategy_id=? AND qty > 0
+        """,
+        (pos_date, strategy_id),
+    ).fetchall()
+    result = {}
+    for sym, qty, avg_cost, mkt_price, high in rows:
+        result[str(sym)] = {
+            "qty": float(qty),
+            "avg_cost": float(avg_cost or 0.0),
+            "market_price": float(mkt_price or 0.0),
+            "high_since_entry": float(high or mkt_price or 0.0),
+        }
+    return result
+
+
+def _check_stop_losses(
+    conn: sqlite3.Connection,
+    asof: str,
+    strategy_id: str,
+    stop_loss_config: dict,
+) -> Tuple[List[str], List[Dict]]:
+    """检查所有持仓是否触发止损/止盈，返回 (forced_exit_symbols, diagnostics)。"""
+    positions = _get_positions_with_cost(conn, asof, strategy_id)
+    if not positions:
+        return [], []
+
+    forced_exits = []
+    diagnostics = []
+    for sym, pos in positions.items():
+        _, current_price = _last_close(conn, sym, asof)
+        if current_price is None:
+            continue
+        atr_pct = _compute_atr_pct(conn, sym, asof, window=int(stop_loss_config.get("atr_window", 20)))
+
+        # 构造最小 row 供 sprint_exit_check_v2 使用
+        row = pd.Series({"vol_z": 0.0, "holding_period_target": 999})
+        should_exit, reason = sprint_exit_check_v2(
+            row,
+            holding_days=0,  # 不在这里检查持有天数
+            benchmark_state="on",  # 不在这里检查 regime
+            avg_cost=pos["avg_cost"],
+            current_price=current_price,
+            high_since_entry=pos["high_since_entry"],
+            atr_pct=atr_pct,
+            stop_loss_config=stop_loss_config,
+        )
+
+        diag = {
+            "symbol": sym,
+            "avg_cost": pos["avg_cost"],
+            "current_price": current_price,
+            "high_since_entry": pos["high_since_entry"],
+            "atr_pct": atr_pct,
+            "triggered": should_exit,
+            "reason": reason,
+        }
+        diagnostics.append(diag)
+        if should_exit:
+            forced_exits.append(sym)
+
+    return forced_exits, diagnostics
 
 
 def _load_target_weights(path: Path) -> pd.DataFrame:
@@ -801,6 +910,12 @@ def main():
     ap.add_argument("--position_sizing", default="equal_weight")
     ap.add_argument("--max_positions", type=int, default=12)
     ap.add_argument("--out_dir", default="artifacts/decision")
+    ap.add_argument("--stop_loss_vol_mult", type=float, default=3.0, help="ATR multiplier for stop-loss")
+    ap.add_argument("--stop_loss_min_pct", type=float, default=0.04, help="minimum stop-loss percentage")
+    ap.add_argument("--stop_loss_max_pct", type=float, default=0.12, help="maximum stop-loss percentage")
+    ap.add_argument("--trailing_activate_pct", type=float, default=0.03, help="profit threshold to activate trailing stop")
+    ap.add_argument("--trailing_stop_pct", type=float, default=0.02, help="trailing stop drawdown from high")
+    ap.add_argument("--atr_window", type=int, default=20, help="ATR lookback window")
     args = ap.parse_args()
 
     requested_asof = args.asof
@@ -929,6 +1044,21 @@ def main():
         else:
             kelly = {}
 
+        # 止损/止盈检查: 检查现有持仓是否触发退出
+        stop_loss_cfg = {
+            "stop_loss_vol_mult": float(getattr(args, "stop_loss_vol_mult", 3.0)),
+            "stop_loss_min_pct": float(getattr(args, "stop_loss_min_pct", 0.04)),
+            "stop_loss_max_pct": float(getattr(args, "stop_loss_max_pct", 0.12)),
+            "trailing_activate_pct": float(getattr(args, "trailing_activate_pct", 0.03)),
+            "trailing_stop_pct": float(getattr(args, "trailing_stop_pct", 0.02)),
+            "atr_window": int(getattr(args, "atr_window", 20)),
+        }
+        forced_exits, stop_loss_diag = _check_stop_losses(conn, asof, args.strategy_id, stop_loss_cfg)
+        if forced_exits:
+            print(f"[risk] stop-loss/trailing triggered for: {forced_exits}")
+            # 从 target_weights 中移除被止损的股票（强制平仓）
+            target_weights = target_weights[~target_weights["symbol"].isin(forced_exits)].copy()
+
         # build orders
         orders, info = build_orders(
             conn, asof, target_weights, cash_jpy=effective_cash,
@@ -1019,6 +1149,11 @@ def main():
                 "peak_nav_input": peak_nav,
                 "position_sizing": args.position_sizing,
                 "kelly": kelly,
+            },
+            "risk_management": {
+                "stop_loss_config": stop_loss_cfg,
+                "forced_exits": forced_exits,
+                "stop_loss_diagnostics": stop_loss_diag,
             },
             "diagnostics": {
                 "target_weights_zero_now": bool(float(target_meta.get("export_row_sum", 0.0) or 0.0) <= 1e-12),

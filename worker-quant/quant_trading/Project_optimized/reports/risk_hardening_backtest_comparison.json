@@ -1,0 +1,34 @@
+{
+  "baseline": {
+    "final_equity": 635378.7530822754,
+    "total_return_pct": 58.844688270568845,
+    "max_drawdown_pct": -13.521599007824559,
+    "annual_vol_pct": 14.023245790781239,
+    "sharpe": 0.9210403899132278,
+    "sortino": 1.4708291794372697,
+    "avg_turnover_notional": 9365.34528162375,
+    "avg_turnover_pct": 2.3413363204059374,
+    "turnover_cv": 3.61124778113288,
+    "avg_cost_paid": 0.0,
+    "win_rate_pct": 0,
+    "profit_factor": 0,
+    "stop_loss_triggers": 10,
+    "trading_days": 1004
+  },
+  "variant": {
+    "final_equity": 602430.2569274902,
+    "total_return_pct": 50.60756423187256,
+    "max_drawdown_pct": -7.49991084136753,
+    "annual_vol_pct": 9.365198869880285,
+    "sharpe": 1.177293818982809,
+    "sortino": 2.116949752635364,
+    "avg_turnover_notional": 37486.247960322406,
+    "avg_turnover_pct": 9.3715619900806,
+    "turnover_cv": 2.2903734153416986,
+    "avg_cost_paid": 0.0,
+    "win_rate_pct": 0,
+    "profit_factor": 0,
+    "stop_loss_triggers": 301,
+    "trading_days": 1004
+  }
+}

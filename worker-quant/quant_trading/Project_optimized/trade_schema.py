@@ -427,6 +427,16 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
         except Exception:
             pass
 
+    # Risk management columns for positions table (v2026-04-07)
+    for ddl in [
+        "ALTER TABLE positions ADD COLUMN high_since_entry REAL",
+        "ALTER TABLE positions ADD COLUMN entry_date TEXT",
+    ]:
+        try:
+            conn.execute(ddl)
+        except Exception:
+            pass
+
 
 def ensure_learning_tables(conn: sqlite3.Connection) -> None:
     """Create Learning M1 tables if missing. Idempotent.

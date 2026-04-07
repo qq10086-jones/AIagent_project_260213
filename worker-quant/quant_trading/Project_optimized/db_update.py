@@ -214,7 +214,7 @@ def update_database(db_path: str = "japan_market.db", default_lookback_days: int
     universe = load_universe(universe_path) if universe_path else TARGET_UNIVERSE
     today = date.today()
     db_latest_trade_date = _get_db_latest_trade_date(db_path)
-    if db_latest_trade_date is not None and db_latest_trade_date >= (today - timedelta(days=1)):
+    if db_latest_trade_date is not None and db_latest_trade_date >= today:
         print(
             "Price DB already holds the latest expected trade date "
             f"({db_latest_trade_date}); skipping remote yfinance refresh."

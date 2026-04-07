@@ -561,6 +561,8 @@ class BTConfig:
     stop_loss_vol_mult: float = 2.5
     stop_loss_min_pct: float = 0.03
     stop_loss_max_pct: float = 0.12
+    trailing_activate_pct: float = 0.0   # 0=disabled; e.g. 0.03 activates trailing after +3%
+    trailing_stop_pct: float = 0.02      # drawdown from high_since_entry to trigger exit
     max_dd_half: float = 0.12        # 组合回撤超过12%：降至半仓
     max_dd_full: float = 0.18        # 组合回撤超过18%：全部平仓退场
     max_dd_reentry_cooldown_days: int = 20
@@ -1344,6 +1346,7 @@ def backtest(bt: BTConfig, ex: ExecConfig):
 
     # 风险管理状态
     entry_px: Dict[str, float] = {}          # 各持仓成本价（止损用）
+    high_since_entry: Dict[str, float] = {}  # 持仓期间最高价（trailing stop 用）
     peak_equity_abs: float = float(ex.initial_capital)  # 历史最高NAV（回撤控制用）
     dd_state: str = "on"
     dd_cooldown_left: int = 0
@@ -1487,6 +1490,12 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 stop_pct = float(bt.stop_loss_pct)
             if (cur_price - ep) / ep < -stop_pct:
                 stop_loss_tickers.add(tkr)
+            # trailing stop
+            high_since_entry[tkr] = max(high_since_entry.get(tkr, cur_price), cur_price)
+            if bt.trailing_activate_pct > 0 and ep > 0:
+                if high_since_entry[tkr] >= ep * (1.0 + bt.trailing_activate_pct):
+                    if cur_price < high_since_entry[tkr] * (1.0 - bt.trailing_stop_pct):
+                        stop_loss_tickers.add(tkr)
 
         rebalance_due = bool((i - start_i) % int(bt.rebalance_every) == 0)
 
@@ -1695,7 +1704,7 @@ def backtest(bt: BTConfig, ex: ExecConfig):
         gross_ret.append(g_ret)
         net_ret.append(n_ret)
 
-        # ── 更新成本价（止损用）────────────────────────────────────────
+        # ── 更新成本价 / 最高价（止损 / trailing stop 用）──────────────
         for tkr in trade_tickers:
             new_qty = int(holdings_new.get(tkr, 0))
             old_qty = int(holdings.get(tkr, 0))
@@ -1704,11 +1713,13 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 added = new_qty - old_qty
                 if old_qty <= 0:
                     entry_px[tkr] = price
+                    high_since_entry[tkr] = price
                 else:
                     old_cost = entry_px.get(tkr, price) * old_qty
                     entry_px[tkr] = (old_cost + price * added) / new_qty
             elif new_qty <= 0:
                 entry_px.pop(tkr, None)
+                high_since_entry.pop(tkr, None)
 
         stop_loss_log.append(list(stop_loss_tickers))
 
@@ -1805,6 +1816,12 @@ def backtest(bt: BTConfig, ex: ExecConfig):
                 stop_pct = float(bt.stop_loss_pct)
             if (cur_price - ep) / ep < -stop_pct:
                 stop_loss_tickers.add(tkr)
+            # trailing stop
+            high_since_entry[tkr] = max(high_since_entry.get(tkr, cur_price), cur_price)
+            if bt.trailing_activate_pct > 0 and ep > 0:
+                if high_since_entry[tkr] >= ep * (1.0 + bt.trailing_activate_pct):
+                    if cur_price < high_since_entry[tkr] * (1.0 - bt.trailing_stop_pct):
+                        stop_loss_tickers.add(tkr)
 
         regime_scale = min(float(benchmark_scale), float(dd_scale))
         rebalance_due = bool((end_i - start_i) % int(bt.rebalance_every) == 0)
@@ -2345,7 +2362,8 @@ if __name__ == "__main__":
     ex = ExecConfig(
         initial_capital=INITIAL_CAPITAL,
         lot_size_default=int(os.getenv("SS7_LOT_SIZE_DEFAULT", "100")),        # set 100 for most JP stocks if required
-        fee_bps=float(os.getenv("SS7_FEE_BPS", "5.0")),
+        fee_bps=float(os.getenv("SS7_FEE_BPS", "0.0")),
+        fee_mode=os.getenv("SS7_FEE_MODE", "sbi_zero"),
         slippage_bps=float(os.getenv("SS7_SLIPPAGE_BPS", "5.0")),
         impact_k=float(os.getenv("SS7_IMPACT_K", "0.5")),              # e.g. 5.0 penalize large trades
         max_adv_frac=float(os.getenv("SS7_MAX_ADV_FRAC", "1.0")),          # e.g. 0.05 limit to 5% ADV
@@ -2379,6 +2397,8 @@ if __name__ == "__main__":
         stop_loss_vol_mult=float(os.getenv("SS7_STOP_LOSS_VOL_MULT", "2.5")),
         stop_loss_min_pct=float(os.getenv("SS7_STOP_LOSS_MIN_PCT", "0.03")),
         stop_loss_max_pct=float(os.getenv("SS7_STOP_LOSS_MAX_PCT", "0.12")),
+        trailing_activate_pct=float(os.getenv("SS7_TRAILING_ACTIVATE_PCT", "0.0")),
+        trailing_stop_pct=float(os.getenv("SS7_TRAILING_STOP_PCT", "0.02")),
         max_dd_half=float(os.getenv("SS7_MAX_DD_HALF", "0.12")),
         max_dd_full=float(os.getenv("SS7_MAX_DD_FULL", "0.18")),
         max_dd_reentry_cooldown_days=int(os.getenv("SS7_MAX_DD_REENTRY_COOLDOWN_DAYS", "20")),

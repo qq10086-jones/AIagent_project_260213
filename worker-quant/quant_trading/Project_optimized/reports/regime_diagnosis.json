@@ -1,17 +1,17 @@
 {
-  "asof": "2026-04-06",
+  "asof": "2026-04-07",
   "simulation": false,
   "benchmark_ticker": "1321.T",
-  "px_b": 55900.0,
-  "fast_ma": 55501.5,
-  "slow_ma": 56604.666666666664,
+  "px_b": 55950.0,
+  "fast_ma": 55566.5,
+  "slow_ma": 56640.5,
   "vix_ticker": "1552.T",
   "vix_value": null,
   "sprint_final_state": "off",
   "sprint_scale": 0.25,
   "ma_state": "off",
   "diagnosis": "MA regime only",
-  "enter_line": 56038.619999999995,
-  "exit_line": 56056.515,
+  "enter_line": 56074.095,
+  "exit_line": 56122.165,
   "vix_missing_policy": "ma_only"
 }

@@ -41,14 +41,25 @@ strategy_profiles:
     max_cost_per_lot: 100000
     signal_mode: "sprint_momentum"
     position_sizing: "half_kelly"
-    max_single_position_pct: 0.50
+    max_single_position_pct: 0.35   # 从 0.50 收紧，防单票过度集中
     max_sector_weight: 0.60
     benchmark_off_scale: 0.25       # regime=off 时允许 25% 暴露（试探性建仓）
     benchmark_caution_scale: 0.60   # regime=caution 时 60% 暴露
     use_vix_confirmation: false     # 1552.T 数据不可靠，禁用 VIX 确认，纯 MA regime
     vix_ticker: "1552.T"
     vix_off_threshold: 30.0
-    vix_missing_policy: "ma_only"   # VIX 缺失时退化为 MA-only，避��隐式治理分歧
+    vix_missing_policy: "ma_only"   # VIX 缺失时退化为 MA-only，避免隐式治理分歧
+    # 止损参数（Sprint 短周期适配）
+    stop_loss_vol_mult: 3.0         # ATR 乘数（全局 6.0，Sprint 收紧为 3.0）
+    stop_loss_min_pct: 0.04         # 最低止损 4%
+    stop_loss_max_pct: 0.12         # 最高止损 12%
+    atr_window: 20
+    # 移动止盈参数
+    trailing_activate_pct: 0.03     # 浮盈超 3% 激活保本止盈
+    trailing_stop_pct: 0.02         # 从最高点回撤 2% 触发退出
+    # 组合回撤门槛（Sprint 集中持仓需更敏感）
+    max_dd_half: 0.08               # 组合 8% 回撤降半仓（全局 12%）
+    max_dd_full: 0.12               # 组合 12% 回撤全平仓（全局 18%）
   harvest:
     enabled: false
     strategy_id: "harvest"
@@ -88,7 +99,8 @@ model:
   exec:
     initial_capital: 400000    # 40万日元实际本金（与 decision.cash / paper.initial_cash 保持一致）
     lot_size_default: 100      # 日本股票标准手数（1手=100股）
-    fee_bps: 10.0              # 手续费按千分之一(10bps)试跑
+    fee_bps: 0.0               # ゼロ革命適用時は0（flat_bpsモード時のみ使用）
+    fee_mode: "sbi_zero"       # "sbi_zero"=手数料無料 | "sbi_standard"=SBI階段手数料 | "flat_bps"=固定bps
     slippage_bps: 5.0          # 开收盘价差约3-8bps（必须设置）
     impact_k: 0.5              # 市场冲击模型系数
     max_adv_frac: null
@@ -169,7 +181,8 @@ paper:
   enabled: false
   price_mode: "latest"
   slippage_bps: 5.0
-  fee_bps: 10.0
+  fee_bps: 0.0
+  fee_mode: "sbi_zero"
   fill_ratio: 1.0
   initial_cash: 400000  # 与 exec.initial_capital 保持一致
 

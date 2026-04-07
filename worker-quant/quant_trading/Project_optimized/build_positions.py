@@ -9,21 +9,23 @@ def last_close(conn, symbol: str, asof: str) -> Optional[float]:
     ).fetchone()
     return float(row[0]) if row else None
 
-def latest_positions(conn, asof: str, strategy_id: str = "default") -> Tuple[Optional[str], Dict[str, float], Dict[str, float]]:
+def latest_positions(conn, asof: str, strategy_id: str = "default") -> Tuple[Optional[str], Dict[str, float], Dict[str, float], Dict[str, float], Dict[str, str]]:
     row = conn.execute(
         "SELECT asof FROM positions WHERE asof < ? AND strategy_id=? ORDER BY asof DESC LIMIT 1",
         (asof, strategy_id),
     ).fetchone()
     if not row:
-        return None, {}, {}
+        return None, {}, {}, {}, {}
     d = row[0]
     rows = conn.execute(
-        "SELECT symbol, qty, COALESCE(avg_cost,0) FROM positions WHERE asof=? AND strategy_id=?",
+        "SELECT symbol, qty, COALESCE(avg_cost,0), COALESCE(high_since_entry,0), COALESCE(entry_date,'') FROM positions WHERE asof=? AND strategy_id=?",
         (d, strategy_id),
     ).fetchall()
-    qty = {s: float(q) for s,q,_ in rows}
-    cost = {s: float(c) for s,_,c in rows}
-    return d, qty, cost
+    qty = {s: float(q) for s,q,_,_,_ in rows}
+    cost = {s: float(c) for s,_,c,_,_ in rows}
+    high = {s: float(h) for s,_,_,h,_ in rows}
+    entry = {s: str(e) for s,_,_,_,e in rows}
+    return d, qty, cost, high, entry
 
 def main():
     ap = argparse.ArgumentParser()
@@ -48,13 +50,22 @@ def main():
 
 
 
+def _get_today_high(conn, symbol: str, asof: str) -> Optional[float]:
+    """取当日最高价，用于更新 high_since_entry。"""
+    row = conn.execute(
+        "SELECT high FROM daily_prices WHERE symbol=? AND date=?",
+        (symbol, asof),
+    ).fetchone()
+    return float(row[0]) if row else None
+
+
 def build_positions(conn, run_id: str, asof: str, strategy_id: str = "default"):
     """Core logic extracted for reuse (e.g., Streamlit or post_trade.py).
 
     Returns: (previous_positions_asof, rows_out, missing_px_symbols)
     """
     ensure_trade_tables(conn)
-    prev_d, qty, avg_cost = latest_positions(conn, asof, strategy_id=strategy_id)
+    prev_d, qty, avg_cost, high_since, entry_date = latest_positions(conn, asof, strategy_id=strategy_id)
 
     fills = conn.execute(
         "SELECT symbol, side, qty, price, fee, tax FROM fills WHERE run_id=? AND asof=? AND strategy_id=?",
@@ -74,15 +85,25 @@ def build_positions(conn, run_id: str, asof: str, strategy_id: str = "default"):
         if side == "BUY":
             new_q = cur_q + q
             if new_q > 0:
-                new_cost_value = cur_q * cur_c + q * px 
+                new_cost_value = cur_q * cur_c + q * px
                 avg_cost[sym] = new_cost_value / new_q
             qty[sym] = new_q
+            # 新建仓或加仓: 更新 entry tracking
+            if cur_q <= 0:
+                high_since[sym] = px
+                entry_date[sym] = asof
+            else:
+                high_since[sym] = max(high_since.get(sym, 0.0), px)
         elif side == "SELL":
             new_q = cur_q - q
             if new_q < -1e-9:
                 raise ValueError(f"SELL exceeds position: {sym} cur_qty={cur_q} sell_qty={q}")
             qty[sym] = new_q
-        
+            if new_q <= 1e-9:
+                # 全部平仓: 清理 tracking
+                high_since.pop(sym, None)
+                entry_date.pop(sym, None)
+
         else:
             raise ValueError(f"Unknown side: {side}")
 
@@ -99,14 +120,19 @@ def build_positions(conn, run_id: str, asof: str, strategy_id: str = "default"):
         else:
             mv = q * px
             upnl = (px - avg_cost.get(sym, 0.0)) * q
-        rows_out.append((asof, strategy_id, sym, q, avg_cost.get(sym, None), px, mv, upnl))
+        # 更新 high_since_entry: 取 max(历史最高, 今日最高)
+        today_high = _get_today_high(conn, sym, asof)
+        prev_high = high_since.get(sym, 0.0)
+        cur_high = max(prev_high, today_high or 0.0, px or 0.0)
+        cur_entry = entry_date.get(sym, asof)
+        rows_out.append((asof, strategy_id, sym, q, avg_cost.get(sym, None), px, mv, upnl, cur_high, cur_entry))
 
     with conn:
         conn.execute("DELETE FROM positions WHERE asof=? AND strategy_id=?", (asof, strategy_id))
         conn.executemany(
             """
-            INSERT INTO positions(asof, strategy_id, symbol, qty, avg_cost, market_price, market_value, unrealized_pnl)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO positions(asof, strategy_id, symbol, qty, avg_cost, market_price, market_value, unrealized_pnl, high_since_entry, entry_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows_out,
         )

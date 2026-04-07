@@ -16,7 +16,8 @@ The config format is the same as run_pipeline.py. Extra keys (optional):
     enabled: true
     price_mode: latest
     slippage_bps: 5.0
-    fee_bps: 10.0
+    fee_bps: 0.0
+    fee_mode: sbi_zero
     fill_ratio: 1.0
 
 Outputs:
@@ -878,7 +879,8 @@ def main():
     env["SS7_OUTPUT_DIR"] = out_dir
     env["SS7_INITIAL_CAPITAL"] = str(float(exec_cfg.get("initial_capital", 1_000_000)))
     env["SS7_LOT_SIZE_DEFAULT"] = str(int(exec_cfg.get("lot_size_default", 100)))
-    env["SS7_FEE_BPS"] = str(float(exec_cfg.get("fee_bps", 5.0)))
+    env["SS7_FEE_BPS"] = str(float(exec_cfg.get("fee_bps", 0.0)))
+    env["SS7_FEE_MODE"] = str(exec_cfg.get("fee_mode", "sbi_zero"))
     env["SS7_SLIPPAGE_BPS"] = str(float(exec_cfg.get("slippage_bps", 5.0)))
     env["SS7_IMPACT_K"] = str(float(exec_cfg.get("impact_k", 0.5)))
     env["SS7_MAX_ADV_FRAC"] = str(float(max_adv_frac))
@@ -889,13 +891,16 @@ def main():
     env["SS7_VOL_TARGET_MAX_SCALE"] = str(float(exec_cfg.get("vol_target_max_scale", 1.0)))
     env["SS7_STOP_LOSS_PCT"] = str(float(exec_cfg.get("stop_loss_pct", 0.08)))
     env["SS7_STOP_LOSS_MODE"] = str(exec_cfg.get("stop_loss_mode", "volatility"))
-    env["SS7_ATR_WINDOW"] = str(int(exec_cfg.get("atr_window", 20)))
-    env["SS7_STOP_LOSS_VOL_MULT"] = str(float(exec_cfg.get("stop_loss_vol_mult", 2.5)))
-    env["SS7_STOP_LOSS_MIN_PCT"] = str(float(exec_cfg.get("stop_loss_min_pct", 0.03)))
-    env["SS7_STOP_LOSS_MAX_PCT"] = str(float(exec_cfg.get("stop_loss_max_pct", 0.12)))
-    env["SS7_MAX_DD_HALF"] = str(float(exec_cfg.get("max_dd_half", 0.12)))
-    env["SS7_MAX_DD_FULL"] = str(float(exec_cfg.get("max_dd_full", 0.18)))
+    env["SS7_ATR_WINDOW"] = str(int(strategy_profile.get("atr_window", exec_cfg.get("atr_window", 20))))
+    env["SS7_STOP_LOSS_VOL_MULT"] = str(float(strategy_profile.get("stop_loss_vol_mult", exec_cfg.get("stop_loss_vol_mult", 2.5))))
+    env["SS7_STOP_LOSS_MIN_PCT"] = str(float(strategy_profile.get("stop_loss_min_pct", exec_cfg.get("stop_loss_min_pct", 0.03))))
+    env["SS7_STOP_LOSS_MAX_PCT"] = str(float(strategy_profile.get("stop_loss_max_pct", exec_cfg.get("stop_loss_max_pct", 0.12))))
+    env["SS7_MAX_DD_HALF"] = str(float(strategy_profile.get("max_dd_half", exec_cfg.get("max_dd_half", 0.12))))
+    env["SS7_MAX_DD_FULL"] = str(float(strategy_profile.get("max_dd_full", exec_cfg.get("max_dd_full", 0.18))))
     env["SS7_MAX_DD_REENTRY_COOLDOWN_DAYS"] = str(int(exec_cfg.get("max_dd_reentry_cooldown_days", 20)))
+    # 移动止盈参数（strategy_profile 优先，exec_cfg 次之）
+    env["SS7_TRAILING_ACTIVATE_PCT"] = str(float(strategy_profile.get("trailing_activate_pct", exec_cfg.get("trailing_activate_pct", 0.0))))
+    env["SS7_TRAILING_STOP_PCT"] = str(float(strategy_profile.get("trailing_stop_pct", exec_cfg.get("trailing_stop_pct", 0.02))))
     env["SS7_MAX_SINGLE_POSITION_PCT"] = str(float(strategy_profile.get("max_single_position_pct", cfg.get("screener", {}).get("max_single_position_pct", 0.25))))
     env["SS7_MAX_SECTOR_WEIGHT"] = str(float(strategy_profile.get("max_sector_weight", cfg.get("screener", {}).get("max_sector_weight", 0.35))))
     if bool(model.get("ridge_alpha_cv", False)):
@@ -994,7 +999,8 @@ def main():
             "--asof", asof,
             "--price_mode", str(paper.get("price_mode", "open")),
             "--slippage_bps", str(float(paper.get("slippage_bps", exec_cfg.get("slippage_bps", 5.0)))),
-            "--fee_bps", str(float(paper.get("fee_bps", exec_cfg.get("fee_bps", 5.0)))),
+            "--fee_bps", str(float(paper.get("fee_bps", exec_cfg.get("fee_bps", 0.0)))),
+            "--fee_mode", str(paper.get("fee_mode", exec_cfg.get("fee_mode", "sbi_zero"))),
             "--fill_ratio", str(float(paper.get("fill_ratio", 1.0))),
             "--initial_cash", str(float(paper.get("initial_cash", exec_cfg.get("initial_capital", 1_000_000)))),
             "--reports_dir", out_dir,

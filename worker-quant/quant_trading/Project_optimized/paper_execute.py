@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from execution_model import sbi_fee
+
 from trade_schema import connect, ensure_trade_tables, get_run_meta, resolve_run_artifact_dir
 from import_fills import import_fills_df
 from build_positions import build_positions
@@ -190,6 +192,7 @@ def simulate_fills(
     fee_bps: float,
     fill_ratio: float,
     strategy_id: str = "default",
+    fee_mode: str = "sbi_zero",
 ) -> tuple[pd.DataFrame, list[str]]:
     rows = []
     missing = []
@@ -208,7 +211,10 @@ def simulate_fills(
 
         price = _fill_price(float(quote["price"]), str(side), slippage_bps)
         notional = fill_qty * price
-        fee = notional * fee_bps / 10000.0
+        if fee_mode == "flat_bps":
+            fee = notional * fee_bps / 10000.0
+        else:
+            fee = sbi_fee(notional, fee_mode)
         price_validated, validation_note = _validate_fill(price, quote)
         if not price_validated:
             # 盘中数据只有单一价位（high=low）时滑点会越界；clamp 到行情区间而非中断
@@ -256,7 +262,8 @@ def main():
     ap.add_argument("--asof", default=None, help="default: run asof")
     ap.add_argument("--price_mode", choices=["latest", "open", "close"], default="latest")
     ap.add_argument("--slippage_bps", type=float, default=5.0)
-    ap.add_argument("--fee_bps", type=float, default=10.0)
+    ap.add_argument("--fee_bps", type=float, default=0.0)
+    ap.add_argument("--fee_mode", default="sbi_zero", choices=["sbi_zero", "sbi_standard", "flat_bps"])
     ap.add_argument("--fill_ratio", type=float, default=1.0, help="0-1 simulated participation ratio")
     ap.add_argument("--initial_cash", type=float, default=0.0, help="used only for first account snapshot")
     ap.add_argument("--refresh_data", action="store_true", help="refresh market data before paper execution")
@@ -321,6 +328,7 @@ def main():
             fee_bps=float(args.fee_bps),
             fill_ratio=float(args.fill_ratio),
             strategy_id=strategy_id,
+            fee_mode=str(args.fee_mode),
         )
 
         inserted = 0

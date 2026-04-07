@@ -12,12 +12,46 @@ import numpy as np
 import pandas as pd
 
 
+def sbi_fee(notional: float, fee_mode: str = "sbi_zero") -> float:
+    """SBI証券の手数料計算。
+
+    fee_mode:
+      "sbi_zero"     — ゼロ革命（電子交付設定済み）→ 手数料 0
+      "sbi_standard" — スタンダードプラン（1注文ごと、税込）
+      "flat_bps"     — 従来の固定bps方式（呼び出し側で計算）
+    """
+    if fee_mode == "sbi_zero":
+        return 0.0
+    if fee_mode != "sbi_standard":
+        return 0.0  # unknown mode → safe default
+
+    # SBI スタンダードプラン 現物取引 手数料（税込）
+    n = abs(float(notional))
+    if n <= 50_000:
+        return 55.0
+    elif n <= 100_000:
+        return 99.0
+    elif n <= 200_000:
+        return 115.0
+    elif n <= 500_000:
+        return 275.0
+    elif n <= 1_000_000:
+        return 535.0
+    elif n <= 1_500_000:
+        return 640.0
+    elif n <= 30_000_000:
+        return 1013.0
+    else:
+        return 1070.0
+
+
 @dataclass
 class ExecConfig:
     initial_capital: float = 200_000.0
     lot_size_default: int = 1
     lot_size_by_ticker: Optional[Dict[str, int]] = None
-    fee_bps: float = 3.0
+    fee_bps: float = 0.0
+    fee_mode: str = "sbi_zero"  # "sbi_zero" | "sbi_standard" | "flat_bps"
     slippage_bps: float = 0.0
     impact_k: float = 0.0
     adv_lookback: int = 20
@@ -97,7 +131,14 @@ def execute_rebalance(
 
     # Compute trade notional and costs
     trade_notional = float((trade.abs().astype(float) * px).sum())
-    fee = trade_notional * (float(cfg.fee_bps) / 10000.0)
+    if cfg.fee_mode == "flat_bps":
+        fee = trade_notional * (float(cfg.fee_bps) / 10000.0)
+    else:
+        # SBI per-order fee: sum fee for each ticker's trade
+        fee = sum(
+            sbi_fee(abs(float(trade.get(t, 0))) * float(px.get(t, 0)), cfg.fee_mode)
+            for t in tickers if abs(trade.get(t, 0)) > 0
+        )
     slip = trade_notional * (float(cfg.slippage_bps) / 10000.0)
 
     impact = 0.0
@@ -128,7 +169,13 @@ def execute_rebalance(
             trade = adj_trade
             desired = cur + trade
             trade_notional = float((trade.abs().astype(float) * px).sum())
-            fee = trade_notional * (float(cfg.fee_bps) / 10000.0)
+            if cfg.fee_mode == "flat_bps":
+                fee = trade_notional * (float(cfg.fee_bps) / 10000.0)
+            else:
+                fee = sum(
+                    sbi_fee(abs(float(trade.get(t, 0))) * float(px.get(t, 0)), cfg.fee_mode)
+                    for t in tickers if abs(trade.get(t, 0)) > 0
+                )
             slip = trade_notional * (float(cfg.slippage_bps) / 10000.0)
             impact = 0.0
             if volumes is not None and float(cfg.impact_k) > 0.0:

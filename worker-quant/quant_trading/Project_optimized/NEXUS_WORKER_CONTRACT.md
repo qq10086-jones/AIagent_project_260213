@@ -37,9 +37,9 @@ Those responsibilities remain with Nexus orchestrator and policy layers.
 
 Authoritative capability registration lives in:
 
-- [capability_registry.json](C:/Users/linweiye/AIagent_project_260213/configs/registry/capability_registry.json)
-- [tools.json](C:/Users/linweiye/AIagent_project_260213/configs/tools.json)
-- [quant_design_latest.md](C:/Users/linweiye/AIagent_project_260213/docs/01_design/quant/quant_design_latest.md)
+- [capability_registry.json](E:/AIagent_project_260213/configs/registry/capability_registry.json)
+- [tools.json](E:/AIagent_project_260213/configs/tools.json)
+- [quant_design_latest.md](E:/AIagent_project_260213/docs/01_design/quant/quant_design_latest.md)
 
 Current quant-facing tools relevant to this project:
 
@@ -67,11 +67,11 @@ For `Project_optimized`, the operational chain is:
 
 The current pipeline entrypoint is:
 
-- [run_pipeline.py](C:/Users/linweiye/AIagent_project_260213/worker-quant/quant_trading/Project_optimized/run_pipeline.py)
+- [run_pipeline.py](E:/AIagent_project_260213/worker-quant/quant_trading/Project_optimized/run_pipeline.py)
 
 The current daily operator entrypoint is:
 
-- [daily_run.py](C:/Users/linweiye/AIagent_project_260213/worker-quant/quant_trading/Project_optimized/daily_run.py)
+- [daily_run.py](E:/AIagent_project_260213/worker-quant/quant_trading/Project_optimized/daily_run.py)
 
 ## Input Contract
 

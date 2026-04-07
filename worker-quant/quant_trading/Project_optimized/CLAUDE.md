@@ -4,7 +4,7 @@
 
 **工作目录（必须先切换）**：
 ```
-C:\Users\linweiye\AIagent_project_260213\worker-quant\quant_trading\Project_optimized
+E:\AIagent_project_260213\worker-quant\quant_trading\Project_optimized
 ```
 
 ---
@@ -29,7 +29,7 @@ C:\Users\linweiye\AIagent_project_260213\worker-quant\quant_trading\Project_opti
 
 **第一步：运行脚本**
 ```bash
-cd C:\Users\linweiye\AIagent_project_260213\worker-quant\quant_trading\Project_optimized
+cd E:\AIagent_project_260213\worker-quant\quant_trading\Project_optimized
 python quant_briefing.py --mode market
 ```
 
@@ -202,8 +202,8 @@ SELECT ticker, report_date, revenue, operating_income, net_income, operating_cf,
 FROM fundamental_snapshots ORDER BY updated_at DESC LIMIT 20;
 
 -- 信号历史（最近5天）
-SELECT date, symbol, signal_mode, score
-FROM signals WHERE date >= date('now', '-5 days') ORDER BY date DESC, score DESC;
+SELECT asof, symbol, score, reason, version
+FROM signals WHERE asof >= date('now', '-5 days') ORDER BY asof DESC, score DESC;
 ```
 
 ---
@@ -212,7 +212,7 @@ FROM signals WHERE date >= date('now', '-5 days') ORDER BY date DESC, score DESC
 
 | 参数 | 当前值 | 含义 |
 |------|--------|------|
-| 生产信号模式 | `ridge` | 等 paper_days≥30 才考虑切换 |
+| 生产信号模式 | `sprint_momentum` (Sprint) / `shadow_hybrid_ic` (Harvest) | Sprint 当前激活 |
 | 实际本金 | ¥400,000 | 与 decision.cash 保持一致 |
 | ATR 止损 | 6%~20% 动态 | vol_mult=6.0 |
 | 组合回撤半仓线 | 12% | max_dd_half |
@@ -298,7 +298,7 @@ python news_to_db.py --db japan_market.db --lookback_hours 26 --sources kabutan,
 请按照以下步骤操作：
 
 1. 读取以下路径的文档：
-   C:\Users\linweiye\AIagent_project_260213\worker-quant\quant_trading\Project_optimized\CLAUDE.md
+   E:\AIagent_project_260213\worker-quant\quant_trading\Project_optimized\CLAUDE.md
 
 2. 文档中有"场景一"到"场景五"，本次执行：[场景名]
    （例如：场景一=市场行情分析，场景二=个股分析，场景五=尾盘决策）
@@ -308,7 +308,7 @@ python news_to_db.py --db japan_market.db --lookback_hours 26 --sources kabutan,
 4. 严格按照文档中该场景的"执行步骤"操作，不要跳过任何步骤。
 
 5. 所有命令的工作目录是：
-   C:\Users\linweiye\AIagent_project_260213\worker-quant\quant_trading\Project_optimized
+   E:\AIagent_project_260213\worker-quant\quant_trading\Project_optimized
 
 6. 用中文输出分析报告，格式按文档中"输出格式"要求。
 ```

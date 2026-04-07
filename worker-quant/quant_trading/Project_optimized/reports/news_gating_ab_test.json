@@ -4,7 +4,7 @@
   "with_news_gating_selected_count": 1,
   "without_news_gating_selected_count": 1,
   "news_risk": "LOW",
-  "macro_sentiment": 0.3236842105263158,
+  "macro_sentiment": 0.4778846153846154,
   "effective_sprint_gating": false,
   "shadow_ready_for_gating_review": false
 }

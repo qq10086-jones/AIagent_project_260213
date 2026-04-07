@@ -23,12 +23,16 @@ echo [1/3] Refreshing market data... >> "%LOG%"
 python db_update.py --db japan_market.db >> "%LOG%" 2>&1
 
 REM Step 2: Generate full briefing report using yesterday's model output + today's fresh prices
-echo [2/3] Generating briefing report... >> "%LOG%"
+echo [2/4] Generating briefing report... >> "%LOG%"
 python quant_briefing.py --mode full --strategy_id sprint >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 
-REM Step 3: Copy latest briefing to a stable known location for easy access
-echo [3/3] Briefing ready. >> "%LOG%"
+REM Step 3: Generate action plan + push to Discord
+echo [3/4] Building action plan... >> "%LOG%"
+python action_plan_builder.py --db japan_market.db --strategy_id sprint >> "%LOG%" 2>&1
+
+REM Step 4: Briefing ready
+echo [4/4] Briefing ready. >> "%LOG%"
 echo =============================================== >> "%LOG%"
 echo [INFO] MORNING BRIEFING END %date% %time% RC=%RC% >> "%LOG%"
 echo =============================================== >> "%LOG%"

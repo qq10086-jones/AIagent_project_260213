@@ -189,7 +189,7 @@ paper:
 alerts:
   enabled: true
   min_level: "warning"
-  webhook_url: "https://discord.com/api/webhooks/1490007156299399374/ikW0cyloS5weHbXFG11NtynR31lNy8Wy9ZhBgQnBPPRc8-Qo1BWjScpjPzTVyG2vjjVU"
+  webhook_url: ""   # DO NOT hardcode here — use webhook_env or .env file
   webhook_env: "WORKER_QUANT_ALERT_WEBHOOK_URL"
 
 simulation:

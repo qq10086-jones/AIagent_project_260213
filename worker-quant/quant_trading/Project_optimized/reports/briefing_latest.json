@@ -1,13 +1,14 @@
 {
-  "generated_at": "2026-04-07 18:00 JST",
+  "generated_at": "2026-04-07 22:55 JST",
   "asof": "2026-04-07",
   "session": {
-    "time_jst": "18:00",
+    "time_jst": "22:55",
     "session": "closed",
     "mins_to_close": 0,
     "trading": false
   },
   "mode": "full",
+  "strategy_id": "sprint",
   "regime": {
     "trend": "UP",
     "vol_level": "NORMAL",
@@ -39,9 +40,9 @@
     {
       "rank": 1,
       "symbol": "7267.T",
-      "score_tech": 24.21,
+      "score_tech": 24.22,
       "fundamental_score": 1.0,
-      "score_adjusted": 24.21,
+      "score_adjusted": 24.22,
       "fundamental_note": "基本面正常",
       "price_cur": 1250.5,
       "price_open": 1260.5,
@@ -60,9 +61,9 @@
     {
       "rank": 2,
       "symbol": "9432.T",
-      "score_tech": 23.23,
+      "score_tech": 23.27,
       "fundamental_score": 1.0,
-      "score_adjusted": 23.23,
+      "score_adjusted": 23.27,
       "fundamental_note": "基本面正常",
       "price_cur": 155.1999969482422,
       "price_open": 157.89999389648438,
@@ -81,9 +82,9 @@
     {
       "rank": 3,
       "symbol": "8604.T",
-      "score_tech": 23.18,
+      "score_tech": 23.19,
       "fundamental_score": 1.0,
-      "score_adjusted": 23.18,
+      "score_adjusted": 23.19,
       "fundamental_note": "基本面正常",
       "price_cur": 1271.5,
       "price_open": 1278.0,
@@ -102,9 +103,9 @@
     {
       "rank": 4,
       "symbol": "9434.T",
-      "score_tech": 22.9,
+      "score_tech": 22.96,
       "fundamental_score": 1.0,
-      "score_adjusted": 22.9,
+      "score_adjusted": 22.96,
       "fundamental_note": "基本面正常",
       "price_cur": 215.5,
       "price_open": 217.89999389648438,
@@ -123,9 +124,9 @@
     {
       "rank": 5,
       "symbol": "5020.T",
-      "score_tech": 22.83,
+      "score_tech": 22.84,
       "fundamental_score": 1.0,
-      "score_adjusted": 22.83,
+      "score_adjusted": 22.84,
       "fundamental_note": "基本面正常",
       "price_cur": 1477.5,
       "price_open": 1476.5,
@@ -144,9 +145,9 @@
     {
       "rank": 6,
       "symbol": "7261.T",
-      "score_tech": 22.34,
+      "score_tech": 22.37,
       "fundamental_score": 1.0,
-      "score_adjusted": 22.34,
+      "score_adjusted": 22.37,
       "fundamental_note": "基本面正常",
       "price_cur": 1033.5,
       "price_open": 1020.5,
@@ -165,9 +166,9 @@
     {
       "rank": 7,
       "symbol": "4005.T",
-      "score_tech": 22.29,
+      "score_tech": 22.31,
       "fundamental_score": 1.0,
-      "score_adjusted": 22.29,
+      "score_adjusted": 22.31,
       "fundamental_note": "基本面正常",
       "price_cur": 536.5999755859375,
       "price_open": 536.2999877929688,
@@ -186,9 +187,9 @@
     {
       "rank": 8,
       "symbol": "7211.T",
-      "score_tech": 21.89,
+      "score_tech": 21.91,
       "fundamental_score": 1.0,
-      "score_adjusted": 21.89,
+      "score_adjusted": 21.91,
       "fundamental_note": "基本面正常",
       "price_cur": 304.8999938964844,
       "price_open": 307.0,
@@ -207,9 +208,9 @@
     {
       "rank": 9,
       "symbol": "6471.T",
-      "score_tech": 21.1,
+      "score_tech": 21.13,
       "fundamental_score": 1.0,
-      "score_adjusted": 21.1,
+      "score_adjusted": 21.13,
       "fundamental_note": "基本面正常",
       "price_cur": 1107.0,
       "price_open": 1126.0,
@@ -249,9 +250,9 @@
     {
       "rank": 11,
       "symbol": "5401.T",
-      "score_tech": 23.34,
+      "score_tech": 23.35,
       "fundamental_score": 0.84,
-      "score_adjusted": 19.6,
+      "score_adjusted": 19.61,
       "fundamental_note": "近2季2季EPS亏损(降权-16%)",
       "price_cur": 587.0,
       "price_open": 589.0,
@@ -270,9 +271,9 @@
     {
       "rank": 12,
       "symbol": "4755.T",
-      "score_tech": 22.89,
+      "score_tech": 22.93,
       "fundamental_score": 0.84,
-      "score_adjusted": 19.23,
+      "score_adjusted": 19.26,
       "fundamental_note": "近2季2季EPS亏损(降权-16%)",
       "price_cur": 764.7999877929688,
       "price_open": 774.9000244140625,
@@ -291,9 +292,9 @@
     {
       "rank": 13,
       "symbol": "7201.T",
-      "score_tech": 22.62,
+      "score_tech": 22.63,
       "fundamental_score": 0.84,
-      "score_adjusted": 19.0,
+      "score_adjusted": 19.01,
       "fundamental_note": "近2季2季EPS亏损(降权-16%)",
       "price_cur": 349.0,
       "price_open": 349.20001220703125,
@@ -328,7 +329,7 @@
     },
     {
       "category": "TRADE",
-      "summary": "看板政策、米政権の「足かせ」に トランプ関税発動1年 企業収益悪化／巨額の返還訴訟 - 47news",
+      "summary": "看板政策、米政権の「足かせ」に トランプ関税発動1年 企業収益悪化／巨額の返還訴訟 - 47NEWS",
       "score": -0.4
     },
     {
@@ -343,12 +344,12 @@
     },
     {
       "category": "TRADE",
-      "summary": "トランプ関税対策の米国輸入車の第1弾は1200万円のトラック トヨタが導入するタンドラってどんなクル",
+      "summary": "学者が斬る・視点争点：追加関税で対米輸出額は大幅減 早川和伸 - weekly-economist.",
       "score": -0.4
     },
     {
       "category": "TRADE",
-      "summary": "世界経済入門2026：トランプ関税の“根っこ”は自由貿易で傷ついた米国製造業労働者の痛みだ 伊藤萬里",
+      "summary": "トランプ関税対策の米国輸入車の第1弾は1200万円のトラック トヨタが導入するタンドラってどんなクル",
       "score": -0.4
     }
   ],
@@ -358,68 +359,85 @@
     "downweighted_count": 4
   },
   "live_state": {
-    "positions": [],
+    "positions": [
+      {
+        "symbol": "4005.T",
+        "qty": 100.0,
+        "avg_cost": 528.8,
+        "market_price": 533.2000122070312,
+        "market_value": 53320.001220703125,
+        "unrealized_pnl": 440.00122070312955,
+        "stop_loss_price": 423.0,
+        "stop_loss_pct": 20.0,
+        "stop_triggered": false,
+        "take_profit_price": 687.4,
+        "take_profit_pct": 30.0,
+        "tp_triggered": false,
+        "stop_note": "ATR14=21.1 → 止损20.0%/止盈30.0%",
+        "pnl_pct": 0.83
+      }
+    ],
     "orders": [],
     "account": {
-      "asof": "2026-04-06",
-      "nav": 400000.0,
-      "cash": 400000.0
+      "asof": "2026-04-07",
+      "nav": 399680.0012207031,
+      "cash": 346360.0
     }
   },
   "db_signals": [
     {
       "asof": "2026-04-07",
       "symbol": "9501.T",
-      "score": 23.535087965765943,
+      "score": 23.539938425115253,
       "name": "Tokyo Electric Power",
       "sector": "Utility"
     },
     {
       "asof": "2026-04-07",
       "symbol": "5401.T",
-      "score": 23.337477792728492,
+      "score": 23.3486355448832,
       "name": "Nippon Steel",
       "sector": "Steel"
     },
     {
       "asof": "2026-04-07",
       "symbol": "9432.T",
-      "score": 23.227208518857115,
+      "score": 23.266753941442737,
       "name": "NTT",
       "sector": "Telecom"
     },
     {
       "asof": "2026-04-07",
       "symbol": "9434.T",
-      "score": 22.902760184952232,
+      "score": 22.959477186350647,
       "name": "SoftBank Corp",
       "sector": "Telecom"
     },
     {
       "asof": "2026-04-07",
       "symbol": "4755.T",
-      "score": 22.892333915810948,
+      "score": 22.9251867599203,
       "name": "Rakuten Group",
       "sector": "Internet"
     },
     {
       "asof": "2026-04-07",
       "symbol": "7201.T",
-      "score": 22.619784750936983,
+      "score": 22.629453069644786,
       "name": "Nissan Motor",
       "sector": "Auto"
     },
     {
       "asof": "2026-04-07",
       "symbol": "4005.T",
-      "score": 22.2940765425077,
+      "score": 22.309007107275605,
       "name": "Sumitomo Chemical",
       "sector": "Chemical"
     },
     {
       "asof": "2026-04-07",
       "symbol": "7211.T",
-      "score": 21.890840274872897,
+      "score": 21.909530988016144,
       "name": "Mitsubishi Motors",
       "sector": "Auto"
     }

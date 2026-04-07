@@ -367,7 +367,23 @@ def _emit_runtime_alert_if_needed(reports_dir: Path, payload: dict) -> None:
     _post_runtime_alert_webhook(payload)
 
 
+def _load_dotenv() -> None:
+    """Load .env file from project root if it exists (no external dependency)."""
+    env_path = Path(__file__).resolve().parent / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
 def configure_alert_env(cfg: dict) -> None:
+    _load_dotenv()
     alerts = cfg.get("alerts", {}) or {}
     enabled = bool(alerts.get("enabled", False))
     os.environ["WORKER_QUANT_ALERTS_ENABLED"] = "1" if enabled else "0"
@@ -1084,6 +1100,35 @@ def main():
             except RuntimeError as e:
                 print(f"⚠️  compute_ic.py failed (non-fatal): {e}")
  
+    # ── Post-decision: Action Plan + Compliance ──────────────────────
+    try:
+        from action_plan_builder import build_action_plan
+        from compliance_tracker import record_daily_compliance, ensure_journal_table
+        _conn = __import__("trade_schema").connect(db_path)
+        __import__("trade_schema").ensure_trade_tables(_conn)
+        ensure_journal_table(_conn)
+        plan = build_action_plan(
+            _conn, asof, strategy_id,
+            reports_dir, Path(str(dec.get("out_dir", "artifacts/decision"))),
+        )
+        emit_runtime_event(
+            reports_dir, "action_plan_generated",
+            level="warning",
+            action_summary=plan["action_summary"],
+            regime=plan["regime"],
+            pending_sells=len(plan["pending_sells"]),
+            pending_buys=len(plan["pending_buys"]),
+            held_positions=len(plan["held_positions"]),
+            risk_alerts=len(plan["risk_alerts"]),
+        )
+        print(f">> Action plan generated: {plan['action_summary']}")
+        comp = record_daily_compliance(_conn, asof, strategy_id,
+                                       Path(str(dec.get("out_dir", "artifacts/decision"))))
+        print(f">> Compliance recorded: {comp['entries_recorded']} entries, {comp['deviations']} deviations")
+        _conn.close()
+    except Exception as e:
+        print(f"⚠️  Action plan / compliance (non-fatal): {e}")
+
     if is_sprint_mode:
         emit_runtime_event(
             reports_dir,

@@ -338,9 +338,10 @@ class TestBuildPositionsTracking:
     def test_sell_clears_tracking(self):
         from build_positions import build_positions
         conn = _create_test_db()
-        _insert_prices(conn, "SELL.T", [("2026-04-01", 500, 520, 490, 510, 100000)])
+        _insert_prices(conn, "SELL.T", [("2026-04-01", 500, 520, 490, 510, 100000),
+                                         ("2026-04-02", 510, 515, 505, 512, 100000)])
 
-        # First buy
+        # Day 1: buy
         conn.execute("""
             INSERT INTO fills(fill_id, run_id, asof, strategy_id, ts, symbol, side, qty, price)
             VALUES ('f1', 'run1', '2026-04-01', 'sprint', '2026-04-01 14:30', 'SELL.T', 'BUY', 100, 505)
@@ -348,16 +349,16 @@ class TestBuildPositionsTracking:
         conn.commit()
         build_positions(conn, "run1", "2026-04-01", strategy_id="sprint")
 
-        # Then sell all
+        # Day 2: sell all (uses day-1 position as prev)
         conn.execute("""
             INSERT INTO fills(fill_id, run_id, asof, strategy_id, ts, symbol, side, qty, price)
-            VALUES ('f2', 'run2', '2026-04-01', 'sprint', '2026-04-01 15:00', 'SELL.T', 'SELL', 100, 510)
+            VALUES ('f2', 'run2', '2026-04-02', 'sprint', '2026-04-02 09:30', 'SELL.T', 'SELL', 100, 510)
         """)
         conn.commit()
-        build_positions(conn, "run2", "2026-04-01", strategy_id="sprint")
+        build_positions(conn, "run2", "2026-04-02", strategy_id="sprint")
 
         rows = conn.execute(
-            "SELECT * FROM positions WHERE symbol='SELL.T' AND asof='2026-04-01' AND strategy_id='sprint'"
+            "SELECT * FROM positions WHERE symbol='SELL.T' AND asof='2026-04-02' AND strategy_id='sprint'"
         ).fetchall()
         assert len(rows) == 0  # position fully closed
 

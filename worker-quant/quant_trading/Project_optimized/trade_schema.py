@@ -438,6 +438,28 @@ def ensure_trade_tables(conn: sqlite3.Connection) -> None:
             pass
 
 
+def ensure_decision_journal_table(conn: sqlite3.Connection) -> None:
+    """Create decision_journal table if missing. Idempotent."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS decision_journal (
+          journal_id TEXT PRIMARY KEY,
+          asof TEXT NOT NULL,
+          ts TEXT NOT NULL,
+          strategy_id TEXT DEFAULT 'sprint',
+          action_type TEXT NOT NULL,
+          model_signal TEXT,
+          actual_action TEXT NOT NULL,
+          override_reason TEXT,
+          outcome_pnl REAL,
+          outcome_filled_at TEXT,
+          compliance_score REAL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_journal_asof ON decision_journal(asof);")
+
+
 def ensure_learning_tables(conn: sqlite3.Connection) -> None:
     """Create Learning M1 tables if missing. Idempotent.
 

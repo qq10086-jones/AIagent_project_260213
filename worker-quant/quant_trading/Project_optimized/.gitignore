@@ -1,2 +1,19 @@
 reports/bt_baseline/
 reports/bt_variant/
+
+# Runtime outputs — sensitive / machine-specific, do not track
+reports/runtime_events.jsonl
+reports/runtime_latest_event.json
+reports/runtime_alerts.jsonl
+reports/runtime_latest_alert.json
+reports/runtime_alert_status.json
+reports/runtime_alert_self_test.json
+reports/action_plan_today.json
+reports/intraday_monitor_latest.json
+reports/paper_trading_account.json
+reports/fundamentals_status.json
+reports/fundamentals_status.md
+
+# Secrets
+.env
+*.env

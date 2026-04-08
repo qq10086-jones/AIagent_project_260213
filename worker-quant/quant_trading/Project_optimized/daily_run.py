@@ -826,6 +826,7 @@ def main():
             reports_dir=Path(out_dir),
             strategy_config=strategy_profile,
             model_config=model,
+            benchmark_regime_config=cfg.get("benchmark_regime", {}),
         )
         emit_runtime_event(
             reports_dir,
@@ -1128,6 +1129,102 @@ def main():
         _conn.close()
     except Exception as e:
         print(f"⚠️  Action plan / compliance (non-fatal): {e}")
+
+    # ── V2 Shadow: 跨资産 + Regime v2 + Sprint Score v2 ─────────────
+    try:
+        ca_cfg = cfg.get("cross_asset", {})
+        if ca_cfg.get("enabled", False):
+            from cross_asset_signals import (
+                fetch_cross_asset_snapshot,
+                compute_cross_asset_regime_signal,
+                ensure_cross_asset_table,
+                save_cross_asset_snapshot,
+            )
+            _ca_conn = __import__("trade_schema").connect(db_path)
+            ensure_cross_asset_table(_ca_conn)
+            ca_snapshot = fetch_cross_asset_snapshot(asof=asof)
+            ca_signal = compute_cross_asset_regime_signal(ca_snapshot, conn=_ca_conn,
+                                                          weights=ca_cfg.get("weights"))
+            save_cross_asset_snapshot(_ca_conn, ca_snapshot, ca_signal)
+            print(f">> [shadow] cross_asset_score: {ca_signal['cross_asset_score']:.4f}  "
+                  f"adjustment: {ca_signal['regime_adjustment']}")
+
+            # Step 0.5: 宏观事件检测 (规则引擎)
+            try:
+                from macro_event_detector import detect_macro_events, save_macro_event
+                _macro_result = detect_macro_events(ca_snapshot)
+                _macro_level = _macro_result.get("alert_level", "none")
+                _macro_boost = _macro_result.get("rule_boost", 0.0)
+                print(f">> [macro_event] alert_level={_macro_level}  rule_boost={_macro_boost:+.4f}  "
+                      f"triggered={_macro_result.get('details', {}).get('n_rules_triggered', 0)}")
+                if _macro_level != "none":
+                    save_macro_event(_ca_conn, asof, _macro_result)
+                    print(f">> [macro_event] saved L1/L2 event to macro_events table")
+                    # LLM 分析 (Gemma via Ollama) — L1/L2 時のみ
+                    _me_cfg = cfg.get("macro_events", {})
+                    _llm_cfg = _me_cfg.get("llm", {})
+                    if _llm_cfg.get("enabled", False) and _macro_level in ("L1", "L2"):
+                        try:
+                            from macro_digest import run_macro_digest
+                            _digest = run_macro_digest(
+                                _ca_conn, asof, ca_snapshot, _macro_level,
+                                _macro_result.get("triggered_rules"),
+                                endpoint=str(_llm_cfg.get("endpoint", "http://localhost:11434")),
+                                model=str(_llm_cfg.get("model", "gemma4:27b")),
+                                timeout=int(_llm_cfg.get("timeout_seconds", 60)),
+                            )
+                            print(f">> [macro_digest] status={_digest['status']}")
+                        except Exception as _md_err:
+                            print(f"⚠️  macro_digest LLM (non-fatal): {_md_err}")
+            except Exception as _me_err:
+                print(f"⚠️  macro_event_detector (non-fatal): {_me_err}")
+
+            # Regime V2 shadow computation
+            regime_cfg = cfg.get("benchmark_regime", {})
+            if regime_cfg.get("version") == "v2" or ca_cfg.get("shadow_only", True):
+                from benchmark_regime import compute_regime_score_v2, compute_ma_slope, compute_volume_ratio
+                benchmark_ticker = strategy_profile.get("benchmark_ticker",
+                                                         cfg.get("benchmark", {}).get("ticker", "1321.T"))
+                slope = compute_ma_slope(_ca_conn, benchmark_ticker, asof)
+                vol_ratio = compute_volume_ratio(_ca_conn, benchmark_ticker, asof)
+                from benchmark_regime import load_latest_price
+                _px = load_latest_price(_ca_conn, benchmark_ticker, asof)
+                # load MA values from regime_diagnosis
+                _regime_file = reports_dir / "regime_diagnosis.json"
+                _fast_ma, _slow_ma = None, None
+                if _regime_file.exists():
+                    import json as _j
+                    _rd = _j.loads(_regime_file.read_text(encoding="utf-8"))
+                    _fast_ma = _rd.get("fast_ma")
+                    _slow_ma = _rd.get("slow_ma")
+                if _px and _fast_ma and _slow_ma:
+                    r_score, r_details = compute_regime_score_v2(
+                        px_b=_px, fast_ma=_fast_ma, slow_ma=_slow_ma,
+                        ma_slope_5d=slope, volume_ratio=vol_ratio,
+                        cross_asset_score=ca_signal["cross_asset_score"],
+                        weights=regime_cfg.get("v2_weights"),
+                    )
+                    print(f">> [shadow] regime_score_v2: {r_score:.4f}  "
+                          f"(v1 state={_rd.get('sprint_final_state','?')})")
+                    # 写入 regime_diagnosis.json shadow 字段
+                    _rd["regime_score_v2"] = r_score
+                    _rd["regime_v2_details"] = r_details
+                    _rd["cross_asset"] = ca_signal
+                    # 叠加宏观事件 boost
+                    try:
+                        from benchmark_regime import apply_event_boost as _apply_eb
+                        _r_final, _ev_info = _apply_eb(r_score, _ca_conn, asof)
+                        _rd["regime_score_v2_with_event"] = _r_final
+                        _rd["macro_event"] = _ev_info
+                        if _ev_info.get("event_boost_applied"):
+                            print(f">> [shadow] regime_v2 + event_boost: {r_score:.4f} → {_r_final:.4f}")
+                    except Exception as _eb_err:
+                        print(f"⚠️  event_boost shadow (non-fatal): {_eb_err}")
+                    _regime_file.write_text(_j.dumps(_rd, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            _ca_conn.close()
+    except Exception as e:
+        print(f"⚠️  V2 shadow computation (non-fatal): {e}")
 
     if is_sprint_mode:
         emit_runtime_event(

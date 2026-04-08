@@ -35,6 +35,33 @@ class OrderRow:
     comment: str = "rebalance"
 
 
+def compute_entry_zone(
+    symbol: str,
+    signal_side: str,
+    last_close: float,
+    atr_pct: float | None,
+) -> dict:
+    """限価区間建議を計算。ATR ベースで target / aggressive / walk_away を算出。"""
+    if atr_pct is None or atr_pct <= 0:
+        atr_pct = 0.02  # fallback 2%
+    atr_pct = min(atr_pct, 0.10)  # cap at 10%
+
+    if signal_side == "BUY":
+        target = last_close * (1.0 - atr_pct * 0.3)       # 回調 0.3 ATR 待ち
+        aggressive = last_close * (1.0 + atr_pct * 0.2)    # 追い 0.2 ATR まで
+        walk_away = last_close * (1.0 + atr_pct * 1.0)     # 1 ATR 超 → 放棄
+    else:  # SELL
+        target = last_close * (1.0 + atr_pct * 0.3)
+        aggressive = last_close * (1.0 - atr_pct * 0.2)
+        walk_away = last_close * (1.0 - atr_pct * 1.0)
+
+    return {
+        "target_limit": round(target, 1),
+        "aggressive_limit": round(aggressive, 1),
+        "walk_away_price": round(walk_away, 1),
+    }
+
+
 FACTOR_FAMILY_MAP = {
     "price": list(TECHNICAL_FACTOR_NAMES),
     "risk_adjusted": list(RISK_ADJUSTED_FACTOR_NAMES),
@@ -106,7 +133,47 @@ def _latest_account_snapshot(conn: sqlite3.Connection, asof: str, strategy_id: s
     ).fetchone()
     if not row:
         return None, None, None
-    return str(row[0]), float(row[1]), float(row[2])
+    snap_asof = str(row[0])
+
+    # ── NAV 鮮度チェック: snapshot 以降に fills があれば自動再構築 ──
+    try:
+        newer_fills = conn.execute(
+            "SELECT COUNT(*) FROM fills WHERE asof > ? AND strategy_id=?",
+            (snap_asof, strategy_id),
+        ).fetchone()
+        if newer_fills and newer_fills[0] > 0:
+            print(f"[risk] ⚠️  account_snapshot stale: snapshot asof={snap_asof} but "
+                  f"{newer_fills[0]} fills found after that date — auto-rebuilding")
+            try:
+                from build_account_snapshot import build_account_snapshot as _rebuild_snap
+                # 逐日重建从 snap_asof 之后到 asof 的每一天的 snapshot
+                fill_dates = conn.execute(
+                    "SELECT DISTINCT asof FROM fills WHERE asof > ? AND strategy_id=? AND asof <= ? ORDER BY asof",
+                    (snap_asof, strategy_id, asof),
+                ).fetchall()
+                for (fill_asof,) in fill_dates:
+                    # 找该日 fills 的 run_id（取最新的）
+                    rid_row = conn.execute(
+                        "SELECT run_id FROM fills WHERE asof=? AND strategy_id=? ORDER BY ts DESC LIMIT 1",
+                        (fill_asof, strategy_id),
+                    ).fetchone()
+                    rid = rid_row[0] if rid_row else "manual"
+                    _rebuild_snap(conn, rid, fill_asof, strategy_id=strategy_id)
+                    print(f"  >> rebuilt snapshot for {fill_asof} (run_id={rid})")
+                # 重新查询
+                row = conn.execute(
+                    "SELECT asof, cash, nav FROM account_snapshots WHERE asof<=? AND strategy_id=? ORDER BY asof DESC LIMIT 1",
+                    (asof, strategy_id),
+                ).fetchone()
+                if row:
+                    return str(row[0]), float(row[1]), float(row[2])
+            except Exception as e:
+                print(f"[risk] ⚠️  auto-rebuild failed ({e}), using stale snapshot — "
+                      "run build_account_snapshot.py manually!")
+    except sqlite3.OperationalError:
+        pass  # fills 表可能还没建
+
+    return snap_asof, float(row[1]), float(row[2])
 
 
 def _compute_atr_pct(conn: sqlite3.Connection, symbol: str, asof: str, window: int = 20) -> Optional[float]:
@@ -1034,6 +1101,11 @@ def main():
                 dd_status = f"HALF_POSITION (DD={drawdown:.1%} < -{args.dd_half:.0%})"
                 print(f"[risk] half position triggered by drawdown: nav={cur_nav:,.0f} peak={peak_nav:,.0f} dd={drawdown:.1%}")
 
+        # FULL_EXIT: 清空 target_weights，让 build_orders 为所有持仓生成 SELL
+        if dd_scale <= 0.0:
+            print(f"[risk] FULL_EXIT: clearing all target weights → force SELL all positions")
+            target_weights = target_weights.iloc[0:0].copy()
+
         if args.position_sizing == "half_kelly":
             kelly = compute_kelly_params(conn, strategy_id=args.strategy_id, lookback_days=60, asof=asof)
             target_weights = apply_kelly_sizing(
@@ -1091,12 +1163,24 @@ def main():
 
         orders_csv = out_run / "orders_proposal.csv"
 
-        # write orders CSV
+        # compute entry zones for each order
+        entry_zones: dict[str, dict] = {}
+        for o in orders:
+            _, px = _last_close(conn, o.symbol, asof)
+            atr = _compute_atr_pct(conn, o.symbol, asof) if px else None
+            if px:
+                entry_zones[o.symbol] = compute_entry_zone(o.symbol, o.side, px, atr)
+
+        # write orders CSV (with entry zone columns)
         with orders_csv.open("w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["symbol", "side", "qty", "suggested_type", "suggested_limit", "est_notional", "comment"])
+            w.writerow(["symbol", "side", "qty", "suggested_type", "suggested_limit",
+                         "est_notional", "comment", "target_limit", "aggressive_limit", "walk_away_price"])
             for o in orders:
-                w.writerow([o.symbol, o.side, o.qty, o.suggested_type, o.suggested_limit or "", f"{o.est_notional:.2f}", o.comment])
+                ez = entry_zones.get(o.symbol, {})
+                w.writerow([o.symbol, o.side, o.qty, o.suggested_type, o.suggested_limit or "",
+                            f"{o.est_notional:.2f}", o.comment,
+                            ez.get("target_limit", ""), ez.get("aggressive_limit", ""), ez.get("walk_away_price", "")])
 
         factor_family_csv = out_run / "factor_family_contributions.csv"
         family_contrib_df.to_csv(factor_family_csv, index=False)

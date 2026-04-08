@@ -386,6 +386,7 @@ def load_logged_factor_scores(conn, asofs: list[str]) -> dict[str, pd.DataFrame]
         SELECT asof, symbol, factor_name, raw_score
         FROM factor_signals
         WHERE asof IN ({placeholders})
+          AND raw_score IS NOT NULL
         """,
         conn,
         params=asofs,
@@ -402,20 +403,27 @@ def load_logged_factor_scores(conn, asofs: list[str]) -> dict[str, pd.DataFrame]
 
 
 def load_feature_daily_scores(conn, asofs: list[str], factor_names: list[str]) -> dict[str, pd.DataFrame]:
+    """Load feature_daily scores and align to eval dates via forward-fill.
+
+    基本面因子是慢变量（季度更新），feature_daily 的 available_ts 已保证 PIT 安全。
+    加载全量数据（不限 asof <= max_eval_date），这样即使 eval_dates 全部早于
+    feature_daily 最早日期，也能通过 bfill 将最近快照回填到历史评估日。
+    典型场景：yfinance 首次写入 feature_daily 是 2026-04-02，但 eval_dates
+    在 2024-04-04 ~ 2026-02-24 — 需要把季报数据回填到这些日期。
+    """
     if not asofs or not factor_names:
         return {}
     placeholders_factor = ",".join("?" for _ in factor_names)
     eval_index = pd.to_datetime(sorted(asofs))
-    max_asof = max(asofs)
+    # 加载全量 feature_daily（不限 asof），基本面季报数据对所有 eval_date 有效
     rows = pd.read_sql_query(
         f"""
         SELECT asof, symbol, feature_name, value
         FROM feature_daily
-        WHERE asof <= ?
-          AND feature_name IN ({placeholders_factor})
+        WHERE feature_name IN ({placeholders_factor})
         """,
         conn,
-        params=[max_asof] + factor_names,
+        params=factor_names,
     )
     if rows.empty:
         return {}
@@ -424,7 +432,10 @@ def load_feature_daily_scores(conn, asofs: list[str], factor_names: list[str]) -
     for feature_name, grp in rows.groupby("feature_name"):
         frame = grp.pivot(index="asof", columns="symbol", values="value").sort_index()
         frame.index = pd.to_datetime(frame.index)
-        out[str(feature_name)] = frame.reindex(frame.index.union(eval_index)).sort_index().ffill().reindex(eval_index)
+        # 合并 eval_index，先 ffill 再 bfill（将最早可用快照回填到更早的 eval_dates）
+        combined_index = frame.index.union(eval_index).sort_values()
+        aligned = frame.reindex(combined_index).ffill().bfill()
+        out[str(feature_name)] = aligned.reindex(eval_index)
     return out
 
 

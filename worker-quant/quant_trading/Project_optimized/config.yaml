@@ -212,3 +212,73 @@ simulation:
 obsidian:
   vault: '/app/quant_trading/quantum investment'
   section: "Quant/Reports"
+
+# ── V2 Alpha 优化 (2026-04-08) ─────────────────────────────────
+# 所有 v2 模块默认 shadow 模式: 计算并记录，但不影响实际决策
+
+cross_asset:
+  enabled: true
+  shadow_only: false            # 已上线生产
+  tickers:
+    sp500: "^GSPC"
+    usdjpy: "USDJPY=X"
+    vix: "^VIX"
+    nk_futures: "NKD=F"
+    crude_oil: "CL=F"           # WTI原油（日本进口依赖，油跌=利好）
+    gold: "GC=F"                # 黄金（避险情绪反向）
+    copper: "HG=F"              # 铜（全球制造业景气）
+    sox: "^SOX"                 # 半导体指数（日经权重股映射）
+  weights:
+    sp500: 0.20
+    usdjpy: 0.15
+    vix: 0.10
+    nk_futures: 0.15
+    crude_oil: 0.15
+    gold: 0.05
+    copper: 0.05
+    sox: 0.10
+
+benchmark_regime:
+  version: "v2"                 # "v2" = 连续化 regime (2026-04-08 回测通过: Sharpe +0.47, MaxDD 改善 3.6pp)
+  v2_weights:
+    ma_signal: 0.30
+    slope_signal: 0.20
+    price_position: 0.15
+    volume_signal: 0.10
+    cross_asset: 0.25
+  v2_thresholds:
+    full_position: 0.70
+    zero_position: 0.15
+
+macro_events:
+  enabled: true
+  llm:
+    enabled: false                  # 家里环境设为 true (需要 Ollama + Gemma)
+    provider: "ollama"
+    endpoint: "http://localhost:11434"   # Tailscale IP 或 hostname
+    model: "gemma4:27b"
+    timeout_seconds: 60
+    fallback_to_rules: true         # LLM 不可用时退化到规则引擎
+  rules:
+    nk_futures_l1_threshold: 3.0
+    crude_oil_l1_threshold: 5.0
+    vix_spike_threshold: 15.0
+    sox_l2_threshold: 3.0
+  boost:
+    max_abs: 0.30
+    default_duration_days: 3
+    decay_mode: "linear"            # linear / exponential
+  alerts:
+    discord_on_l1: true
+    discord_on_l2: false
+
+sprint_signal:
+  score_version: "v1"           # "v1" = 3因子, "v2" = 全因子自适应 (切换后生效)
+
+factor_categories:
+  momentum: [mom_consist, ret20, ret60, mom_12_1, high52w]
+  mean_reversion: [rsi14, z_20, vol_z]
+  risk: [sharpe_60, sharpe_20, sortino_60, vol_stability, vol_adj_mom20]
+  fundamental: [value_bp, roa_op, cfo_assets, accruals_inv, margin_op,
+                growth_rev_yoy, growth_op_yoy, guidance_delta, leverage_safety, dividend_yield]
+  neutral: [ret1, ret5, slope60, ma_gap, vol20, vol60]

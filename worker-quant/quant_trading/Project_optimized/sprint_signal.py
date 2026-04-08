@@ -8,7 +8,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from benchmark_regime import benchmark_regime_scale_v2, load_latest_price
+from benchmark_regime import (
+    benchmark_regime_scale_v2, load_latest_price,
+    compute_regime_score_v2, regime_score_to_scale,
+    compute_ma_slope, compute_volume_ratio,
+    apply_event_boost,
+)
 from compute_ic import compute_features
 from trade_schema import ensure_learning_tables
 
@@ -47,6 +52,120 @@ def sprint_score(features: pd.DataFrame, ic_weights: dict | None = None) -> pd.S
         score = score + pd.to_numeric(features.get(factor, 0.0), errors="coerce").fillna(0.0) * weight
         denom += abs(weight)
     return score / max(denom, 1e-12)
+
+
+# ── Sprint Score V2: 全因子自適応加重 ───────────────────────────
+
+# 因子カテゴリ — regime に応じて動的に加重
+FACTOR_CATEGORIES = {
+    "momentum": ["mom_consist", "ret20", "ret60", "mom_12_1", "high52w"],
+    "mean_reversion": ["rsi14", "z_20", "vol_z"],
+    "risk": ["sharpe_60", "sharpe_20", "sortino_60", "vol_stability", "vol_adj_mom20"],
+    "fundamental": [
+        "value_bp", "roa_op", "cfo_assets", "accruals_inv", "margin_op",
+        "growth_rev_yoy", "growth_op_yoy", "guidance_delta",
+        "leverage_safety", "dividend_yield",
+    ],
+    "neutral": ["ret1", "ret5", "slope60", "ma_gap", "vol20", "vol60"],
+}
+
+# 逆引き: factor_name → category
+_FACTOR_TO_CATEGORY: dict[str, str] = {}
+for _cat, _factors in FACTOR_CATEGORIES.items():
+    for _f in _factors:
+        _FACTOR_TO_CATEGORY[_f] = _cat
+
+
+def shrink_icir(icir: float, n_obs: int, prior: float = 0.05, shrink_n: int = 30) -> float:
+    """Bayesian shrinkage: 低サンプル ICIR を事前分布に収縮。
+
+    n_obs < 5 → ほぼ prior を使用
+    n_obs > 50 → ほぼ元の ICIR を使用
+    """
+    if n_obs <= 0:
+        return prior
+    shrink = n_obs / (n_obs + shrink_n)
+    return icir * shrink + prior * (1.0 - shrink)
+
+
+def _regime_factor_tilt(category: str, regime_score: float) -> float:
+    """regime_score に応じてカテゴリ別の加重倍率を返す。
+
+    regime 高 → momentum 強化, value/fundamental 弱化
+    regime 低 → value/fundamental 強化, momentum 弱化
+    """
+    if category == "momentum":
+        return 0.5 + 0.5 * regime_score       # [0.5, 1.0]
+    elif category in ("fundamental", "mean_reversion"):
+        return 1.0 - 0.3 * regime_score        # [0.7, 1.0]
+    else:
+        return 1.0  # risk, neutral
+
+
+def sprint_score_v2(
+    features: pd.DataFrame,
+    factor_registry: dict[str, dict] | None = None,
+    tier_config: dict[str, list[str]] | None = None,
+    regime_score: float = 0.5,
+    category_config: dict[str, list[str]] | None = None,
+) -> pd.Series:
+    """全因子自適応加重スコア。
+
+    factor_registry: {factor_name: {"icir": float, "n_obs": int, "is_active": int}}
+    tier_config: {"core": [...], "candidate": [...], "excluded": [...]}
+    """
+    if factor_registry is None or len(factor_registry) == 0:
+        # fallback to v1
+        return sprint_score(features)
+
+    categories = category_config or FACTOR_CATEGORIES
+    cat_lookup = {}
+    for cat, factors in categories.items():
+        for f in factors:
+            cat_lookup[f] = cat
+
+    tier_mult = {"core": 1.0, "candidate": 0.7, "fundamental_pending": 0.5}
+    factor_tier_map: dict[str, str] = {}
+    if tier_config:
+        for tier_name, factors in tier_config.items():
+            for f in factors:
+                factor_tier_map[f] = tier_name
+
+    score = pd.Series(0.0, index=features.index, dtype=float)
+    total_weight = 0.0
+
+    for factor_name, reg in factor_registry.items():
+        if not reg.get("is_active", 1):
+            continue
+        if factor_name not in features.columns:
+            continue
+
+        raw_icir = float(reg.get("icir", 0.0) or 0.0)
+        n_obs = int(reg.get("n_obs", 0) or 0)
+        effective_icir = shrink_icir(raw_icir, n_obs)
+
+        # tier 倍率
+        tier = factor_tier_map.get(factor_name, "candidate")
+        if tier == "excluded":
+            continue
+        t_mult = tier_mult.get(tier, 0.5)
+
+        # regime 動的加重
+        cat = cat_lookup.get(factor_name, "neutral")
+        r_tilt = _regime_factor_tilt(cat, regime_score)
+
+        weight = effective_icir * t_mult * r_tilt
+        if abs(weight) < 1e-9:
+            continue
+
+        vals = pd.to_numeric(features.get(factor_name, 0.0), errors="coerce").fillna(0.0)
+        score = score + vals * weight
+        total_weight += abs(weight)
+
+    if total_weight > 0:
+        score = score / total_weight
+
+    return score
 
 
 def sprint_entry_check(row: pd.Series, benchmark_state: str, *, off_scale: float = 0.0) -> bool:
@@ -246,6 +365,8 @@ def generate_sprint_artifacts(
     reports_dir: Path,
     strategy_config: dict,
     model_config: dict,
+    *,
+    benchmark_regime_config: dict | None = None,
 ) -> dict:
     reports_dir.mkdir(parents=True, exist_ok=True)
     simulation = os.getenv("WORKER_QUANT_SIMULATION", "0") == "1"
@@ -301,20 +422,79 @@ def generate_sprint_artifacts(
             px_b = float(bench_series.iloc[-1])
             fast_ma_b = float(bench_series.rolling(fast_window).mean().iloc[-1])
             slow_ma_b = float(bench_series.rolling(slow_window).mean().iloc[-1])
-            benchmark_state, benchmark_scale, regime_diag = benchmark_regime_scale_v2(
-                px_b=px_b,
-                fast_ma_b=fast_ma_b,
-                slow_ma_b=slow_ma_b,
-                prev_state=prev_state,
-                enter_pct=float(model_config.get("benchmark_hysteresis_enter_pct", 0.01)),
-                exit_pct=float(model_config.get("benchmark_hysteresis_exit_pct", 0.01)),
-                off_scale=float(strategy_config.get("benchmark_off_scale", 0.0)),
-                caution_scale=float(strategy_config.get("benchmark_caution_scale", 0.40)),
-                use_vix_confirmation=bool(strategy_config.get("use_vix_confirmation", False)),
-                vix_value=vix_value,
-                vix_off_threshold=float(strategy_config.get("vix_off_threshold", 30.0)),
-                vix_missing_policy=str(strategy_config.get("vix_missing_policy", "fail_closed")),
-            )
+
+            _regime_cfg = benchmark_regime_config or {}
+            _regime_version = str(_regime_cfg.get("version", "v1"))
+
+            if _regime_version == "v2":
+                # ── V2: 连续化 regime ──
+                _ma_slope = compute_ma_slope(conn, bench, asof)
+                _vol_ratio = compute_volume_ratio(conn, bench, asof)
+                # 读取跨资产 score
+                from cross_asset_signals import load_latest_cross_asset
+                _ca = load_latest_cross_asset(conn)
+                _ca_score = _ca.get("cross_asset_score") if _ca else None
+
+                _r_score, _r_details = compute_regime_score_v2(
+                    px_b=px_b, fast_ma=fast_ma_b, slow_ma=slow_ma_b,
+                    ma_slope_5d=_ma_slope, volume_ratio=_vol_ratio,
+                    cross_asset_score=_ca_score,
+                    weights=_regime_cfg.get("v2_weights"),
+                )
+                _thresholds = _regime_cfg.get("v2_thresholds", {})
+                benchmark_scale = regime_score_to_scale(
+                    _r_score,
+                    full_threshold=float(_thresholds.get("full_position", 0.70)),
+                    zero_threshold=float(_thresholds.get("zero_position", 0.15)),
+                )
+                # 映射连续 scale 到离散 state（兼容下游 entry/exit check）
+                if benchmark_scale >= 0.8:
+                    benchmark_state = "on"
+                elif benchmark_scale <= 0.05:
+                    benchmark_state = "off"
+                else:
+                    benchmark_state = "caution"
+                # 叠加宏观事件 boost (衰减)
+                _r_score_pre_event = _r_score
+                try:
+                    _r_score, _event_info = apply_event_boost(_r_score, conn, asof)
+                    if _event_info.get("event_boost_applied"):
+                        # 重新计算 scale
+                        benchmark_scale = regime_score_to_scale(
+                            _r_score,
+                            full_threshold=float(_thresholds.get("full_position", 0.70)),
+                            zero_threshold=float(_thresholds.get("zero_position", 0.15)),
+                        )
+                        if benchmark_scale >= 0.8:
+                            benchmark_state = "on"
+                        elif benchmark_scale <= 0.05:
+                            benchmark_state = "off"
+                        else:
+                            benchmark_state = "caution"
+                except Exception:
+                    _event_info = {"event_boost_applied": False}
+
+                regime_diag = _r_details
+                regime_diag["regime_version"] = "v2"
+                regime_diag["regime_score"] = _r_score
+                regime_diag["regime_score_pre_event"] = _r_score_pre_event
+                regime_diag["macro_event"] = _event_info
+            else:
+                # ── V1: 二值逻辑 ──
+                benchmark_state, benchmark_scale, regime_diag = benchmark_regime_scale_v2(
+                    px_b=px_b,
+                    fast_ma_b=fast_ma_b,
+                    slow_ma_b=slow_ma_b,
+                    prev_state=prev_state,
+                    enter_pct=float(model_config.get("benchmark_hysteresis_enter_pct", 0.01)),
+                    exit_pct=float(model_config.get("benchmark_hysteresis_exit_pct", 0.01)),
+                    off_scale=float(strategy_config.get("benchmark_off_scale", 0.0)),
+                    caution_scale=float(strategy_config.get("benchmark_caution_scale", 0.40)),
+                    use_vix_confirmation=bool(strategy_config.get("use_vix_confirmation", False)),
+                    vix_value=vix_value,
+                    vix_off_threshold=float(strategy_config.get("vix_off_threshold", 30.0)),
+                    vix_missing_policy=str(strategy_config.get("vix_missing_policy", "fail_closed")),
+                )
 
         if strict_pit:
             news_rows = conn.execute(

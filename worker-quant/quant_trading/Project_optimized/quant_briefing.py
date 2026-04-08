@@ -996,6 +996,66 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
         "",
         "---",
         "",
+        "## 零、隔夜跨资产信号",
+        "",
+    ]
+
+    # 跨资产信号 (from DB)
+    try:
+        from cross_asset_signals import load_latest_cross_asset
+        ca = load_latest_cross_asset(conn)
+        if ca:
+            sp_str = f"S&P500: {ca.get('sp500_close', 'N/A')} ({ca.get('sp500_overnight_pct', 0):+.2f}%)" if ca.get('sp500_close') else "S&P500: N/A"
+            uj_str = f"USD/JPY: {ca.get('usdjpy', 'N/A')} ({ca.get('usdjpy_change_pct', 0):+.2f}%)" if ca.get('usdjpy') else "USD/JPY: N/A"
+            vix_str = f"VIX: {ca.get('vix_close', 'N/A')} ({ca.get('vix_change_pct', 0):+.2f}%)" if ca.get('vix_close') else "VIX: N/A"
+            nk_str = f"NK Futures: {ca.get('nk_futures', 'N/A')} ({ca.get('nk_futures_gap_pct', 0):+.2f}%)" if ca.get('nk_futures') else "NK Futures: N/A"
+            score = ca.get('cross_asset_score', 0.5)
+            adj = ca.get('regime_adjustment', 'neutral')
+            adj_cn = {"upgrade": "偏多", "neutral": "中性", "downgrade": "偏空"}
+            oil_str = f"WTI: {ca.get('crude_oil', 'N/A')} ({ca.get('crude_oil_change_pct', 0):+.2f}%)" if ca.get('crude_oil') else "WTI: N/A"
+            gold_str = f"Gold: {ca.get('gold', 'N/A')} ({ca.get('gold_change_pct', 0):+.2f}%)" if ca.get('gold') else "Gold: N/A"
+            copper_str = f"Copper: {ca.get('copper', 'N/A')} ({ca.get('copper_change_pct', 0):+.2f}%)" if ca.get('copper') else "Copper: N/A"
+            sox_str = f"SOX: {ca.get('sox', 'N/A')} ({ca.get('sox_change_pct', 0):+.2f}%)" if ca.get('sox') else "SOX: N/A"
+            lines += [
+                f"- {sp_str}  {uj_str}",
+                f"- {vix_str}  {nk_str}",
+                f"- {oil_str}  {gold_str}",
+                f"- {copper_str}  {sox_str}",
+                f"- 跨资产 regime 信号: **{score:.2f}** ({adj_cn.get(adj, adj)}) → 建议 {adj.upper()}",
+                "",
+            ]
+        else:
+            lines += ["- (无跨资产数据，请运行 `python cross_asset_signals.py`)", ""]
+    except Exception:
+        lines += ["- (跨资产模块未就绪)", ""]
+
+    # 宏观事件检测 (from macro_events table)
+    try:
+        from macro_event_detector import load_active_event
+        asof_for_event = report.get("asof") or datetime.now().strftime("%Y-%m-%d")
+        macro_ev = load_active_event(conn, asof_for_event)
+        if macro_ev and macro_ev.get("alert_level") in ("L1", "L2"):
+            level = macro_ev["alert_level"]
+            level_icon = "🔴" if level == "L1" else "🟡"
+            eboost = macro_ev.get("effective_boost", 0)
+            decay = macro_ev.get("decay", 1.0)
+            days_el = macro_ev.get("days_elapsed", 0)
+            dur = macro_ev.get("duration_days", 3)
+            ev_summary = macro_ev.get("event_summary") or "(规则引擎检测)"
+            lines += [
+                f"### 宏观事件检测 {level_icon}",
+                f"- **{level}级事件** (来源日: {macro_ev.get('event_asof', 'N/A')})",
+                f"- 事件: {ev_summary}",
+                f"- regime boost: {macro_ev.get('original_boost', 0):+.4f} × 衰减{decay:.2f} = **{eboost:+.4f}**",
+                f"- 持续: {days_el}/{dur} 天已过",
+                "",
+            ]
+        else:
+            lines += ["### 宏观事件检测", "- 无活跃宏观事件", ""]
+    except Exception:
+        lines += ["### 宏观事件检测", "- (宏观事件模块未就绪)", ""]
+
+    lines += [
         "## 一、市场状态",
         f"- 日经ETF ({NIKKEI_ETF}): **{etf.get('cur','N/A')}**  "
         f"({'+' if (etf.get('chg_pct') or 0) >= 0 else ''}{etf.get('chg_pct','N/A')}%)",

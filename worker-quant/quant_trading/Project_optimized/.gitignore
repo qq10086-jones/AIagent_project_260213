@@ -14,6 +14,9 @@ reports/paper_trading_account.json
 reports/fundamentals_status.json
 reports/fundamentals_status.md
 
+# Pytest local temp
+.pytest_tmp/
+
 # Secrets
 .env
 *.env

@@ -3,15 +3,22 @@
   "simulation": false,
   "benchmark_ticker": "1321.T",
   "px_b": 55950.0,
-  "fast_ma": 55559.0,
-  "slow_ma": 56638.0,
+  "fast_ma": 55566.5,
+  "slow_ma": 56640.5,
   "vix_ticker": "1552.T",
   "vix_value": null,
-  "sprint_final_state": "off",
-  "sprint_scale": 0.25,
-  "ma_state": "off",
-  "diagnosis": "MA regime only",
-  "enter_line": 56071.62,
-  "exit_line": 56114.590000000004,
-  "vix_missing_policy": "ma_only"
+  "sprint_final_state": "caution",
+  "sprint_scale": 0.11644194914808015,
+  "regime_score": 0.21404307203144407,
+  "raw_score": -0.4336,
+  "components": {
+    "ma_signal": -0.7389,
+    "slope_signal": -0.5486,
+    "price_signal": -0.3502,
+    "volume_signal": 0.0,
+    "cross_asset_signal": -0.1986
+  },
+  "ma_gap_pct": -1.896,
+  "diagnosis": "regime_v2_continuous",
+  "regime_version": "v2"
 }

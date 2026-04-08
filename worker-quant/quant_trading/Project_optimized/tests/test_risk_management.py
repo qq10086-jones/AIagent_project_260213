@@ -409,3 +409,81 @@ class TestBackwardCompatibility:
         ok2, r2 = sprint_exit_check_v2(row, 2, "on")
         assert ok1 == ok2
         assert r1 == r2
+
+
+# ============================================================
+# T6: NAV staleness auto-rebuild
+# ============================================================
+
+class TestNAVStalenessGuard:
+    def test_stale_snapshot_triggers_rebuild(self):
+        """fills 比 snapshot 更新时，应自动重建 snapshot。"""
+        from make_decision import _latest_account_snapshot
+        conn = _create_test_db()
+
+        # 建初始 snapshot: asof=04-05, cash=400000, nav=450000
+        conn.execute("""
+            INSERT INTO account_snapshots(asof, strategy_id, ts, run_id, cash, positions_value, nav)
+            VALUES ('2026-04-05', 'sprint', '2026-04-05T16:30:00', 'run1', 400000, 50000, 450000)
+        """)
+        # 建 04-06 的 fill（比 snapshot 更新）
+        conn.execute("""
+            INSERT INTO fills(fill_id, run_id, asof, strategy_id, ts, symbol, side, qty, price, fee, tax)
+            VALUES ('f1', 'run2', '2026-04-06', 'sprint', '2026-04-06 09:00', 'TEST.T', 'SELL', 100, 500, 0, 0)
+        """)
+        # 建 positions for 04-06 (卖完后无持仓)
+        conn.commit()
+
+        snap_asof, cash, nav = _latest_account_snapshot(conn, '2026-04-06', 'sprint')
+        # 应该被自动重建到 04-06
+        assert snap_asof == '2026-04-06'
+
+    def test_fresh_snapshot_no_rebuild(self):
+        """snapshot 与 fills 同步时不触发重建。"""
+        from make_decision import _latest_account_snapshot
+        conn = _create_test_db()
+
+        conn.execute("""
+            INSERT INTO account_snapshots(asof, strategy_id, ts, run_id, cash, positions_value, nav)
+            VALUES ('2026-04-06', 'sprint', '2026-04-06T16:30:00', 'run1', 400000, 50000, 450000)
+        """)
+        conn.execute("""
+            INSERT INTO fills(fill_id, run_id, asof, strategy_id, ts, symbol, side, qty, price, fee, tax)
+            VALUES ('f1', 'run1', '2026-04-06', 'sprint', '2026-04-06 09:00', 'TEST.T', 'SELL', 100, 500, 0, 0)
+        """)
+        conn.commit()
+
+        snap_asof, cash, nav = _latest_account_snapshot(conn, '2026-04-06', 'sprint')
+        assert snap_asof == '2026-04-06'
+        assert cash == 400000  # 原值不变，没有重建
+
+
+# ============================================================
+# T7: FULL_EXIT drawdown forces SELL ALL
+# ============================================================
+
+class TestFullExitForcesSellAll:
+    def test_full_exit_clears_target_weights(self):
+        """dd_scale=0 时 target_weights 被清空，build_orders 为所有持仓生成 SELL。"""
+        from make_decision import build_orders
+        conn = _create_test_db()
+
+        # 持仓: 100 股 HOLD.T @ 1000
+        conn.execute("""
+            INSERT INTO positions(asof, strategy_id, symbol, qty, avg_cost, market_price, market_value, unrealized_pnl)
+            VALUES ('2026-04-07', 'sprint', 'HOLD.T', 100, 1000, 1000, 100000, 0)
+        """)
+        _insert_prices(conn, "HOLD.T", [("2026-04-07", 1000, 1010, 990, 1000, 500000)])
+        conn.execute("INSERT INTO tickers(symbol, sector) VALUES ('HOLD.T', 'test')")
+        conn.commit()
+
+        # 空的 target_weights（模拟 FULL_EXIT 清空后的状态）
+        empty_tw = pd.DataFrame(columns=["symbol", "target_weight"])
+        orders, info = build_orders(
+            conn, "2026-04-07", empty_tw, cash_jpy=300000,
+            lot_size=100, min_trade_notional=10000, strategy_id="sprint",
+        )
+        sell_orders = [o for o in orders if o.side == "SELL"]
+        assert len(sell_orders) == 1
+        assert sell_orders[0].symbol == "HOLD.T"
+        assert sell_orders[0].qty == 100

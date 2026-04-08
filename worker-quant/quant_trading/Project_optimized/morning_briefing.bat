@@ -18,8 +18,20 @@ echo =============================================== > "%LOG%"
 echo [INFO] MORNING BRIEFING START %date% %time% >> "%LOG%"
 echo =============================================== >> "%LOG%"
 
+REM Step 0: Cross-asset overnight signals (S&P500, USD/JPY, VIX, NK futures, Oil, Gold, Copper, SOX)
+echo [0/5] Fetching cross-asset signals... >> "%LOG%"
+python cross_asset_signals.py --db japan_market.db >> "%LOG%" 2>&1
+
+REM Step 0.5: Macro event detection (rule engine — L1/L2 event check)
+echo [0.5/6] Running macro event detector... >> "%LOG%"
+python macro_event_detector.py --db japan_market.db >> "%LOG%" 2>&1
+
+REM Step 0.7: LLM macro analysis (Gemma via Ollama — only runs if L1/L2 detected)
+echo [0.7/6] Running macro digest (LLM)... >> "%LOG%"
+python macro_digest.py --db japan_market.db >> "%LOG%" 2>&1
+
 REM Step 1: Quick data refresh (fetch latest prices only, no full model run)
-echo [1/3] Refreshing market data... >> "%LOG%"
+echo [1/4] Refreshing market data... >> "%LOG%"
 python db_update.py --db japan_market.db >> "%LOG%" 2>&1
 
 REM Step 2: Generate full briefing report using yesterday's model output + today's fresh prices

@@ -1,10 +1,10 @@
 {
-  "target_mode": "shadow_hybrid_ic",
+  "target_mode": "sprint_momentum",
   "recommendation": "defer_optimizer_sharpe_objective",
   "rationale": {
     "sharpe": 1.492804022802991,
-    "mean_ic": 0.05130083116521289,
-    "mean_t_stat": 1.1657503,
+    "mean_ic": 0.051247746083727154,
+    "mean_t_stat": 1.0606614,
     "turnover_cv": 0.7523738095232881
   },
   "decision_rule": {

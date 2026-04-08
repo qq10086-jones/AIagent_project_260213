@@ -542,13 +542,67 @@ def generate_sprint_artifacts(
         conn.commit()
 
     effective_off_scale = float(strategy_config.get("benchmark_off_scale", 0.0))
-    latest_features["entry_ok"] = latest_features.apply(
-        lambda row: sprint_entry_check(row, benchmark_state, off_scale=effective_off_scale), axis=1
-    )
+    max_positions = int(strategy_config.get("max_positions", 3))
+    strategy_id = str(strategy_config.get("strategy_id", "sprint"))
+
+    # ── Entry/Exit 分离: 新进仓用 entry_check，现有持仓用 exit_check ──
+    # 加载当前持仓（只看最新快照，qty>0）
+    held_symbols: set[str] = set()
+    held_entry_dates: dict[str, str] = {}
+    try:
+        with sqlite3.connect(db_path) as _pos_conn:
+            _pos_row = _pos_conn.execute(
+                "SELECT MAX(asof) FROM positions WHERE strategy_id=? AND asof<=?",
+                (strategy_id, asof)
+            ).fetchone()
+            _pos_asof = _pos_row[0] if _pos_row and _pos_row[0] else asof
+            _held_rows = _pos_conn.execute(
+                "SELECT symbol, entry_date FROM positions WHERE asof=? AND strategy_id=? AND qty>0",
+                (_pos_asof, strategy_id)
+            ).fetchall()
+            held_symbols = {r[0] for r in _held_rows}
+            held_entry_dates = {r[0]: r[1] for r in _held_rows}
+    except sqlite3.OperationalError:
+        pass  # positions table may not exist in test/fresh DBs
+
     latest_features["sprint_score"] = sprint_score(latest_features)
-    eligible = latest_features[latest_features["entry_ok"]].sort_values("sprint_score", ascending=False).head(
-        int(strategy_config.get("max_positions", 3))
+
+    # Entry check: only for NEW candidates (not currently held)
+    latest_features["entry_ok"] = latest_features.apply(
+        lambda row: sprint_entry_check(row, benchmark_state, off_scale=effective_off_scale)
+        if str(row.get("symbol", "")) not in held_symbols else False,
+        axis=1
     )
+
+    # Exit check: only for CURRENTLY HELD positions
+    stop_loss_cfg = {
+        "stop_loss_vol_mult": float(strategy_config.get("stop_loss_vol_mult", 3.0)),
+        "stop_loss_min_pct": float(strategy_config.get("stop_loss_min_pct", 0.04)),
+        "stop_loss_max_pct": float(strategy_config.get("stop_loss_max_pct", 0.12)),
+        "trailing_activate_pct": float(strategy_config.get("trailing_activate_pct", 0.03)),
+        "trailing_stop_pct": float(strategy_config.get("trailing_stop_pct", 0.02)),
+        "atr_window": int(strategy_config.get("atr_window", 20)),
+    }
+    latest_features["hold_ok"] = False
+    for idx, row in latest_features.iterrows():
+        sym = str(row.get("symbol", ""))
+        if sym not in held_symbols:
+            continue
+        entry_date = held_entry_dates.get(sym, asof)
+        holding_days = max((pd.Timestamp(asof) - pd.Timestamp(entry_date)).days, 0)
+        should_exit, exit_reason = sprint_exit_check(row, holding_days, benchmark_state)
+        latest_features.at[idx, "hold_ok"] = not should_exit
+
+    # Combine: existing holds (not exiting) + new entries (passing entry_check)
+    new_entries = latest_features[latest_features["entry_ok"]].sort_values("sprint_score", ascending=False)
+    existing_holds = latest_features[latest_features["hold_ok"]].sort_values("sprint_score", ascending=False)
+
+    # Existing holds take priority, then fill remaining slots with new entries
+    remaining_slots = max(max_positions - len(existing_holds), 0)
+    eligible = pd.concat([
+        existing_holds,
+        new_entries.head(remaining_slots),
+    ]).drop_duplicates(subset="symbol").head(max_positions)
 
     effective_sprint_gating = bool(model_config.get("news", {}).get("sprint_gating", False))
     if effective_sprint_gating and not bool(news_shadow_summary.get("ready_for_gating_review", False)):
@@ -562,8 +616,23 @@ def generate_sprint_artifacts(
         elif macro_sentiment < -0.5 and benchmark_state == "caution":
             benchmark_scale *= 0.8
 
+    # ── 零选股诊断：区分"正常空仓"和"模型异常" ──
+    _zero_diag = None
     if eligible.empty:
         target_weights = pd.DataFrame(columns=["symbol", "target_weight"])
+        _n_candidates = len(latest_features)
+        _n_entry_ok = int(latest_features["entry_ok"].sum()) if "entry_ok" in latest_features.columns else 0
+        _n_hold_ok = int(latest_features["hold_ok"].sum()) if "hold_ok" in latest_features.columns else 0
+        _has_price_features = "mom_consist" in latest_features.columns
+        if benchmark_state == "off" and effective_off_scale <= 0:
+            _zero_diag = {"cause": "benchmark_off", "detail": "regime=off with zero off_scale"}
+        elif not _has_price_features:
+            _zero_diag = {"cause": "missing_features", "detail": "price features not in feature_daily (compute_price_features.py may not have run)"}
+        elif _n_entry_ok == 0 and _n_hold_ok == 0:
+            _zero_diag = {"cause": "entry_filter", "detail": f"0/{_n_candidates} pass entry_check, 0 held positions passing exit_check"}
+        else:
+            _zero_diag = {"cause": "normal", "detail": f"entry_ok={_n_entry_ok}, hold_ok={_n_hold_ok}, eligible after gating=0"}
+        print(f"[sprint] selected_count=0  cause={_zero_diag['cause']}  {_zero_diag['detail']}")
     else:
         base_weight = 1.0 / len(eligible)
         target_weights = eligible[["symbol"]].copy()
@@ -575,6 +644,15 @@ def generate_sprint_artifacts(
 
     target_weights.to_csv(reports_dir / "target_weights.csv", index=False)
     latest_features.sort_values("sprint_score", ascending=False).to_csv(reports_dir / "sprint_candidates.csv", index=False)
+
+    # Signal decay tracking: record today's scores for future IC validation
+    try:
+        from signal_decay_tracker import record_signal_snapshot
+        with sqlite3.connect(db_path) as _sd_conn:
+            _sd_candidates = latest_features.assign(benchmark_state=benchmark_state).to_dict("records")
+            _sd_n = record_signal_snapshot(_sd_conn, asof, _sd_candidates)
+    except Exception:
+        pass
     regime_payload = {
         "asof": asof,
         "simulation": bool(simulation),
@@ -604,6 +682,8 @@ def generate_sprint_artifacts(
         "benchmark_state": benchmark_state,
         "benchmark_scale": benchmark_scale,
         "selected_count": int(len(target_weights)),
+        "zero_cause": _zero_diag["cause"] if _zero_diag else "none",
+        "zero_detail": _zero_diag["detail"] if _zero_diag else "",
     }
     for path in [reports_dir / "target_weights_meta.json", reports_dir / "target_weights_sprint_momentum_meta.json"]:
         path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -107,6 +107,16 @@ def detect_macro_events(snapshot: Dict[str, Any]) -> Dict[str, Any]:
 
     # 汇总 boost (同级别叠加，跨级别叠加后 clamp)
     total_boost = sum(t["boost"] for t in triggered)
+
+    # VIX 极值修正: VIX 单日涨幅 > 50% 属于"恐慌极值"，短期反弹概率高，
+    # 此时规则引擎倾向于给出过大负 boost；将总 boost 乘以 0.5 以避免过度减仓。
+    # 历史依据: 2024-08-05 BOJ 冲击 VIX+64.9%，规则给 -0.30 但实际翌日+7.5%。
+    vix_chg = float(snapshot.get("vix_change_pct") or 0.0)
+    _vix_panic_dampened = False
+    if vix_chg >= 50.0 and total_boost < 0:
+        total_boost = total_boost * 0.5
+        _vix_panic_dampened = True
+
     clamped_boost = max(-MAX_ABS_BOOST, min(MAX_ABS_BOOST, total_boost))
 
     # L1 → 3 天, L2 → 2 天, none → 0 天
@@ -121,6 +131,7 @@ def detect_macro_events(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             "n_rules_triggered": len(triggered),
             "raw_boost_sum": round(total_boost, 4),
             "clamped": total_boost != clamped_boost,
+            "vix_panic_dampened": _vix_panic_dampened,
         },
     }
 
@@ -219,6 +230,100 @@ def load_active_event(conn: sqlite3.Connection, asof: str) -> Optional[Dict[str,
         }
 
     return None
+
+
+# ── LLM 精度追踪 ────────────────────────────────────────────────
+
+def backfill_macro_event_actuals(conn: sqlite3.Connection, benchmark_ticker: str = "1321.T") -> dict:
+    """回填历史宏观事件的实际 NK 收益，计算 LLM 方向准确率。
+
+    对于每个 macro_events 行，取 asof 之后 1 日和 5 日的 benchmark 收益率，
+    然后对比 final_boost 的方向 (+/-) 与实际收益方向。
+
+    Returns summary dict with direction_accuracy, event_count, etc.
+    """
+    ensure_macro_events_table(conn)
+
+    # Add tracking columns if they don't exist
+    existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(macro_events)").fetchall()}
+    for col, col_type in [
+        ("actual_1d_ret", "REAL"), ("actual_5d_ret", "REAL"),
+        ("direction_correct_1d", "INTEGER"), ("direction_correct_5d", "INTEGER"),
+    ]:
+        if col not in existing_cols:
+            conn.execute(f"ALTER TABLE macro_events ADD COLUMN {col} {col_type}")
+    conn.commit()
+
+    # Get events that need backfill (actual_1d_ret is NULL)
+    events = conn.execute(
+        "SELECT asof, final_boost FROM macro_events WHERE actual_1d_ret IS NULL AND alert_level IN ('L1','L2')"
+    ).fetchall()
+
+    if not events:
+        return {"status": "no_pending", "backfilled": 0}
+
+    from datetime import date as dt_date
+
+    backfilled = 0
+    for event_asof, final_boost in events:
+        try:
+            # Get benchmark prices after event
+            prices = conn.execute(
+                "SELECT date, close FROM daily_prices WHERE symbol=? AND date>? ORDER BY date LIMIT 6",
+                (benchmark_ticker, event_asof)
+            ).fetchall()
+            # Get event-day close as base
+            base_row = conn.execute(
+                "SELECT close FROM daily_prices WHERE symbol=? AND date<=? ORDER BY date DESC LIMIT 1",
+                (benchmark_ticker, event_asof)
+            ).fetchone()
+            if not base_row or not prices:
+                continue
+
+            base_px = float(base_row[0])
+            ret_1d = (float(prices[0][1]) - base_px) / base_px if len(prices) >= 1 else None
+            ret_5d = (float(prices[min(4, len(prices)-1)][1]) - base_px) / base_px if len(prices) >= 1 else None
+
+            # Direction check: boost > 0 means "bullish", actual > 0 means "NK went up"
+            dir_correct_1d = None
+            dir_correct_5d = None
+            if ret_1d is not None and abs(final_boost) > 1e-6:
+                dir_correct_1d = 1 if (final_boost > 0 and ret_1d > 0) or (final_boost < 0 and ret_1d < 0) else 0
+            if ret_5d is not None and abs(final_boost) > 1e-6:
+                dir_correct_5d = 1 if (final_boost > 0 and ret_5d > 0) or (final_boost < 0 and ret_5d < 0) else 0
+
+            conn.execute(
+                """UPDATE macro_events SET actual_1d_ret=?, actual_5d_ret=?,
+                   direction_correct_1d=?, direction_correct_5d=? WHERE asof=?""",
+                (ret_1d, ret_5d, dir_correct_1d, dir_correct_5d, event_asof)
+            )
+            backfilled += 1
+        except Exception:
+            continue
+
+    conn.commit()
+
+    # Compute aggregate accuracy
+    stats = conn.execute("""
+        SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN direction_correct_1d=1 THEN 1 ELSE 0 END) as correct_1d,
+            SUM(CASE WHEN direction_correct_5d=1 THEN 1 ELSE 0 END) as correct_5d,
+            COUNT(direction_correct_1d) as evaluated_1d,
+            COUNT(direction_correct_5d) as evaluated_5d
+        FROM macro_events WHERE alert_level IN ('L1','L2')
+    """).fetchone()
+
+    total, correct_1d, correct_5d, eval_1d, eval_5d = stats
+    return {
+        "status": "ok",
+        "backfilled": backfilled,
+        "total_events": total,
+        "evaluated_1d": eval_1d,
+        "accuracy_1d": round(correct_1d / max(eval_1d, 1), 4),
+        "evaluated_5d": eval_5d,
+        "accuracy_5d": round(correct_5d / max(eval_5d, 1), 4),
+    }
 
 
 # ── CLI ──────────────────────────────────────────────────────────

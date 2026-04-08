@@ -351,3 +351,15 @@ python quant_briefing.py --mode market
 - `execution_model.py`
 - `news_overlay.py`
 - `portfolio_optimizer.py`
+- `compute_price_features.py` — 价格技术特征计算（sprint 信号必需）
+- `cross_asset_signals.py` — 跨资产信号（8 品种）
+- `macro_event_detector.py` — 宏观事件规则引擎（L1/L2）
+- `macro_digest.py` — Gemma4 LLM 分析管线
+
+## Macro Intelligence Pipeline (2026-04-08)
+
+- 三层架构：L1 cross_asset → L2 规则引擎 → L3 Gemma4 LLM
+- `compute_price_features.py` 在 daily_run step 1.3 写入 feature_daily（sprint 必需）
+- LLM: Ollama `/api/chat` endpoint, model=gemma4:26b, num_predict=2048
+- Entry/Exit 分离：新进仓用 entry_check，持仓用 exit_check（不再因 entry_filter 空而机械清仓）
+- 新闻源：google,boj,trade,macro,gdelt（kabutan deprecated）

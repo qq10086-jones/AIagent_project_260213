@@ -1116,6 +1116,52 @@ def main():
         else:
             kelly = {}
 
+        # ── 持仓保全：当 entry_filter 拦截所有新进仓时，不强制清仓现有持仓 ──────
+        # 逻辑：
+        #   - 目标权重为空 (signal 无法选股)
+        #   - 原因是 entry_filter（不是 benchmark=off 或 drawdown 全平）
+        #   - 现有持仓未触发止损
+        # 此时将现有持仓按当前市值权重注入 target_weights，阻止机械性 rebalance 卖出。
+        _benchmark_state = str(target_meta.get("benchmark_state", "on") or "on")
+        _tw_is_empty = (
+            target_weights.empty
+            or float(target_weights.get("target_weight", pd.Series(dtype=float)).fillna(0).sum()) < 1e-9
+        )
+        # Preserve existing positions when:
+        #   - signal returned empty target (entry_filter blocked all candidates)
+        #   - benchmark is NOT off (regime allows holding)
+        #   - no drawdown full-exit triggered
+        # Without this, existing profitable positions get sold mechanically.
+        if _tw_is_empty and _benchmark_state != "off" and dd_scale > 0:
+            _, _cur_pos = _latest_positions(conn, asof, strategy_id=args.strategy_id)
+            if _cur_pos:
+                # Compute approximate NAV for weight calculation
+                _cur_nav_est = float(effective_cash)
+                _held_rows = []
+                for _sym, _qty in _cur_pos.items():
+                    _, _px = _last_close(conn, _sym, asof)
+                    if _px is not None:
+                        _val = float(_qty) * float(_px)
+                        _cur_nav_est += _val
+                        _held_rows.append({"symbol": _sym, "value": _val})
+                if _held_rows and _cur_nav_est > 0:
+                    _hold_df = pd.DataFrame([
+                        {"symbol": r["symbol"], "target_weight": r["value"] / _cur_nav_est}
+                        for r in _held_rows
+                    ])
+                    target_weights = _hold_df
+                    _held_syms = [r["symbol"] for r in _held_rows]
+                    print(f"[entry_filter_hold] Preserving {len(_held_rows)} existing position(s) "
+                          f"instead of rebalancing to zero. Symbols: {_held_syms}")
+                    # Cancel any stale SELL orders for preserved positions
+                    for _hsym in _held_syms:
+                        conn.execute(
+                            "UPDATE orders SET status='cancelled' "
+                            "WHERE symbol=? AND side='SELL' AND status='proposed' AND strategy_id=?",
+                            (_hsym, args.strategy_id),
+                        )
+                    conn.commit()
+
         # 止损/止盈检查: 检查现有持仓是否触发退出
         stop_loss_cfg = {
             "stop_loss_vol_mult": float(getattr(args, "stop_loss_vol_mult", 3.0)),

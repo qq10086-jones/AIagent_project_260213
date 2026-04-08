@@ -45,9 +45,10 @@ def ensure_journal_table(conn) -> None:
 
 def _load_orders_proposal(artifact_root: Path, asof: str) -> list[dict]:
     """Load orders_proposal.csv from latest decision artifact."""
-    candidates = sorted(artifact_root.glob(f"{asof}/*/orders_proposal.csv")) if artifact_root.exists() else []
+    candidates = list(artifact_root.glob(f"{asof}/*/orders_proposal.csv")) if artifact_root.exists() else []
     if not candidates:
         return []
+    candidates.sort(key=lambda p: p.stat().st_mtime)
     rows = []
     with open(candidates[-1], encoding="utf-8") as f:
         for row in csv.DictReader(f):

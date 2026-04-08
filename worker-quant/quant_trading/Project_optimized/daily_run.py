@@ -163,6 +163,61 @@ def apply_simulation_env(*, asof: str | None, mode: str | None, state_path: str 
     os.environ["WORKER_QUANT_SIMULATION_STRICT_PIT"] = "1" if strict_pit else "0"
 
 
+def refresh_positions_market_prices(db_path: str, asof: str) -> int:
+    """
+    Insert a fresh positions snapshot for today with updated market prices.
+
+    For each (strategy_id, symbol) with qty > 0 in the latest available snapshot,
+    look up today's close in daily_prices and INSERT OR REPLACE a new row with
+    asof=today. Historical rows are never mutated.
+
+    Returns the number of positions refreshed.
+    """
+    with sqlite3.connect(db_path) as conn:
+        # Find the latest snapshot date per strategy, then read held positions from it.
+        # Using per-strategy MAX(asof) avoids treating stale pre-sell rows as live.
+        rows = conn.execute("""
+            SELECT p.strategy_id, p.symbol, p.qty, p.avg_cost,
+                   p.high_since_entry, p.entry_date
+            FROM positions p
+            INNER JOIN (
+                SELECT strategy_id, MAX(asof) AS max_asof
+                FROM positions
+                GROUP BY strategy_id
+            ) latest ON p.strategy_id = latest.strategy_id
+                      AND p.asof = latest.max_asof
+            WHERE p.qty > 0
+        """).fetchall()
+
+        if not rows:
+            return 0
+
+        refreshed = 0
+        for strategy_id, symbol, qty, avg_cost, high_since_entry, entry_date in rows:
+            price_row = conn.execute(
+                "SELECT close FROM daily_prices WHERE symbol=? AND date<=? ORDER BY date DESC LIMIT 1",
+                (symbol, asof),
+            ).fetchone()
+            if not price_row:
+                continue
+            close_price = float(price_row[0])
+            market_value = round(close_price * qty, 4)
+            unrealized_pnl = round((close_price - (avg_cost or 0.0)) * qty, 4)
+            new_high = max(float(high_since_entry or 0.0), close_price)
+            conn.execute("""
+                INSERT OR REPLACE INTO positions
+                    (asof, strategy_id, symbol, qty, avg_cost,
+                     market_price, market_value, unrealized_pnl,
+                     high_since_entry, entry_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (asof, strategy_id, symbol, qty, avg_cost,
+                  close_price, market_value, unrealized_pnl,
+                  new_high, entry_date))
+            refreshed += 1
+        conn.commit()
+    return refreshed
+
+
 def _latest_fundamental_status(db_path: str) -> dict:
     with sqlite3.connect(db_path) as conn:
         source_rows = conn.execute(
@@ -282,7 +337,9 @@ def _is_discord_webhook_url(webhook_url: str) -> bool:
     return host in {"discord.com", "discordapp.com", "www.discord.com", "www.discordapp.com"} and "/api/webhooks/" in path
 
 
-def _discord_embed_color(level: str) -> int:
+def _discord_embed_color(level: str, event: str = "") -> int:
+    if event == "macro_event_detected":
+        return 0xFF4500  # OrangeRed — distinct from normal warning
     palette = {
         "info": 0x3498DB,
         "warning": 0xF1C40F,
@@ -302,24 +359,103 @@ def _format_discord_webhook_payload(payload: dict) -> dict:
     level = str(payload.get("level", "info")).lower()
     event = str(payload.get("event", "runtime_event"))
     ts_utc = str(payload.get("ts_utc", ""))
-    detail_lines = []
-    for key, value in payload.items():
-        if key in {"ts_utc", "level", "event"}:
-            continue
-        detail_lines.append(f"`{key}`: {_truncate_discord_text(value, limit=180)}")
-    description = "\n".join(detail_lines[:10]) if detail_lines else "No extra fields"
+
+    if event == "action_plan_generated":
+        description = _format_action_plan_embed(payload)
+    elif event == "macro_event_detected":
+        description = _format_macro_event_embed(payload)
+    else:
+        detail_lines = []
+        for key, value in payload.items():
+            if key in {"ts_utc", "level", "event"}:
+                continue
+            detail_lines.append(f"`{key}`: {_truncate_discord_text(value, limit=180)}")
+        description = "\n".join(detail_lines[:10]) if detail_lines else "No extra fields"
+
     return {
         "username": "worker-quant",
         "embeds": [
             {
                 "title": f"[{level.upper()}] {event}",
                 "description": description,
-                "color": _discord_embed_color(level),
+                "color": _discord_embed_color(level, event),
                 "footer": {"text": "worker-quant runtime alert"},
                 "timestamp": ts_utc or _utc_now_iso(),
             }
         ],
     }
+
+
+def _format_macro_event_embed(payload: dict) -> str:
+    """Human-readable Discord embed for macro_event_detected events."""
+    alert_level = str(payload.get("alert_level", "?"))
+    event_summary = str(payload.get("event_summary") or payload.get("rule_summary") or "宏観イベント検出")
+    event_type = str(payload.get("event_type", "other"))
+    regime_boost = payload.get("regime_boost", 0.0)
+    try:
+        regime_boost = float(regime_boost)
+    except (TypeError, ValueError):
+        regime_boost = 0.0
+    duration_days = payload.get("duration_days", 3)
+    confidence = payload.get("confidence")
+    impact_direction = str(payload.get("impact_direction", "unknown"))
+    sectors_positive = payload.get("sectors_positive") or []
+    sectors_negative = payload.get("sectors_negative") or []
+    triggered_rules = payload.get("triggered_rules_summary", "")
+    source = str(payload.get("source", "rules"))
+
+    level_emoji = {"L1": "🚨", "L2": "⚠️"}.get(alert_level, "📢")
+    direction_emoji = {"positive": "🟢", "negative": "🔴", "mixed": "🟡"}.get(impact_direction, "⚪")
+    boost_sign = "+" if regime_boost >= 0 else ""
+
+    lines = [
+        f"{level_emoji} **{alert_level} 宏観事件** — `{event_type}`",
+        "",
+        f"**{event_summary}**",
+        "",
+        f"影響方向: {direction_emoji} `{impact_direction}`",
+        f"Regime Boost: `{boost_sign}{regime_boost:.2f}`  |  持続: `{duration_days}d`",
+    ]
+    if confidence is not None:
+        try:
+            lines.append(f"LLM信頼度: `{float(confidence):.0%}`  (source: {source})")
+        except (TypeError, ValueError):
+            pass
+    if sectors_positive:
+        lines.append(f"受益: {', '.join(str(s) for s in sectors_positive[:4])}")
+    if sectors_negative:
+        lines.append(f"受損: {', '.join(str(s) for s in sectors_negative[:4])}")
+    if triggered_rules:
+        lines.append(f"触発: `{triggered_rules}`")
+
+    return "\n".join(lines)
+
+
+def _format_action_plan_embed(payload: dict) -> str:
+    """Human-readable Discord embed for action_plan_generated events."""
+    action_summary = str(payload.get("action_summary", "—"))
+    regime = str(payload.get("regime", "unknown"))
+    pending_sells = int(payload.get("pending_sells", 0))
+    pending_buys = int(payload.get("pending_buys", 0))
+    held = int(payload.get("held_positions", 0))
+    alerts = int(payload.get("risk_alerts", 0))
+
+    regime_emoji = {"off": "🔴", "caution": "🟡", "on": "🟢"}.get(regime, "⚪")
+
+    lines = [
+        f"**市场状态** {regime_emoji} `{regime}`",
+        "",
+        f"**今日操作**",
+        f"> {action_summary}",
+        "",
+        f"📊 持仓 **{held}** 只　｜　"
+        f"🔻 待卖 **{pending_sells}** 只　｜　"
+        f"🔺 待买 **{pending_buys}** 只",
+    ]
+    if alerts > 0:
+        lines.append(f"⚠️ 风险警报 **{alerts}** 条 — 请立即查看 action_plan_today.json")
+
+    return "\n".join(lines)
 
 
 def _post_runtime_alert_webhook(payload: dict) -> tuple[bool, str]:
@@ -714,6 +850,32 @@ def main():
     )
     emit_runtime_event(reports_dir, "phase_resolved", phase=phase, strategy_ids=[p["strategy_id"] for p in strategy_profiles], total_nav=total_nav)
 
+    # 0) Capital tier 阶梯适配 — 根据 NAV 自动调整组件激活级别
+    try:
+        from capital_tier import resolve_capital_tier, apply_tier_overrides
+        _tier_conn = sqlite3.connect(db_path)
+        _tier_result = resolve_capital_tier(cfg, _tier_conn, strategy_id=strategy_id)
+        _tier_conn.close()
+        if _tier_result["tier"] > 0:
+            cfg = apply_tier_overrides(cfg, _tier_result)
+            # 重新解析被 tier 覆盖的关键配置
+            model = cfg.get("model", {})
+            strategy_profile = cfg.get("strategy_profiles", {}).get(strategy_id, strategy_profile)
+            print(f">> [capital_tier] Tier {_tier_result['tier']} ({_tier_result['label']})  "
+                  f"NAV={_tier_result['nav']:,.0f}  {_tier_result['reason']}")
+            emit_runtime_event(
+                reports_dir, "capital_tier_resolved",
+                tier=_tier_result["tier"],
+                label=_tier_result["label"],
+                nav=_tier_result["nav"],
+                reason=_tier_result["reason"],
+                overrides=_tier_result["overrides"],
+            )
+        else:
+            print(f">> [capital_tier] disabled")
+    except Exception as _tier_err:
+        print(f"⚠️  capital_tier (non-fatal): {_tier_err}")
+
     # 0a) 每日 DB 备份（防数据丢失，保留最近 7 天）
     backup_dir = Path(db_path).parent / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
@@ -747,6 +909,45 @@ def main():
         run_and_capture(cmd)
 
     asof = resolve_asof(db_path, asof_override=args.asof_override)
+
+    # 1.2) Refresh positions snapshot with today's market prices
+    n_refreshed = refresh_positions_market_prices(db_path, asof)
+    if n_refreshed > 0:
+        print(f">> positions market prices refreshed: {n_refreshed} rows (asof={asof})")
+    else:
+        print(f">> positions market prices: no held positions to refresh (asof={asof})")
+
+    # 1.3) Compute price-based technical features → feature_daily
+    # (needed by sprint_signal entry_filter: mom_consist_pctile, high52w, vol_z, etc.)
+    if not is_simulation:
+        try:
+            from compute_price_features import run_compute_price_features
+            _pf_result = run_compute_price_features(db_path, asof)
+            print(f">> [price_features] {_pf_result.get('status')}  "
+                  f"symbols={_pf_result.get('symbols', 0)}  "
+                  f"rows={_pf_result.get('rows_written', 0)}")
+        except Exception as _pf_err:
+            print(f"⚠️  compute_price_features (non-fatal): {_pf_err}")
+
+    # 1.4) Health check: verify feature_daily has all sprint-required features
+    _SPRINT_REQUIRED_FEATURES = {"mom_consist", "high52w", "vol_z", "sharpe_60", "ma_gap", "mom_consist_pctile"}
+    try:
+        _hc_conn = sqlite3.connect(db_path)
+        _hc_feats = set(r[0] for r in _hc_conn.execute(
+            "SELECT DISTINCT feature_name FROM feature_daily WHERE asof=?", (asof,)
+        ).fetchall())
+        _hc_conn.close()
+        _hc_missing = _SPRINT_REQUIRED_FEATURES - _hc_feats
+        if _hc_missing:
+            print(f"⚠️  [health_check] feature_daily MISSING sprint-required features for {asof}: {_hc_missing}")
+            emit_runtime_event(
+                reports_dir, "feature_health_check_failed", level="warning",
+                asof=asof, missing_features=list(_hc_missing),
+            )
+        else:
+            print(f">> [health_check] feature_daily OK — {len(_hc_feats)} features for {asof}")
+    except Exception as _hc_err:
+        print(f"⚠️  feature health check failed: {_hc_err}")
 
     # 1.5) Optional fundamentals update with degraded-cache support
     fund = cfg.get("fundamental", {})
@@ -804,7 +1005,7 @@ def main():
     news_cfg = cfg.get("model", {}).get("news", {})
     if news_cfg.get("enabled", False) and not is_simulation:
         lookback_h = float(news_cfg.get("lookback_hours", 26.0))
-        sources    = str(news_cfg.get("sources", "kabutan,google,gdelt"))
+        sources    = str(news_cfg.get("sources", "google,boj,trade,macro,gdelt"))
         cmd = [
             "python", "news_to_db.py",
             "--db", db_path,
@@ -816,6 +1017,91 @@ def main():
             run_and_capture(cmd)
         except RuntimeError as e:
             print(f"⚠️  news_to_db.py failed (non-fatal, overlay disabled): {e}")
+
+    # 2.7) Cross-asset update + macro event detection — must run BEFORE sprint signal
+    #       so that V2 regime reads fresh cross_asset data from DB.
+    ca_cfg = cfg.get("cross_asset", {})
+    if ca_cfg.get("enabled", False) and not is_simulation:
+        try:
+            from cross_asset_signals import (
+                fetch_cross_asset_snapshot,
+                compute_cross_asset_regime_signal,
+                ensure_cross_asset_table,
+                save_cross_asset_snapshot,
+            )
+            from trade_schema import connect as _ts_connect
+            _ca_conn = _ts_connect(db_path)
+            ensure_cross_asset_table(_ca_conn)
+            _ca_snapshot = fetch_cross_asset_snapshot(asof=asof)
+            _ca_signal = compute_cross_asset_regime_signal(
+                _ca_snapshot, conn=_ca_conn, weights=ca_cfg.get("weights")
+            )
+            save_cross_asset_snapshot(_ca_conn, _ca_snapshot, _ca_signal)
+            print(f">> [cross_asset] score={_ca_signal['cross_asset_score']:.4f}  "
+                  f"adjustment={_ca_signal['regime_adjustment']}")
+
+            # Macro event detection (rule engine) — uses fresh cross_asset
+            try:
+                from macro_event_detector import detect_macro_events, save_macro_event
+                _macro_result = detect_macro_events(_ca_snapshot)
+                _macro_level = _macro_result.get("alert_level", "none")
+                _macro_boost = _macro_result.get("rule_boost", 0.0)
+                save_macro_event(_ca_conn, asof, _macro_result)
+                print(f">> [macro_event] alert_level={_macro_level}  "
+                      f"rule_boost={_macro_boost:+.4f}  "
+                      f"triggered={len(_macro_result.get('triggered_rules', []))}")
+                _me_cfg = cfg.get("macro_events", {})
+                _digest = None
+                if _me_cfg.get("llm", {}).get("enabled", False) and _macro_level in ("L1", "L2"):
+                    try:
+                        from macro_digest import run_macro_digest
+                        _llm_cfg = _me_cfg.get("llm", {})
+                        _digest = run_macro_digest(
+                            _ca_conn, asof, _ca_snapshot, _macro_level,
+                            _macro_result.get("triggered_rules"),
+                            endpoint=str(_llm_cfg.get("endpoint", "http://localhost:11434")),
+                            model=str(_llm_cfg.get("model", "gemma4:26b")),
+                            timeout=int(_llm_cfg.get("timeout_seconds", 120)),
+                        )
+                        print(f">> [macro_digest] status={_digest['status']}")
+                    except Exception as _md_err:
+                        print(f"⚠️  macro_digest LLM (non-fatal): {_md_err}")
+
+                # Discord webhook push for L1/L2 events
+                if _macro_level in ("L1", "L2"):
+                    _alert_cfg = _me_cfg.get("alerts", {})
+                    _should_alert = (
+                        (_macro_level == "L1" and _alert_cfg.get("discord_on_l1", True)) or
+                        (_macro_level == "L2" and _alert_cfg.get("discord_on_l2", False))
+                    )
+                    if _should_alert:
+                        _llm_r = (_digest or {}).get("llm_result") or {}
+                        _triggered_names = ", ".join(
+                            r.get("name", "") for r in _macro_result.get("triggered_rules", [])
+                        )
+                        _final_boost = _llm_r.get("regime_boost") if _llm_r else _macro_boost
+                        emit_runtime_event(
+                            reports_dir,
+                            "macro_event_detected",
+                            level="warning" if _macro_level == "L1" else "info",
+                            alert_level=_macro_level,
+                            event_summary=_llm_r.get("event_summary") or _macro_result.get("summary", ""),
+                            event_type=_llm_r.get("event_type", "other"),
+                            impact_direction=_llm_r.get("impact_direction", "unknown"),
+                            regime_boost=round(float(_final_boost or 0.0), 4),
+                            duration_days=_llm_r.get("duration_days", _me_cfg.get("boost", {}).get("default_duration_days", 3)),
+                            confidence=_llm_r.get("confidence"),
+                            sectors_positive=_llm_r.get("sectors_positive", []),
+                            sectors_negative=_llm_r.get("sectors_negative", []),
+                            triggered_rules_summary=_triggered_names,
+                            source=_llm_r.get("source", "rules") if _llm_r else "rules",
+                            asof=asof,
+                        )
+            except Exception as _me_err:
+                print(f"⚠️  macro_event_detector (non-fatal): {_me_err}")
+            _ca_conn.close()
+        except Exception as _ca_err:
+            print(f"⚠️  cross_asset update (non-fatal): {_ca_err}")
 
     skip_ss7 = False
     if is_sprint_mode:
@@ -1130,54 +1416,43 @@ def main():
     except Exception as e:
         print(f"⚠️  Action plan / compliance (non-fatal): {e}")
 
-    # ── V2 Shadow: 跨资産 + Regime v2 + Sprint Score v2 ─────────────
+    # ── Macro event accuracy tracking: backfill actual returns for past events ──
+    try:
+        from macro_event_detector import backfill_macro_event_actuals
+        _acc_conn = sqlite3.connect(db_path)
+        _acc = backfill_macro_event_actuals(_acc_conn, benchmark_ticker=model.get("benchmark_ticker", "1321.T"))
+        _acc_conn.close()
+        if _acc.get("backfilled", 0) > 0:
+            print(f">> [macro_accuracy] backfilled {_acc['backfilled']} events  "
+                  f"1d_accuracy={_acc.get('accuracy_1d', 0):.0%}  5d_accuracy={_acc.get('accuracy_5d', 0):.0%}")
+    except Exception as _acc_err:
+        print(f"⚠️  macro event accuracy tracking (non-fatal): {_acc_err}")
+
+    # ── Signal decay tracking: backfill actual returns for past sprint signals ──
+    try:
+        from signal_decay_tracker import backfill_signal_actuals
+        _sd_conn = sqlite3.connect(db_path)
+        _sd = backfill_signal_actuals(_sd_conn)
+        _sd_conn.close()
+        if _sd.get("backfilled", 0) > 0 or _sd.get("ic_1d") is not None:
+            _ic_str = "  ".join(f"{k}={v}" for k, v in _sd.items() if k.startswith("ic_"))
+            print(f">> [signal_decay] backfilled={_sd.get('backfilled', 0)}  {_ic_str}")
+    except Exception as _sd_err:
+        print(f"⚠️  signal decay tracking (non-fatal): {_sd_err}")
+
+    # ── V2 Shadow: Regime v2 诊断（cross_asset 已在 step 2.7 更新入库）─────
+    # cross_asset fetch/save 和 macro_event_detector 已提前至 step 2.7，
+    # 这里只做 regime_score_v2 的后验计算并写入 regime_diagnosis.json。
     try:
         ca_cfg = cfg.get("cross_asset", {})
         if ca_cfg.get("enabled", False):
-            from cross_asset_signals import (
-                fetch_cross_asset_snapshot,
-                compute_cross_asset_regime_signal,
-                ensure_cross_asset_table,
-                save_cross_asset_snapshot,
-            )
-            _ca_conn = __import__("trade_schema").connect(db_path)
-            ensure_cross_asset_table(_ca_conn)
-            ca_snapshot = fetch_cross_asset_snapshot(asof=asof)
-            ca_signal = compute_cross_asset_regime_signal(ca_snapshot, conn=_ca_conn,
-                                                          weights=ca_cfg.get("weights"))
-            save_cross_asset_snapshot(_ca_conn, ca_snapshot, ca_signal)
-            print(f">> [shadow] cross_asset_score: {ca_signal['cross_asset_score']:.4f}  "
-                  f"adjustment: {ca_signal['regime_adjustment']}")
-
-            # Step 0.5: 宏观事件检测 (规则引擎)
-            try:
-                from macro_event_detector import detect_macro_events, save_macro_event
-                _macro_result = detect_macro_events(ca_snapshot)
-                _macro_level = _macro_result.get("alert_level", "none")
-                _macro_boost = _macro_result.get("rule_boost", 0.0)
-                print(f">> [macro_event] alert_level={_macro_level}  rule_boost={_macro_boost:+.4f}  "
-                      f"triggered={_macro_result.get('details', {}).get('n_rules_triggered', 0)}")
-                if _macro_level != "none":
-                    save_macro_event(_ca_conn, asof, _macro_result)
-                    print(f">> [macro_event] saved L1/L2 event to macro_events table")
-                    # LLM 分析 (Gemma via Ollama) — L1/L2 時のみ
-                    _me_cfg = cfg.get("macro_events", {})
-                    _llm_cfg = _me_cfg.get("llm", {})
-                    if _llm_cfg.get("enabled", False) and _macro_level in ("L1", "L2"):
-                        try:
-                            from macro_digest import run_macro_digest
-                            _digest = run_macro_digest(
-                                _ca_conn, asof, ca_snapshot, _macro_level,
-                                _macro_result.get("triggered_rules"),
-                                endpoint=str(_llm_cfg.get("endpoint", "http://localhost:11434")),
-                                model=str(_llm_cfg.get("model", "gemma4:27b")),
-                                timeout=int(_llm_cfg.get("timeout_seconds", 60)),
-                            )
-                            print(f">> [macro_digest] status={_digest['status']}")
-                        except Exception as _md_err:
-                            print(f"⚠️  macro_digest LLM (non-fatal): {_md_err}")
-            except Exception as _me_err:
-                print(f"⚠️  macro_event_detector (non-fatal): {_me_err}")
+            from cross_asset_signals import load_latest_cross_asset
+            from trade_schema import connect as _ts_connect
+            _ca_conn = _ts_connect(db_path)
+            ca_signal = load_latest_cross_asset(_ca_conn) or {}
+            if ca_signal:
+                print(f">> [shadow] cross_asset_score: {ca_signal.get('cross_asset_score', 'N/A')}  "
+                      f"adjustment: {ca_signal.get('regime_adjustment', 'N/A')}")
 
             # Regime V2 shadow computation
             regime_cfg = cfg.get("benchmark_regime", {})
@@ -1233,11 +1508,12 @@ def main():
             strategy_id=strategy_id,
             reason="harvest_specific_reports",
         )
-        return
+        # Skip harvest-specific steps 7-11; heartbeat (step 12) runs below unconditionally
 
-    # 7) Promotion audit (final pass after learning updates)
-    promotion = cfg.get("promotion", {})
-    cmd = [
+    if not is_sprint_mode:
+        # 7) Promotion audit (final pass after learning updates)
+        promotion = cfg.get("promotion", {})
+        cmd = [
         "python", "evaluate_promotion.py",
         "--db", db_path,
         "--reports_dir", out_dir,
@@ -1254,48 +1530,121 @@ def main():
         "--max_zero_exposure_days", str(int(promotion.get("max_zero_exposure_days", 3))),
         "--require_actionable_mode", "1" if bool(promotion.get("require_actionable_mode", True)) else "0",
         "--paper_evidence_type", "simulated_forward" if is_simulation else "natural_time",
-    ]
-    if promotion.get("max_turnover_cv") is not None:
-        cmd += ["--max_turnover_cv", str(float(promotion.get("max_turnover_cv")))]
-    print(">>", " ".join(cmd))
-    run_and_capture(cmd)
+        ]
+        if promotion.get("max_turnover_cv") is not None:
+            cmd += ["--max_turnover_cv", str(float(promotion.get("max_turnover_cv")))]
+        print(">>", " ".join(cmd))
+        run_and_capture(cmd)
 
-    # 8) Factor health report
-    cmd = [
+        # 8) Factor health report
+        cmd = [
         "python", "factor_health_report.py",
         "--db", db_path,
         "--reports_dir", out_dir,
         "--target_mode", str(strategy_profile.get("signal_mode", model.get("signal_mode", "shadow_ic"))),
-    ]
-    print(">>", " ".join(cmd))
-    run_and_capture(cmd)
+        ]
+        print(">>", " ".join(cmd))
+        run_and_capture(cmd)
 
-    # 9) Mode comparison report
-    cmd = [
+        # 9) Mode comparison report
+        cmd = [
         "python", "compare_signal_modes_report.py",
         "--reports_dir", out_dir,
         "--max_zero_exposure_days", str(int(promotion.get("max_zero_exposure_days", 3))),
-    ]
-    print(">>", " ".join(cmd))
-    run_and_capture(cmd)
+        ]
+        print(">>", " ".join(cmd))
+        run_and_capture(cmd)
 
-    # 10) Earnings event study
-    cmd = [
+        # 10) Earnings event study
+        cmd = [
         "python", "earnings_event_study.py",
         "--db", db_path,
         "--out_dir", out_dir,
-    ]
-    print(">>", " ".join(cmd))
-    run_and_capture(cmd)
+        ]
+        print(">>", " ".join(cmd))
+        run_and_capture(cmd)
 
-    # 11) Optimizer objective evaluation
-    cmd = [
+        # 11) Optimizer objective evaluation
+        cmd = [
         "python", "evaluate_optimizer_objective.py",
         "--reports_dir", out_dir,
         "--target_mode", str(strategy_profile.get("signal_mode", model.get("signal_mode", "shadow_ic"))),
-    ]
-    print(">>", " ".join(cmd))
-    run_and_capture(cmd)
+        ]
+        print(">>", " ".join(cmd))
+        run_and_capture(cmd)
+
+
+    # ── 12) 心跳监控: daily_run 末尾 5 项核心健康检查 ──────────────
+    try:
+        _hb_conn = sqlite3.connect(db_path)
+        _hb_issues: list[str] = []
+
+        # Check 1: feature_daily 有价格特征
+        _hb_feat_count = _hb_conn.execute(
+            "SELECT COUNT(DISTINCT feature_name) FROM feature_daily WHERE asof=?", (asof,)
+        ).fetchone()[0]
+        if _hb_feat_count < 10:
+            _hb_issues.append(f"feature_daily only {_hb_feat_count} features (need ≥10)")
+
+        # Check 2: target_weights 非零率（最近 10 天）
+        try:
+            _tw_meta = json.loads((Path(out_dir) / "target_weights_sprint_momentum_meta.json").read_text(encoding="utf-8"))
+            if _tw_meta.get("export_row_sum", 0) <= 1e-9:
+                _hb_issues.append("target_weights is zero (selected_count=0)")
+        except Exception:
+            pass
+
+        # Check 3: positions 与 orders 一致性
+        try:
+            _pos_syms = set(r[0] for r in _hb_conn.execute(
+                "SELECT DISTINCT symbol FROM positions WHERE asof=? AND strategy_id=? AND qty>0",
+                (asof, strategy_id)
+            ).fetchall())
+            _sell_syms = set(r[0] for r in _hb_conn.execute(
+                "SELECT DISTINCT symbol FROM orders WHERE asof=? AND strategy_id=? AND side='SELL' AND status='proposed'",
+                (asof, strategy_id)
+            ).fetchall())
+            _orphan_sells = _sell_syms - _pos_syms
+            if _orphan_sells:
+                _hb_issues.append(f"SELL orders for non-held symbols: {_orphan_sells}")
+        except Exception:
+            pass
+
+        # Check 4: 最近一次 fill 距今天数
+        try:
+            _last_fill = _hb_conn.execute(
+                "SELECT MAX(fill_time) FROM fills WHERE strategy_id=?", (strategy_id,)
+            ).fetchone()
+            if _last_fill and _last_fill[0]:
+                from datetime import date as dt_date
+                _fill_date = str(_last_fill[0])[:10]
+                _fill_age = (dt_date.fromisoformat(asof) - dt_date.fromisoformat(_fill_date)).days
+                if _fill_age > 30:
+                    _hb_issues.append(f"last fill was {_fill_age} days ago ({_fill_date})")
+        except Exception:
+            pass
+
+        # Check 5: DB 文件大小合理性
+        _db_size_mb = Path(db_path).stat().st_size / (1024 * 1024)
+        if _db_size_mb > 500:
+            _hb_issues.append(f"DB size {_db_size_mb:.0f}MB exceeds 500MB threshold")
+
+        _hb_conn.close()
+
+        if _hb_issues:
+            print(f"⚠️  [heartbeat] {len(_hb_issues)} issue(s):")
+            for _issue in _hb_issues:
+                print(f"     - {_issue}")
+            emit_runtime_event(
+                reports_dir, "heartbeat_warning", level="warning",
+                issues=_hb_issues, issue_count=len(_hb_issues),
+            )
+        else:
+            print(f">> [heartbeat] All 5 checks passed ✓")
+            emit_runtime_event(reports_dir, "heartbeat_ok", level="info")
+
+    except Exception as _hb_err:
+        print(f"⚠️  heartbeat check failed: {_hb_err}")
 
 
 if __name__ == "__main__":

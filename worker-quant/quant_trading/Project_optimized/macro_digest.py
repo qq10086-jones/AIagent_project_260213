@@ -159,18 +159,20 @@ USD/JPY: {_fmt('usdjpy_change_pct')} | S&P500: {_fmt('sp500_overnight_pct')} | S
 def call_llm_analysis(
     prompt: str,
     endpoint: str = "http://localhost:11434",
-    model: str = "gemma4:27b",
+    model: str = "gemma4:26b",
     timeout: int = 60,
 ) -> Optional[str]:
-    """Ollama API を叩いて LLM 応答を取得。"""
-    url = f"{endpoint}/api/generate"
+    """Ollama chat API を叩いて LLM 応答を取得。
+    /api/chat を優先使用（gemma4 では /api/generate が空レスポンスを返すことがある）。
+    """
+    url = f"{endpoint}/api/chat"
     payload = json.dumps({
         "model": model,
-        "prompt": prompt,
+        "messages": [{"role": "user", "content": prompt}],
         "stream": False,
         "options": {
             "temperature": 0.3,
-            "num_predict": 512,
+            "num_predict": 2048,  # gemma4 uses thinking tokens before output; 512 is insufficient
         },
     }).encode("utf-8")
 
@@ -184,7 +186,13 @@ def call_llm_analysis(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             result = json.loads(resp.read().decode("utf-8"))
-            return result.get("response", "")
+            # chat API: result["message"]["content"]
+            msg = result.get("message") or {}
+            content = msg.get("content", "")
+            if not content:
+                # fallback: some builds return top-level "response"
+                content = result.get("response", "")
+            return content or None
     except urllib.error.URLError as e:
         print(f"[macro_digest] Ollama request failed: {e}")
         return None
@@ -198,15 +206,16 @@ def parse_llm_response(raw: str) -> Optional[Dict[str, Any]]:
     if not raw:
         return None
 
-    # JSON ブロックを抽出
-    # ```json ... ``` または { ... } を探す
+    # 1. ```json ... ``` ブロック
     json_match = re.search(r'```json\s*(.*?)\s*```', raw, re.DOTALL)
     if json_match:
         json_str = json_match.group(1)
     else:
-        json_match = re.search(r'\{[^{}]*\}', raw, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
+        # 2. 最初の { から最後の } まで（ネスト対応）
+        start = raw.find('{')
+        end = raw.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            json_str = raw[start:end + 1]
         else:
             return None
 
@@ -344,7 +353,7 @@ def main():
     ap.add_argument("--db", default="japan_market.db")
     ap.add_argument("--endpoint", default="http://localhost:11434",
                     help="Ollama API endpoint (e.g. http://gemma-host:11434)")
-    ap.add_argument("--model", default="gemma4:27b")
+    ap.add_argument("--model", default="gemma4:26b")
     ap.add_argument("--timeout", type=int, default=60)
     ap.add_argument("--asof", default=None)
     args = ap.parse_args()

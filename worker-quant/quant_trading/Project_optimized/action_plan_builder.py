@@ -20,9 +20,11 @@ def _now_jst():
 def _load_latest_orders_proposal(reports_dir: Path, artifact_root: Path, asof: str) -> list[dict]:
     """Find latest orders_proposal.csv from decision artifacts."""
     # Try artifact dir first
-    candidates = sorted(artifact_root.glob(f"{asof}/*/orders_proposal.csv")) if artifact_root.exists() else []
+    candidates = list(artifact_root.glob(f"{asof}/*/orders_proposal.csv")) if artifact_root.exists() else []
     if candidates:
-        path = candidates[-1]  # latest run
+        # Sort by modification time (not path) to get the truly latest run
+        candidates.sort(key=lambda p: p.stat().st_mtime)
+        path = candidates[-1]  # latest run by mtime
     else:
         # Fallback: reports dir
         path = reports_dir / "orders_proposal.csv"
@@ -78,9 +80,10 @@ def _load_regime(reports_dir: Path) -> dict:
 
 def _load_stop_loss_info(artifact_root: Path, asof: str) -> list[dict]:
     """Load stop-loss diagnostics from latest decision snapshot."""
-    candidates = sorted(artifact_root.glob(f"{asof}/*/decision_snapshot.json")) if artifact_root.exists() else []
+    candidates = list(artifact_root.glob(f"{asof}/*/decision_snapshot.json")) if artifact_root.exists() else []
     if not candidates:
         return []
+    candidates.sort(key=lambda p: p.stat().st_mtime)
     try:
         snap = json.loads(candidates[-1].read_text(encoding="utf-8"))
         return snap.get("risk_management", {}).get("stop_loss_diagnostics", [])
@@ -137,7 +140,8 @@ def build_action_plan(
         summary_parts.append(f"BUY: {syms}")
     if not pending_sells and not pending_buys:
         summary_parts.append("No trades required")
-    held_syms = [p["symbol"] for p in positions if p["current_status"] == "HOLD"]
+    sell_syms = {s["symbol"] for s in pending_sells}
+    held_syms = [p["symbol"] for p in positions if p["current_status"] == "HOLD" and p["symbol"] not in sell_syms]
     if held_syms:
         summary_parts.append(f"HOLD: {', '.join(held_syms)}")
     regime_state = regime.get("sprint_final_state", "unknown")

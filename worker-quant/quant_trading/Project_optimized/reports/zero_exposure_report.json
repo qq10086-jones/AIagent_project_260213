@@ -1,8 +1,8 @@
 {
   "signal_mode": "sprint_momentum",
-  "latest_weights_zero": true,
-  "days_since_last_nonzero": 1,
-  "primary_cause": "entry_filter",
-  "last_nonzero_asof": null,
-  "last_nonzero_row_sum": 0.0
+  "latest_weights_zero": false,
+  "days_since_last_nonzero": 0,
+  "primary_cause": "none",
+  "last_nonzero_asof": "2026-04-08",
+  "last_nonzero_row_sum": 0.6
 }

@@ -128,7 +128,7 @@ model:
     shadow_only: true
     sprint_gating: false           # 治理要求: shadow 运行满 30 天后才可启用 (GOVERNANCE_v2 6.1)
     lookback_hours: 26.0          # 覆盖盘前 + 盘中，略超 24h 防漏
-    sources: "kabutan,google,gdelt"   # 优先级顺序；均免费
+    sources: "google,boj,trade,macro,gdelt"  # kabutan deprecated (持续403 Forbidden, 2026-04-08)
     csv_path: ""                  # 保留兼容字段，DB 模式不需要
 
 learning:
@@ -178,7 +178,7 @@ decision:
   out_dir: "artifacts/decision"
 
 paper:
-  enabled: false
+  enabled: true    # 2026-04-08: Sprint信号首次正常工作，启动 paper trading 验证期
   price_mode: "latest"
   slippage_bps: 5.0
   fee_bps: 0.0
@@ -229,14 +229,16 @@ cross_asset:
     copper: "HG=F"              # 铜（全球制造业景气）
     sox: "^SOX"                 # 半导体指数（日经权重股映射）
   weights:
-    sp500: 0.20
-    usdjpy: 0.15
+    # Walk-forward validated 2026-04-08 (train=346d, test=173d, test_IC=0.259)
+    # Copper/SOX strongest predictors; SP500/USDJPY weakest lagged IC for next-day NK
+    sp500: 0.08
+    usdjpy: 0.08
     vix: 0.10
-    nk_futures: 0.15
-    crude_oil: 0.15
-    gold: 0.05
-    copper: 0.05
-    sox: 0.10
+    nk_futures: 0.12
+    crude_oil: 0.12
+    gold: 0.12
+    copper: 0.20
+    sox: 0.18
 
 benchmark_regime:
   version: "v2"                 # "v2" = 连续化 regime (2026-04-08 回测通过: Sharpe +0.47, MaxDD 改善 3.6pp)
@@ -253,11 +255,11 @@ benchmark_regime:
 macro_events:
   enabled: true
   llm:
-    enabled: false                  # 家里环境设为 true (需要 Ollama + Gemma)
+    enabled: true
     provider: "ollama"
-    endpoint: "http://localhost:11434"   # Tailscale IP 或 hostname
-    model: "gemma4:27b"
-    timeout_seconds: 60
+    endpoint: "http://localhost:11434"
+    model: "gemma4:26b"
+    timeout_seconds: 120
     fallback_to_rules: true         # LLM 不可用时退化到规则引擎
   rules:
     nk_futures_l1_threshold: 3.0
@@ -271,6 +273,54 @@ macro_events:
   alerts:
     discord_on_l1: true
     discord_on_l2: false
+
+# ── 资金阶梯适配 (2026-04-08) ─────────────────────────────────
+# NAV 自动决定哪些组件进入决策链路、哪些只做 shadow 记录。
+# 升 tier: NAV 连续 20 个交易日 ≥ 阈值；降 tier: 即时（风控优先）
+capital_tiers:
+  enabled: true
+  thresholds:
+    tier2_min_nav: 800000       # ¥80万 → Tier 2
+    tier3_min_nav: 2000000      # ¥200万 → Tier 3
+    upgrade_consecutive_days: 20  # 升级需连续达标天数
+    downgrade_immediate: true     # 降级立即生效
+
+  # 各 Tier 的组件覆盖配置（覆盖上方的默认值）
+  tier1:                          # ≤ ¥80万（当前阶段）
+    label: "Starter"
+    max_positions: 3
+    signal_version: "v1"          # 固定 3 因子 sprint_score
+    kelly_enabled: false          # 固定 25% 仓位
+    cross_asset_production: false  # shadow only
+    llm_production: false          # shadow only
+    regime_version: "v1"           # MA 交叉 only
+    trailing_stop: false           # 基础 ATR 止损
+    portfolio_dd_enabled: false    # 仓位太少，组合回撤意义不大
+    harvest_enabled: false
+
+  tier2:                          # ¥80万 - ¥200万
+    label: "Growth"
+    max_positions: 5
+    signal_version: "v2"          # IC 加权（需 n_obs≥30）
+    kelly_enabled: true           # 需 fills≥30 才激活
+    cross_asset_production: true
+    llm_production: false          # shadow，积累精度数据
+    regime_version: "v2"           # 连续化 regime
+    trailing_stop: true
+    portfolio_dd_enabled: true
+    harvest_enabled: false
+
+  tier3:                          # ≥ ¥200万
+    label: "Scale"
+    max_positions: 8
+    signal_version: "v2"
+    kelly_enabled: true
+    cross_asset_production: true
+    llm_production: true           # LLM 进入决策链路
+    regime_version: "v2"
+    trailing_stop: true
+    portfolio_dd_enabled: true
+    harvest_enabled: true          # 双策略激活
 
 sprint_signal:
   score_version: "v1"           # "v1" = 3因子, "v2" = 全因子自适应 (切换后生效)

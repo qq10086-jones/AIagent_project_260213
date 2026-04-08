@@ -43,11 +43,17 @@ try:
 except Exception:
     pass
 
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
+
 try:
     import requests as _requests
     def _get(url: str, timeout: int = 8) -> Optional[bytes]:
         try:
-            r = _requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0 (NexusBot/2.0)"})
+            r = _requests.get(url, timeout=timeout, headers={"User-Agent": _UA})
             if r.status_code == 200:
                 return r.content
         except Exception:
@@ -56,7 +62,7 @@ try:
 except ImportError:
     def _get(url: str, timeout: int = 8) -> Optional[bytes]:
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (NexusBot/2.0)"})
+            req = urllib.request.Request(url, headers={"User-Agent": _UA})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.read()
         except Exception:
@@ -277,26 +283,52 @@ def fetch_google_news_jp(lookback_hours: float = 24.0, name_map: dict | None = N
 # ──────────────────────────────────────────────
 # Source 3: GDELT DOC 2.0 API（英文/多语，全球宏观）
 # ──────────────────────────────────────────────
-def fetch_gdelt(lookback_hours: float = 24.0, max_records: int = 30, name_map: dict | None = None) -> list[dict]:
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    start = now - timedelta(hours=lookback_hours)
-    fmt = "%Y%m%d%H%M%S"
-    query = "japan stock earnings OR nikkei OR TSE"
+def _gdelt_fetch_one(query: str, start_str: str, end_str: str, max_records: int) -> list[dict]:
+    """Single GDELT query with rate-limit retry."""
     url = (
         "https://api.gdeltproject.org/api/v2/doc/doc"
         f"?query={urllib.parse.quote(query)}"
         f"&mode=artlist&maxrecords={max_records}"
-        f"&startdatetime={start.strftime(fmt)}&enddatetime={now.strftime(fmt)}"
+        f"&startdatetime={start_str}&enddatetime={end_str}"
         "&format=json&sort=DateDesc"
     )
-    data = _get(url, timeout=12)
-    if not data:
-        return []
-    try:
-        obj = json.loads(data)
-        arts = obj.get("articles") or []
-    except Exception:
-        return []
+    for attempt in range(2):
+        data = _get(url, timeout=15)
+        if not data:
+            return []
+        # Detect rate-limit plain-text response
+        snippet = data[:120].decode("utf-8", errors="ignore").strip()
+        if not snippet.startswith("{"):
+            if attempt == 0:
+                time.sleep(6)   # GDELT: max 1 req / 5s
+                continue
+            return []
+        try:
+            return (json.loads(data).get("articles") or [])
+        except Exception:
+            return []
+    return []
+
+
+def fetch_gdelt(lookback_hours: float = 24.0, max_records: int = 30, name_map: dict | None = None) -> list[dict]:
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    start = now - timedelta(hours=lookback_hours)
+    fmt = "%Y%m%d%H%M%S"
+    start_str, end_str = start.strftime(fmt), now.strftime(fmt)
+
+    # Query 1: Japan stock market news
+    arts = _gdelt_fetch_one(
+        "japan stock nikkei TSE earnings",
+        start_str, end_str, max_records
+    )
+    # Query 2: Macro / geopolitical (oil, ceasefire, Fed, BOJ) — sleep to respect rate limit
+    time.sleep(6)
+    arts += _gdelt_fetch_one(
+        "oil ceasefire Fed BOJ Japan economy geopolitical",
+        start_str, end_str, max_records // 2
+    )
+
+    items = []
     items = []
     for art in arts:
         title = str(art.get("title") or "").strip()
@@ -405,6 +437,54 @@ def fetch_google_news_trade(lookback_hours: float = 24.0) -> list[dict]:
             "sentiment":       sent,
             "urgency":         4.5,
             "impact_category": "TRADE",
+        })
+    return items
+
+
+# ──────────────────────────────────────────────
+# Source 6: Google News RSS — 宏観地政学（原油/停火/リスクオン）
+# ──────────────────────────────────────────────
+def fetch_google_news_macro(lookback_hours: float = 24.0) -> list[dict]:
+    """原油価格・地政学リスク・停戦・リスクオン/オフ系のマクロニュース。"""
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=lookback_hours)
+    kw = "原油 OR 停戦 OR 停火 OR 地政学 OR リスクオン OR リスクオフ OR イラン OR 中東 OR OPEC OR WTI"
+    url = f"https://news.google.com/rss/search?q={urllib.parse.quote(kw)}&hl=ja&gl=JP&ceid=JP:ja"
+    data = _get(url)
+    if not data:
+        return []
+    try:
+        root = ET.fromstring(data)
+    except Exception:
+        return []
+    items = []
+    for item in root.iter("item"):
+        title = (item.findtext("title") or "").strip()
+        link  = (item.findtext("link")  or "").strip()
+        pub   = (item.findtext("pubDate") or "").strip()
+        if not title:
+            continue
+        pub_dt = _parse_pubdate(pub)
+        if pub_dt and pub_dt < cutoff:
+            continue
+        pos_kw = ["停戦", "停火", "原油安", "リスクオン", "和平"]
+        neg_kw = ["原油高", "リスクオフ", "紛争", "戦争", "制裁", "攻撃"]
+        if any(k in title for k in pos_kw):
+            sent = 0.6
+        elif any(k in title for k in neg_kw):
+            sent = -0.6
+        else:
+            sent = 0.0
+        items.append({
+            "news_id":         _make_hash(title, link),
+            "symbol":          None,
+            "published_ts":    pub_dt.isoformat() if pub_dt else datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            "source":          "google_news_macro",
+            "title":           title,
+            "url":             link,
+            "category":        "macro_geopolitical",
+            "sentiment":       sent,
+            "urgency":         5.0,
+            "impact_category": "MARKET_WIDE",
         })
     return items
 
@@ -581,8 +661,8 @@ def main():
                     help="抓取过去多少小时的新闻（默认 24h）")
     ap.add_argument("--dry_run",        action="store_true",
                     help="只打印，不写入数据库")
-    ap.add_argument("--sources",        default="kabutan,google,boj,trade,gdelt",
-                    help="逗号分隔的数据源: kabutan,google,boj,trade,gdelt")
+    ap.add_argument("--sources",        default="google,boj,trade,macro,gdelt",
+                    help="逗号分隔的数据源: google,boj,trade,macro,gdelt (kabutan deprecated: 403)")
     args = ap.parse_args()
 
     all_items: list[dict] = []
@@ -606,6 +686,9 @@ def main():
         elif src == "trade":
             fetched = fetch_google_news_trade(args.lookback_hours)
             print(f"[google_trade] 抓取 {len(fetched)} 条")
+        elif src == "macro":
+            fetched = fetch_google_news_macro(args.lookback_hours)
+            print(f"[google_macro] 抓取 {len(fetched)} 条")
         elif src == "gdelt":
             fetched = fetch_gdelt(args.lookback_hours, name_map=name_map)
             print(f"[gdelt]       抓取 {len(fetched)} 条")

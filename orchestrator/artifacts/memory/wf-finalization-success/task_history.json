@@ -262,5 +262,60 @@
     "summary": "Workflow workflow_finalization_v0 completed successfully",
     "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
     "created_at": "2026-04-05T15:31:23.114Z"
+  },
+  {
+    "workflow_run_id": "b7923b6a-90e0-44b0-8323-c032f8859f09",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-08T15:43:11.663Z"
+  },
+  {
+    "workflow_run_id": "56de4def-9ac5-4d12-8075-60148fb067f7",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-08T15:43:31.120Z"
+  },
+  {
+    "workflow_run_id": "173e7012-43a3-48d5-9570-f6d94980d14b",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-08T15:43:56.935Z"
+  },
+  {
+    "workflow_run_id": "cf4155f2-638b-44f3-bf72-4b021bb06114",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-08T15:44:00.111Z"
+  },
+  {
+    "workflow_run_id": "f8152664-8e51-4b26-bf8a-fd8dab8b3f60",
+    "run_id": "wf-finalization-success",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/full_success/artifacts",
+    "created_at": "2026-04-08T15:44:02.978Z"
   }
 ]

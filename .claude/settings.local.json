@@ -144,7 +144,8 @@
       "Bash(schtasks.exe /query /fo TABLE)",
       "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python daily_run.py --config config.yaml)",
       "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python quant_briefing.py --mode full --output-version v2)",
-      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python quant_briefing.py --mode full --output-version v2 --strategy_id sprint)"
+      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python quant_briefing.py --mode full --output-version v2 --strategy_id sprint)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m py_compile daily_run.py)"
     ]
   }
 }

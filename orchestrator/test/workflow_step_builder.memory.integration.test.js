@@ -62,7 +62,7 @@ function makeStepDef() {
   };
 }
 
-test("arch_design prompt includes read-only memory context when memory files exist", () => {
+test("arch_design prompt includes read-only memory context when memory files exist", async () => {
   const memoryRoot = path.join(makeWorkspace(), "memory");
   const projectRoot = path.join(memoryRoot, "memory-run");
   fs.mkdirSync(path.join(projectRoot, "adrs"), { recursive: true });
@@ -83,7 +83,7 @@ test("arch_design prompt includes read-only memory context when memory files exi
   process.env.MEMORY_ROOT = memoryRoot;
   try {
     const { buildStepPayload } = makeStepBuilder();
-    const payload = buildStepPayload({
+    const payload = await buildStepPayload({
       run: makeRun(),
       stepDef: makeStepDef(),
       stepIndex: 1,
@@ -102,13 +102,13 @@ test("arch_design prompt includes read-only memory context when memory files exi
   }
 });
 
-test("arch_design prompt omits memory block when memory files do not exist", () => {
+test("arch_design prompt omits memory block when memory files do not exist", async () => {
   const memoryRoot = path.join(makeWorkspace(), "memory");
   const previousMemoryRoot = process.env.MEMORY_ROOT;
   process.env.MEMORY_ROOT = memoryRoot;
   try {
     const { buildStepPayload } = makeStepBuilder();
-    const payload = buildStepPayload({
+    const payload = await buildStepPayload({
       run: makeRun("no-memory-run"),
       stepDef: makeStepDef(),
       stepIndex: 1,

@@ -617,11 +617,11 @@ export function buildArchitectMemoryContext({ projectContext = null, priorADRs =
  * Create a step payload builder bound to engine-level config.
  * @param {{ registry, promptScriptRegistry, handoffContracts }} config
  */
-export function createStepBuilder({ registry, promptScriptRegistry, handoffContracts, workspaceRoot = ".", runtimeConfig = {} }) {
+export function createStepBuilder({ registry, promptScriptRegistry, handoffContracts, workspaceRoot = ".", runtimeConfig = {}, redis = null }) {
   const contextBudgetService = createContextBudgetService();
-  const repoContextService = createRepoContextService({ workspaceRoot });
+  const repoContextService = createRepoContextService({ workspaceRoot, redis });
   const workerCodingTemplateRegistry = loadWorkerCodingTemplateRegistryOrThrow();
-  function buildStepPayload({ run, stepDef, stepIndex }) {
+  async function buildStepPayload({ run, stepDef, stepIndex }) {
     const input = parseJsonSafe(run.input_json, {});
     const artifactRoot = pathForRunArtifacts(run.run_id);
     const contract = STEP_CONTRACTS[stepDef.id] || null;
@@ -823,11 +823,11 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
           const summary = String(entry?.summary || entry?.result || entry?.note || "").trim();
           return summary ? `${stepId} | ${status} | ${summary}` : `${stepId} | ${status}`;
         });
-        payload.repo_map = repoContextService.buildRepoMap({
+        payload.repo_map = await repoContextService.buildRepoMap({
           targetPaths: payload.target_paths,
           recentChangedFiles: payload.target_paths,
         });
-        payload.context_packet = repoContextService.buildContextPacket({
+        payload.context_packet = await repoContextService.buildContextPacket({
           role: effectiveStepDef.role,
           stepId: effectiveStepDef.id,
           targetPaths: payload.target_paths,

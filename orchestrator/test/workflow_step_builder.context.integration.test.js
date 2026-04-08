@@ -51,14 +51,14 @@ function makeBuilder(workspaceRoot) {
   });
 }
 
-test("impl_be payload includes context packet, repo map, and coding context block", () => {
+test("impl_be payload includes context packet, repo map, and coding context block", async () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "package.json", JSON.stringify({ name: "crm-app" }, null, 2));
   writeFile(workspaceRoot, "workspace/sandbox/crm_site/server.js", "function startServer() { return 'ok'; }\n");
-  writeFile(workspaceRoot, "workspace/sandbox/crm_site/server.test.js", "test('server', () => {})\n");
+  writeFile(workspaceRoot, "workspace/sandbox/crm_site/server.test.js", "test('server', async () => {})\n");
 
   const { buildStepPayload } = makeBuilder(workspaceRoot);
-  const payload = buildStepPayload({
+  const payload = await buildStepPayload({
     run: {
       run_id: "run-ctx",
       workflow_run_id: "wf-run-ctx",
@@ -101,7 +101,7 @@ test("impl_be payload includes context packet, repo map, and coding context bloc
 // The clamp is: clampInt(configured, max(30, max_runtime_s), 3600, max(max_runtime_s, 300))
 // impl_be max_runtime_s=240, arch_design=480 (from runtimeByStep in workflow_step_builder.js)
 
-test("wall_clock_timeout_s is clamped UP when config is below max_runtime_s", () => {
+test("wall_clock_timeout_s is clamped UP when config is below max_runtime_s", async () => {
   const workspaceRoot = makeWorkspace();
   const builder = createStepBuilder({
     workspaceRoot,
@@ -118,7 +118,7 @@ test("wall_clock_timeout_s is clamped UP when config is below max_runtime_s", ()
       },
     },
   });
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: { run_id: "r1", workflow_run_id: "w1", workflow_id: "coding_team_v0", project_type: "webapp_crm",
       input_json: JSON.stringify({ goal: "impl", provider: "opencode" }) },
     stepDef: { id: "impl_be", role: "backend", tool: "coding.delegate", gate: "policy", prompt_script_id: "" },
@@ -129,7 +129,7 @@ test("wall_clock_timeout_s is clamped UP when config is below max_runtime_s", ()
     "wall_clock below max_runtime_s must be clamped up to max_runtime_s");
 });
 
-test("wall_clock_timeout_s=900 passes through for arch_design (max_runtime_s=480)", () => {
+test("wall_clock_timeout_s=900 passes through for arch_design (max_runtime_s=480)", async () => {
   // Production scenario: runtime_defaults.json wall_clock_timeout_s_default=900
   // arch_design max_runtime_s=480 ↁEclamp(900, max(30,480), 3600, max(480,300)) = 900
   const workspaceRoot = makeWorkspace();
@@ -148,7 +148,7 @@ test("wall_clock_timeout_s=900 passes through for arch_design (max_runtime_s=480
       },
     },
   });
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: { run_id: "r2", workflow_run_id: "w2", workflow_id: "coding_team_v0", project_type: "webapp_crm",
       input_json: JSON.stringify({ goal: "arch", provider: "opencode" }) },
     stepDef: { id: "arch_design", role: "architect", tool: "coding.delegate", gate: "policy", prompt_script_id: "" },
@@ -158,7 +158,7 @@ test("wall_clock_timeout_s=900 passes through for arch_design (max_runtime_s=480
     "wall_clock=900 must not be clamped down when max_runtime_s=480");
 });
 
-test("wall_clock_timeout_s defaults to max(max_runtime_s, 300) when not configured", () => {
+test("wall_clock_timeout_s defaults to max(max_runtime_s, 300) when not configured", async () => {
   // No wall_clock_timeout_s_default ↁEfallback = max(max_runtime_s, 300)
   // impl_be max_runtime_s=240 ↁEdefault = max(240, 300) = 300
   const workspaceRoot = makeWorkspace();
@@ -176,7 +176,7 @@ test("wall_clock_timeout_s defaults to max(max_runtime_s, 300) when not configur
       },
     },
   });
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: { run_id: "r3", workflow_run_id: "w3", workflow_id: "coding_team_v0", project_type: "webapp_crm",
       input_json: JSON.stringify({ goal: "impl", provider: "opencode" }) },
     stepDef: { id: "impl_be", role: "backend", tool: "coding.delegate", gate: "policy", prompt_script_id: "" },
@@ -187,7 +187,7 @@ test("wall_clock_timeout_s defaults to max(max_runtime_s, 300) when not configur
 });
 
 
-test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outputs", () => {
+test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outputs", async () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "package.json", JSON.stringify({ name: "crm-app" }, null, 2));
   writeFile(workspaceRoot, "workspace/sandbox/crm_site/server.js", "function startServer() { return 'ok'; }\n");
@@ -212,7 +212,7 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
     },
   });
 
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: {
       run_id: "mini-cloud-run",
       workflow_run_id: "mini-cloud-wf",
@@ -238,7 +238,7 @@ test("stable_cloud_lane impl_be avoids structured_patch and keeps full-file outp
   assert.match(payload.task_prompt, /api_contracts=\[\.\.\.\], shared_types=\[\.\.\.\], scope_constraints=\[\.\.\.\]/, "backend prompt should pin typed handoff array fields");
 });
 
-test("generic_app impl_be injects primary_minimax_lane and uses full_file_fallback", () => {
+test("generic_app impl_be injects primary_minimax_lane and uses full_file_fallback", async () => {
   const workspaceRoot = makeWorkspace();
   // workspace/sandbox/app is empty — no target files — natural full_file_fallback
   fs.mkdirSync(path.join(workspaceRoot, "workspace/sandbox/app"), { recursive: true });
@@ -267,7 +267,7 @@ test("generic_app impl_be injects primary_minimax_lane and uses full_file_fallba
     },
   });
 
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: {
       run_id: "generic-run",
       workflow_run_id: "generic-wf",
@@ -290,7 +290,7 @@ test("generic_app impl_be injects primary_minimax_lane and uses full_file_fallba
   assert.equal(payload.execution_mode_requested, "full_file_fallback", "primary_minimax_lane forced to full_file_fallback");
 });
 
-test("deploy_preview payload includes release metadata and preview defaults", () => {
+test("deploy_preview payload includes release metadata and preview defaults", async () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "workspace/sandbox/crm_site/index.html", "<!doctype html><html></html>");
 
@@ -302,7 +302,7 @@ test("deploy_preview payload includes release metadata and preview defaults", ()
     runtimeConfig: {},
   });
 
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: {
       run_id: "preview-run",
       workflow_run_id: "preview-wf",
@@ -333,7 +333,7 @@ test("deploy_preview payload includes release metadata and preview defaults", ()
   assert.equal(payload.model_override, "minimax-coding-plan/MiniMax-M2.7");
 });
 
-test("release_pack payload pins fast model lane for webapp_crm", () => {
+test("release_pack payload pins fast model lane for webapp_crm", async () => {
   const workspaceRoot = makeWorkspace();
   const builder = createStepBuilder({
     workspaceRoot,
@@ -347,7 +347,7 @@ test("release_pack payload pins fast model lane for webapp_crm", () => {
     runtimeConfig: {},
   });
 
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: {
       run_id: "release-run",
       workflow_run_id: "release-wf",
@@ -370,7 +370,7 @@ test("release_pack payload pins fast model lane for webapp_crm", () => {
   assert.equal(payload.model_override, "minimax-coding-plan/MiniMax-M2.7");
 });
 
-test("smoke_test payload includes executable command and smoke artifact", () => {
+test("smoke_test payload includes executable command and smoke artifact", async () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "runtime/artifacts/release/run-smoke/handoff/be_to_fe.json", JSON.stringify({
     api_contracts: [{ method: "GET", path: "/api/books" }],
@@ -384,7 +384,7 @@ test("smoke_test payload includes executable command and smoke artifact", () => 
     runtimeConfig: {},
   });
 
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: {
       run_id: "run-smoke",
       workflow_run_id: "wf-smoke",
@@ -408,7 +408,7 @@ test("smoke_test payload includes executable command and smoke artifact", () => 
   assert.deepEqual(payload.expected_artifacts, ["smoke/smoke_result.json"]);
 });
 
-test("impl_be prefers structured workplan json over markdown fallback", () => {
+test("impl_be prefers structured workplan json over markdown fallback", async () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan/plan/workplan.json", JSON.stringify({
     be_tasks: [
@@ -429,7 +429,7 @@ test("impl_be prefers structured workplan json over markdown fallback", () => {
     runtimeConfig: {},
   });
 
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: {
       run_id: "run-workplan",
       workflow_run_id: "wf-workplan",
@@ -466,7 +466,7 @@ test("impl_be prefers structured workplan json over markdown fallback", () => {
   assert.equal(payload.workplan_validation.ok, true);
 });
 
-test("impl_be falls back to markdown when structured workplan json is invalid", () => {
+test("impl_be falls back to markdown when structured workplan json is invalid", async () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan-bad/plan/workplan.json", JSON.stringify({
     be_tasks: [{ id: "T-BE-1", description: "Missing verify field" }],
@@ -486,7 +486,7 @@ test("impl_be falls back to markdown when structured workplan json is invalid", 
     runtimeConfig: {},
   });
 
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: {
       run_id: "run-workplan-bad",
       workflow_run_id: "wf-workplan-bad",
@@ -510,7 +510,7 @@ test("impl_be falls back to markdown when structured workplan json is invalid", 
   assert.match(payload.task_prompt, /T-BE-9: Fallback task/);
 });
 
-test("impl_be payload exposes injected_workplan from structured workplan json", () => {
+test("impl_be payload exposes injected_workplan from structured workplan json", async () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan-ctx/plan/workplan.json", JSON.stringify({
     be_tasks: [
@@ -531,7 +531,7 @@ test("impl_be payload exposes injected_workplan from structured workplan json", 
     runtimeConfig: {},
   });
 
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: {
       run_id: "run-workplan-ctx",
       workflow_run_id: "wf-workplan-ctx",
@@ -559,7 +559,7 @@ test("impl_be payload exposes injected_workplan from structured workplan json", 
   assert.deepEqual(payload.tool_adapter_request.payload.injected_workplan, payload.injected_workplan);
 });
 
-test("impl_be payload leaves injected_workplan null when structured workplan is invalid", () => {
+test("impl_be payload leaves injected_workplan null when structured workplan is invalid", async () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan-invalid/plan/workplan.json", JSON.stringify({
     be_tasks: [{ id: "T-BE-1", description: "Missing verify field" }],
@@ -579,7 +579,7 @@ test("impl_be payload leaves injected_workplan null when structured workplan is 
     runtimeConfig: {},
   });
 
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: {
       run_id: "run-workplan-invalid",
       workflow_run_id: "wf-workplan-invalid",
@@ -601,7 +601,7 @@ test("impl_be payload leaves injected_workplan null when structured workplan is 
   assert.equal(payload.workplan_validation.code, "WORKPLAN_JSON_INVALID");
 });
 
-test("impl_fe payload exposes injected_workplan from structured workplan json", () => {
+test("impl_fe payload exposes injected_workplan from structured workplan json", async () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "runtime/artifacts/release/run-workplan-fe/plan/workplan.json", JSON.stringify({
     be_tasks: [],
@@ -622,7 +622,7 @@ test("impl_fe payload exposes injected_workplan from structured workplan json", 
     runtimeConfig: {},
   });
 
-  const payload = builder.buildStepPayload({
+  const payload = await builder.buildStepPayload({
     run: {
       run_id: "run-workplan-fe",
       workflow_run_id: "wf-workplan-fe",

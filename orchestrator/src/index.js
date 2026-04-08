@@ -299,6 +299,7 @@ const workflowEngine = createWorkflowEngine({
       diff_first_enabled: RUNTIME_EXECUTION.diff_first_enabled !== false,
     },
   },
+  redis,
   minio: {
     enabled: String(RELEASE_PACK_ARCHIVE_TO_MINIO || "1") !== "0",
     bucket: String(RELEASE_PACK_BUCKET || "nexus-artifacts"),

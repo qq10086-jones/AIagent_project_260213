@@ -338,6 +338,7 @@ async function processTask(msgId, task, lifecycle) {
         on_runtime_event: async (event) => {
           await emitPiSessionUpdate(task_id, tool_name, event);
         },
+        redis,
       });
       output = result;
       isSuccess = !!result.ok;

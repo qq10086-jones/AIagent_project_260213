@@ -338,6 +338,7 @@ export const CodingService = {
             beta_template_id = null,
             context_envelope = null,
             on_runtime_event = null,
+            redis = null,
         } = params;
         const reqId = makeRequestId(task_id, run_id);
         const taskContract = buildTaskContractMetadata({
@@ -535,6 +536,7 @@ export const CodingService = {
                 executionAdapterPacket: execution_adapter_packet,
                 contextPacket: context_packet,
                 repoMap: repo_map,
+                contextEnvelope: context_envelope,
             });
             const effectivePrompt = promptContract.prompt;
             const adapterRequest = payloadToAdapterRequest({
@@ -712,6 +714,7 @@ export const CodingService = {
                     workspaceRoot: executionWorkspaceRoot,
                     filesChanged: finalGitSummary?.filesChanged || [],
                     taskDir,
+                    redis,
                 })
                 : { checked: false, ok: true, commands: [], logPath: null };
 

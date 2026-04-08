@@ -59,6 +59,7 @@ export function createWorkflowEngine({
   runtimeConfig = {},
   waterfallTraceService = null,
   artifactPackService = null,
+  redis = null,
 }) {
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -81,7 +82,7 @@ export function createWorkflowEngine({
   const { archiveReleasePackToMinio, indexReleasePackToDb, minioBucket } =
     createWorkflowReleasePackService({ pool, recordEvent, workspaceRoot, minio });
 
-  const { buildStepPayload } = createStepBuilder({ registry, promptScriptRegistry, handoffContracts, workspaceRoot, runtimeConfig });
+  const { buildStepPayload } = createStepBuilder({ registry, promptScriptRegistry, handoffContracts, workspaceRoot, runtimeConfig, redis });
   const patchBundleService = createPatchBundleService({ workspaceRoot });
   const contextBudgetService = createContextBudgetService();
   const routingAuditLogService = createRoutingAuditLogService({ pool, workspaceRoot });
@@ -354,7 +355,7 @@ export function createWorkflowEngine({
     if (!["pending", "failed"].includes(stepStatus)) {
       return { skipped: true, reason: `step status ${stepStatus}` };
     }
-    const payload = buildStepPayload({ run, stepDef, stepIndex });
+    const payload = await buildStepPayload({ run, stepDef, stepIndex });
     const toolPermission = validateToolPermission(String(stepDef.role || ""), String(stepDef.tool || ""));
     if (!toolPermission.allowed) {
       await recordEvent(workflow_run_id, "policy.tool_permission.denied", {

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { truncateContextForTokenBudget } from "./task_contract.js";
 
 export function buildAutoFixPrompt({ originalPrompt, previousFailure, attemptIndex }) {
   const lines = [
@@ -75,7 +76,26 @@ export function writePromptContractArtifact({
   executionAdapterPacket,
   contextPacket,
   repoMap,
+  contextEnvelope = null,
 }) {
+  // Token budget truncation (Phase 0, P0-3)
+  let effectiveContextPacket = contextPacket;
+  let effectiveRepoMap = repoMap;
+  let contextEnvelopeTruncated = false;
+  let contextTokenUsage = null;
+  const maxTokens = Number(contextEnvelope?.max_tokens || 0);
+  if (maxTokens > 0 && (contextPacket || repoMap)) {
+    const result = truncateContextForTokenBudget({
+      contextPacket: contextPacket || {},
+      repoMap: repoMap || {},
+      maxTokens,
+    });
+    effectiveContextPacket = result.contextPacket;
+    effectiveRepoMap = result.repoMap;
+    contextEnvelopeTruncated = result.truncated;
+    contextTokenUsage = result.tokenUsage;
+  }
+
   const contractBlock = buildExecutionPromptContract({
     stepId,
     targetPaths,
@@ -83,8 +103,8 @@ export function writePromptContractArtifact({
     verificationCommand,
     verificationPlan,
     executionAdapterPacket,
-    contextPacket,
-    repoMap,
+    contextPacket: effectiveContextPacket,
+    repoMap: effectiveRepoMap,
   });
   const prompt = `${String(basePrompt || "").trim()}\n\n${contractBlock}\n`;
   const diagnostics = {
@@ -96,6 +116,8 @@ export function writePromptContractArtifact({
     execution_mode: String(executionAdapterPacket?.execution_mode || "default"),
     prompt_sha1: crypto.createHash("sha1").update(prompt).digest("hex"),
     attempt: attemptIndex,
+    context_envelope_truncated: contextEnvelopeTruncated,
+    context_token_usage: contextTokenUsage,
   };
   let relPath = null;
   try {

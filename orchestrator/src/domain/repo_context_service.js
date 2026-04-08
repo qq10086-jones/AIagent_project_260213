@@ -1,5 +1,9 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
+import { exec } from "child_process";
+
+import { isCacheEnabled } from "../../../shared/feature_flags.js";
 
 const TEXT_EXTENSIONS = new Set([
   ".js", ".jsx", ".ts", ".tsx", ".json", ".md", ".txt", ".py", ".rb", ".java", ".go", ".rs", ".css", ".scss", ".html", ".yml", ".yaml"
@@ -144,7 +148,20 @@ function extractSymbolHints(workspaceRoot, files = []) {
   return hints;
 }
 
-export function createRepoContextService({ workspaceRoot = "." } = {}) {
+async function getGitHeadSha(cwd) {
+  return new Promise((resolve) => {
+    exec("git rev-parse HEAD", { cwd, timeout: 5000 }, (error, stdout) => {
+      resolve(error ? null : String(stdout || "").trim());
+    });
+  });
+}
+
+function makeCacheKey(workspaceAbs, sha, targetPaths) {
+  const raw = `${workspaceAbs}:${sha}:${JSON.stringify(targetPaths || [])}`;
+  return `repo_map:${crypto.createHash("sha256").update(raw).digest("hex")}`;
+}
+
+export function createRepoContextService({ workspaceRoot = ".", redis = null } = {}) {
   const workspaceAbs = path.resolve(workspaceRoot);
 
   function resolveScopedPaths(targetPaths = []) {
@@ -219,8 +236,47 @@ export function createRepoContextService({ workspaceRoot = "." } = {}) {
     };
   }
 
+  async function buildRepoMapCached(opts = {}) {
+    if (!redis || !isCacheEnabled()) return buildRepoMap(opts);
+    try {
+      const sha = await getGitHeadSha(workspaceAbs);
+      if (!sha) return buildRepoMap(opts);
+      const key = makeCacheKey(workspaceAbs, sha, opts.targetPaths);
+      const cached = await redis.get(key);
+      if (cached) {
+        try { return JSON.parse(cached); } catch { /* fall through */ }
+      }
+      const result = buildRepoMap(opts);
+      try { await redis.set(key, JSON.stringify(result), "EX", 3600); } catch { /* ignore */ }
+      return result;
+    } catch (err) {
+      console.warn("[repo_context] cache error, falling back:", err.message);
+      return buildRepoMap(opts);
+    }
+  }
+
+  async function buildContextPacketCached(opts = {}) {
+    if (!redis || !isCacheEnabled()) return buildContextPacket(opts);
+    try {
+      const sha = await getGitHeadSha(workspaceAbs);
+      if (!sha) return buildContextPacket(opts);
+      const raw = `${workspaceAbs}:ctx:${sha}:${JSON.stringify(opts.targetPaths || [])}:${String(opts.stepId || "")}`;
+      const key = `context_packet:${crypto.createHash("sha256").update(raw).digest("hex")}`;
+      const cached = await redis.get(key);
+      if (cached) {
+        try { return JSON.parse(cached); } catch { /* fall through */ }
+      }
+      const result = buildContextPacket(opts);
+      try { await redis.set(key, JSON.stringify(result), "EX", 3600); } catch { /* ignore */ }
+      return result;
+    } catch (err) {
+      console.warn("[repo_context] cache error, falling back:", err.message);
+      return buildContextPacket(opts);
+    }
+  }
+
   return {
-    buildRepoMap,
-    buildContextPacket,
+    buildRepoMap: buildRepoMapCached,
+    buildContextPacket: buildContextPacketCached,
   };
 }

@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { createStepBuilder } from "../src/domain/workflow_step_builder.js";
 
-function main() {
+async function main() {
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "worker-coding-template-"));
   fs.mkdirSync(path.join(workspaceRoot, "sandbox", "crm_site"), { recursive: true });
   fs.writeFileSync(path.join(workspaceRoot, "sandbox", "crm_site", "app.js"), "export const app = 1;\n", "utf8");
@@ -55,7 +55,7 @@ function main() {
     runtimeConfig: {},
   });
 
-  const payload = buildStepPayload({
+  const payload = await buildStepPayload({
     run: {
       run_id: "run-1",
       workflow_run_id: "wf-1",
@@ -119,8 +119,8 @@ function main() {
   assert.equal(payload.verification_command, "node --check sandbox/crm_site/app.js");
   assert.ok(Array.isArray(payload.human_acceptance_criteria));
 
-  assert.throws(() => {
-    buildStepPayload({
+  await assert.rejects(async () => {
+    await buildStepPayload({
       run: {
         run_id: "run-2",
         workflow_run_id: "wf-2",
@@ -150,10 +150,8 @@ function main() {
   console.log("worker_coding_templates.test.js: all tests passed");
 }
 
-try {
-  main();
-} catch (err) {
+main().catch((err) => {
   console.error("worker_coding_templates.test.js: failed");
   console.error(err);
   process.exit(1);
-}
+});

@@ -127,7 +127,24 @@
       "Bash(/d/python/python.exe --version)",
       "Bash(powershell.exe:*)",
       "Bash(PYTHONIOENCODING=utf-8 python quant_briefing.py --mode full)",
-      "Bash(docker --version)"
+      "Bash(docker --version)",
+      "Bash(PYTHONIOENCODING=utf-8 python quant_briefing.py --mode full --output-version v2 --strategy_id sprint --no-refresh)",
+      "Bash(PYTHONIOENCODING=utf-8 python quant_briefing.py --mode stock --symbols 4005.T,7267.T,9432.T --strategy_id sprint --no-refresh)",
+      "Bash(PYTHONIOENCODING=utf-8 python build_positions.py --db japan_market.db --run_id 2026-04-07__manual_sell --asof 2026-04-07 --strategy_id sprint)",
+      "Bash(PYTHONIOENCODING=utf-8 python build_account_snapshot.py --db japan_market.db --run_id 2026-04-07__manual_sell --asof 2026-04-07 --strategy_id sprint)",
+      "Bash(PYTHONIOENCODING=utf-8 python quant_briefing.py --mode full --output-version v2 --strategy_id sprint)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m pytest tests/test_execution_discipline.py -v)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m pytest tests/test_execution_discipline.py -v --basetemp=E:/tmp_pytest)",
+      "Bash(PYTHONIOENCODING=utf-8 python intraday_monitor.py --mode midday --db japan_market.db --config config.yaml --strategy_id sprint --no-live)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m pytest tests/ -v --basetemp=E:/tmp_pytest)",
+      "Bash(C:/Windows/System32/schtasks.exe /Query /FO LIST /V)",
+      "Bash(powershell:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m pytest tests/ -v --tb=short --basetemp=E:/tmp_pytest)",
+      "Bash(crontab -l)",
+      "Bash(schtasks.exe /query /fo TABLE)",
+      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python daily_run.py --config config.yaml)",
+      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python quant_briefing.py --mode full --output-version v2)",
+      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python quant_briefing.py --mode full --output-version v2 --strategy_id sprint)"
     ]
   }
 }

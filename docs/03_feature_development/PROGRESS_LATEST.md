@@ -1,14 +1,19 @@
-# Nexus Project Progress Report - 2026-04-06
+# Nexus Project Progress Report - 2026-04-09
 
 ## Current Status
 
-Nexus v3.1 is feature-complete for M1-M4 milestones. The critical `HANDOFF_TYPED_SCHEMA_INVALID`
-blocker that prevented real MiniMax E2E runs from completing `impl_be` has been root-caused and
-fixed. All orchestrator tests pass (211/211).
+Nexus v3.2 Phase 1 + Phase 1.5 implementation complete. Worker-coder now has deterministic
+micro-fix capability (surgical patch) and refinement re-entry (iterative fix with task lineage).
+All worker-coder tests pass (27 files, including 3 new test files with 33 new test cases).
 
 Latest high-signal outcomes:
 
-- **NEW (2026-04-06)**: Root-caused `impl_be` `HANDOFF_TYPED_SCHEMA_INVALID` failure — `be_to_fe.json` schema required `name` field on api_contracts items, but MiniMax output only provides `method` + `path`
+- **NEW (2026-04-09)**: v3.2 Phase 1 implemented — `surgical_patch.js` deterministic micro-fix engine (JSON trailing comma, JS unclosed bracket, Python indentation), integrated into `coding_service.js` retry loop as transparent pre-processor
+- **NEW (2026-04-09)**: v3.2 Phase 1.5 implemented (worker-coder side) — `refinement_context_builder.js` task lineage context builder, `normalizeLineage` in `task_contract.js`, lineage tracking in `failure_memory.js`, prompt injection in `coding_service.js`
+- **NEW (2026-04-09)**: `native_file_tools.js` — read-only file access with path traversal protection, protected root blocking, content redaction
+- **NEW (2026-04-09)**: Feature flags added: `surgical_patch_enabled` (default false), `refinement_reentry_enabled` (default false) in `runtime_defaults.json`
+- **NEW (2026-04-09)**: Worker-coder tests 27/27 files PASS (was 24, +3 new: native_file_tools, surgical_patch, refinement_context_builder)
+- **2026-04-06**: Root-caused `impl_be` `HANDOFF_TYPED_SCHEMA_INVALID` failure — `be_to_fe.json` schema required `name` field on api_contracts items, but MiniMax output only provides `method` + `path`
 - **NEW (2026-04-06)**: Fixed `coding_team_be_to_fe_handoff.schema.json` — `api_contracts.items.required` relaxed from `["name","method","path"]` to `["method","path"]`
 - **NEW (2026-04-06)**: Added regression test for LLM-tolerance (api_contracts without `name`)
 - **NEW (2026-04-06)**: Orchestrator tests 211/211 PASS (was 210)

@@ -33,6 +33,8 @@
     "execution_lane_default": "stable_cloud_lane",
     "allow_provider_fallback_default": false,
     "stream_batch_size": 1,
+    "surgical_patch_enabled": false,
+    "refinement_reentry_enabled": false,
     "execution_lanes": {
       "stable_codex_lane": {
         "provider": "codex",

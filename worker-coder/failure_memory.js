@@ -35,6 +35,7 @@ export function persistCodingFailureMemory({
   taskClass = null,
   betaTemplateId = null,
   contextEnvelope = null,
+  lineage = null,
 }) {
   try {
     const runDir = path.join(workspaceRoot, "artifacts", "runs", runId || "default");
@@ -66,6 +67,12 @@ export function persistCodingFailureMemory({
         betaTemplateId,
         contextEnvelope,
       }),
+      lineage: lineage && typeof lineage === "object" ? {
+        parent_task_id: String(lineage.parent_task_id || ""),
+        parent_run_id: String(lineage.parent_run_id || ""),
+        refinement_round: Number(lineage.refinement_round || 0),
+        refinement_instruction: String(lineage.refinement_instruction || "").slice(0, 500),
+      } : null,
     };
     const jsonlPath = path.join(memoryDir, "coding_failures.jsonl");
     fs.appendFileSync(jsonlPath, `${JSON.stringify(entry)}\n`, "utf8");
@@ -110,6 +117,7 @@ export function buildDelegateFailureSummary({
   taskClass = null,
   betaTemplateId = null,
   contextEnvelope = null,
+  lineage = null,
 }) {
   const failureMemory = persistCodingFailureMemory({
     workspaceRoot,
@@ -139,6 +147,7 @@ export function buildDelegateFailureSummary({
     taskClass,
     betaTemplateId,
     contextEnvelope,
+    lineage,
   });
   const taskContract = buildTaskContractMetadata({
     taskClass,
@@ -176,6 +185,7 @@ export function buildDelegateFailureSummary({
       static_check: staticCheck || { checked: false, ok: true, commands: [], logPath: null },
       verification: verification || { checked: false, ok: true, command: "", logPath: null },
       coding_failure_memory: failureMemory,
+      lineage: lineage || null,
     },
     error,
     command_used: adapterResult?.command_used || null,

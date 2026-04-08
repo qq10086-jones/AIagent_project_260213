@@ -49,7 +49,9 @@ import {
     validateChangedFilesWithinScope,
     validateRequestedWrite,
 } from './scope_guard.js';
-import { buildTaskContractMetadata } from './task_contract.js';
+import { buildTaskContractMetadata, normalizeLineage } from './task_contract.js';
+import { canFix, applySurgicalPatches } from './surgical_patch.js';
+import { buildRefinementContext } from './refinement_context_builder.js';
 
 import {
     getWorkflowStepHandoff,
@@ -337,6 +339,7 @@ export const CodingService = {
             task_class = null,
             beta_template_id = null,
             context_envelope = null,
+            lineage = null,
             on_runtime_event = null,
             redis = null,
         } = params;
@@ -346,6 +349,8 @@ export const CodingService = {
             betaTemplateId: beta_template_id,
             contextEnvelope: context_envelope,
         });
+        const refinementReentryEnabled = !!(runtime_coder_config?.refinement_reentry_enabled);
+        const normalizedLineage = refinementReentryEnabled ? normalizeLineage(lineage) : null;
 
         const providerRequested = String(provider || "auto").toLowerCase();
         if (!SUPPORTED_PROVIDERS.has(providerRequested)) {
@@ -367,6 +372,7 @@ export const CodingService = {
                 taskClass: taskContract.task_class,
                 betaTemplateId: taskContract.beta_template_id,
                 contextEnvelope: taskContract.context_envelope,
+                lineage: normalizedLineage,
             });
             return {
                 ok: false,
@@ -408,6 +414,7 @@ export const CodingService = {
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
                     contextEnvelope: taskContract.context_envelope,
+                    lineage: normalizedLineage,
                 });
                 return {
                     ok: false,
@@ -480,6 +487,9 @@ export const CodingService = {
         let finalSummary = null;
         let finalFallbackFrom = null;
         let terminalRetryReason = "completed";
+        const surgicalPatchEnabled = !!(runtime_coder_config?.surgical_patch_enabled);
+        let surgicalPatchAttempted = false;
+        let refinementDiagnostics = null;
 
         for (let attemptIndex = 1; attemptIndex <= maxAttemptsSafe; attemptIndex++) {
             const remainingMs = (startedMs + (wallClockTimeoutSafe * 1000)) - Date.now();
@@ -512,17 +522,32 @@ export const CodingService = {
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
                     contextEnvelope: taskContract.context_envelope,
+                    lineage: normalizedLineage,
                 });
                 break;
             }
             const priorFailure = attemptRecords.length > 0 ? attemptRecords[attemptRecords.length - 1] : null;
-            const promptSeed = attemptIndex === 1
+            let promptSeed = attemptIndex === 1
                 ? task_prompt
                 : buildAutoFixPrompt({
                     originalPrompt: task_prompt,
                     previousFailure: priorFailure,
                     attemptIndex,
                 });
+
+            // --- Phase 1.5: Refinement Re-entry context injection ---
+            if (normalizedLineage && attemptIndex === 1) {
+                const refinementCtx = buildRefinementContext({
+                    lineage: normalizedLineage,
+                    workspaceRoot: executionWorkspaceRoot,
+                    targetPaths: effectiveTargetPaths,
+                });
+                if (refinementCtx.contextBlock) {
+                    promptSeed = `${refinementCtx.contextBlock}\n\n${promptSeed}`;
+                }
+                refinementDiagnostics = refinementCtx.diagnostics;
+            }
+
             const promptContract = writePromptContractArtifact({
                 workspaceRoot,
                 taskDir,
@@ -650,6 +675,7 @@ export const CodingService = {
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
                     contextEnvelope: taskContract.context_envelope,
+                    lineage: normalizedLineage,
                 });
                 break;
             }
@@ -709,7 +735,7 @@ export const CodingService = {
                 })
                 : { checked: false, ok: true };
 
-            const staticCheck = result?.ok
+            let staticCheck = result?.ok
                 ? await runStaticChecks({
                     workspaceRoot: executionWorkspaceRoot,
                     filesChanged: finalGitSummary?.filesChanged || [],
@@ -726,6 +752,45 @@ export const CodingService = {
                     taskDir,
                 })
                 : { checked: false, ok: true, command: "", commands: [], records: [], achieved_tiers: [], unresolved_tiers: [], logPath: null };
+
+            // --- Phase 1: Surgical Patch Pre-processor ---
+            // Attempt deterministic micro-fix before entering the decision tree.
+            // If successful, staticCheck is overridden to the passing recheck result,
+            // and the existing if/else chain naturally falls through to the success path.
+            if (result?.ok && staticCheck.checked && !staticCheck.ok
+                && surgicalPatchEnabled && !surgicalPatchAttempted) {
+                const fixability = canFix({ records: staticCheck.records || [] });
+                if (fixability.fixable) {
+                    const patchResult = applySurgicalPatches({
+                        executionWorkspaceRoot,
+                        records: staticCheck.records || [],
+                        allowedTargetPaths: effectiveTargetPaths,
+                        workspaceRoot,
+                    });
+                    surgicalPatchAttempted = true;
+                    if (patchResult.success) {
+                        const recheck = await runStaticChecks({
+                            workspaceRoot: executionWorkspaceRoot,
+                            filesChanged: patchResult.patches_applied.map((p) => p.file),
+                            taskDir,
+                            redis,
+                        });
+                        if (recheck.ok) {
+                            staticCheck = { ...recheck, surgical_patch: {
+                                attempted: true, success: true,
+                                patches_applied: patchResult.patches_applied,
+                            }};
+                        }
+                    }
+                    if (!staticCheck.ok) {
+                        staticCheck.surgical_patch = {
+                            attempted: true, success: false,
+                            patches_applied: patchResult.patches_applied,
+                            failure_reason: patchResult.failure_reason,
+                        };
+                    }
+                }
+            }
 
             if (result?.ok && roleValidation.checked && !roleValidation.ok) {
                 finalSummary = buildDelegateFailureSummary({
@@ -755,6 +820,7 @@ export const CodingService = {
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
                     contextEnvelope: taskContract.context_envelope,
+                    lineage: normalizedLineage,
                 });
                 finalSummary.diagnostics = {
                     ...(finalSummary.diagnostics || {}),
@@ -789,6 +855,7 @@ export const CodingService = {
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
                     contextEnvelope: taskContract.context_envelope,
+                    lineage: normalizedLineage,
                 });
                 finalSummary.diagnostics = {
                     ...(finalSummary.diagnostics || {}),
@@ -822,6 +889,7 @@ export const CodingService = {
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
                     contextEnvelope: taskContract.context_envelope,
+                    lineage: normalizedLineage,
                 });
             } else if (result?.ok && verification.checked && !verification.ok) {
                 finalSummary = buildDelegateFailureSummary({
@@ -851,6 +919,7 @@ export const CodingService = {
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
                     contextEnvelope: taskContract.context_envelope,
+                    lineage: normalizedLineage,
                 });
             } else if (!result?.ok) {
                 finalSummary = buildDelegateFailureSummary({
@@ -880,6 +949,7 @@ export const CodingService = {
                     taskClass: taskContract.task_class,
                     betaTemplateId: taskContract.beta_template_id,
                     contextEnvelope: taskContract.context_envelope,
+                    lineage: normalizedLineage,
                 });
             } else {
                 const promotion = isolationScaffold?.enabled
@@ -930,6 +1000,7 @@ export const CodingService = {
                         taskClass: taskContract.task_class,
                         betaTemplateId: taskContract.beta_template_id,
                         contextEnvelope: taskContract.context_envelope,
+                        lineage: normalizedLineage,
                     });
                     finalSummary.artifacts = {
                         ...(finalSummary.artifacts || {}),
@@ -1008,6 +1079,11 @@ export const CodingService = {
                         },
                         parse_error: false,
                         truncated: false,
+                        surgical_patch: staticCheck.surgical_patch || null,
+                        refinement: normalizedLineage ? {
+                            lineage: normalizedLineage,
+                            context_diagnostics: refinementDiagnostics,
+                        } : null,
                     },
                     error: redactSensitiveText(result.error || "") || null,
                     command_used: result.command_used || null,

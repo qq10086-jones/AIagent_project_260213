@@ -16,6 +16,7 @@
 | v3.2.1 | 新增 Phase 1.5 迭代修复回路 (Refinement Re-entry)，补齐"做完后回来改"的核心缺失 |
 | v3.2.2 | 新增 Phase 0 Redis Caching 层 + gpt-tokenizer；新增附录 B Harness 对标分析与结论 |
 | v3.2.3 | Phase 0 实施完成 (P0-1/P0-2/P0-3 全部落地，测试全绿)，更新状态标记 |
+| v3.2.4 | Phase 1 + Phase 1.5 实施完成 (P1-1/P1-2/P1-3/P1.5-1/P1.5-2/P1.5-3/P1.5-5 全部落地，27 测试文件全绿含 33 新用例)，feature flags 默认 false |
 
 ---
 
@@ -202,7 +203,7 @@ export function validateContextTokenBudget({ contextText, maxTokens }) {
 
 ---
 
-## 三、Phase 1 — 轻量微操层 (Surgical Patch Layer)
+## 三、Phase 1 — 轻量微操层 (Surgical Patch Layer) ✅ COMPLETED (2026-04-09)
 
 ### 3.1 目标
 
@@ -329,7 +330,7 @@ export function nativeListDir({ workspaceRoot, relPath, maxEntries = 200 }) {
 
 ---
 
-## 三点五、Phase 1.5 — 迭代修复回路 (Refinement Re-entry)
+## 三点五、Phase 1.5 — 迭代修复回路 (Refinement Re-entry) ✅ COMPLETED (2026-04-09, worker-coder side; orchestrator P1.5-4 pending)
 
 ### 3.5.1 问题陈述
 

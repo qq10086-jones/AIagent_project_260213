@@ -53,6 +53,27 @@ export function deriveFailureAttribution({ phase, errorCode }) {
   return "coding_logic_failure";
 }
 
+// --- Lineage normalization (Phase 1.5, P1.5-2) ---
+
+const REFINEMENT_MAX_ROUNDS = 5;
+
+export function normalizeLineage(lineage) {
+  if (!lineage || typeof lineage !== "object") return null;
+  const round = Number(lineage.refinement_round);
+  if (!Number.isFinite(round) || round < 1 || round > REFINEMENT_MAX_ROUNDS) return null;
+  const parentTaskId = String(lineage.parent_task_id || "").trim();
+  if (!parentTaskId) return null;
+  return {
+    parent_task_id: parentTaskId,
+    parent_run_id: String(lineage.parent_run_id || "").trim() || null,
+    refinement_round: Math.trunc(round),
+    refinement_instruction: String(lineage.refinement_instruction || "").trim() || null,
+    inherited_context: lineage.inherited_context && typeof lineage.inherited_context === "object"
+      ? lineage.inherited_context
+      : null,
+  };
+}
+
 // --- Token counting (Phase 0, P0-3) ---
 
 export function countTokens(text) {

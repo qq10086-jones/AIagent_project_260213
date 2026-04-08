@@ -335,6 +335,7 @@ async function processTask(msgId, task, lifecycle) {
         task_class: payload.task_class || null,
         beta_template_id: payload.beta_template_id || null,
         context_envelope: payload.context_envelope || null,
+        lineage: payload.lineage || null,
         on_runtime_event: async (event) => {
           await emitPiSessionUpdate(task_id, tool_name, event);
         },

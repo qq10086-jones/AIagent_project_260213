@@ -2,6 +2,7 @@ import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import {
   extractJson,
+  tryFixTruncatedJson,
   generateProjectSlug,
   buildDecompositionPrompt,
   buildFallbackPlan,
@@ -29,6 +30,63 @@ describe("extractJson", () => {
     const text = '{"a": {"b": 1}, "c": [{"d": 2}]}';
     const result = extractJson(text);
     assert.deepEqual(result, { a: { b: 1 }, c: [{ d: 2 }] });
+  });
+
+  it("strips <think> tags before extraction", () => {
+    const text = '<think>\nLet me think about this...\n</think>\n```json\n{"runs": [1]}\n```';
+    const result = extractJson(text);
+    assert.deepEqual(result, { runs: [1] });
+  });
+
+  it("strips unclosed <think> tag (truncated thinking)", () => {
+    // Unclosed think = LLM was cut off mid-thinking, no usable JSON
+    const text = '<think>\nStill thinking about the structure...';
+    const result = extractJson(text);
+    assert.equal(result, null);
+  });
+
+  it("extracts JSON after closed think followed by more content", () => {
+    const text = '<think>planning...</think>\nHere is the result:\n{"runs": []}';
+    const result = extractJson(text);
+    assert.deepEqual(result, { runs: [] });
+  });
+
+  it("handles long thinking chain before JSON", () => {
+    const think = '<think>' + 'x'.repeat(5000) + '</think>';
+    const text = think + '\n{"modules": [], "runs": [{"run_key": "R-01"}]}';
+    const result = extractJson(text);
+    assert.ok(result);
+    assert.equal(result.runs[0].run_key, "R-01");
+  });
+});
+
+describe("tryFixTruncatedJson", () => {
+  it("fixes missing closing braces", () => {
+    const result = tryFixTruncatedJson('{"a": 1, "b": {"c": 2}');
+    assert.deepEqual(result, { a: 1, b: { c: 2 } });
+  });
+
+  it("fixes missing closing brackets and braces", () => {
+    const result = tryFixTruncatedJson('{"runs": [{"key": "R-01"}, {"key": "R-02"}');
+    assert.ok(result);
+    assert.equal(result.runs.length, 2);
+  });
+
+  it("handles truncated string value", () => {
+    const result = tryFixTruncatedJson('{"a": 1, "b": "truncated val');
+    assert.ok(result);
+    assert.equal(result.a, 1);
+  });
+
+  it("returns null for non-object input", () => {
+    assert.equal(tryFixTruncatedJson("just text"), null);
+    assert.equal(tryFixTruncatedJson(""), null);
+  });
+
+  it("removes trailing incomplete key-value pair", () => {
+    const result = tryFixTruncatedJson('{"complete": true, "incomplete":');
+    assert.ok(result);
+    assert.equal(result.complete, true);
   });
 });
 

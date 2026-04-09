@@ -316,7 +316,7 @@ const executeVNextDispatch = createExecuteVNextDispatch({
   ensureRun, parseIntent, registry: REGISTRY, generateBrainDirectReply, pool,
   updateRunStatus: async (_pool, run_id, status) => updateRunStatus(run_id, status),
   enqueueTask, workflowEngine, coderProviderDefault: CODER_PROVIDER_DEFAULT, coderModelDefault: CODER_MODEL_DEFAULT,
-  waterfallTraceService,
+  waterfallTraceService, runtimeConfig: RUNTIME_CONFIG,
 });
 
 const handleApiChat = createHandleApiChat({

@@ -2,6 +2,7 @@ export const RESPONSE_MODES = [
   "direct_reply",
   "progress_update",
   "approval_request",
+  "project_plan_pending",
   "final_completion_reply",
 ];
 
@@ -52,5 +53,16 @@ export function makeWorkflowQueuedResponse({ run_id, task_envelope, workflow_run
       workflow_id,
       first_step: first_step || null,
     },
+  };
+}
+
+export function makeProjectPlanPendingResponse({ run_id, task_envelope, project_plan }) {
+  return {
+    ok: true,
+    response_mode: "project_plan_pending",
+    run_id,
+    task_envelope,
+    project_plan,
+    confirm_instructions: "Review the plan. POST /api/v1/project/confirm with { run_id, project_plan } to execute, or modify runs[] before confirming.",
   };
 }

@@ -4,38 +4,107 @@
  * v3.3 Project Planner — LLM-driven product-level requirement decomposition.
  * Takes a raw user requirement and decomposes it into multiple workflow runs,
  * each executable by the existing coding_team_v0 pipeline.
+ *
+ * Supports two LLM backends:
+ *   - MiniMax (cloud) via qwenChat()
+ *   - Ollama (local) via callLocalOllamaChat() — default for planner
  */
 
 import { qwenChat } from "../nlp/router.js";
+import { callLocalOllamaChat } from "./local_llm_client.js";
 import { inferCodingProjectType } from "./coding_project_type.js";
 import { validateProjectPlan, topoSort, computeWaves } from "./project_plan_contract.js";
 
+// ---------------------------------------------------------------------------
+// extractJson — robust JSON extraction from LLM output
+// ---------------------------------------------------------------------------
+
 /**
  * 从 LLM 响应中提取 JSON 对象。
- * 支持 ```json ... ``` fence 和裸 JSON。
+ * 处理: <think> 标签、```json fence、裸 JSON、截断 JSON 修复。
  */
 function extractJson(text) {
-  const raw = String(text || "").trim();
+  let raw = String(text || "").trim();
 
-  // 尝试 ```json ... ``` fence
+  // 1. 移除 <think>...</think> 标签（MiniMax-M2.7 thinking chain）
+  raw = raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  // 移除未闭合的 <think>... (截断的 thinking)
+  raw = raw.replace(/<think>[\s\S]*$/gi, "").trim();
+
+  // 2. 尝试 ```json ... ``` fence
   const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
   if (fenceMatch) {
-    try { return JSON.parse(fenceMatch[1].trim()); } catch { /* fall through */ }
+    const fenceContent = fenceMatch[1].trim();
+    try { return JSON.parse(fenceContent); } catch {
+      // fence 内 JSON 可能被截断，尝试修复
+      const fixed = tryFixTruncatedJson(fenceContent);
+      if (fixed) return fixed;
+    }
   }
 
-  // 尝试第一个 { ... } 块
+  // 3. 尝试第一个 { ... } 块
   const braceStart = raw.indexOf("{");
   const braceEnd = raw.lastIndexOf("}");
   if (braceStart >= 0 && braceEnd > braceStart) {
-    try { return JSON.parse(raw.slice(braceStart, braceEnd + 1)); } catch { /* fall through */ }
+    const candidate = raw.slice(braceStart, braceEnd + 1);
+    try { return JSON.parse(candidate); } catch {
+      const fixed = tryFixTruncatedJson(candidate);
+      if (fixed) return fixed;
+    }
+  }
+
+  // 4. 最后尝试: 从 { 开始到末尾，修复截断
+  if (braceStart >= 0) {
+    const tail = raw.slice(braceStart);
+    const fixed = tryFixTruncatedJson(tail);
+    if (fixed) return fixed;
   }
 
   return null;
 }
 
 /**
- * 生成项目 slug (用于 workspace 路径)。
+ * 尝试修复被截断的 JSON。
+ * 策略: 补齐缺失的 ] 和 }，移除尾部不完整的字段。
  */
+function tryFixTruncatedJson(text) {
+  let s = String(text || "").trim();
+  if (!s.startsWith("{")) return null;
+
+  // 移除尾部不完整的键值对 (如 "key": "val 或 "key": [1,2
+  s = s.replace(/,\s*"[^"]*"?\s*:\s*("([^"\\]|\\.)*)?$/g, "");
+  s = s.replace(/,\s*$/g, "");
+
+  // 计算未闭合的括号
+  let braces = 0;
+  let brackets = 0;
+  let inString = false;
+  let escape = false;
+  for (const ch of s) {
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") braces++;
+    if (ch === "}") braces--;
+    if (ch === "[") brackets++;
+    if (ch === "]") brackets--;
+  }
+
+  // 如果在字符串内，先闭合字符串
+  if (inString) s += '"';
+
+  // 补齐括号
+  while (brackets > 0) { s += "]"; brackets--; }
+  while (braces > 0) { s += "}"; braces--; }
+
+  try { return JSON.parse(s); } catch { return null; }
+}
+
+// ---------------------------------------------------------------------------
+// Prompt construction
+// ---------------------------------------------------------------------------
+
 function generateProjectSlug(rawInput) {
   const slug = String(rawInput || "")
     .replace(/[^\w\u4e00-\u9fff\s-]/g, "")
@@ -47,88 +116,43 @@ function generateProjectSlug(rawInput) {
 }
 
 /**
- * 构建 decomposition prompt。
- * 所有变量运行时注入 — 不硬编码枚举或路径。
+ * 精简的 decomposition prompt。
  */
 function buildDecompositionPrompt({ rawInput, taskClasses, projectType, workspaceRoot }) {
   const taskClassList = Array.isArray(taskClasses) ? taskClasses : [...taskClasses];
 
-  return `<role>
-你是 Nexus 项目规划器。你的职责是将产品级需求拆解为多个可独立执行的功能模块（Run）。
-每个 Run 将由一条完整的 coding_team_v0 流水线执行（PM→架构→实现→测试→QA→发布）。
-</role>
+  return `你是项目拆解器。将产品需求拆为多个独立 Run，每个 Run 由 coding_team_v0 流水线执行。
 
-<task>
-将以下需求拆解为多个独立的 Runs。
 需求: ${rawInput}
-</task>
-
-<constraints>
-已注册 task_class: ${JSON.stringify(taskClassList)}
+task_class 枚举: ${taskClassList.join(" | ")}
 项目类型: ${projectType}
-目标 workspace: ${workspaceRoot}
-</constraints>
+workspace: ${workspaceRoot}
 
-<rules>
-1. 粒度控制: 每个 Run 必须是一个 LLM 在单次调用中能完成的功能单元
-   - 好的粒度: "用户认证 API（注册+登录+JWT验证）" — 1个模块, 3-5个文件
-   - 坏的粒度: "整个后端" — 太大; "加一行配置" — 太小
-2. task_class 必须从已注册枚举中选择: ${taskClassList.join(" | ")}
-3. depends_on 声明因果依赖:
-   - 后端 API 必须先于调用它的前端页面
-   - 共享数据模型必须先于使用它的业务逻辑
-   - 不相关的模块之间不要加假依赖
-4. target_paths 在不同 Run 之间不得重叠，每个 run 用独立子目录
-5. 每个 Run 包含 2-5 条具体的验收标准（AC），可验证、可自动化
-6. 总 Run 数量: 3-12 个
-7. shared_context.artifacts 只能引用标准 artifact 路径:
-   handoff/pm_to_architect.json, handoff/architect_to_impl.json,
-   handoff/be_to_fe.json, handoff/impl_to_qa.json,
-   plan/interfaces.md, plan/spec.md, plan/arch.md, plan/workplan.json
-8. prompt 字段: 写给 PM 角色看的需求描述 (200-500字)，包含:
-   - 要实现的功能
-   - 关键数据结构/接口
-   - 与其他模块的边界约束
-9. run_key 格式: R-01, R-02, ..., R-12
-</rules>
+规则:
+1. 每 Run 粒度 = 1个 LLM 单次能完成的功能（1模块 3-5文件）
+2. task_class 只能从枚举中选
+3. depends_on 声明因果依赖（后端先于前端，共享模型先于业务逻辑）
+4. target_paths 不同 Run 间不重叠
+5. 每 Run 含 2-5 条可验证的 acceptance_criteria
+6. 总 Run 数: 2-12
+7. run_key 格式: R-01, R-02, ...
+8. prompt 字段写给 PM 的详细描述（至少 50 字）
 
-<output_format>
-返回 JSON，严格符合以下结构 (不要包含注释):
-{
-  "modules": [{ "module_id": "mod-xxx", "title": "...", "description": "..." }],
-  "runs": [{
-    "run_key": "R-01",
-    "module_id": "mod-xxx",
-    "task_class": "${taskClassList[0] || "be_create"}",
-    "title": "简短标题 (<80字符)",
-    "prompt": "给 PM 的详细需求描述 (200-500字)...",
-    "target_paths": ["${workspaceRoot}子路径/"],
-    "depends_on": [],
-    "shared_context": { "from_runs": [], "artifacts": [] },
-    "estimated_complexity": "medium",
-    "acceptance_criteria": ["AC-R01-1: 具体可验证条件"]
-  }],
-  "tech_stack_hints": { "backend": "...", "frontend": "...", "test": "..." }
-}
-</output_format>`;
+不要输出思考过程。直接返回 JSON（不要注释，不要 markdown 解释）:
+{"modules":[{"module_id":"mod-xxx","title":"...","description":"..."}],"runs":[{"run_key":"R-01","module_id":"mod-xxx","task_class":"${taskClassList[0] || "be_create"}","title":"标题(<80字)","prompt":"给PM的详细需求(至少50字)，描述功能、数据结构、边界...","target_paths":["${workspaceRoot}backend/"],"depends_on":[],"shared_context":{"from_runs":[],"artifacts":[]},"estimated_complexity":"medium","acceptance_criteria":["AC-R01-1: 具体可验证条件","AC-R01-2: 第二条"]}]}`;
 }
 
-/**
- * 构建 retry prompt — 包含上次失败的错误信息。
- */
 function buildRetryPrompt(originalPrompt, errors) {
   return `${originalPrompt}
 
-<retry_feedback>
-上次拆解结果未通过验证，请修正以下问题:
-${errors.map((e, i) => `${i + 1}. ${e}`).join("\n")}
-</retry_feedback>`;
+上次结果未通过验证，请修正:
+${errors.map((e, i) => `${i + 1}. ${e}`).join("\n")}`;
 }
 
-/**
- * 构建 single-run fallback plan。
- * 当 LLM 拆解失败时，退化为现有的单 run 行为。
- */
+// ---------------------------------------------------------------------------
+// Fallback & assembly
+// ---------------------------------------------------------------------------
+
 function buildFallbackPlan({ rawInput, projectType, workspaceRoot }) {
   return {
     project_id: `proj-fallback-${Date.now()}`,
@@ -158,14 +182,10 @@ function buildFallbackPlan({ rawInput, projectType, workspaceRoot }) {
   };
 }
 
-/**
- * 将 LLM 输出补全为完整的 project_plan.json。
- */
 function assemblePlan({ llmOutput, rawInput, projectType, workspaceRoot, model, config }) {
   const slug = generateProjectSlug(rawInput);
   const runs = Array.isArray(llmOutput.runs) ? llmOutput.runs : [];
 
-  // 从 runs 构建 dependency_graph
   const depGraph = {};
   for (const run of runs) {
     depGraph[String(run.run_key || "")] = Array.isArray(run.depends_on) ? [...run.depends_on] : [];
@@ -194,15 +214,17 @@ function assemblePlan({ llmOutput, rawInput, projectType, workspaceRoot, model, 
   };
 }
 
+// ---------------------------------------------------------------------------
+// Core decompose function
+// ---------------------------------------------------------------------------
+
 /**
- * 核心拆解函数。
- *
  * @param {object} opts
  * @param {string} opts.raw_input — 用户原始需求文本
- * @param {string} [opts.project_type] — 项目类型 (可选, 自动推断)
- * @param {object} [opts.classifier_result] — brain_router_classifier 结果
- * @param {object} [opts.registry] — capability_registry.json 对象
- * @param {Set|Array|object} [opts.task_classes] — 已注册 task_class
+ * @param {string} [opts.project_type]
+ * @param {object} [opts.classifier_result]
+ * @param {object} [opts.registry]
+ * @param {Set|Array|object} [opts.task_classes]
  * @param {object} [opts.config] — runtime config (project_planner_* flags)
  * @returns {Promise<object>} project_plan.json
  */
@@ -239,14 +261,16 @@ export async function decompose({
   });
 
   // 第一次 LLM 调用
-  let llmResult = await callLlm(prompt);
+  let llmResult = await callLlm(prompt, config);
   let llmRaw = llmResult?.raw;
   let llmOutput = llmResult?.parsed;
   let model = llmResult?.model || "unknown";
 
   if (!llmOutput) {
     console.warn("[project_planner] LLM returned no parseable JSON, using fallback");
-    return buildFallbackPlan({ rawInput, projectType, workspaceRoot });
+    const fb = buildFallbackPlan({ rawInput, projectType, workspaceRoot });
+    fb._llm_raw = llmRaw;
+    return fb;
   }
 
   // 验证
@@ -265,7 +289,7 @@ export async function decompose({
   if (!validation.ok && validation.errors.length > 0) {
     console.warn("[project_planner] First attempt failed validation, retrying with feedback");
     const retryPrompt = buildRetryPrompt(prompt, validation.errors);
-    const retryResult = await callLlm(retryPrompt);
+    const retryResult = await callLlm(retryPrompt, config);
     if (retryResult?.parsed) {
       plan = assemblePlan({
         llmOutput: retryResult.parsed,
@@ -288,7 +312,6 @@ export async function decompose({
     return fallback;
   }
 
-  // 附加验证结果
   plan.sorted = validation.sorted;
   plan.waves = validation.waves;
   plan._warnings = validation.warnings;
@@ -297,16 +320,74 @@ export async function decompose({
   return plan;
 }
 
+// ---------------------------------------------------------------------------
+// LLM call — supports Ollama (local) and MiniMax (cloud)
+// ---------------------------------------------------------------------------
+
 /**
- * 内部 LLM 调用封装。
+ * 调用 LLM 进行拆解。优先使用 Ollama 本地模型（无超时限制），
+ * 失败时 fallback 到 MiniMax cloud。
  */
-async function callLlm(systemContent) {
+async function callLlm(systemContent, config = {}) {
+  const provider = config.project_planner_llm_provider || process.env.PLANNER_LLM_PROVIDER || "auto";
+  const ollamaModel = config.project_planner_ollama_model || process.env.PLANNER_OLLAMA_MODEL || "gemma4:26b";
+  const ollamaBase = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+
+  // auto: 先试 Ollama，失败 fallback 到 MiniMax
+  // ollama: 只用 Ollama
+  // minimax: 只用 MiniMax
+  if (provider === "ollama" || provider === "auto") {
+    const ollamaResult = await callLlmOllama(systemContent, ollamaModel, ollamaBase);
+    if (ollamaResult?.parsed) return ollamaResult;
+    if (provider === "ollama") return ollamaResult; // 不 fallback
+    console.warn("[project_planner] Ollama failed, falling back to MiniMax");
+  }
+
+  return callLlmMinimax(systemContent);
+}
+
+async function callLlmOllama(systemContent, model, baseUrl) {
   try {
     const messages = [
       { role: "system", content: systemContent },
-      { role: "user", content: "请根据上述需求进行项目拆解，返回 JSON。" },
+      { role: "user", content: "请根据上述需求进行项目拆解，直接返回 JSON。" },
     ];
-    const result = await qwenChat(messages, 90000);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 min for local
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages,
+        think: false,
+        stream: false,
+        options: { num_ctx: 32768, num_predict: 32768 },
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.warn(`[project_planner] Ollama error: ${data?.error || response.status}`);
+      return { raw: null, parsed: null, model: null };
+    }
+    const raw = String(data.message?.content || "");
+    const parsed = extractJson(raw);
+    return { raw, parsed, model: `ollama/${model}` };
+  } catch (err) {
+    console.warn(`[project_planner] Ollama call failed: ${err.message}`);
+    return { raw: null, parsed: null, model: null };
+  }
+}
+
+async function callLlmMinimax(systemContent) {
+  try {
+    const messages = [
+      { role: "system", content: systemContent },
+      { role: "user", content: "请根据上述需求进行项目拆解，直接返回 JSON。" },
+    ];
+    const result = await qwenChat(messages, 300000, { max_tokens: 8192 });
     if (!result?.choices?.[0]?.message?.content) {
       return { raw: null, parsed: null, model: null };
     }
@@ -314,10 +395,10 @@ async function callLlm(systemContent) {
     const parsed = extractJson(raw);
     return { raw, parsed, model: result.model || null };
   } catch (err) {
-    console.error("[project_planner] LLM call failed:", err.message);
+    console.error("[project_planner] MiniMax call failed:", err.message);
     return { raw: null, parsed: null, model: null };
   }
 }
 
 // 导出内部函数用于测试
-export { extractJson, generateProjectSlug, buildDecompositionPrompt, buildFallbackPlan, assemblePlan };
+export { extractJson, tryFixTruncatedJson, generateProjectSlug, buildDecompositionPrompt, buildFallbackPlan, assemblePlan };

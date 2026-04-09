@@ -41,6 +41,8 @@
     "project_planner_max_parallel_runs": 2,
     "project_planner_failure_policy": "stop_dependents",
     "project_planner_confirm_mode": "manual",
+    "project_planner_llm_provider": "auto",
+    "project_planner_ollama_model": "gemma4:26b",
     "execution_lanes": {
       "stable_codex_lane": {
         "provider": "codex",

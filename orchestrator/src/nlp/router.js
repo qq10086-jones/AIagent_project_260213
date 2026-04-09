@@ -162,7 +162,7 @@ function normalizeModeSuggested(value, { requiresTools = false } = {}) {
   return requiresTools ? "run" : "chat";
 }
 
-export async function qwenChat(messages, timeoutMs = 60000) {
+export async function qwenChat(messages, timeoutMs = 60000, opts = {}) {
   const QWEN_KEY = process.env.MINIMAX_API_KEY || process.env.QWEN_API_KEY;
   if (!QWEN_KEY) return null;
   const baseRaw = String(QWEN_BASE || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1").replace(/\/+$/, "");
@@ -182,7 +182,8 @@ export async function qwenChat(messages, timeoutMs = 60000) {
         body: JSON.stringify({
           model: CURRENT_QWEN_MODEL,
           messages: messages,
-          temperature: 0.1 // Low temp for more deterministic routing
+          temperature: 0.1, // Low temp for more deterministic routing
+          ...(opts.max_tokens ? { max_tokens: opts.max_tokens } : {}),
         }),
         signal: controller.signal,
       });
@@ -195,6 +196,8 @@ export async function qwenChat(messages, timeoutMs = 60000) {
       return await response.json();
     } catch (e) {
       console.error("MiniMax Dispatcher Error:", e);
+      // 超时错误不继续尝试其他候选 — timeout 是硬限制
+      if (e?.name === "AbortError") return null;
     } finally {
       clearTimeout(timeoutId);
     }

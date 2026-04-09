@@ -1,18 +1,24 @@
-# Nexus Project Progress Report - 2026-04-09
+# Nexus Project Progress Report - 2026-04-10
 
 ## Current Status
 
-Nexus v3.2 Phase 1 + Phase 1.5 implementation complete. Worker-coder now has deterministic
-micro-fix capability (surgical patch) and refinement re-entry (iterative fix with task lineage).
-All worker-coder tests pass (27 files, including 3 new test files with 33 new test cases).
+**Nexus v3.3 全三阶段实现完毕 + QA 质量关通过。** Project Planner 产品级任务拆解 + Project Executor 多 Run 编排 + 治理层 + LLM 真实验证三场景全 PASS。
 
 Latest high-signal outcomes:
 
-- **NEW (2026-04-09)**: v3.2 Phase 1 implemented — `surgical_patch.js` deterministic micro-fix engine (JSON trailing comma, JS unclosed bracket, Python indentation), integrated into `coding_service.js` retry loop as transparent pre-processor
-- **NEW (2026-04-09)**: v3.2 Phase 1.5 implemented (worker-coder side) — `refinement_context_builder.js` task lineage context builder, `normalizeLineage` in `task_contract.js`, lineage tracking in `failure_memory.js`, prompt injection in `coding_service.js`
-- **NEW (2026-04-09)**: `native_file_tools.js` — read-only file access with path traversal protection, protected root blocking, content redaction
-- **NEW (2026-04-09)**: Feature flags added: `surgical_patch_enabled` (default false), `refinement_reentry_enabled` (default false) in `runtime_defaults.json`
-- **NEW (2026-04-09)**: Worker-coder tests 27/27 files PASS (was 24, +3 new: native_file_tools, surgical_patch, refinement_context_builder)
+- **NEW (2026-04-10)**: LLM 真实拆解验证 3/3 PASS — 小型(待办 2 runs/51s)、中型(客诉 4 runs/18s)、大型(SaaS电商 6 runs/30s)
+- **NEW (2026-04-10)**: Ollama gemma4:26b 本地模型接入 — planner 支持 auto/ollama/minimax 三种 LLM 路由，auto 模式先本地后云端
+- **NEW (2026-04-10)**: `extractJson` 健壮性修复 — `<think>` 标签清理、`tryFixTruncatedJson` 截断 JSON 修复
+- **NEW (2026-04-10)**: `scripts/test_planner.js` 端到端验证脚本 — 支持 `--all` 三场景或自定义输入
+- **NEW (2026-04-10)**: decomposition prompt 精简 (~700→350 字)，`qwenChat` 超时后不再尝试 fallback URL
+- **NEW (2026-04-10)**: v3.3 Phase C — 汇总报告持久化、人工确认模式 (`confirm_mode=manual`)、断点续跑 (checkpoint)
+- **NEW (2026-04-10)**: `createConfirmProjectPlan` API + `makeProjectPlanPendingResponse` 响应类型
+- **NEW (2026-04-10)**: auto 路径加入 `validateProjectPlan` 校验（修复与 confirm 路径的不一致）
+- **2026-04-09**: v3.3 Phase A+B complete (planner + executor + dispatch integration)
+- **2026-04-09**: v3.2 feature flags all enabled
+- **2026-04-09**: Codex plugin installed: `codex@openai-codex v1.0.3`
+- **2026-04-09**: v3.2 Phase 1 implemented — `surgical_patch.js` deterministic micro-fix engine
+- **2026-04-09**: v3.2 Phase 1.5 implemented — `refinement_context_builder.js` task lineage context builder
 - **2026-04-06**: Root-caused `impl_be` `HANDOFF_TYPED_SCHEMA_INVALID` failure — `be_to_fe.json` schema required `name` field on api_contracts items, but MiniMax output only provides `method` + `path`
 - **NEW (2026-04-06)**: Fixed `coding_team_be_to_fe_handoff.schema.json` — `api_contracts.items.required` relaxed from `["name","method","path"]` to `["method","path"]`
 - **NEW (2026-04-06)**: Added regression test for LLM-tolerance (api_contracts without `name`)
@@ -112,9 +118,13 @@ tasks from Redis streams and produces structured results with full audit trails.
 ## Current Working Baseline
 
 ### Orchestrator
-- `npm --prefix orchestrator test` -> **211/211 PASS**
+- `npm --prefix orchestrator test` -> **298/299 PASS** (1 pre-existing repo context service failure)
 - `npm --prefix worker-coder test` -> **all PASS**
 - Permission council tests -> **all PASS**
+- Project planner contract tests -> **14 PASS**
+- Project planner tests -> **18 PASS** (含 extractJson/tryFixTruncatedJson 8 个新测试)
+- Project executor tests -> **25 PASS** (Phase B 10 + Phase C 15)
+- `test_planner.js --all` (真实 LLM) -> **3/3 PASS** (Ollama gemma4:26b + MiniMax fallback)
 
 ### Quant
 - `target_mode = shadow_hybrid_ic`
@@ -129,10 +139,12 @@ tasks from Redis streams and produces structured results with full audit trails.
 
 ## Recommended Next Steps
 
-1. Rebuild Docker images and re-run real E2E to validate full 8-step chain completion
-2. Begin GOV-02 data accumulation (Permission Council advisory logs)
-3. Start Sprint 30-day paper trading for quant
-4. Track C activation: DashScope key for qwen3-coder-plus lane
+1. Enable `project_planner_enabled=true` in runtime_defaults.json to activate project planner (currently false, awaiting first E2E validation)
+2. Rebuild Docker images and re-run real E2E with project planner enabled
+3. Run first multi-run project plan end-to-end (e.g. "做一套客诉管理系统")
+4. Begin GOV-02 data accumulation (Permission Council advisory logs)
+5. Start Sprint 30-day paper trading for quant
+6. Track C activation: DashScope key for qwen3-coder-plus lane
 
 ## Open Issues
 

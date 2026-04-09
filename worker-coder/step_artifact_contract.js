@@ -95,6 +95,71 @@ export function getWorkflowStepHandoff(stepId) {
 }
 
 /**
+ * Phase 3 (P3-1): Step dependency graph metadata.
+ * Each step declares its upstream dependencies and parallel eligibility.
+ * Used by dag_scheduler and workflow_parallelization_policy to determine
+ * which steps can run concurrently.
+ *
+ * parallel_eligible is deny-by-default (false) — only impl_be/impl_fe
+ * are eligible, and only when arch_design declares be_fe_independent: true.
+ */
+export const STEP_DEPENDENCY_GRAPH = {
+    pm_spec: {
+        depends_on: [],
+        parallel_eligible: false,
+        parallel_group: null,
+    },
+    arch_design: {
+        depends_on: ["pm_spec"],
+        parallel_eligible: false,
+        parallel_group: null,
+    },
+    impl_be: {
+        depends_on: ["arch_design"],
+        parallel_eligible: true,
+        parallel_group: "implementation",
+    },
+    impl_fe: {
+        depends_on: ["arch_design"],
+        parallel_eligible: true,
+        parallel_group: "implementation",
+    },
+    smoke_test: {
+        depends_on: ["impl_be", "impl_fe"],
+        parallel_eligible: false,
+        parallel_group: null,
+    },
+    qa_verify: {
+        depends_on: ["impl_be", "impl_fe"],
+        parallel_eligible: false,
+        parallel_group: null,
+    },
+    release_pack: {
+        depends_on: ["qa_verify"],
+        parallel_eligible: false,
+        parallel_group: null,
+    },
+    deploy_preview: {
+        depends_on: ["release_pack"],
+        parallel_eligible: false,
+        parallel_group: null,
+    },
+};
+
+/**
+ * Get the dependency metadata for a step.
+ * @param {string} stepId
+ * @returns {{ depends_on: string[], parallel_eligible: boolean, parallel_group: string|null }}
+ */
+export function getStepDependencyMeta(stepId) {
+    return STEP_DEPENDENCY_GRAPH[String(stepId || "")] || {
+        depends_on: [],
+        parallel_eligible: false,
+        parallel_group: null,
+    };
+}
+
+/**
  * Dispatches to the appropriate per-step artifact validator.
  * Returns { checked: bool, ok: bool, ... } consistent with orchestrator validator contracts.
  */

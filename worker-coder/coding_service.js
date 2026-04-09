@@ -52,6 +52,7 @@ import {
 import { buildTaskContractMetadata, normalizeLineage } from './task_contract.js';
 import { canFix, applySurgicalPatches } from './surgical_patch.js';
 import { buildRefinementContext } from './refinement_context_builder.js';
+import { resolveContext, buildContextBlock } from './context_resolver.js';
 
 import {
     getWorkflowStepHandoff,
@@ -491,6 +492,53 @@ export const CodingService = {
         let surgicalPatchAttempted = false;
         let refinementDiagnostics = null;
 
+        // Phase 2 (P2-2): Auto-resolve context when context_packet is empty and context_source is automated
+        const contextResolverEnabled = !!(runtime_coder_config?.context_resolver_enabled);
+        let contextResolution = null;
+        if (contextResolverEnabled && !context_packet && taskContract.context_envelope?.context_source === "automated") {
+            try {
+                const contextResponse = resolveContext({
+                    task_class: taskContract.task_class || step_id,
+                    target_paths: effectiveTargetPaths,
+                    max_files: taskContract.context_envelope?.max_files || 20,
+                    max_tokens: taskContract.context_envelope?.max_tokens || 8000,
+                    dependency_depth: taskContract.context_envelope?.dependency_depth || 2,
+                }, workspaceRoot);
+                contextResolution = {
+                    method: "automated",
+                    files_provided: contextResponse.files.length,
+                    token_usage: contextResponse.token_usage,
+                    confidence: contextResponse.confidence,
+                    missing_context: contextResponse.missing_context,
+                };
+                // Inject resolved context into task_prompt if files found
+                if (contextResponse.files.length > 0) {
+                    const contextBlock = buildContextBlock(contextResponse, workspaceRoot);
+                    if (contextBlock) {
+                        task_prompt = `${task_prompt}${contextBlock}`;
+                    }
+                }
+            } catch (err) {
+                console.warn(`${reqId} context_resolver error (non-fatal):`, err.message);
+                contextResolution = {
+                    method: "automated",
+                    files_provided: 0,
+                    token_usage: 0,
+                    confidence: null,
+                    missing_context: [],
+                    error: err.message,
+                };
+            }
+        } else if (context_packet) {
+            contextResolution = {
+                method: "manual",
+                files_provided: Array.isArray(context_packet?.entrypoints) ? context_packet.entrypoints.length : 0,
+                token_usage: 0,
+                confidence: null,
+                missing_context: [],
+            };
+        }
+
         for (let attemptIndex = 1; attemptIndex <= maxAttemptsSafe; attemptIndex++) {
             const remainingMs = (startedMs + (wallClockTimeoutSafe * 1000)) - Date.now();
             if (remainingMs <= 0) {
@@ -769,9 +817,18 @@ export const CodingService = {
                     });
                     surgicalPatchAttempted = true;
                     if (patchResult.success) {
+                        // Recheck ALL originally-failing files, not just patched ones,
+                        // to avoid masking unpatched failures.
+                        const allFailingFiles = (staticCheck.records || [])
+                            .filter((r) => !r.ok)
+                            .map((r) => r.file)
+                            .filter(Boolean);
+                        const recheckFiles = allFailingFiles.length > 0
+                            ? [...new Set(allFailingFiles)]
+                            : patchResult.patches_applied.map((p) => p.file);
                         const recheck = await runStaticChecks({
                             workspaceRoot: executionWorkspaceRoot,
-                            filesChanged: patchResult.patches_applied.map((p) => p.file),
+                            filesChanged: recheckFiles,
                             taskDir,
                             redis,
                         });

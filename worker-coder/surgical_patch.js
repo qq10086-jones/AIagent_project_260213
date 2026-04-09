@@ -98,7 +98,7 @@ export function applySurgicalPatches({ executionWorkspaceRoot, records, allowedT
 
   return {
     attempted: true,
-    success: !anyFailed || patches_applied.length > 0,
+    success: !anyFailed && patches_applied.length > 0,
     patches_applied,
     failure_reason: anyFailed ? "some fixes failed" : null,
   };

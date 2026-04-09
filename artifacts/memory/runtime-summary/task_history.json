@@ -42,5 +42,38 @@
     "summary": "Workflow workflow_finalization_v0 completed successfully",
     "release_root": "E:/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
     "created_at": "2026-04-05T02:38:01.066Z"
+  },
+  {
+    "workflow_run_id": "13eb09db-ae82-4315-a9e5-b211281e1638",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "C:/Users/linweiye/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-09T08:24:21.405Z"
+  },
+  {
+    "workflow_run_id": "bf6ca5ff-4605-4f1f-874c-7aca0bf3548b",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "C:/Users/linweiye/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-09T08:25:29.228Z"
+  },
+  {
+    "workflow_run_id": "9e9d0ab1-c269-4239-9f8f-74b940eb22fa",
+    "run_id": "runtime-summary",
+    "workflow_id": "workflow_finalization_v0",
+    "project_type": "webapp_crm",
+    "step_id": "workflow_complete",
+    "status": "succeeded",
+    "summary": "Workflow workflow_finalization_v0 completed successfully",
+    "release_root": "C:/Users/linweiye/AIagent_project_260213/orchestrator/artifacts/test/workflow_finalization/runtime_summary/artifacts/release/runtime-summary",
+    "created_at": "2026-04-09T08:52:23.246Z"
   }
 ]

@@ -33,8 +33,14 @@
     "execution_lane_default": "stable_cloud_lane",
     "allow_provider_fallback_default": false,
     "stream_batch_size": 1,
-    "surgical_patch_enabled": false,
-    "refinement_reentry_enabled": false,
+    "surgical_patch_enabled": true,
+    "refinement_reentry_enabled": true,
+    "context_resolver_enabled": true,
+    "project_planner_enabled": false,
+    "project_planner_max_runs": 12,
+    "project_planner_max_parallel_runs": 2,
+    "project_planner_failure_policy": "stop_dependents",
+    "project_planner_confirm_mode": "manual",
     "execution_lanes": {
       "stable_codex_lane": {
         "provider": "codex",

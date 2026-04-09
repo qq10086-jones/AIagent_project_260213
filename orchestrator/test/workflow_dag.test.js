@@ -231,6 +231,14 @@ function createMemoryPool() {
       if (text.startsWith("INSERT INTO routing_decision_log")) {
         return { rows: [] };
       }
+      if (text.startsWith("UPDATE workflow_steps SET status='claiming'")) {
+        const step = findStep(params[0], params[1]);
+        if (step && step.status === params[2]) {
+          step.status = "claiming";
+          return { rowCount: 1, rows: [] };
+        }
+        return { rowCount: 0, rows: [] };
+      }
       throw new Error(`Unhandled SQL in memory pool: ${text}`);
     },
   };

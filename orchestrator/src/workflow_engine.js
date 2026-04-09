@@ -20,6 +20,7 @@ import { createWorkflowParallelizationRuntime } from "./domain/workflow_parallel
 import { createRoutingAuditLogService } from "./domain/routing_audit_log.js";
 import { createWaterfallTraceService } from "./domain/waterfall_trace_service.js";
 import { summarizeDagProgress } from "./domain/dag_scheduler.js";
+import { normalizeRefinementLineage, resolveRefinementSkips } from "./domain/workflow_refinement_service.js";
 import { getTaskPayloadRecord } from "./data/task_repository.js";
 import { updateRunStatus } from "./data/run_repository.js";
 import { createWorkflowStepArtifactHelpers } from "./domain/workflow_step_artifacts.js";
@@ -36,6 +37,7 @@ import {
   updateWorkflowRunCurrentStep,
   updateWorkflowRunFailed,
   updateWorkflowRunSucceeded,
+  claimStepForDispatch,
   updateWorkflowStepDispatchState,
   updateWorkflowStepFailed,
   updateWorkflowStepSucceeded,
@@ -355,6 +357,11 @@ export function createWorkflowEngine({
     if (!["pending", "failed"].includes(stepStatus)) {
       return { skipped: true, reason: `step status ${stepStatus}` };
     }
+    // CAS guard: atomically claim the step to prevent duplicate dispatch
+    const claimed = await claimStepForDispatch(pool, workflow_run_id, stepIndex, stepStatus);
+    if (!claimed) {
+      return { skipped: true, reason: "step already claimed by concurrent dispatch" };
+    }
     const payload = await buildStepPayload({ run, stepDef, stepIndex });
     const toolPermission = validateToolPermission(String(stepDef.role || ""), String(stepDef.tool || ""));
     if (!toolPermission.allowed) {
@@ -533,8 +540,37 @@ export function createWorkflowEngine({
         gate_name: String(step.gate || ""),
       });
     }
+
+    // Phase 1.5-4: Refinement step-skip — auto-succeed steps not needed for this refinement
+    const refinementLineageResult = normalizeRefinementLineage(input?.lineage);
+    let refinementSkippedStepIds = [];
+    if (refinementLineageResult.ok) {
+      const { skipStepIds } = resolveRefinementSkips({
+        lineage: refinementLineageResult.lineage,
+        steps,
+      });
+      for (const skipId of skipStepIds) {
+        const skipIndex = steps.findIndex((s) => String(s?.id || "") === skipId);
+        if (skipIndex >= 0) {
+          await updateWorkflowStepSucceeded(pool, workflow_run_id, skipIndex, {
+            skipped: true,
+            reason: "refinement_skip",
+            refinement_round: refinementLineageResult.lineage.refinement_round,
+          });
+          await recordEvent(workflow_run_id, "workflow.step.refinement_skipped", {
+            workflow_run_id, step_id: skipId, step_index: skipIndex,
+            refinement_round: refinementLineageResult.lineage.refinement_round,
+            refinement_task_class: refinementLineageResult.lineage.refinement_task_class,
+          });
+        }
+      }
+      refinementSkippedStepIds = skipStepIds;
+    }
+
     await recordEvent(workflow_run_id, "workflow.started", {
       workflow_run_id, workflow_id, project_type: resolvedProjectType, run_id,
+      is_refinement: refinementLineageResult.ok,
+      refinement_skipped_steps: refinementSkippedStepIds,
       steps: steps.map((s, idx) => ({ step_index: idx, step_id: s.id, role: s.role, tool: s.tool, gate: s.gate })),
     });
     const firstBatch = await dispatchReadySteps(workflow_run_id, context);

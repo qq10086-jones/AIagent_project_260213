@@ -36,6 +36,7 @@ export function persistCodingFailureMemory({
   betaTemplateId = null,
   contextEnvelope = null,
   lineage = null,
+  contextResolution = null,
 }) {
   try {
     const runDir = path.join(workspaceRoot, "artifacts", "runs", runId || "default");
@@ -72,6 +73,14 @@ export function persistCodingFailureMemory({
         parent_run_id: String(lineage.parent_run_id || ""),
         refinement_round: Number(lineage.refinement_round || 0),
         refinement_instruction: String(lineage.refinement_instruction || "").slice(0, 500),
+      } : null,
+      // Phase 2 (P2-3): context_resolution cohort data
+      context_resolution: contextResolution && typeof contextResolution === "object" ? {
+        method: String(contextResolution.method || "none"),
+        files_provided: Number(contextResolution.files_provided || 0),
+        token_usage: Number(contextResolution.token_usage || 0),
+        confidence: Number.isFinite(contextResolution.confidence) ? contextResolution.confidence : null,
+        missing_context: Array.isArray(contextResolution.missing_context) ? contextResolution.missing_context : [],
       } : null,
     };
     const jsonlPath = path.join(memoryDir, "coding_failures.jsonl");
@@ -118,6 +127,7 @@ export function buildDelegateFailureSummary({
   betaTemplateId = null,
   contextEnvelope = null,
   lineage = null,
+  contextResolution = null,
 }) {
   const failureMemory = persistCodingFailureMemory({
     workspaceRoot,
@@ -148,6 +158,7 @@ export function buildDelegateFailureSummary({
     betaTemplateId,
     contextEnvelope,
     lineage,
+    contextResolution,
   });
   const taskContract = buildTaskContractMetadata({
     taskClass,
@@ -186,6 +197,7 @@ export function buildDelegateFailureSummary({
       verification: verification || { checked: false, ok: true, command: "", logPath: null },
       coding_failure_memory: failureMemory,
       lineage: lineage || null,
+      context_resolution: contextResolution || null,
     },
     error,
     command_used: adapterResult?.command_used || null,

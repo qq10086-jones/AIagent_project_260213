@@ -1,7 +1,7 @@
 # Nexus Coder v3.2 能力增强设计文档
 
-> **状态**: PROPOSED (架构委员会评审中)
-> **日期**: 2026-04-08
+> **状态**: IMPLEMENTED (全 Phase 代码落地，feature flags 默认 false，待 cohort validation 启用)
+> **日期**: 2026-04-09
 > **作者**: 架构团队
 > **基线**: 基于 `OpenClaw_Nexus_Worker_Coding_Design_v4.2.md` (2026-03-11)
 > **定位**: v4.2 Worker-Coding Design 的实施增强方案，不替换基线文档
@@ -17,6 +17,7 @@
 | v3.2.2 | 新增 Phase 0 Redis Caching 层 + gpt-tokenizer；新增附录 B Harness 对标分析与结论 |
 | v3.2.3 | Phase 0 实施完成 (P0-1/P0-2/P0-3 全部落地，测试全绿)，更新状态标记 |
 | v3.2.4 | Phase 1 + Phase 1.5 实施完成 (P1-1/P1-2/P1-3/P1.5-1/P1.5-2/P1.5-3/P1.5-5 全部落地，27 测试文件全绿含 33 新用例)，feature flags 默认 false |
+| v3.2.5 | **全量实施完成**: P1.5-4 orchestrator lineage 透传 + 步骤跳过; Phase 2 (P2-1/P2-2/P2-3) context_resolver + coding_service 集成 + failure_memory 扩展; Phase 3 (P3-1/P3-2/P3-3) step dependency graph + be_fe_independent 并行判定 + scoped subtask generation。35 测试文件 104+ 用例全绿，feature flags 默认 false |
 
 ---
 
@@ -330,7 +331,7 @@ export function nativeListDir({ workspaceRoot, relPath, maxEntries = 200 }) {
 
 ---
 
-## 三点五、Phase 1.5 — 迭代修复回路 (Refinement Re-entry) ✅ COMPLETED (2026-04-09, worker-coder side; orchestrator P1.5-4 pending)
+## 三点五、Phase 1.5 — 迭代修复回路 (Refinement Re-entry) ✅ COMPLETED (2026-04-09, 全端落地含 orchestrator P1.5-4)
 
 ### 3.5.1 问题陈述
 
@@ -598,7 +599,7 @@ Nexus: [Refinement R1] 基于上次产出，仅修改 customers.js
 
 ---
 
-## 四、Phase 2 — 结构化上下文管道 (Structured Context Pipeline)
+## 四、Phase 2 — 结构化上下文管道 (Structured Context Pipeline) ✅ COMPLETED (2026-04-09)
 
 ### 4.1 目标
 
@@ -698,7 +699,7 @@ Nexus: [Refinement R1] 基于上次产出，仅修改 customers.js
 
 ---
 
-## 五、Phase 3 — 调度弹性化 (Scheduling Flexibility)
+## 五、Phase 3 — 调度弹性化 (Scheduling Flexibility) ✅ COMPLETED (2026-04-09)
 
 ### 5.1 目标
 
@@ -1014,16 +1015,25 @@ worker.js
   failure_memory.js  (MODIFY — lineage 追踪字段)
 ```
 
+**Phase 1.5-4 (Orchestrator) 新增**:
+```
+  orchestrator/src/domain/workflow_refinement_service.js  (NEW — lineage 归一化 + 步骤跳过规则)
+  orchestrator/src/workflow_engine.js  (MODIFY — startWorkflowRun 中 refinement step-skip)
+  orchestrator/src/domain/workflow_step_builder.js  (MODIFY — lineage 透传到 payload)
+```
+
 **Phase 2 新增**:
 ```
-  coding_service.js
-        └── context_resolver.js  (NEW — 结构层上下文解析)
+  coding_service.js  (MODIFY — context_resolver 集成)
+        └── context_resolver.js  (NEW — 正则 import graph 上下文解析, JS/TS/Python)
+  failure_memory.js  (MODIFY — context_resolution 字段)
 ```
 
 **Phase 3 变更**:
 ```
-  step_artifact_contract.js  (MODIFY — 新增 depends_on / parallel_eligible)
-  (Orchestrator 侧变更不在此图范围)
+  step_artifact_contract.js  (MODIFY — STEP_DEPENDENCY_GRAPH + getStepDependencyMeta)
+  subtask_generator.js  (NEW — scoped dynamic subtask: install_dependency/create_config)
+  orchestrator/src/domain/workflow_parallelization_policy.js  (MODIFY — be_fe_independent 判定)
 ```
 
 ---

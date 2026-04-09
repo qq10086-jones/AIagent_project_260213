@@ -638,6 +638,9 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         ...(Array.isArray(downstreamHandoff?.required_artifacts) ? downstreamHandoff.required_artifacts : []),
       ])
     );
+    // Phase 1.5-4: Extract lineage from run input for refinement re-entry
+    const inputLineage = input.lineage && typeof input.lineage === "object" ? input.lineage : null;
+
     const payload = {
       ...(input.step_payloads?.[stepDef.id] || {}),
       ...(input.default_payload || {}),
@@ -655,6 +658,8 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       llm_role: String(stepDef.role || ""),
       handoff_contract_out: downstreamHandoff || null,
       handoff_contract_in: upstreamHandoffs,
+      lineage: inputLineage,
+      is_refinement: !!inputLineage,
     };
     applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeConfig });
     applyGenericAppPrimaryLaneDefaults({ run, stepDef, payload, runtimeConfig });

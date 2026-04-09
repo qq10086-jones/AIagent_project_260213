@@ -20,6 +20,14 @@ const ALLOWED_CMD_PREFIXES = new Set([
   "black",
 ]);
 
+// Dangerous subcommands that should never be run from LLM-generated commands
+const BLOCKED_SUBCOMMANDS = new Map([
+  ["git", new Set(["clean", "push", "reset", "remote", "config", "rebase", "merge", "checkout", "restore"])],
+  ["npm", new Set(["publish", "unpublish", "owner", "access", "token", "login", "logout"])],
+  ["node", new Set(["-e", "--eval"])],
+  ["python", new Set(["-c"])],
+]);
+
 function splitCommandChain(command) {
   return String(command || "")
     .split("&&")
@@ -70,9 +78,14 @@ export function validateSafeCommand(command) {
     return { ok: false, error: "Command blocked: empty command segment." };
   }
   for (const segment of segments) {
-    const prefix = segment.trim().split(/\s+/)[0];
+    const tokens = segment.trim().split(/\s+/);
+    const prefix = tokens[0];
     if (!ALLOWED_CMD_PREFIXES.has(prefix)) {
       return { ok: false, error: `Command blocked: '${prefix}' is not whitelisted.` };
+    }
+    const blocked = BLOCKED_SUBCOMMANDS.get(prefix);
+    if (blocked && tokens.length > 1 && blocked.has(tokens[1])) {
+      return { ok: false, error: `Command blocked: '${prefix} ${tokens[1]}' is a restricted subcommand.` };
     }
   }
   return { ok: true };

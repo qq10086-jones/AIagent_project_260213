@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { createParallelRolloutGate } from "./parallel_rollout_gate.js";
 
 function cloneWorkflow(workflow) {
@@ -15,6 +17,40 @@ function findStepIndex(steps, stepId) {
 const MANAGED_STEP_IDS = new Set(["impl_be", "impl_fe", "qa_verify"]);
 function hasExplicitDagMetadata(steps = []) {
   return steps.some((step) => MANAGED_STEP_IDS.has(step.id) && Array.isArray(step?.depends_on));
+}
+
+/**
+ * Phase 3 (P3-2): Check if architect_to_impl.json declares be_fe_independent.
+ * When the handoff explicitly states the BE and FE are independent modules,
+ * parallel scheduling is safe. Otherwise falls back to sequential.
+ * @param {string} workspaceRoot
+ * @param {string} runId
+ * @returns {{ independent: boolean, source: string }}
+ */
+function checkBeFeIndependence(workspaceRoot, runId) {
+  const artifactRoot = `runtime/artifacts/release/${runId || "unknown-run"}`;
+  const handoffPath = path.resolve(workspaceRoot, artifactRoot, "handoff/architect_to_impl.json");
+  try {
+    if (!fs.existsSync(handoffPath)) {
+      return { independent: false, source: "handoff_not_found" };
+    }
+    const handoff = JSON.parse(fs.readFileSync(handoffPath, "utf8"));
+    if (handoff?.be_fe_independent === true) {
+      return { independent: true, source: "architect_handoff" };
+    }
+    // If be_to_fe.json typed_handoff has non-empty contracts → interface deps exist
+    const beToFePath = path.resolve(workspaceRoot, artifactRoot, "handoff/be_to_fe.json");
+    if (fs.existsSync(beToFePath)) {
+      const beToFe = JSON.parse(fs.readFileSync(beToFePath, "utf8"));
+      const hasContracts = Array.isArray(beToFe?.api_contracts) && beToFe.api_contracts.length > 0;
+      if (hasContracts) {
+        return { independent: false, source: "be_to_fe_has_contracts" };
+      }
+    }
+    return { independent: false, source: "not_declared" };
+  } catch {
+    return { independent: false, source: "handoff_read_error" };
+  }
 }
 
 export function createWorkflowParallelizationPolicyService({ registry, workspaceRoot }) {
@@ -78,14 +114,36 @@ export function createWorkflowParallelizationPolicyService({ registry, workspace
       };
     }
 
+    // Phase 3 (P3-2): Check architect handoff for be_fe_independent declaration
+    const runId = run.run_id || run.workflow_run_id;
+    const independence = checkBeFeIndependence(workspaceRoot, runId);
+    const effectiveGateDecision = {
+      ...gateDecision,
+      be_fe_independence: independence,
+    };
+
+    if (!independence.independent) {
+      // Architect did not declare independence — fall back to sequential BE→FE
+      return {
+        workflow: cloned,
+        gateDecision: {
+          ...effectiveGateDecision,
+          allowed: false,
+          mode: "sequential_be_fe_dependent",
+          reason_code: `BE_FE_DEPENDENT:${independence.source}`,
+        },
+      };
+    }
+
     steps[beIndex].depends_on = ["arch_design"];
     steps[feIndex].depends_on = ["arch_design"];
     steps[qaIndex].depends_on = ["impl_be", "impl_fe"];
-    return { workflow: cloned, gateDecision };
+    return { workflow: cloned, gateDecision: effectiveGateDecision };
   }
 
   return {
     evaluateBeFeParallelizationGate,
     resolveWorkflowForRun,
+    checkBeFeIndependence,
   };
 }

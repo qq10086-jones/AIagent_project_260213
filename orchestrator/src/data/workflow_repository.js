@@ -118,6 +118,16 @@ export async function updateWorkflowStepDispatchState(pool, workflowRunId, stepI
   );
 }
 
+export async function claimStepForDispatch(pool, workflowRunId, stepIndex, expectedStatus) {
+  const result = await pool.query(
+    `UPDATE workflow_steps
+     SET status='claiming', updated_at=NOW()
+     WHERE workflow_run_id=$1 AND step_index=$2 AND status=$3`,
+    [workflowRunId, stepIndex, expectedStatus]
+  );
+  return (result.rowCount || 0) > 0;
+}
+
 export async function markWorkflowStepRunning(pool, workflowRunId, stepIndex) {
   await pool.query(
     `UPDATE workflow_steps

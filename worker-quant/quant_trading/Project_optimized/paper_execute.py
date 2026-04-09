@@ -346,9 +346,14 @@ def main():
 
         prev_asof, rows_out, missing_px = build_positions(conn, run_id, asof, strategy_id=strategy_id)
         starting_cash = _existing_cash_snapshot(conn, asof, strategy_id=strategy_id)
-        if starting_cash is None:
-            starting_cash = float(args.initial_cash)
-        snap = build_account_snapshot(conn, run_id, asof, initial_cash=starting_cash, strategy_id=strategy_id)
+        if starting_cash is not None:
+            # Today's snapshot already exists (re-run) — pass it so it is preserved
+            snap = build_account_snapshot(conn, run_id, asof, initial_cash=starting_cash, strategy_id=strategy_id)
+        else:
+            # No snapshot for today yet — let build_account_snapshot derive
+            # cash_start from the previous day's snapshot.  Only fall back to
+            # args.initial_cash when there is no prior snapshot at all.
+            snap = build_account_snapshot(conn, run_id, asof, initial_cash=0.0, strategy_id=strategy_id)
 
         artifact_dir = resolve_run_artifact_dir(meta.get("snapshot_path") if meta else None)
         if artifact_dir is None:

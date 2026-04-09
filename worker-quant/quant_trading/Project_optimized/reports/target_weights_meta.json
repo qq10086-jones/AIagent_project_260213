@@ -1,13 +1,13 @@
 {
   "primary_mode": "sprint_momentum",
   "asof": "2026-04-09",
-  "export_row_sum": 0.0,
-  "history_last_row_is_zero": true,
-  "last_nonzero_asof": null,
-  "last_nonzero_row_sum": 0.0,
+  "export_row_sum": 0.6,
+  "history_last_row_is_zero": false,
+  "last_nonzero_asof": "2026-04-09",
+  "last_nonzero_row_sum": 0.6,
   "benchmark_state": "caution",
   "benchmark_scale": 0.6,
-  "selected_count": 0,
-  "zero_cause": "entry_filter",
-  "zero_detail": "0/8 pass entry_check, 0 held positions passing exit_check"
+  "selected_count": 1,
+  "zero_cause": "none",
+  "zero_detail": ""
 }

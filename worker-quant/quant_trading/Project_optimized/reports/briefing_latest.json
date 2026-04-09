@@ -1,25 +1,432 @@
 {
-  "generated_at": "2026-04-09 15:43 JST",
-  "asof": "2026-04-09",
+  "generated_at": "2026-04-10 07:30 JST",
+  "asof": "2026-04-10",
   "session": {
-    "time_jst": "15:43",
-    "session": "closed",
-    "mins_to_close": 0,
+    "time_jst": "07:30",
+    "session": "pre_market",
+    "mins_to_close": 480,
     "trading": false
   },
-  "mode": "ipo",
+  "mode": "full",
   "strategy_id": "sprint",
   "regime": {
     "trend": "UP",
     "vol_level": "NORMAL",
     "bias": "BULLISH",
-    "sma5": 56974.0,
-    "sma20": 55779.0,
+    "sma5": 56980.0,
+    "sma20": 55780.5,
     "atr_5d_pct": 2.23,
     "atr_60d_pct": 2.46,
-    "ret_5d_pct": 5.18,
+    "ret_5d_pct": 5.23,
     "action_bias": "趋势向上，正常操作"
   },
+  "market": {
+    "nikkei_etf": {
+      "open": 58680.0,
+      "cur": 58470.0,
+      "low": 58140.0,
+      "high": 59030.0,
+      "prev_close": 58470.0,
+      "vol_total": 993863,
+      "last_time": "15:24",
+      "chg_pct": 0.0,
+      "trend_5m": "down",
+      "volume_spike_ratio": 22.3
+    },
+    "market_ret_pct": 0.0,
+    "sentiment": "neutral"
+  },
+  "candidates": [
+    {
+      "rank": 1,
+      "symbol": "7267.T",
+      "score_tech": 24.17,
+      "fundamental_score": 1.0,
+      "score_adjusted": 24.17,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1271.5,
+      "price_open": 1275.0,
+      "chg_pct": 0.0,
+      "trend_5m": "down",
+      "volume_spike": 9.6,
+      "ret_today": -0.58,
+      "ret_20d": -10.66,
+      "excess_vs_market": 0.2,
+      "vol_5d": 1.39,
+      "news_validation": {
+        "news_risk": "HIGH",
+        "news_notes": [
+          "決算:ホンダ、EV戦略頓挫で出せぬ新車 かさむ奨励金と高まる減配リスク - 日本経済新聞"
+        ]
+      }
+    },
+    {
+      "rank": 2,
+      "symbol": "9432.T",
+      "score_tech": 23.22,
+      "fundamental_score": 1.0,
+      "score_adjusted": 23.22,
+      "fundamental_note": "基本面正常",
+      "price_cur": 154.8000030517578,
+      "price_open": 156.5,
+      "chg_pct": 0.0,
+      "trend_5m": "up",
+      "volume_spike": 14.4,
+      "ret_today": -0.45,
+      "ret_20d": 1.11,
+      "excess_vs_market": 0.33,
+      "vol_5d": 0.58,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 3,
+      "symbol": "8604.T",
+      "score_tech": 23.12,
+      "fundamental_score": 1.0,
+      "score_adjusted": 23.12,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1310.0,
+      "price_open": 1327.5,
+      "chg_pct": 0.0,
+      "trend_5m": "down",
+      "volume_spike": 11.8,
+      "ret_today": -1.54,
+      "ret_20d": 6.53,
+      "excess_vs_market": -0.76,
+      "vol_5d": 2.26,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 4,
+      "symbol": "9434.T",
+      "score_tech": 22.95,
+      "fundamental_score": 1.0,
+      "score_adjusted": 22.95,
+      "fundamental_note": "基本面正常",
+      "price_cur": 215.89999389648438,
+      "price_open": 216.5,
+      "chg_pct": 0.0,
+      "trend_5m": "flat",
+      "volume_spike": 26.1,
+      "ret_today": -0.19,
+      "ret_20d": 1.4,
+      "excess_vs_market": 0.6,
+      "vol_5d": 1.09,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 5,
+      "symbol": "5020.T",
+      "score_tech": 22.87,
+      "fundamental_score": 1.0,
+      "score_adjusted": 22.87,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1447.0,
+      "price_open": 1502.5,
+      "chg_pct": 0.0,
+      "trend_5m": "down",
+      "volume_spike": 25.2,
+      "ret_today": -1.4,
+      "ret_20d": 6.47,
+      "excess_vs_market": -0.62,
+      "vol_5d": 1.19,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 6,
+      "symbol": "7261.T",
+      "score_tech": 22.36,
+      "fundamental_score": 1.0,
+      "score_adjusted": 22.36,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1047.0,
+      "price_open": 1057.5,
+      "chg_pct": 0.0,
+      "trend_5m": "down",
+      "volume_spike": 10.5,
+      "ret_today": -2.23,
+      "ret_20d": -9.3,
+      "excess_vs_market": -1.45,
+      "vol_5d": 2.53,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 7,
+      "symbol": "4005.T",
+      "score_tech": 22.26,
+      "fundamental_score": 1.0,
+      "score_adjusted": 22.26,
+      "fundamental_note": "基本面正常",
+      "price_cur": 539.4000244140625,
+      "price_open": 555.0,
+      "chg_pct": 0.0,
+      "trend_5m": "up",
+      "volume_spike": 12.2,
+      "ret_today": -3.36,
+      "ret_20d": 10.3,
+      "excess_vs_market": -2.58,
+      "vol_5d": 2.69,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 8,
+      "symbol": "7211.T",
+      "score_tech": 21.83,
+      "fundamental_score": 1.0,
+      "score_adjusted": 21.83,
+      "fundamental_note": "基本面正常",
+      "price_cur": 318.29998779296875,
+      "price_open": 305.70001220703125,
+      "chg_pct": 0.0,
+      "trend_5m": "flat",
+      "volume_spike": 79.9,
+      "ret_today": -1.24,
+      "ret_20d": -14.66,
+      "excess_vs_market": -0.46,
+      "vol_5d": 3.04,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 9,
+      "symbol": "6471.T",
+      "score_tech": 21.07,
+      "fundamental_score": 1.0,
+      "score_adjusted": 21.07,
+      "fundamental_note": "基本面正常",
+      "price_cur": 1166.0,
+      "price_open": 1160.5,
+      "chg_pct": 0.0,
+      "trend_5m": "up",
+      "volume_spike": 11.1,
+      "ret_today": -1.35,
+      "ret_20d": -3.16,
+      "excess_vs_market": -0.57,
+      "vol_5d": 3.68,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 10,
+      "symbol": "9501.T",
+      "score_tech": 23.56,
+      "fundamental_score": 0.84,
+      "score_adjusted": 19.79,
+      "fundamental_note": "近2季2季EPS亏损(降权-16%)",
+      "price_cur": 659.7999877929688,
+      "price_open": 650.0,
+      "chg_pct": 0.0,
+      "trend_5m": "up",
+      "volume_spike": 8.4,
+      "ret_today": 2.64,
+      "ret_20d": 5.34,
+      "excess_vs_market": 3.42,
+      "vol_5d": 2.2,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 11,
+      "symbol": "5401.T",
+      "score_tech": 23.34,
+      "fundamental_score": 0.84,
+      "score_adjusted": 19.6,
+      "fundamental_note": "近2季2季EPS亏损(降权-16%)",
+      "price_cur": 602.7000122070312,
+      "price_open": 596.0999755859375,
+      "chg_pct": 0.0,
+      "trend_5m": "up",
+      "volume_spike": 30.7,
+      "ret_today": 0.57,
+      "ret_20d": 0.73,
+      "excess_vs_market": 1.35,
+      "vol_5d": 1.0,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 12,
+      "symbol": "4755.T",
+      "score_tech": 22.79,
+      "fundamental_score": 0.84,
+      "score_adjusted": 19.14,
+      "fundamental_note": "近2季2季EPS亏损(降权-16%)",
+      "price_cur": 789.0999755859375,
+      "price_open": 782.0,
+      "chg_pct": 0.0,
+      "trend_5m": "down",
+      "volume_spike": 10.6,
+      "ret_today": -1.87,
+      "ret_20d": -1.33,
+      "excess_vs_market": -1.09,
+      "vol_5d": 2.63,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    },
+    {
+      "rank": 13,
+      "symbol": "7201.T",
+      "score_tech": 22.58,
+      "fundamental_score": 0.84,
+      "score_adjusted": 18.97,
+      "fundamental_note": "近2季2季EPS亏损(降权-16%)",
+      "price_cur": 355.1000061035156,
+      "price_open": 355.70001220703125,
+      "chg_pct": 0.0,
+      "trend_5m": "down",
+      "volume_spike": 22.9,
+      "ret_today": -1.98,
+      "ret_20d": -5.42,
+      "excess_vs_market": -1.2,
+      "vol_5d": 2.61,
+      "news_validation": {
+        "news_risk": "NONE",
+        "news_notes": []
+      }
+    }
+  ],
+  "macro_news": [
+    {
+      "category": "TRADE",
+      "summary": "【ヤフコメで話題】「トランプ政権の関税政策と国際的孤立」「米国の信頼低下と世界経済への影響」 - 米",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "Avturの価格は上昇し、政府は航空機部品の輸入関税を0% に設定 - VOI.id",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "米関税ショック1年 日経平均2万2000円高、キオクシア株価15倍 - 日本経済新聞",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "カンパチの輸入 無関税対象拡大 重油不足 業者負担減へ - 沖縄タイムス社",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "カンパチの輸入 無関税対象拡大 重油不足 業者負担減へ - okinawatimes.co.jp",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "デジタル貿易に関税課さないルール採択 日本含む66の国・地域 - NHKニュース",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "トランプ相互関税から1年 - 毎日新聞",
+      "score": -0.4
+    },
+    {
+      "category": "TRADE",
+      "summary": "トランプ関税対策でトヨタがタンドラを輸入 価格は1200万円から (2026年4月8日掲載) - ラ",
+      "score": -0.4
+    }
+  ],
+  "screener_meta": {
+    "count": 13,
+    "hard_vetoed_count": 0,
+    "downweighted_count": 4
+  },
+  "live_state": {
+    "positions": [],
+    "orders": [],
+    "account": {
+      "asof": "2026-04-09",
+      "nav": 400392.0,
+      "cash": 400392.0
+    }
+  },
+  "db_signals": [
+    {
+      "asof": "2026-04-09",
+      "symbol": "9501.T",
+      "score": 23.558941959682222,
+      "name": "Tokyo Electric Power",
+      "sector": "Utility"
+    },
+    {
+      "asof": "2026-04-09",
+      "symbol": "5401.T",
+      "score": 23.33503028459419,
+      "name": "Nippon Steel",
+      "sector": "Steel"
+    },
+    {
+      "asof": "2026-04-09",
+      "symbol": "9432.T",
+      "score": 23.215434656869213,
+      "name": "NTT",
+      "sector": "Telecom"
+    },
+    {
+      "asof": "2026-04-09",
+      "symbol": "9434.T",
+      "score": 22.94694678279549,
+      "name": "SoftBank Corp",
+      "sector": "Telecom"
+    },
+    {
+      "asof": "2026-04-09",
+      "symbol": "4755.T",
+      "score": 22.79058778415288,
+      "name": "Rakuten Group",
+      "sector": "Internet"
+    },
+    {
+      "asof": "2026-04-09",
+      "symbol": "7201.T",
+      "score": 22.58102410950682,
+      "name": "Nissan Motor",
+      "sector": "Auto"
+    },
+    {
+      "asof": "2026-04-09",
+      "symbol": "4005.T",
+      "score": 22.26480776388663,
+      "name": "Sumitomo Chemical",
+      "sector": "Chemical"
+    },
+    {
+      "asof": "2026-04-09",
+      "symbol": "7211.T",
+      "score": 21.82860110229371,
+      "name": "Mitsubishi Motors",
+      "sector": "Auto"
+    }
+  ],
   "ipo_watchlist": {
     "calendar": [
       {
@@ -28,7 +435,7 @@
         "listing_date": "4/24(金)",
         "bb_period": "04/09 (木)04/15 (水)",
         "offering_price_date": "04/16",
-        "status": "BB開始日",
+        "status": "BB期間中",
         "market": "",
         "offering_price": 0,
         "absorption_amount_jpy": 0,
@@ -67,7 +474,7 @@
         "listing_date": "4/21(火)",
         "bb_period": "04/06 (月)04/10 (金)",
         "offering_price_date": "04/13",
-        "status": "BB期間中",
+        "status": "BB最終日",
         "market": "",
         "offering_price": 0,
         "absorption_amount_jpy": 0,
@@ -80,7 +487,7 @@
         "listing_date": "4/9(木)",
         "bb_period": "03/24 (火)03/30 (月)",
         "offering_price_date": "03/31",
-        "status": "上場日",
+        "status": "上場済",
         "market": "",
         "offering_price": 0,
         "absorption_amount_jpy": 0,
@@ -238,15 +645,17 @@
         "listing_date": "4/24(金)",
         "bb_period": "04/09 (木)04/15 (水)",
         "offering_price_date": "04/16",
-        "status": "BB開始日",
+        "status": "BB期間中",
         "market": "",
         "offering_price": 0,
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "犬猫生活",
@@ -260,9 +669,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "SQUEEZE",
@@ -276,9 +687,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "バトンズ",
@@ -286,15 +699,17 @@
         "listing_date": "4/21(火)",
         "bb_period": "04/06 (月)04/10 (金)",
         "offering_price_date": "04/13",
-        "status": "BB期間中",
+        "status": "BB最終日",
         "market": "",
         "offering_price": 0,
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "ソフトテックス",
@@ -302,15 +717,17 @@
         "listing_date": "4/9(木)",
         "bb_period": "03/24 (火)03/30 (月)",
         "offering_price_date": "03/31",
-        "status": "上場日",
+        "status": "上場済",
         "market": "",
         "offering_price": 0,
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "ヒトトヒトホールディングス",
@@ -324,9 +741,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "システムエグゼ",
@@ -340,9 +759,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "ビタブリッドジャパン",
@@ -356,9 +777,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "レクメド",
@@ -372,9 +795,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "セイワホールディングス",
@@ -388,9 +813,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "ジェイファーマ",
@@ -404,9 +831,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "ベーシック",
@@ -420,9 +849,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "グリーンライト・再エネインフラ投資法人",
@@ -436,9 +867,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "ギークリー",
@@ -452,9 +885,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "イノバセル",
@@ -468,9 +903,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       },
       {
         "name": "ＴＯブックス",
@@ -484,9 +921,11 @@
         "absorption_amount_jpy": 0,
         "offering_ratio": 0.0,
         "source": "96ut.com",
-        "verdict": "情報不足",
-        "flags": [],
-        "regime_ok": true
+        "verdict": "注意",
+        "flags": [
+          "⚠️ 熊市暂停打新 (regime=0.29 < 0.3)"
+        ],
+        "regime_ok": false
       }
     ],
     "capital": {
@@ -497,97 +936,97 @@
     },
     "ipo_news": [
       {
-        "summary": "ソフトテクスはカイ気配スタート、きょうスタンダード市場などに新規上場 - かぶたん",
+        "summary": "セブン米子会社 IPO時期延期 27年度へ - 沖縄タイムス社",
         "score": 0.3,
-        "published_at": "2026-04-09T05:30:26",
+        "published_at": "2026-04-09T18:57:00",
         "source": "google_news_ipo"
       },
       {
-        "summary": "ソフトテックス---本日新規上場、公開価格大幅に上回る初値示現後は伸び悩み - ダイヤモンド・オンラ",
+        "summary": "【香港】ＩＰＯ調達額、１Ｑ首位は香港＝デロイト［金融］ | チバテレ＋プラス - 千葉テレビ放送",
         "score": 0.3,
-        "published_at": "2026-04-09T05:24:37",
+        "published_at": "2026-04-09T17:01:38",
         "source": "google_news_ipo"
       },
       {
-        "summary": "ソフトテックス---本日新規上場、公開価格大幅に上回る初値示現後は伸び悩み - ｄメニューニュース",
+        "summary": "米スペース X が IPO 申請 史上最大規模の可能性 - 朝日新聞",
         "score": 0.3,
-        "published_at": "2026-04-09T05:09:00",
+        "published_at": "2026-04-09T15:05:43",
         "source": "google_news_ipo"
       },
       {
-        "summary": "ソフトテックス---本日新規上場、公開価格大幅に上回る初値示現後は伸び悩み 執筆： Fisco - ",
+        "summary": "セブン「独り負け」脱却できず 経費かさみコンビニ事業減益 米子会社のIPOも延期 - 産経ニュース",
         "score": 0.3,
-        "published_at": "2026-04-09T05:09:00",
+        "published_at": "2026-04-09T12:03:12",
         "source": "google_news_ipo"
       },
       {
-        "summary": "ノボ系出資のアバリン・ファーマ、米IPO申請−肺線維症治療薬に注力 - ｄメニューニュース",
+        "summary": "セブン&アイが米国事業IPO延期、最短で27年度－還元方針は変えず - Bloomberg.com",
         "score": 0.3,
-        "published_at": "2026-04-09T05:04:00",
+        "published_at": "2026-04-09T10:39:10",
         "source": "google_news_ipo"
       },
       {
-        "summary": "SpaceXの巨大IPOで株式市場に起きる「評価額より意味深い」3つの変化。すでに株価急騰の業界も…",
+        "summary": "タクシー配車GOの東証上場、資金吸収額は数百億円規模で調整－関係者 - Bloomberg.com",
         "score": 0.3,
-        "published_at": "2026-04-09T03:50:00",
+        "published_at": "2026-04-09T08:14:58",
         "source": "google_news_ipo"
       },
       {
-        "summary": "（再送）ＩＰＯ＝ソフトテックスの初値は３２００円、公開価格を６４．９％上回る - kabushiki",
+        "summary": "【動画】新規上場ソフトテックスの石黒佳彦社長に聞く - 四季報オンライン",
         "score": 0.3,
-        "published_at": "2026-04-09T02:58:00",
+        "published_at": "2026-04-09T08:00:00",
         "source": "google_news_ipo"
       },
       {
-        "summary": "ＩＰＯ＝ソフトテックスの初値は３２００円、公開価格を６４．９％上回る(ウエルスアドバイザー) - Y",
+        "summary": "Seven & i to Postpone U.S. Unit IPO - 時事通信ニュース",
         "score": 0.3,
-        "published_at": "2026-04-09T02:58:00",
+        "published_at": "2026-04-09T07:47:00",
         "source": "google_news_ipo"
       },
       {
-        "summary": "【IPO】ソフトテックス---初値は3200円（公開価格1940円） 執筆： Fisco - Inv",
+        "summary": "世界のＩＰＯ、3月は前年比8％増の99億ドル アジア太平洋は3倍＝ＬＳＥＧ - ニューズウィーク日本",
         "score": 0.3,
-        "published_at": "2026-04-09T01:58:00",
+        "published_at": "2026-04-09T07:10:40",
         "source": "google_news_ipo"
       },
       {
-        "summary": "ソフトテックス---初値は3200円（公開価格1940円）(フィスコ) - Yahoo!ファイナンス",
+        "summary": "世界のＩＰＯ、3月は前年比8％増の99億ドル アジア太平洋は3倍＝ＬＳＥＧ（ロイター） - Yaho",
         "score": 0.3,
-        "published_at": "2026-04-09T01:58:00",
+        "published_at": "2026-04-09T07:10:40",
         "source": "google_news_ipo"
       },
       {
-        "summary": "超軽量級IPOのソフトテックスは買い気配スタート - 四季報オンライン",
+        "summary": "セブン&アイが米国事業IPO延期、最短で27年度－還元方針は変えず - TBS NEWS DIG",
         "score": 0.3,
-        "published_at": "2026-04-09T00:59:10",
+        "published_at": "2026-04-09T06:46:00",
         "source": "google_news_ipo"
       },
       {
-        "summary": "ＩＰＯ＝ソフトテックスがカイ気配を切り上げる展開(ウエルスアドバイザー) - Yahoo!ファイナン",
+        "summary": "会計不正の陰に「労務」あり：東証の内部統制指針を読み解くIPOガバナンスの新常識 - manegy.",
         "score": 0.3,
-        "published_at": "2026-04-09T00:46:00",
+        "published_at": "2026-04-09T06:45:45",
         "source": "google_news_ipo"
       },
       {
-        "summary": "スペースX、IPO前にテスラとの合併観測広がる - WSJ",
+        "summary": "きょうのＩＰＯの終値、ソフトテクスは初値を下回る２６１３円で取引終える - ライブドアニュース",
         "score": 0.3,
-        "published_at": "2026-04-09T00:46:00",
+        "published_at": "2026-04-09T06:41:02",
         "source": "google_news_ipo"
       },
       {
-        "summary": "米オープンＡＩ、年内予定のＩＰＯで一部を個人投資家に割り当てへ - ニューズウィーク日本版 オフィシ",
+        "summary": "きょうのＩＰＯの終値、ソフトテクスは初値を下回る２６１３円で取引終える - かぶたん",
         "score": 0.3,
-        "published_at": "2026-04-09T00:40:27",
+        "published_at": "2026-04-09T06:41:00",
         "source": "google_news_ipo"
       },
       {
-        "summary": "米オープンＡＩ、年内予定のＩＰＯで一部を個人投資家に割り当てへ - Reuters",
+        "summary": "セブン&アイが米国事業IPO延期、最短で27年度－還元方針は変えず（Bloomberg） - Yah",
         "score": 0.3,
-        "published_at": "2026-04-09T00:40:00",
+        "published_at": "2026-04-09T06:33:13",
         "source": "google_news_ipo"
       }
     ],
-    "regime_score": 0.9174726529558315,
-    "generated_at": "2026-04-09T06:43:33.453838+00:00"
+    "regime_score": 0.2924864296517361,
+    "generated_at": "2026-04-09T22:33:06.905784+00:00"
   }
 }

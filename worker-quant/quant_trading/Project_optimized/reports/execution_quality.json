@@ -1,8 +1,8 @@
 {
-  "run_id": "2026-04-09__90c54330d9",
+  "run_id": "2026-04-09__ff363b11a8",
   "strategy_id": "sprint",
   "fill_count": 1,
-  "avg_slippage_bps": 0.0,
+  "avg_slippage_bps": -7.547620306525005e-06,
   "total_commission": 0.0,
   "fill_validation_rate": 0.0
 }

@@ -74,16 +74,19 @@ def build_account_snapshot(conn, run_id: str, asof: str, initial_cash: float = 0
     ensure_trade_tables(conn)
     prev = get_prev_snapshot(conn, asof, strategy_id=strategy_id)
     
-    # If initial_cash is explicitly provided (> 0), use it as an override
-    if initial_cash > 0:
-        cash_start = float(initial_cash)
-        prev_asof = prev[0] if prev else None
-    elif prev is None:
-        cash_start = float(initial_cash)
-        prev_asof = None
-    else:
+    # Determine cash_start: prefer previous snapshot, then initial_cash fallback
+    if prev is not None and initial_cash <= 0:
+        # Normal path: derive from yesterday's actual cash
         prev_asof, cash_start, _prev_nav = prev
         cash_start = float(cash_start)
+    elif prev is not None and initial_cash > 0:
+        # Re-run for today: caller already knows today's starting cash
+        cash_start = float(initial_cash)
+        prev_asof = prev[0]
+    else:
+        # No prior snapshot at all (first ever run)
+        cash_start = float(initial_cash)
+        prev_asof = None
 
     net_cf, fees, tax, buy_notional, sell_notional, nfills = get_trade_cashflow(conn, run_id, asof, strategy_id=strategy_id)
     cash_ledger_delta = get_cash_ledger_delta(conn, asof)

@@ -372,11 +372,16 @@ def _format_discord_webhook_payload(payload: dict) -> dict:
             detail_lines.append(f"`{key}`: {_truncate_discord_text(value, limit=180)}")
         description = "\n".join(detail_lines[:10]) if detail_lines else "No extra fields"
 
+    pipeline = str(payload.get("pipeline", ""))
+    title_prefix = f"[{level.upper()}] "
+    if pipeline == "morning_briefing":
+        title_prefix = f"[{level.upper()}] [朝ブリーフィング] "
+
     return {
         "username": "worker-quant",
         "embeds": [
             {
-                "title": f"[{level.upper()}] {event}",
+                "title": f"{title_prefix}{event}",
                 "description": description,
                 "color": _discord_embed_color(level, event),
                 "footer": {"text": "worker-quant runtime alert"},

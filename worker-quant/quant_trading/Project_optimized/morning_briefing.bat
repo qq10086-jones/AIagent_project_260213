@@ -43,8 +43,12 @@ REM Step 3: Generate action plan + push to Discord
 echo [3/4] Building action plan... >> "%LOG%"
 python action_plan_builder.py --db japan_market.db --strategy_id sprint >> "%LOG%" 2>&1
 
-REM Step 4: Briefing ready
-echo [4/4] Briefing ready. >> "%LOG%"
+REM Step 4: Send Discord notifications (macro event + action plan)
+echo [4/5] Sending Discord notifications... >> "%LOG%"
+python morning_briefing_notify.py --db japan_market.db --config config.yaml >> "%LOG%" 2>&1
+
+REM Step 5: Briefing ready
+echo [5/5] Briefing ready. >> "%LOG%"
 echo =============================================== >> "%LOG%"
 echo [INFO] MORNING BRIEFING END %date% %time% RC=%RC% >> "%LOG%"
 echo =============================================== >> "%LOG%"

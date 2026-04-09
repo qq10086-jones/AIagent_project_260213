@@ -1055,9 +1055,10 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
     ]
 
     # 跨资产信号 (from DB)
+    _v2_conn = sqlite3.connect(DB_PATH)
     try:
         from cross_asset_signals import load_latest_cross_asset
-        ca = load_latest_cross_asset(conn)
+        ca = load_latest_cross_asset(_v2_conn)
         if ca:
             sp_str = f"S&P500: {ca.get('sp500_close', 'N/A')} ({ca.get('sp500_overnight_pct', 0):+.2f}%)" if ca.get('sp500_close') else "S&P500: N/A"
             uj_str = f"USD/JPY: {ca.get('usdjpy', 'N/A')} ({ca.get('usdjpy_change_pct', 0):+.2f}%)" if ca.get('usdjpy') else "USD/JPY: N/A"
@@ -1087,7 +1088,7 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
     try:
         from macro_event_detector import load_active_event
         asof_for_event = report.get("asof") or datetime.now().strftime("%Y-%m-%d")
-        macro_ev = load_active_event(conn, asof_for_event)
+        macro_ev = load_active_event(_v2_conn, asof_for_event)
         if macro_ev and macro_ev.get("alert_level") in ("L1", "L2"):
             level = macro_ev["alert_level"]
             level_icon = "🔴" if level == "L1" else "🟡"
@@ -1108,6 +1109,8 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
             lines += ["### 宏观事件检测", "- 无活跃宏观事件", ""]
     except Exception:
         lines += ["### 宏观事件检测", "- (宏观事件模块未就绪)", ""]
+    finally:
+        _v2_conn.close()
 
     lines += [
         "## 一、市场状态",

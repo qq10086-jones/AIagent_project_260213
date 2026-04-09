@@ -148,6 +148,9 @@ _CATEGORY_MAP = {
     "不祥事":   ("scandal",               -0.80),
     "行政処分": ("regulatory",            -0.70),
     "減配":     ("dividend_cut",          -0.65),
+    "新規上場": ("ipo",                   +0.30),
+    "IPO":      ("ipo",                   +0.30),
+    "上場承認": ("ipo",                   +0.20),
 }
 
 _URGENCY_MAP = {
@@ -163,6 +166,7 @@ _URGENCY_MAP = {
     "scandal":                5.0,
     "regulatory":             4.5,
     "earnings_revision":      3.0,
+    "ipo":                    3.5,
     "general":                1.0,
 }
 
@@ -489,6 +493,52 @@ def fetch_google_news_macro(lookback_hours: float = 24.0) -> list[dict]:
     return items
 
 
+def fetch_google_news_ipo(lookback_hours: float = 72.0) -> list[dict]:
+    """IPO / 新規上場関連ニュースを取得。"""
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=lookback_hours)
+    kw = "新規上場 OR IPO OR 上場承認 OR 公開価格 OR グロース上場"
+    url = f"https://news.google.com/rss/search?q={urllib.parse.quote(kw)}&hl=ja&gl=JP&ceid=JP:ja"
+    data = _get(url)
+    if not data:
+        return []
+    try:
+        root = ET.fromstring(data)
+    except Exception:
+        return []
+    items = []
+    pos_kw = ["初値高騰", "人気", "好調", "上場承認", "期待"]
+    neg_kw = ["破発", "公募割れ", "初値割れ", "不人気", "低迷"]
+    for item in root.iter("item"):
+        title = (item.findtext("title") or "").strip()
+        link  = (item.findtext("link")  or "").strip()
+        pub   = (item.findtext("pubDate") or "").strip()
+        if not title:
+            continue
+        pub_dt = _parse_pubdate(pub)
+        if pub_dt and pub_dt < cutoff:
+            continue
+        if any(k in title for k in neg_kw):
+            sent = -0.6
+        elif any(k in title for k in pos_kw):
+            sent = 0.6
+        else:
+            sent = 0.3
+        items.append({
+            "news_id":         _make_hash(title, link),
+            "symbol":          None,
+            "published_ts":    pub_dt.isoformat() if pub_dt else datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            "source":          "google_news_ipo",
+            "title":           title,
+            "url":             link,
+            "category":        "ipo",
+            "sentiment":       sent,
+            "urgency":         3.5,
+            "impact_category": "IPO",
+        })
+    print(f"[google_ipo]  抓取 {len(items)} 条")
+    return items
+
+
 # ──────────────────────────────────────────────
 # 可选：Ollama LLM 二次评分（本地免费）
 # ──────────────────────────────────────────────
@@ -692,6 +742,8 @@ def main():
         elif src == "gdelt":
             fetched = fetch_gdelt(args.lookback_hours, name_map=name_map)
             print(f"[gdelt]       抓取 {len(fetched)} 条")
+        elif src == "ipo":
+            fetched = fetch_google_news_ipo(args.lookback_hours)
         else:
             print(f"[warn] 未知数据源: {src}，跳过")
             continue

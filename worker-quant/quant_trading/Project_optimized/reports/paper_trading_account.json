@@ -3,57 +3,48 @@
   "source_of_truth": "japan_market.db (positions + account_snapshots tables)",
   "strategy_id": "sprint",
   "account": {
-    "asof": "2026-04-08",
-    "cash": 344970.0012,
-    "positions_value": 55590.00244140625,
-    "nav": 400560.00364140625,
-    "run_id": "2026-04-08__be6eab8238"
+    "asof": "2026-04-09",
+    "cash": 454550.0,
+    "positions_value": 0.0,
+    "nav": 454550.0,
+    "run_id": "2026-04-09__90c54330d9"
   },
   "positions": [
-    {
-      "asof": "2026-04-08",
-      "symbol": "4005.T",
-      "qty": 100.0,
-      "avg_cost": 528.8,
-      "market_price": 555.9000244140625,
-      "market_value": 55590.00244140625,
-      "unrealized_pnl": 2710.0024414062545
-    },
     {
       "asof": "2026-04-07",
       "symbol": "4005.T",
       "qty": 100.0,
       "avg_cost": 528.8,
-      "market_price": 533.2000122070312,
-      "market_value": 53320.001220703125,
-      "unrealized_pnl": 440.00122070312955
+      "market_price": 534.7000122070312,
+      "market_value": 53470.001220703125,
+      "unrealized_pnl": 590.0012207031295
     },
     {
       "asof": "2026-04-06",
       "symbol": "4005.T",
       "qty": 100.0,
       "avg_cost": 528.8,
-      "market_price": 533.2000122070312,
-      "market_value": 53320.001220703125,
-      "unrealized_pnl": 440.00122070312955
+      "market_price": 534.7000122070312,
+      "market_value": 53470.001220703125,
+      "unrealized_pnl": 590.0012207031295
     },
     {
       "asof": "2026-04-06",
       "symbol": "7267.T",
       "qty": 100.0,
       "avg_cost": 1259.5,
-      "market_price": 1262.0,
-      "market_value": 126200.0,
-      "unrealized_pnl": 250.0
+      "market_price": 1258.5,
+      "market_value": 125850.0,
+      "unrealized_pnl": -100.0
     },
     {
       "asof": "2026-04-06",
       "symbol": "9432.T",
       "qty": 400.0,
       "avg_cost": 156.9,
-      "market_price": 157.10000610351562,
-      "market_value": 62840.00244140625,
-      "unrealized_pnl": 80.00244140624773
+      "market_price": 156.89999389648438,
+      "market_value": 62759.99755859375,
+      "unrealized_pnl": -0.0024414062522737368
     }
   ]
 }

@@ -1,108 +1,105 @@
 db_path: japan_market.db
-
 update:
   lookback_days: 730
   universe_file: null
-
 fundamental:
   enabled: true
-  source: "yfinance"              # stable default: yfinance (免费可靠) | jquants_v2 (需 pip install jquantsapi) | csv | noop
+  source: yfinance
   run_on_main_path: false
   blocking: false
   allow_stale_on_failure: true
   csv_path: null
-  fail_closed: false              # 基本面失败不阻塞主链路（实盘安全优先）
-  require_available_ts: false     # 允许无 timestamp 的旧数据（防冷启动失败）
-  use_in_live_scoring: true   # 基本面因子进入 ss7 模型评分（P0修复 2026-03-26）
+  fail_closed: false
+  require_available_ts: false
+  use_in_live_scoring: true
   use_in_learning: true
-
 screener:
   asof: null
-  top_k: 50                               # P1修复：扩大候选池，IC t-stat 需要 25+ 只（2026-03-26）
+  top_k: 50
   min_adv: null
-  auto_min_adv_from_capital: false        # P1修复：关闭按资本自动推算，避免资本过小导致 universe 收缩
-  min_adv_floor: 2000000                  # 最低流动性要求：日均成交额 200万日元
+  auto_min_adv_from_capital: false
+  min_adv_floor: 2000000
   max_single_position_pct: 0.25
   target_adv_participation: 0.05
-  max_cost_per_lot: 500000                # P1修复：直接设定1手上限 50万日元（对应最高股价约5000円/股）
-  auto_max_cost_per_lot_from_capital: false  # 关闭自动推算，screener universe 与实际本金解耦
+  max_cost_per_lot: 500000
+  auto_max_cost_per_lot_from_capital: false
   lot_cost_position_budget_frac: 1.0
   max_cost_per_lot_floor: 50000
-
 strategy_profiles:
   sprint:
     enabled: true
-    strategy_id: "sprint"
+    strategy_id: sprint
     capital_allocation_pct: 1.0
     activation_threshold: 0
     max_positions: 3
     top_k: 20
     min_adv_floor: 5000000
     max_cost_per_lot: 100000
-    signal_mode: "sprint_momentum"
-    position_sizing: "half_kelly"
-    max_single_position_pct: 0.35   # 从 0.50 收紧，防单票过度集中
-    max_sector_weight: 0.60
-    benchmark_off_scale: 0.25       # regime=off 时允许 25% 暴露（试探性建仓）
-    benchmark_caution_scale: 0.60   # regime=caution 时 60% 暴露
-    use_vix_confirmation: false     # 1552.T 数据不可靠，禁用 VIX 确认，纯 MA regime
-    vix_ticker: "1552.T"
+    signal_mode: sprint_momentum
+    position_sizing: half_kelly
+    max_single_position_pct: 0.35
+    max_sector_weight: 0.6
+    benchmark_off_scale: 0.25
+    benchmark_caution_scale: 0.6
+    use_vix_confirmation: false
+    vix_ticker: 1552.T
     vix_off_threshold: 30.0
-    vix_missing_policy: "ma_only"   # VIX 缺失时退化为 MA-only，避免隐式治理分歧
-    # 止损参数（Sprint 短周期适配）
-    stop_loss_vol_mult: 3.0         # ATR 乘数（全局 6.0，Sprint 收紧为 3.0）
-    stop_loss_min_pct: 0.04         # 最低止损 4%
-    stop_loss_max_pct: 0.12         # 最高止损 12%
+    vix_missing_policy: ma_only
+    stop_loss_vol_mult: 3.0
+    stop_loss_min_pct: 0.04
+    stop_loss_max_pct: 0.12
     atr_window: 20
-    # 移动止盈参数
-    trailing_activate_pct: 0.03     # 浮盈超 3% 激活保本止盈
-    trailing_stop_pct: 0.02         # 从最高点回撤 2% 触发退出
-    # 组合回撤门槛（Sprint 集中持仓需更敏感）
-    max_dd_half: 0.08               # 组合 8% 回撤降半仓（全局 12%）
-    max_dd_full: 0.12               # 组合 12% 回撤全平仓（全局 18%）
+    trailing_activate_pct: 0.03
+    trailing_stop_pct: 0.02
+    max_dd_half: 0.08
+    max_dd_full: 0.12
   harvest:
     enabled: false
-    strategy_id: "harvest"
-    capital_allocation_pct: 0.70
+    strategy_id: harvest
+    capital_allocation_pct: 0.7
     activation_threshold: 2000000
     max_positions: 12
     top_k: 50
     min_adv_floor: 2000000
     max_cost_per_lot: 500000
-    signal_mode: "shadow_hybrid_ic"
-    position_sizing: "equal_weight"
+    signal_mode: shadow_hybrid_ic
+    position_sizing: equal_weight
     max_single_position_pct: 0.15
-    max_sector_weight: 0.30
-
+    max_sector_weight: 0.3
 model:
-  # IC 实测结论 (2026-03-26 更新，universe扩展后重新计算):
-  #   P1修复后 universe 60+只，IC 统计功效改善，等本次 compute_ic --shadow 完成后重新评估
-  #   signal_mode 维持 ridge，等 paper_days≥30 + IC t-stat≥1.5 + Sharpe≥1.5 后再切换
-  signal_mode: "shadow_hybrid_ic"
-  compare_signal_modes: ["ridge", "shadow_eq", "shadow_ic", "shadow_hybrid_ic"]
-  ridge_alpha_cv: false        # true: 用 TimeSeriesSplit CV 选最优 alpha; false: 固定 alpha=50
-  excluded_factors: ["ret20", "rsi14", "slope60", "vol_adj_mom20"]
-  start: "2020-01-01"
+  signal_mode: shadow_hybrid_ic
+  compare_signal_modes:
+  - ridge
+  - shadow_eq
+  - shadow_ic
+  - shadow_hybrid_ic
+  ridge_alpha_cv: false
+  excluded_factors:
+  - ret20
+  - rsi14
+  - slope60
+  - vol_adj_mom20
+  start: '2020-01-01'
   end: null
   H: 10
   train_window: 252
   rebalance_every: 10
-  benchmark_ticker: "1321.T"
+  benchmark_ticker: 1321.T
   benchmark_fast_ma_window: 20
   benchmark_slow_ma_window: 60
   benchmark_hysteresis_enter_pct: 0.01
   benchmark_hysteresis_exit_pct: 0.01
   benchmark_off_scale: 0.25
-  benchmark_caution_scale: 0.60
+  benchmark_caution_scale: 0.6
   safe_plot: true
-  output_dir: "reports"
+  output_dir: reports
   exec:
-    initial_capital: 400000    # 40万日元实际本金（与 decision.cash / paper.initial_cash 保持一致）
-    lot_size_default: 100      # 日本股票标准手数（1手=100股）
-    fee_bps: 0.0               # ゼロ革命適用時は0（flat_bpsモード時のみ使用）
-    fee_mode: "sbi_zero"       # "sbi_zero"=手数料無料 | "sbi_standard"=SBI階段手数料 | "flat_bps"=固定bps
-    slippage_bps: 5.0          # 开收盘价差约3-8bps（必须设置）
-    impact_k: 0.5              # 市场冲击模型系数
+    initial_capital: 400000
+    lot_size_default: 100
+    fee_bps: 0.0
+    fee_mode: sbi_zero
+    slippage_bps: 5.0
+    impact_k: 0.5
     max_adv_frac: null
     auto_max_adv_frac_from_capital: true
     cash_rate_daily: 0.0
@@ -110,43 +107,60 @@ model:
     vol_target_lookback: 20
     vol_target_min_scale: 0.35
     vol_target_max_scale: 1.0
-    stop_loss_pct: 0.08      # legacy fixed stop-loss fallback
-    stop_loss_mode: "atr"
+    stop_loss_pct: 0.08
+    stop_loss_mode: atr
     atr_window: 20
     stop_loss_vol_mult: 6.0
     stop_loss_min_pct: 0.06
-    stop_loss_max_pct: 0.20
-    max_dd_half: 0.12        # 组合12%回撤降半仓
-    max_dd_full: 0.18        # 组合18%回撤全平
+    stop_loss_max_pct: 0.2
+    max_dd_half: 0.12
+    max_dd_full: 0.18
     max_dd_reentry_cooldown_days: 20
-
-  # News overlay — 使用免费数据源（Kabutan RSS / Google News / GDELT）
-  # news_to_db.py 在每次 daily_run 中自动运行并写入 japan_market.db
-  # 若要完全禁用 news overlay，将 enabled 改为 false
   news:
     enabled: true
     shadow_only: true
-    sprint_gating: false           # 治理要求: shadow 运行满 30 天后才可启用 (GOVERNANCE_v2 6.1)
-    lookback_hours: 26.0          # 覆盖盘前 + 盘中，略超 24h 防漏
-    sources: "google,boj,trade,macro,gdelt"  # kabutan deprecated (持续403 Forbidden, 2026-04-08)
-    csv_path: ""                  # 保留兼容字段，DB 模式不需要
-
+    sprint_gating: false
+    lookback_hours: 26.0
+    sources: google,boj,trade,macro,gdelt
+    csv_path: ''
 learning:
-  enabled: true           # run compute_ic.py after each daily_run
-  shadow: true            # P2修复：shadow=true 计算真实IC但不覆盖生产权重，等验证后手动晋升（2026-03-26）
-  lookback_periods: 60    # number of rebalance periods to evaluate IC over
-  min_cross_section_n: 20 # P1修复：universe扩展后降低最低截面数要求（25→20，配合实际数据覆盖）
-
+  enabled: true
+  shadow: true
+  lookback_periods: 60
+  min_cross_section_n: 20
 risk_adjusted:
   enabled: true
-  factors: ["sharpe_20", "sharpe_60", "sortino_60", "vol_stability"]
-
+  factors:
+  - sharpe_20
+  - sharpe_60
+  - sortino_60
+  - vol_stability
 factor_tiers:
-  core: ["mom_consist", "ma_gap", "sharpe_60"]
-  candidate: ["high52w", "mom_12_1", "ret60", "vol_z"]
-  fundamental_pending: ["roa_op", "cfo_assets", "accruals_inv", "margin_op", "leverage_safety"]
-  excluded: ["ret20", "rsi14", "slope60", "vol_adj_mom20", "ret1", "ret5", "vol20", "vol60", "z_20"]
-
+  core:
+  - mom_consist
+  - ma_gap
+  - sharpe_60
+  candidate:
+  - high52w
+  - mom_12_1
+  - ret60
+  - vol_z
+  fundamental_pending:
+  - roa_op
+  - cfo_assets
+  - accruals_inv
+  - margin_op
+  - leverage_safety
+  excluded:
+  - ret20
+  - rsi14
+  - slope60
+  - vol_adj_mom20
+  - ret1
+  - ret5
+  - vol20
+  - vol60
+  - z_20
 factor_promotion_rules:
   min_observations: 100
   min_t_stat: 1.5
@@ -154,181 +168,196 @@ factor_promotion_rules:
   demotion_t_stat: 0.5
   demotion_lookback_periods: 60
   review_frequency_days: 30
-
 promotion:
-  min_backtest_sharpe: 1.5    # P2修复：提高晋升门槛（1.0→1.5），防止过早切换信号模式（2026-03-26）
+  min_backtest_sharpe: 1.5
   backtest_sharpe_tolerance: 0.01
-  min_production_ic: 0.02     # 要求 IC 均值 > 2%（之前0=无门槛，等于没有保护）
+  min_production_ic: 0.02
   min_t_stat: 1.5
   max_drawdown_pct: 20.0
-  paper_days_required: 30     # P2修复：提高纸交易天数要求（20→30天）
-  min_sharpe_improvement: 0.1 # 要求相对 ridge 至少提升 0.1 Sharpe
-  baseline_mode: "ridge"
+  paper_days_required: 30
+  min_sharpe_improvement: 0.1
+  baseline_mode: ridge
   max_turnover_cv: 2.5
   min_eligible_factors: 3
   max_zero_exposure_days: 3
   require_actionable_mode: true
-  zero_exposure_fallback_mode: "shadow_hybrid_ic"
+  zero_exposure_fallback_mode: shadow_hybrid_ic
   zero_exposure_disable_news_on_fallback: true
-
 decision:
-  cash: 400000          # 与 exec.initial_capital 保持一致
+  cash: 400000
   lot: 100
   min_trade: 1000
-  out_dir: "artifacts/decision"
-
+  out_dir: artifacts/decision
 paper:
-  enabled: true    # 2026-04-08: Sprint信号首次正常工作，启动 paper trading 验证期
-  price_mode: "latest"
+  enabled: true
+  price_mode: latest
   slippage_bps: 5.0
   fee_bps: 0.0
-  fee_mode: "sbi_zero"
+  fee_mode: sbi_zero
   fill_ratio: 1.0
-  initial_cash: 400000  # 与 exec.initial_capital 保持一致
-
+  initial_cash: 400000
 alerts:
   enabled: true
-  min_level: "warning"
-  webhook_url: ""   # DO NOT hardcode here — use webhook_env or .env file
-  webhook_env: "WORKER_QUANT_ALERT_WEBHOOK_URL"
-
+  min_level: warning
+  webhook_url: ''
+  webhook_env: WORKER_QUANT_ALERT_WEBHOOK_URL
 simulation:
   enabled: false
-  mode: "accelerated_forward"
-  start_asof: "2026-02-03"
-  end_asof: "2026-03-31"
+  mode: accelerated_forward
+  start_asof: '2026-02-03'
+  end_asof: '2026-03-31'
   tick_seconds: 60
   trading_day_per_tick: 1
   strict_pit: true
   resume: true
   use_cloned_db: true
   reset_runtime_state: true
-  cloned_db_path: "state/simulated_forward/japan_market_sim.db"
-  reports_dir: "reports/simulated_forward"
-  artifacts_dir: "artifacts/simulated_forward"
-  state_dir: "state/simulated_forward"
+  cloned_db_path: state/simulated_forward/japan_market_sim.db
+  reports_dir: reports/simulated_forward
+  artifacts_dir: artifacts/simulated_forward
+  state_dir: state/simulated_forward
   stop_on_error: true
-
 obsidian:
-  vault: '/app/quant_trading/quantum investment'
-  section: "Quant/Reports"
-
-# ── V2 Alpha 优化 (2026-04-08) ─────────────────────────────────
-# 所有 v2 模块默认 shadow 模式: 计算并记录，但不影响实际决策
-
+  vault: /app/quant_trading/quantum investment
+  section: Quant/Reports
 cross_asset:
   enabled: true
-  shadow_only: false            # 已上线生产
+  shadow_only: false
   tickers:
-    sp500: "^GSPC"
-    usdjpy: "USDJPY=X"
-    vix: "^VIX"
-    nk_futures: "NKD=F"
-    crude_oil: "CL=F"           # WTI原油（日本进口依赖，油跌=利好）
-    gold: "GC=F"                # 黄金（避险情绪反向）
-    copper: "HG=F"              # 铜（全球制造业景气）
-    sox: "^SOX"                 # 半导体指数（日经权重股映射）
+    sp500: ^GSPC
+    usdjpy: USDJPY=X
+    vix: ^VIX
+    nk_futures: NKD=F
+    crude_oil: CL=F
+    gold: GC=F
+    copper: HG=F
+    sox: ^SOX
   weights:
-    # Walk-forward validated 2026-04-08 (train=346d, test=173d, test_IC=0.259)
-    # Copper/SOX strongest predictors; SP500/USDJPY weakest lagged IC for next-day NK
     sp500: 0.08
     usdjpy: 0.08
-    vix: 0.10
+    vix: 0.1
     nk_futures: 0.12
     crude_oil: 0.12
     gold: 0.12
-    copper: 0.20
+    copper: 0.2
     sox: 0.18
-
 benchmark_regime:
-  version: "v2"                 # "v2" = 连续化 regime (2026-04-08 回测通过: Sharpe +0.47, MaxDD 改善 3.6pp)
+  version: v2
   v2_weights:
-    ma_signal: 0.30
-    slope_signal: 0.20
+    ma_signal: 0.3
+    slope_signal: 0.2
     price_position: 0.15
-    volume_signal: 0.10
+    volume_signal: 0.1
     cross_asset: 0.25
   v2_thresholds:
-    full_position: 0.70
+    full_position: 0.7
     zero_position: 0.15
-
 macro_events:
   enabled: true
   llm:
     enabled: true
-    provider: "ollama"
-    endpoint: "http://localhost:11434"
-    model: "gemma4:26b"
+    provider: ollama
+    endpoint: http://localhost:11434
+    model: gemma4:26b
     timeout_seconds: 120
-    fallback_to_rules: true         # LLM 不可用时退化到规则引擎
+    fallback_to_rules: true
   rules:
     nk_futures_l1_threshold: 3.0
     crude_oil_l1_threshold: 5.0
     vix_spike_threshold: 15.0
     sox_l2_threshold: 3.0
   boost:
-    max_abs: 0.30
+    max_abs: 0.3
     default_duration_days: 3
-    decay_mode: "linear"            # linear / exponential
+    decay_mode: linear
   alerts:
     discord_on_l1: true
     discord_on_l2: false
 
-# ── 资金阶梯适配 (2026-04-08) ─────────────────────────────────
-# NAV 自动决定哪些组件进入决策链路、哪些只做 shadow 记录。
-# 升 tier: NAV 连续 20 个交易日 ≥ 阈值；降 tier: 即时（风控优先）
+ipo_monitor:
+  enabled: true
+  hard_rules:
+    max_absorption_jpy: 5000000000
+    max_offering_ratio: 0.30
+    min_regime_score: 0.30
+  news_keywords: "新規上場 OR IPO OR 上場承認 OR 公開価格 OR グロース上場"
+  calendar_source: "96ut"
+  strategy_id: sprint
+
 capital_tiers:
   enabled: true
   thresholds:
-    tier2_min_nav: 800000       # ¥80万 → Tier 2
-    tier3_min_nav: 2000000      # ¥200万 → Tier 3
-    upgrade_consecutive_days: 20  # 升级需连续达标天数
-    downgrade_immediate: true     # 降级立即生效
-
-  # 各 Tier 的组件覆盖配置（覆盖上方的默认值）
-  tier1:                          # ≤ ¥80万（当前阶段）
-    label: "Starter"
+    tier2_min_nav: 800000
+    tier3_min_nav: 2000000
+    upgrade_consecutive_days: 20
+    downgrade_immediate: true
+  tier1:
+    label: Starter
     max_positions: 3
-    signal_version: "v1"          # 固定 3 因子 sprint_score
-    kelly_enabled: false          # 固定 25% 仓位
-    cross_asset_production: false  # shadow only
-    llm_production: false          # shadow only
-    regime_version: "v1"           # MA 交叉 only
-    trailing_stop: false           # 基础 ATR 止损
-    portfolio_dd_enabled: false    # 仓位太少，组合回撤意义不大
+    signal_version: v1
+    kelly_enabled: false
+    cross_asset_production: false
+    llm_production: false
+    regime_version: v1
+    trailing_stop: false
+    portfolio_dd_enabled: false
     harvest_enabled: false
-
-  tier2:                          # ¥80万 - ¥200万
-    label: "Growth"
+  tier2:
+    label: Growth
     max_positions: 5
-    signal_version: "v2"          # IC 加权（需 n_obs≥30）
-    kelly_enabled: true           # 需 fills≥30 才激活
-    cross_asset_production: true
-    llm_production: false          # shadow，积累精度数据
-    regime_version: "v2"           # 连续化 regime
-    trailing_stop: true
-    portfolio_dd_enabled: true
-    harvest_enabled: false
-
-  tier3:                          # ≥ ¥200万
-    label: "Scale"
-    max_positions: 8
-    signal_version: "v2"
+    signal_version: v2
     kelly_enabled: true
     cross_asset_production: true
-    llm_production: true           # LLM 进入决策链路
-    regime_version: "v2"
+    llm_production: false
+    regime_version: v2
     trailing_stop: true
     portfolio_dd_enabled: true
-    harvest_enabled: true          # 双策略激活
-
+    harvest_enabled: false
+  tier3:
+    label: Scale
+    max_positions: 8
+    signal_version: v2
+    kelly_enabled: true
+    cross_asset_production: true
+    llm_production: true
+    regime_version: v2
+    trailing_stop: true
+    portfolio_dd_enabled: true
+    harvest_enabled: true
 sprint_signal:
-  score_version: "v1"           # "v1" = 3因子, "v2" = 全因子自适应 (切换后生效)
-
+  score_version: v1
 factor_categories:
-  momentum: [mom_consist, ret20, ret60, mom_12_1, high52w]
-  mean_reversion: [rsi14, z_20, vol_z]
-  risk: [sharpe_60, sharpe_20, sortino_60, vol_stability, vol_adj_mom20]
-  fundamental: [value_bp, roa_op, cfo_assets, accruals_inv, margin_op,
-                growth_rev_yoy, growth_op_yoy, guidance_delta, leverage_safety, dividend_yield]
-  neutral: [ret1, ret5, slope60, ma_gap, vol20, vol60]
+  momentum:
+  - mom_consist
+  - ret20
+  - ret60
+  - mom_12_1
+  - high52w
+  mean_reversion:
+  - rsi14
+  - z_20
+  - vol_z
+  risk:
+  - sharpe_60
+  - sharpe_20
+  - sortino_60
+  - vol_stability
+  - vol_adj_mom20
+  fundamental:
+  - value_bp
+  - roa_op
+  - cfo_assets
+  - accruals_inv
+  - margin_op
+  - growth_rev_yoy
+  - growth_op_yoy
+  - guidance_delta
+  - leverage_safety
+  - dividend_yield
+  neutral:
+  - ret1
+  - ret5
+  - slope60
+  - ma_gap
+  - vol20
+  - vol60

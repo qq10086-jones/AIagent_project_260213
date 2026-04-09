@@ -2,9 +2,9 @@
   "enabled": true,
   "min_level": "warning",
   "webhook_env": "WORKER_QUANT_ALERT_WEBHOOK_URL",
-  "webhook_configured": true,
-  "webhook_kind": "discord",
-  "webhook_target": "https://discordapp.com/api/webhooks/1491092751926956225/ud69bCTK...",
-  "self_test_ready": true,
-  "reported_at_utc": "2026-04-08T15:05:11+00:00"
+  "webhook_configured": false,
+  "webhook_kind": null,
+  "webhook_target": null,
+  "self_test_ready": false,
+  "reported_at_utc": "2026-04-09T01:08:51+00:00"
 }

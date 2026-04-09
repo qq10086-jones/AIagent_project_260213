@@ -1,7 +1,11 @@
 {
-  "ts_utc": "2026-04-08T15:05:44+00:00",
-  "level": "info",
-  "event": "heartbeat_ok",
+  "ts_utc": "2026-04-09T01:10:08+00:00",
+  "level": "warning",
+  "event": "heartbeat_warning",
   "simulation": false,
-  "simulation_strict_pit": true
+  "simulation_strict_pit": true,
+  "issues": [
+    "target_weights is zero (selected_count=0)"
+  ],
+  "issue_count": 1
 }

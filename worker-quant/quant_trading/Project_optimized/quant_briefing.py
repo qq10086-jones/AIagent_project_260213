@@ -36,6 +36,15 @@ NIKKEI_ETF = "1321.T"   # 日经225 ETF（野村，1:1跟踪指数），用作�
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────
 
+def _load_config(path: str = "config.yaml") -> dict:
+    """加载 config.yaml 配置。"""
+    import yaml
+    p = Path(path)
+    if p.exists():
+        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    return {}
+
+
 def now_jst() -> datetime:
     return datetime.now(JST)
 
@@ -676,17 +685,20 @@ def fetch_stock_deep(symbol: str, db_path: str = None, writeback: bool = True) -
 
 # ── 报告生成 ───────────────────────────────────────────────────────────────
 
-def _run_preflight(db_path: str) -> None:
+def _run_preflight(db_path: str, mode: str = "market") -> None:
     """
     报告生成前自动刷新数据：新闻采集 + 基本面更新。
     任何步骤失败均打印警告并继续，不中断报告生成。
     """
     import subprocess, sys
+    news_sources = "google,boj,trade,macro,gdelt"
+    if mode in ("ipo", "full"):
+        news_sources += ",ipo"
     steps = [
         {
             "name": "新闻采集",
             "cmd": [sys.executable, "news_to_db.py", "--db", db_path,
-                    "--lookback_hours", "26", "--sources", "kabutan,google,boj,trade,gdelt"],
+                    "--lookback_hours", "26", "--sources", news_sources],
         },
         {
             "name": "基本面更新",
@@ -717,7 +729,7 @@ def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = F
 
     # ── 自动预刷新（新闻 + 基本面），可用 --no-refresh 跳过 ─────────────────
     if not skip_preflight:
-        _run_preflight(DB_PATH)
+        _run_preflight(DB_PATH, mode=mode)
 
     report: dict = {
         "generated_at": now.strftime("%Y-%m-%d %H:%M JST"),
@@ -799,6 +811,16 @@ def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = F
     # ── 模式：stock（个股深析）───────────────────────────────────────────
     if mode in ("stock", "full") and extra_symbols:
         report["stock_analysis"] = [fetch_stock_deep(s, db_path=DB_PATH, writeback=True) for s in extra_symbols]
+
+    # ── 模式：ipo（IPO打新监控）──────────────────────────────────────────
+    if mode in ("ipo", "full"):
+        try:
+            from ipo_monitor import build_ipo_report
+            ipo_cfg = _load_config().get("ipo_monitor", {})
+            report["ipo_watchlist"] = build_ipo_report(DB_PATH, ipo_cfg)
+        except Exception as e:
+            print(f"[briefing] IPO monitor error: {e}", file=sys.stderr)
+            report["ipo_watchlist"] = {"error": str(e)}
 
     return report
 
@@ -885,6 +907,37 @@ def write_report(report: dict) -> tuple[Path, Path]:
                 )
                 lines.append(f"- 季度EPS趋势: {eps_str}")
             lines.append("")
+
+    if "ipo_watchlist" in report:
+        ipo = report["ipo_watchlist"]
+        lines.append("## IPO 打新监控")
+        if "error" in ipo:
+            lines.append(f"- 数据获取失败: {ipo['error']}")
+        else:
+            lines.append(f"- Regime: {ipo.get('regime_score', 'N/A'):.2f}")
+            cap = ipo.get("capital", {})
+            lines.append(f"- 资金余力: {cap.get('message', 'N/A')}")
+            lines.append("")
+            scored = ipo.get("scored", [])
+            if scored:
+                lines.append("| 銘柄 | 上場日 | 市場 | 吸収額 | OR | 判定 | 备注 |")
+                lines.append("|------|--------|------|--------|-----|------|------|")
+                for s in scored:
+                    abs_str = f"{s.get('absorption_amount_jpy',0)/1e8:.0f}億" if s.get('absorption_amount_jpy') else "?"
+                    or_str = f"{s.get('offering_ratio',0):.0%}" if s.get('offering_ratio') else "?"
+                    flags_str = " ".join(s.get("flags", [])) or "-"
+                    lines.append(f"| {s.get('name','')} | {s.get('listing_date','')} | "
+                                 f"{s.get('market','')} | {abs_str} | {or_str} | "
+                                 f"{s.get('verdict','')} | {flags_str} |")
+            else:
+                lines.append("- 近期无 IPO 日历数据")
+            news = ipo.get("ipo_news", [])
+            if news:
+                lines.append("")
+                lines.append("### IPO 相关新闻")
+                for n in news[:5]:
+                    lines.append(f"- [{n.get('score',0):+.1f}] {n.get('summary','')}")
+        lines.append("")
 
     with open(md_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
@@ -976,6 +1029,7 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
         "orders":       orders_v2,
         "risk_alerts":  risk_alerts,
         "account":      account,
+        "ipo_watchlist": report.get("ipo_watchlist"),
     }
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(nexus_json, f, ensure_ascii=False, indent=2, default=str)
@@ -1205,6 +1259,34 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
                 f.write("\n".join(stock_lines))
             print(f"[briefing] 个股报告 → {stock_path}")
 
+    # ── 八、IPO 打新监控（仅当 mode=ipo/full 时出现）─────────────────────────
+    ipo_wl = report.get("ipo_watchlist")
+    if ipo_wl and "error" not in ipo_wl:
+        lines += ["", "---", "## 八、IPO 打新监控", ""]
+        lines.append(f"**Regime Score**: {ipo_wl.get('regime_score', 0):.2f}")
+        cap = ipo_wl.get("capital", {})
+        lines.append(f"**资金余力**: {cap.get('message', 'N/A')}")
+        lines.append("")
+        scored = ipo_wl.get("scored", [])
+        if scored:
+            lines.append("| 銘柄 | 上場日 | 市場 | 吸収額 | OR | 判定 | 风险标注 |")
+            lines.append("|------|--------|------|--------|-----|------|----------|")
+            for s in scored:
+                abs_str = f"{s.get('absorption_amount_jpy',0)/1e8:.0f}億" if s.get('absorption_amount_jpy') else "?"
+                or_str = f"{s.get('offering_ratio',0):.0%}" if s.get('offering_ratio') else "?"
+                flags_str = " ".join(s.get("flags", [])) or "-"
+                lines.append(f"| {s.get('name','')} | {s.get('listing_date','')} | "
+                             f"{s.get('market','')} | {abs_str} | {or_str} | "
+                             f"**{s.get('verdict','')}** | {flags_str} |")
+        else:
+            lines.append("近期无 IPO 日历数据。")
+        news = ipo_wl.get("ipo_news", [])
+        if news:
+            lines += ["", "### IPO 相关新闻"]
+            for n in news[:5]:
+                lines.append(f"- [{n.get('score',0):+.1f}] {n.get('summary','')}")
+        lines.append("")
+
     lines.append("---")
     lines.append("*本报告由 worker-quant v2 自动生成，数据来源 yfinance（约15分钟延迟）。投资决策请结合实际情况判断。*")
 
@@ -1218,8 +1300,8 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
 
 def main():
     ap = argparse.ArgumentParser(description="Quant Daily Briefing")
-    ap.add_argument("--mode", choices=["market", "stock", "full"], default="market",
-                    help="market=行情+策略  stock=个股深析  full=全部")
+    ap.add_argument("--mode", choices=["market", "stock", "full", "ipo"], default="market",
+                    help="market=行情+策略  stock=个股深析  full=全部  ipo=IPO打新监控")
     ap.add_argument("--symbols", default="",
                     help="个股分析时指定代码，逗号分隔，如 9432.T,5401.T")
     ap.add_argument("--output-version", choices=["v1", "v2"], default="v2",

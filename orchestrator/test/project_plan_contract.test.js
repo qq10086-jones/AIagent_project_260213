@@ -41,6 +41,14 @@ describe("validateProjectPlan", () => {
     assert.equal(result.waves.length, 2);
   });
 
+  it("accepts custom task_class passed as Set", () => {
+    const plan = makePlan();
+    plan.runs[0].task_class = "custom_deploy";
+    plan.runs[1].task_class = "custom_deploy";
+    const result = validateProjectPlan(plan, { taskClasses: new Set(["custom_deploy"]) });
+    assert.equal(result.ok, true, `errors: ${result.errors.join("; ")}`);
+  });
+
   it("C-01: rejects plan with fewer than 2 runs", () => {
     const plan = makePlan({ runs: [makePlan().runs[0]] });
     const result = validateProjectPlan(plan, { taskClasses: TASK_CLASSES });
@@ -129,11 +137,21 @@ describe("validateProjectPlan", () => {
     assert.ok(result.errors.some((e) => e.includes("C-08")));
   });
 
-  it("C-09: warns on non-standard artifact paths", () => {
+  it("C-09: warns on non-standard artifact paths and strips them", () => {
     const plan = makePlan();
     plan.runs[1].shared_context.artifacts = ["handoff/be_to_fe.json", "custom/my_file.txt"];
     const result = validateProjectPlan(plan, { taskClasses: TASK_CLASSES });
     assert.ok(result.warnings.some((w) => w.includes("C-09") && w.includes("custom/my_file.txt")));
+    // Non-standard artifact should be stripped, only whitelisted ones remain
+    assert.deepEqual(plan.runs[1].shared_context.artifacts, ["handoff/be_to_fe.json"]);
+  });
+
+  it("C-09: rejects path traversal in artifacts", () => {
+    const plan = makePlan();
+    plan.runs[0].shared_context = { from_runs: [], artifacts: ["../../etc/passwd"] };
+    const result = validateProjectPlan(plan, { taskClasses: TASK_CLASSES });
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some((e) => e.includes("C-09") && e.includes("path traversal")));
   });
 
   it("C-10: warns on orphan module", () => {
@@ -181,6 +199,14 @@ describe("computeWaves", () => {
 });
 
 describe("loadTaskClasses", () => {
+  it("loads from Set (passthrough)", () => {
+    const input = new Set(["custom_class", "another"]);
+    const s = loadTaskClasses(input);
+    assert.ok(s.has("custom_class"));
+    assert.ok(s.has("another"));
+    assert.equal(s, input); // same reference — no copy
+  });
+
   it("loads from array", () => {
     const s = loadTaskClasses(["a", "b"]);
     assert.ok(s.has("a"));

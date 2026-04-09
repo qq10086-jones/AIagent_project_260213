@@ -33,6 +33,7 @@ const RUN_KEY_RE = /^R-\d{2,3}$/;
  * 支持传入已解析对象或文件路径。
  */
 export function loadTaskClasses(taskClassesOrPath) {
+  if (taskClassesOrPath instanceof Set) return taskClassesOrPath;
   if (Array.isArray(taskClassesOrPath)) return new Set(taskClassesOrPath);
   if (taskClassesOrPath && typeof taskClassesOrPath === "object" && Array.isArray(taskClassesOrPath.task_classes)) {
     return new Set(taskClassesOrPath.task_classes);
@@ -174,12 +175,21 @@ export function validateProjectPlan(plan, { taskClasses, maxRuns = 12 } = {}) {
       allTargetPaths.set(normalized, key);
     }
 
-    // C-09: shared_context.artifacts 白名单
+    // C-09: shared_context.artifacts 白名单 + 路径遍历检测 + 自动 strip
     const artifacts = run.shared_context?.artifacts || [];
+    const safeArtifacts = [];
     for (const art of artifacts) {
-      if (!ALLOWED_ARTIFACT_PATHS.has(String(art || ""))) {
-        warnings.push(`C-09: run '${key}' references non-standard artifact '${art}' (stripped)`);
+      const artStr = String(art || "");
+      if (artStr.includes("..")) {
+        errors.push(`C-09: run '${key}' artifact '${artStr}' contains path traversal (blocked)`);
+      } else if (!ALLOWED_ARTIFACT_PATHS.has(artStr)) {
+        warnings.push(`C-09: run '${key}' references non-standard artifact '${artStr}' (stripped)`);
+      } else {
+        safeArtifacts.push(artStr);
       }
+    }
+    if (run.shared_context) {
+      run.shared_context.artifacts = safeArtifacts;
     }
   }
 

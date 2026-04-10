@@ -1,0 +1,38 @@
+{
+  "project_id": "proj-test-001",
+  "project_title": "Test Project",
+  "status": "COMPLETED",
+  "started_at": "2026-04-10T04:45:27.196Z",
+  "completed_at": "2026-04-10T04:45:27.197Z",
+  "duration_ms": 1,
+  "total_runs": 2,
+  "completed": 2,
+  "failed": 0,
+  "skipped": 0,
+  "acceptance_rate": 1,
+  "runs": [
+    {
+      "run_key": "R-01",
+      "title": "Backend API",
+      "task_class": "be_create",
+      "status": "COMPLETED",
+      "workflow_run_id": "wfr-R-01-1775786078145",
+      "duration_ms": null,
+      "error": null
+    },
+    {
+      "run_key": "R-02",
+      "title": "Frontend Page",
+      "task_class": "fe_create",
+      "status": "COMPLETED",
+      "workflow_run_id": "wfr-R-02-1775786078147",
+      "duration_ms": null,
+      "error": null
+    }
+  ],
+  "risk_report": {
+    "has_failures": false,
+    "failure_runs": [],
+    "skipped_runs": []
+  }
+}

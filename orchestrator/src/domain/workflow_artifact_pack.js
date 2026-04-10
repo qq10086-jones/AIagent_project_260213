@@ -440,6 +440,27 @@ function collectCodingExecutionEvidence(steps = []) {
       reasons.push(`artifact write failed: ${err.message}`);
     }
 
+    // v3.3 Patch B: persist regression_baseline.json from acceptance_result
+    try {
+      const acceptResultPath = path.resolve(releaseRoot, "verify", "acceptance_result.json");
+      if (fs.existsSync(acceptResultPath)) {
+        const acceptResult = JSON.parse(fs.readFileSync(acceptResultPath, "utf8"));
+        const passedCommands = (acceptResult.criteria_results || [])
+          .filter((r) => r.status === "pass" && r.verify_tier === "deterministic" && r.verify_command)
+          .map((r) => ({ id: r.id, description: r.description, verify_command: r.verify_command, expected_pattern: r.expected_pattern || "" }));
+        if (passedCommands.length > 0) {
+          const baselinePath = path.resolve(releaseRoot, "release", "regression_baseline.json");
+          ensureDir(path.dirname(baselinePath));
+          writeJsonFile(baselinePath, {
+            generated_at: new Date().toISOString(),
+            source_run_id: run.run_id,
+            workflow_run_id: run.workflow_run_id,
+            baseline_commands: passedCommands,
+          });
+        }
+      }
+    } catch { /* non-fatal: regression baseline is best-effort */ }
+
     const validator = validateArtifactPack({ run, steps, checkpoints, manifestPath, summaryPath, registry });
     try {
       const q = validator?.quality_summary || {};

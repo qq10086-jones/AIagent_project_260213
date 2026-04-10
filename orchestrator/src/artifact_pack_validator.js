@@ -411,6 +411,26 @@ export function validateArtifactPack({
 
   const quality = validateArtifactQuality({ run, manifestPath });
   if (!quality.ok) reasons.push(...quality.reasons);
+
+  // v3.3 Patch B: deterministic acceptance gate — fail-closed
+  const releaseRoot = path.dirname(path.dirname(manifestPath || ""));
+  const acceptanceResultPath = path.resolve(releaseRoot, "verify", "acceptance_result.json");
+  const acceptResult = loadJsonIfExists(acceptanceResultPath);
+  if (!acceptResult || typeof acceptResult !== "object") {
+    // fail-closed: 缺失 acceptance_result.json 视为失败
+    reasons.push("ACCEPTANCE_RESULT_MISSING:verify/acceptance_result.json");
+  } else if (acceptResult.verdict === "fail") {
+    const failedCriteria = Array.isArray(acceptResult.criteria_results)
+      ? acceptResult.criteria_results.filter((r) => r.status === "fail" || r.status === "error")
+      : [];
+    for (const c of failedCriteria) {
+      reasons.push(`ACCEPTANCE_CRITERION_FAILED:${c.id}:${c.description || ""}`.slice(0, 200));
+    }
+    if (acceptResult.runner_error) {
+      reasons.push(`ACCEPTANCE_RUNNER_ERROR:${String(acceptResult.runner_error).slice(0, 150)}`);
+    }
+  }
+
   const contextBudget = validateContextBudgetCoverage({
     releaseRoot: path.dirname(path.dirname(manifestPath || "")),
     manifest,

@@ -19,7 +19,8 @@ export const STEP_CONTRACTS = {
     required_artifacts: ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"],
     instructions: [
       "Define user stories, scope boundaries, and non-goals for the actual system described in the Goal field above.",
-      "Write measurable acceptance criteria in plan/acceptance.json.",
+      "CRITICAL — plan/acceptance.json: Extract EVERY numbered requirement and feature from the Goal into a SEPARATE acceptance criterion. Do NOT summarize or generalize. Each criterion object must have: id (AC-1, AC-2, ...), description (the specific feature), verify_command (a concrete shell command like 'grep', 'curl', or 'node -e' that can deterministically check), expected_pattern (regex to match output), and verify_tier: 'deterministic'. If no command can verify it, set verify_tier: 'semantic'.",
+      "plan/spec.md must reproduce ALL core requirements from the Goal verbatim in the Scope section — do not omit, truncate, or paraphrase them.",
       "Create phased milestones in plan/milestones.md.",
     ],
   },
@@ -142,13 +143,15 @@ export function buildStepPrompt({ run, stepDef, input, payload, promptScript = n
   const projectType = String(run?.project_type || "").trim();
   let effectiveLines = lines;
   if (String(stepDef?.id || "") === "pm_spec" && lines.length > 0) {
+    // Pass the FULL goal — truncating to 200 chars loses numbered requirements
+    const goalForPm = goal.length > 2000 ? goal.slice(0, 2000) + "..." : goal;
     effectiveLines = projectType && projectType !== "webapp_crm"
-      ? [`Write ALL scope, user stories, and acceptance criteria SPECIFICALLY for this system: "${goal.slice(0, 200)}". Do NOT use a CRM template or CRM-specific assumptions unless the goal explicitly asks for CRM behavior.`, ...lines]
-      : [`Write ALL scope, user stories, and acceptance criteria SPECIFICALLY for this system: "${goal.slice(0, 200)}".`, ...lines];
+      ? [`Write ALL scope, user stories, and acceptance criteria SPECIFICALLY for this system. Do NOT use a CRM template or CRM-specific assumptions unless the goal explicitly asks for CRM behavior.\n\nFull Goal:\n${goalForPm}`, ...lines]
+      : [`Write ALL scope, user stories, and acceptance criteria SPECIFICALLY for this system.\n\nFull Goal:\n${goalForPm}`, ...lines];
   }
   if (String(stepDef?.id || "") === "arch_design" && projectType === "single_file_html") {
     effectiveLines = [
-      `Design SPECIFICALLY for a static single-file HTML landing page described by: "${goal.slice(0, 200)}". Do NOT introduce CRM, database, auth, or CRUD modules unless the goal explicitly asks for them.`,
+      `Design SPECIFICALLY for a static single-file HTML landing page. Do NOT introduce CRM, database, auth, or CRUD modules unless the goal explicitly asks for them.\n\nFull Goal:\n${goal.length > 2000 ? goal.slice(0, 2000) + "..." : goal}`,
       "In plan/interfaces.md, include concrete markdown headings for the browser-facing contract such as '## GET /' and at least one static asset or UI event heading such as '## GET /styles.css' or '## Event: faq.toggle'.",
       "Under each plan/interfaces.md heading, write request shape, response or payload shape, and auth requirement. For static assets, state 'request body: none' and describe the returned asset.",
       "In plan/workplan.md, keep BE Tasks concrete for static hosting/assembly work such as serving public assets, wiring the root route, and packaging preview startup. Do not write vague 'N/A' placeholders.",

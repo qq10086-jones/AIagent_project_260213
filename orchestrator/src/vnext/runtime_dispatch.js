@@ -290,6 +290,7 @@ async function executeProjectPlanFromDispatch({
       }
     },
     runtimeConfig: runtimeConfig?.worker_coder || {},
+    artifactDir: `runtime/artifacts/release/project-${run_id}`,
   });
 
   return executor.executeProjectPlan(projectPlan, {
@@ -307,6 +308,7 @@ async function executeProjectPlanFromDispatch({
 export function createConfirmProjectPlan({
   pool,
   updateRunStatus,
+  getRunById,
   workflowEngine,
   runtimeConfig = {},
   waterfallTraceService = null,
@@ -314,8 +316,26 @@ export function createConfirmProjectPlan({
   coderModelDefault = "minimax-coding-plan/MiniMax-M2.7",
 }) {
   return async function confirmProjectPlan({ run_id, project_plan, requestBody = {}, resume = false }) {
+    // Fix #3: 状态绑定 — 只有 pending_confirmation 状态的 run 才能被 confirm
+    if (typeof getRunById === "function") {
+      const run = await getRunById(pool, run_id);
+      if (!run) {
+        return { ok: false, error: `run ${run_id} not found`, error_code: "RUN_NOT_FOUND" };
+      }
+      const allowedStates = resume ? ["partial_failure", "pending_confirmation"] : ["pending_confirmation"];
+      if (!allowedStates.includes(run.status)) {
+        return {
+          ok: false,
+          error: `run ${run_id} is in state '${run.status}', expected one of: ${allowedStates.join(", ")}`,
+          error_code: "INVALID_RUN_STATE",
+        };
+      }
+    }
+
     const { validateProjectPlan } = await import("./project_plan_contract.js");
+    const taskClasses = runtimeConfig?.worker_coder?.task_classes || undefined;
     const validation = validateProjectPlan(project_plan, {
+      taskClasses,
       maxRuns: runtimeConfig?.worker_coder?.project_planner_max_runs ?? 12,
     });
     if (!validation.ok) {

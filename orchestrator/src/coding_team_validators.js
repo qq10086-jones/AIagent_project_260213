@@ -23,8 +23,8 @@ export const PM_REQUIRED_SECTION_MATCHERS = [
   { id: "scope", patterns: ["scope"] },
   { id: "user_stories", patterns: ["user stor", "user stories"] },
   { id: "acceptance_criteria", patterns: ["acceptance criteria"] },
-  { id: "non_goals", patterns: ["non-goal", "non goal", "non_goals"] },
-  { id: "artifact_list", patterns: ["artifact list", "artifacts"] },
+  { id: "non_goals", patterns: ["non-goal", "non goal", "non_goals", "out of scope"] },
+  { id: "artifact_list", patterns: ["artifact list", "artifacts", "milestones", "deliverables", "validation plan", "validation"] },
 ];
 
 export const ARCH_REQUIRED_FILES = ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md", "plan/workplan.json"];
@@ -39,8 +39,8 @@ const PM_SPEC_REQUIRED_HEADINGS = [
   { id: "scope", patterns: ["scope"] },
   { id: "user_stories", patterns: ["user stories", "user story"] },
   { id: "acceptance_criteria", patterns: ["acceptance criteria"] },
-  { id: "non_goals", patterns: ["non-goals", "non goals", "non-goals"] },
-  { id: "artifact_list", patterns: ["artifact list", "artifacts"] },
+  { id: "non_goals", patterns: ["non-goals", "non goals", "out of scope"] },
+  { id: "artifact_list", patterns: ["artifact list", "artifacts", "milestones", "deliverables", "validation plan", "validation"] },
 ];
 
 const ARCH_REQUIRED_HEADINGS = [
@@ -78,6 +78,36 @@ function normalizeAcceptanceCriteria(acceptanceJson) {
     return acceptanceJson.criteria.map((item) => String(item || "").trim()).filter(Boolean);
   }
   return [];
+}
+
+/**
+ * Normalize criteria to structured format (v3.3 Patch B).
+ * Accepts both legacy string[] and new object[] formats.
+ * Returns { id, description, verify_command?, expected_pattern?, verify_tier } for each.
+ */
+export function normalizeAcceptanceCriteriaStructured(acceptanceJson) {
+  const raw = Array.isArray(acceptanceJson?.criteria) ? acceptanceJson.criteria : [];
+  return raw.map((item, i) => {
+    if (typeof item === "string") {
+      return {
+        id: `AC-${i + 1}`,
+        description: item.trim(),
+        verify_command: "",
+        expected_pattern: "",
+        verify_tier: "semantic",
+      };
+    }
+    if (item && typeof item === "object") {
+      return {
+        id: String(item.id || `AC-${i + 1}`).trim(),
+        description: String(item.description || item.criterion || "").trim(),
+        verify_command: String(item.verify_command || "").trim(),
+        expected_pattern: String(item.expected_pattern || "").trim(),
+        verify_tier: String(item.verify_tier || (item.verify_command ? "deterministic" : "semantic")).trim(),
+      };
+    }
+    return null;
+  }).filter(Boolean);
 }
 
 function extractInterfaceContracts(interfacesText = "") {
@@ -235,7 +265,11 @@ export function validatePmOutput({ workspaceRoot, artifactRoot }) {
   missingSections.push(...missingHeadings);
   for (const matcher of PM_REQUIRED_SECTION_MATCHERS) {
     const found = matcher.patterns.some((pattern) => specText.includes(pattern) || milestoneText.includes(pattern));
-    if (!found) {
+    if (found) {
+      // Body text match can satisfy a missing heading — remove from missingSections
+      const idx = missingSections.indexOf(matcher.id);
+      if (idx >= 0) missingSections.splice(idx, 1);
+    } else {
       if (!missingSections.includes(matcher.id)) missingSections.push(matcher.id);
     }
   }

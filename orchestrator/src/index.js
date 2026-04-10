@@ -13,7 +13,7 @@ import { getDefaultAgentRegistryDir, loadAgentContractsOrThrow } from "./agent_c
 import { getDefaultHandoffContractPath, loadHandoffContractsOrThrow } from "./handoff_contract_registry.js";
 import { buildRouteContractResponse } from "./vnext/route_contract.js";
 import { makeErrorResponse } from "./vnext/response_protocol.js";
-import { createExecuteVNextDispatch } from "./vnext/runtime_dispatch.js";
+import { createExecuteVNextDispatch, createConfirmProjectPlan } from "./vnext/runtime_dispatch.js";
 import { createHandleApiChat, generateBrainDirectReply as generateChatDirectReply } from "./vnext/chat_entrypoint.js";
 import { createHandleApproveTask, createHandleRejectTask } from "./vnext/approval_entrypoint.js";
 import { createBrainGatewayHandlers } from "./vnext/brain_gateway.js";
@@ -319,6 +319,17 @@ const executeVNextDispatch = createExecuteVNextDispatch({
   waterfallTraceService, runtimeConfig: RUNTIME_CONFIG,
 });
 
+const confirmProjectPlan = createConfirmProjectPlan({
+  pool,
+  updateRunStatus: async (_pool, run_id, status) => updateRunStatus(run_id, status),
+  getRunById: async (_pool, rid) => getRunById(rid),
+  workflowEngine,
+  runtimeConfig: RUNTIME_CONFIG,
+  waterfallTraceService,
+  coderProviderDefault: CODER_PROVIDER_DEFAULT,
+  coderModelDefault: CODER_MODEL_DEFAULT,
+});
+
 const handleApiChat = createHandleApiChat({
   uuidv4, ensureRun, planCompositeWorkflowFromText, pool,
   updateRunStatus: async (_pool, run_id, status) => updateRunStatus(run_id, status),
@@ -446,6 +457,38 @@ app.post("/vnext/dispatch", async (req, res) => {
   }
 });
 
+app.post("/vnext/project-plan/:runId/confirm", async (req, res) => {
+  const run_id = String(req.params.runId || "").trim();
+  if (!run_id) return res.status(400).json({ ok: false, error: "run_id is required" });
+  const project_plan = req.body?.project_plan;
+  if (!project_plan || typeof project_plan !== "object") {
+    return res.status(400).json({ ok: false, error: "project_plan is required in body", error_code: "BAD_REQUEST" });
+  }
+  try {
+    const result = await confirmProjectPlan({
+      run_id,
+      project_plan,
+      requestBody: req.body,
+      resume: Boolean(req.body?.resume),
+    });
+    if (!result.ok) return res.status(400).json(result);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || "confirm failed", error_code: String(err?.code || "UNKNOWN_ERROR") });
+  }
+});
+
+app.post("/vnext/project-plan/:runId/reject", async (req, res) => {
+  const run_id = String(req.params.runId || "").trim();
+  if (!run_id) return res.status(400).json({ ok: false, error: "run_id is required" });
+  try {
+    await updateRunStatus(run_id, "rejected").catch(() => {});
+    return res.json({ ok: true, run_id, status: "rejected" });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message || "reject failed" });
+  }
+});
+
 app.get("/runtime/config", (_, res) => res.json({
   ok: true,
   runtime_config_path: RUNTIME_CONFIG_LOADED.path || null,
@@ -466,7 +509,13 @@ app.post("/tasks/:task_id/reject", handleRejectTask);
 app.post("/workflow-runs/start", async (req, res) => {
   const workflow_id = String(req.body?.workflow_id || "").trim();
   const project_type = String(req.body?.project_type || "").trim();
-  const input = req.body?.input && typeof req.body.input === "object" ? req.body.input : {};
+  // Accept input as nested object OR as top-level keys (goal, provider, model, fast_mode)
+  const explicitInput = req.body?.input && typeof req.body.input === "object" ? req.body.input : {};
+  const topLevelInput = {};
+  for (const key of ["goal", "provider", "model", "fast_mode", "max_runtime_s", "step_payloads", "default_payload"]) {
+    if (req.body?.[key] !== undefined && !(key in explicitInput)) topLevelInput[key] = req.body[key];
+  }
+  const input = { ...topLevelInput, ...explicitInput };
   const run_id = String(req.body?.run_id || uuidv4()).trim();
   if (!workflow_id) return res.status(400).json({ ok: false, error: "workflow_id is required" });
   try {

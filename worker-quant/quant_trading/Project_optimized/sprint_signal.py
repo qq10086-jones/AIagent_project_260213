@@ -193,10 +193,11 @@ def sprint_entry_check(row: pd.Series, benchmark_state: str, *, off_scale: float
             and float(row.get("fundamental_score", 1.0)) > 0.50
         )
 
+    # vol_z >= 0.0 : 当日出来高が60日平均以上であれば OK（0.50 だと非触媒日にほぼ全滅）
     return (
         float(row.get("mom_consist_pctile", 0.0)) >= 0.80
         and float(row.get("high52w", -1.0)) > -0.10
-        and float(row.get("vol_z", 0.0)) > 0.50
+        and float(row.get("vol_z", 0.0)) >= 0.0
         and float(row.get("fundamental_score", 1.0)) > 0.50
     )
 
@@ -390,11 +391,34 @@ def generate_sprint_artifacts(
         feats = compute_features(px, vol)
         latest_dt = px.index[-1]
         mom_consist_raw = feats["mom_consist"].loc[latest_dt].reindex(px.columns).astype(float)
+
+        # 全截面 pctile: 优先从 feature_daily 读取（compute_price_features 在全 universe 上计算）
+        # fallback: 仅在 shortlist 上计算（精度低但不阻塞）
+        _fd_pctile: dict[str, float] = {}
+        try:
+            _fd_rows = conn.execute(
+                "SELECT symbol, value FROM feature_daily WHERE asof=? AND feature_name='mom_consist_pctile'",
+                (asof,),
+            ).fetchall()
+            _fd_pctile = {str(r[0]): float(r[1]) for r in _fd_rows if r[1] is not None}
+        except Exception:
+            pass
+
+        if _fd_pctile:
+            # 用全截面 pctile（来自 compute_price_features，覆盖 2000+ 只）
+            pctile_values = pd.Series(
+                [float(_fd_pctile.get(str(s), mom_consist_raw.rank(pct=True).get(s, 0.5))) for s in px.columns],
+                index=px.columns,
+            )
+        else:
+            # fallback: shortlist 内计算
+            pctile_values = mom_consist_raw.rank(pct=True)
+
         latest_features = pd.DataFrame(
             {
                 "symbol": px.columns,
                 "mom_consist": mom_consist_raw.values,
-                "mom_consist_pctile": mom_consist_raw.rank(pct=True).values,
+                "mom_consist_pctile": pctile_values.values,
                 "high52w": feats["high52w"].loc[latest_dt].reindex(px.columns).astype(float).values,
                 "vol_z": feats["vol_z"].loc[latest_dt].reindex(px.columns).astype(float).values,
             }

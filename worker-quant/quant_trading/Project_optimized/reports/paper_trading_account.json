@@ -3,11 +3,11 @@
   "source_of_truth": "japan_market.db (positions + account_snapshots tables)",
   "strategy_id": "sprint",
   "account": {
-    "asof": "2026-04-09",
-    "cash": 454859.9976,
+    "asof": "2026-04-10",
+    "cash": 400545.0,
     "positions_value": 0.0,
-    "nav": 454859.9976,
-    "run_id": "2026-04-09__ff363b11a8"
+    "nav": 400545.0,
+    "run_id": "sbi-2026-04-10"
   },
   "positions": [
     {

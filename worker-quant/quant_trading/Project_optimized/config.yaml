@@ -1,7 +1,15 @@
 db_path: japan_market.db
+universe:
+  file: universe.json
+  fallback_to_hardcoded: true
+  rebuild_day: monday
+  min_adv_universe: 10000000
+  max_cost_per_lot_universe: 500000
+  exclude_etf: true
+  exclude_reit: true
 update:
   lookback_days: 730
-  universe_file: null
+  universe_file: universe.json
 fundamental:
   enabled: true
   source: yfinance

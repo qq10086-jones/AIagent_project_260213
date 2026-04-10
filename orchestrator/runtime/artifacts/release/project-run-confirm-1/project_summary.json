@@ -1,0 +1,38 @@
+{
+  "project_id": "proj-test",
+  "project_title": "Test Project",
+  "status": "COMPLETED",
+  "started_at": "2026-04-10T04:45:29.862Z",
+  "completed_at": "2026-04-10T04:45:29.874Z",
+  "duration_ms": 12,
+  "total_runs": 2,
+  "completed": 2,
+  "failed": 0,
+  "skipped": 0,
+  "acceptance_rate": 1,
+  "runs": [
+    {
+      "run_key": "R-01",
+      "title": "Run 01",
+      "task_class": "be_create",
+      "status": "COMPLETED",
+      "workflow_run_id": "wf-proj-test__R-01",
+      "duration_ms": null,
+      "error": null
+    },
+    {
+      "run_key": "R-02",
+      "title": "Run 02",
+      "task_class": "be_create",
+      "status": "COMPLETED",
+      "workflow_run_id": "wf-proj-test__R-02",
+      "duration_ms": 1,
+      "error": null
+    }
+  ],
+  "risk_report": {
+    "has_failures": false,
+    "failure_runs": [],
+    "skipped_runs": []
+  }
+}

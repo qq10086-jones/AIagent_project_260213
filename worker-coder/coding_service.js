@@ -1231,35 +1231,6 @@ export const CodingService = {
 
         return finalSummary;
     },
-
-    /**
-     * Placeholder for starting a task.
-     */
-    startTask: async (task_prompt, workspaceRoot) => {
-        const run_id = crypto.randomUUID();
-        const runDir = buildRunDir(workspaceRoot, run_id);
-
-        try {
-            if (!fs.existsSync(runDir)) fs.mkdirSync(runDir, { recursive: true });
-            
-            const initialState = {
-                run_id,
-                status: "INIT",
-                task_prompt,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            };
-            
-            fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify(initialState, null, 2));
-            fs.writeFileSync(path.join(runDir, 'timeline.md'), `# Timeline for Run ${run_id}
-
-`);
-
-            return { ok: true, run_id, state: initialState };
-        } catch (err) {
-            return { ok: false, error: err.message };
-        }
-    }
 };
 
 

@@ -110,9 +110,21 @@ export function validateCodingTeamHandoff({ workspaceRoot, artifactRoot, handoff
       })
       .map((k) => normalizeSectionToken(k))
   );
+  // Section aliases: LLMs use different headings for the same concept.
+  // Each required_section is checked against these alternative tokens.
+  const SECTION_ALIASES = {
+    "non_goals": ["non goals", "non goal", "out of scope"],
+    "artifact_list": ["artifact list", "artifacts", "milestones", "deliverables"],
+    "user_stories": ["user stories", "user story"],
+    "acceptance_criteria": ["acceptance criteria", "acceptance"],
+  };
   const missingSections = (handoff.required_sections || []).filter((section) => {
     const token = normalizeSectionToken(section);
-    return token && !normalizedCorpus.includes(token) && !jsonTopLevelKeys.has(token);
+    if (!token) return false;
+    const tokens = SECTION_ALIASES[section] || [token];
+    const inCorpus = tokens.some((t) => normalizedCorpus.includes(t));
+    const inJsonKeys = tokens.some((t) => jsonTopLevelKeys.has(t));
+    return !inCorpus && !inJsonKeys;
   });
   if (missingSections.length > 0) {
     return {
@@ -147,6 +159,34 @@ export function validateCodingTeamHandoff({ workspaceRoot, artifactRoot, handoff
         handoff,
       };
     }
+    // Auto-repair: if architect_to_impl.json misses workplan/risks, fill from sibling artifacts
+    const safeName = String(typed.file || "").replace(/\\/g, "/");
+    if (safeName.endsWith("architect_to_impl.json")) {
+      let repaired = false;
+      if (!manifest.workplan || typeof manifest.workplan !== "object") {
+        const workplanJson = readJsonFileSafe(path.resolve(rootAbs, "plan/workplan.json"));
+        if (workplanJson && typeof workplanJson === "object") {
+          manifest.workplan = {
+            be_tasks: Array.isArray(workplanJson.be_tasks) ? workplanJson.be_tasks : [],
+            fe_tasks: Array.isArray(workplanJson.fe_tasks) ? workplanJson.fe_tasks : [],
+          };
+          repaired = true;
+        }
+      }
+      if (!Array.isArray(manifest.risks) || manifest.risks.length === 0) {
+        const riskReport = readJsonFileSafe(path.resolve(rootAbs, "risk/risk_report.json"));
+        if (riskReport && Array.isArray(riskReport.risks)) {
+          manifest.risks = riskReport.risks.map((r) =>
+            typeof r === "string" ? r : String(r.title || r.description || r.risk || "unknown risk")
+          );
+          repaired = true;
+        }
+      }
+      if (repaired) {
+        try { fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2)); } catch { /* best-effort */ }
+      }
+    }
+
     const manifestSchema = getSchemaForTypedHandoff(typed.file);
     if (manifestSchema) {
       const schemaErrors = validateJsonSchemaLite(manifestSchema, manifest, "$");

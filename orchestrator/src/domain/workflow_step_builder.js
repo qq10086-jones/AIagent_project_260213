@@ -86,9 +86,13 @@ function buildTargetFileContextBlock(targetFileContext = []) {
   return lines.join("\n");
 }
 
-function buildArchHandoffBlock(handoff) {
+function buildArchHandoffBlock(handoff, { stepId = "" } = {}) {
   if (!handoff || typeof handoff !== "object") return "";
-  const lines = ["", "[Architecture Handoff]"];
+  const lines = [
+    "",
+    "[Architecture Handoff — THIS IS YOUR PRIMARY SPECIFICATION]",
+    "IMPORTANT: Implement EXACTLY what this handoff specifies. Do NOT copy patterns from existing sandbox files if they differ from this spec.",
+  ];
   if (Array.isArray(handoff.modules) && handoff.modules.length > 0) {
     lines.push(`Modules: ${handoff.modules.map((m) => String(m)).join(", ")}`);
   }
@@ -97,7 +101,7 @@ function buildArchHandoffBlock(handoff) {
     for (const iface of handoff.interfaces) lines.push(`- ${String(iface)}`);
   }
   if (Array.isArray(handoff.decisions) && handoff.decisions.length > 0) {
-    lines.push("Architecture decisions:");
+    lines.push("Architecture decisions (MUST follow these):");
     for (const dec of handoff.decisions) {
       const parts = [dec?.adr_id, dec?.title, dec?.status].filter(Boolean).map(String);
       lines.push(`- ${parts.join(" | ")}`);
@@ -107,7 +111,23 @@ function buildArchHandoffBlock(handoff) {
     lines.push("Risks:");
     for (const risk of handoff.risks) lines.push(`- ${String(risk)}`);
   }
-  return lines.length > 1 ? lines.join("\n") : "";
+  // R1: Include workplan tasks so LLM knows exactly what to build
+  const wp = handoff.workplan;
+  if (wp && typeof wp === "object") {
+    const side = stepId === "impl_fe" ? "fe_tasks" : "be_tasks";
+    const tasks = Array.isArray(wp[side]) ? wp[side] : [];
+    if (tasks.length > 0) {
+      lines.push(`\nWorkplan tasks to implement (${side}):`);
+      for (const t of tasks) {
+        const id = String(t?.id || "").trim();
+        const desc = String(t?.description || "").trim();
+        const verify = String(t?.verify || "").trim();
+        lines.push(`- ${id || "TASK"}: ${desc}${verify ? ` [verify: ${verify}]` : ""}`);
+      }
+      lines.push("Execute these tasks IN ORDER. Each task's verify condition must pass before proceeding.");
+    }
+  }
+  return lines.length > 3 ? lines.join("\n") : "";
 }
 
 function buildStructuredWorkplanBlock(tasks = [], sectionLabel = "") {
@@ -211,9 +231,12 @@ function buildWorkplanFallbackNotice(validation = {}) {
   return lines.join("\n");
 }
 
-function buildCodingContextBlock({ contextPacket = null, repoMap = null }) {
+function buildCodingContextBlock({ contextPacket = null, repoMap = null, hasArchHandoff = false }) {
   if (!contextPacket || typeof contextPacket !== "object") return "";
-  const lines = ["", "[Coding Context Packet]"];
+  const lines = ["", "[Coding Context Packet — Reference Only]"];
+  if (hasArchHandoff) {
+    lines.push("NOTE: These are existing sandbox files for REFERENCE ONLY. The Architecture Handoff above is your PRIMARY specification. If sandbox files use a different data model or domain, build fresh per the handoff spec — do NOT copy old patterns.");
+  }
   lines.push(`Step: ${String(contextPacket.step_id || "")}`);
   lines.push(`Role: ${String(contextPacket.role || "")}`);
   if (Array.isArray(contextPacket.target_paths) && contextPacket.target_paths.length > 0) {
@@ -350,6 +373,21 @@ function buildSmokeTestCommand({ workspaceRoot, artifactRoot, port = 13099 }) {
     args.push("--api-endpoint", JSON.stringify(apiEndpoint));
   }
   return args.join(" ");
+}
+
+function buildAcceptanceTestCommand({ workspaceRoot, artifactRoot }) {
+  const workspaceScriptAbs = path.resolve(workspaceRoot, "orchestrator", "scripts", "run_acceptance_test.mjs");
+  const fallbackScriptAbs = path.resolve(MODULE_DIR, "..", "..", "scripts", "run_acceptance_test.mjs");
+  const scriptAbs = fs.existsSync(workspaceScriptAbs) ? workspaceScriptAbs : fallbackScriptAbs;
+  const scriptRel = path.relative(workspaceRoot, scriptAbs).replace(/\\/g, "/");
+  return [
+    "node",
+    JSON.stringify(scriptRel),
+    "--artifact-root",
+    JSON.stringify(String(artifactRoot || "")),
+    "--workspace-root",
+    JSON.stringify("."),
+  ].join(" ");
 }
 
 function shouldEnforceStableCodingLane({ run, stepDef }) {
@@ -761,6 +799,24 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         if (memoryContext) {
           payload.task_prompt = `${payload.task_prompt}${memoryContext}`;
         }
+        // Reinforce handoff schema — LLM often drops workplan/risks fields
+        const handoffReminder = [
+          "",
+          "[CRITICAL: handoff/architect_to_impl.json REQUIRED FIELDS]",
+          "Your handoff JSON MUST have ALL of these top-level keys or validation WILL fail:",
+          '  "from_step": "arch_design",',
+          '  "to_steps": ["impl_be", "impl_fe"],',
+          '  "modules": ["..."],        // array of strings',
+          '  "interfaces": ["..."],     // array of strings',
+          '  "decisions": [{...}],      // array of {adr_id, title, status}',
+          '  "risks": ["..."],          // array of strings — DO NOT OMIT',
+          '  "workplan": {              // DO NOT OMIT, DO NOT RENAME',
+          '    "be_tasks": [{"id":"T-BE-1","description":"...","verify":"..."}],',
+          '    "fe_tasks": [{"id":"T-FE-1","description":"...","verify":"..."}]',
+          "  }",
+          "Copy workplan content from plan/workplan.json into the handoff.",
+        ].join("\n");
+        payload.task_prompt = `${payload.task_prompt}${handoffReminder}`;
       }
 
       if (fastMode) {
@@ -819,6 +875,40 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
           Math.max(Number(payload.max_runtime_s || 30), 300),
         );
       }
+      // R3: For impl steps, inject handoff + workplan BEFORE context so LLM sees spec first
+      if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
+        const archHandoffPath = path.resolve(workspaceRoot, artifactRoot, "handoff/architect_to_impl.json");
+        if (fs.existsSync(archHandoffPath)) {
+          try {
+            const archHandoff = JSON.parse(fs.readFileSync(archHandoffPath, "utf8"));
+            const archBlock = buildArchHandoffBlock(archHandoff, { stepId: stepDef.id });
+            if (archBlock) payload.task_prompt = `${payload.task_prompt}${archBlock}`;
+          } catch { /* ignore read errors */ }
+        }
+        const structuredWorkplan = readStructuredWorkplan({ workspaceRoot, artifactRoot, stepId: stepDef.id });
+        payload.workplan_validation = structuredWorkplan.validation;
+        payload.injected_workplan = structuredWorkplan.injected || null;
+        if (structuredWorkplan.block) {
+          payload.task_prompt = `${payload.task_prompt}${structuredWorkplan.block}`;
+        } else {
+          const fallbackNotice = buildWorkplanFallbackNotice(structuredWorkplan.validation);
+          if (fallbackNotice) payload.task_prompt = `${payload.task_prompt}${fallbackNotice}`;
+          const workplanPath = path.resolve(workspaceRoot, artifactRoot, "plan/workplan.md");
+          if (fs.existsSync(workplanPath)) {
+          try {
+            const workplan = fs.readFileSync(workplanPath, "utf8");
+            const sectionLabel = stepDef.id === "impl_be" ? "BE Tasks" : "FE Tasks";
+            const sectionMatch = workplan.match(new RegExp(`##\\s*${sectionLabel}([\\s\\S]*?)(?=\\n##\\s|$)`));
+            if (sectionMatch) {
+              const taskList = sectionMatch[1].trim();
+              if (taskList) {
+                payload.task_prompt = `${payload.task_prompt}\n\n[Task List from plan/workplan.md — ${sectionLabel}]\n${taskList}\nExecute tasks in order. After completing each task, self-check against its verify condition before proceeding to the next.`;
+              }
+            }
+          } catch { /* graceful fallback — workplan read failure does not block step */ }
+          }
+        }
+      }
       if (["impl_be", "impl_fe", "qa_verify"].includes(String(stepDef.id || ""))) {
         const memoryProjectId = String(run.run_id || run.workflow_run_id || "default");
         const recentTaskHistory = getTaskHistory(memoryProjectId, 3);
@@ -839,9 +929,12 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
           recentChangedFiles: payload.target_paths,
           memoryHints,
         });
+        const hasArchHandoff = ["impl_be", "impl_fe"].includes(String(stepDef.id || ""))
+          && fs.existsSync(path.resolve(workspaceRoot, artifactRoot, "handoff/architect_to_impl.json"));
         payload.task_prompt = `${payload.task_prompt}${buildCodingContextBlock({
           contextPacket: payload.context_packet,
           repoMap: payload.repo_map,
+          hasArchHandoff,
         })}`;
       }
       if (String(stepDef.id || "") === "qa_verify") {
@@ -866,6 +959,36 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
             }
           } catch { /* ignore parse errors */ }
         }
+        // v3.3 Patch B: inject acceptance_result.json (deterministic test results)
+        const acceptanceResultPath = path.resolve(workspaceRoot, artifactRoot, "verify/acceptance_result.json");
+        if (fs.existsSync(acceptanceResultPath)) {
+          try {
+            const acceptResult = JSON.parse(fs.readFileSync(acceptanceResultPath, "utf8"));
+            const detResults = Array.isArray(acceptResult?.criteria_results)
+              ? acceptResult.criteria_results.filter((r) => r.verify_tier === "deterministic")
+              : [];
+            if (detResults.length > 0) {
+              const detBlock = [
+                "",
+                "[Deterministic Acceptance Test Results — DO NOT override these verdicts]",
+                `Verdict: ${acceptResult.verdict} (${acceptResult.deterministic_pass} pass, ${acceptResult.deterministic_fail} fail)`,
+                ...detResults.map((r) => `- ${r.id}: ${r.status.toUpperCase()} — ${r.description}${r.error ? ` (error: ${r.error})` : ""}`),
+                "",
+                "IMPORTANT: If a deterministic criterion FAILED above, your qa_report must mark it as 'fail'. Do not override deterministic results.",
+                "Focus your semantic review on criteria NOT covered by deterministic tests.",
+                "You MUST include journey_checks (at least 1) and rubric_citations (at least 1) in your report.",
+                "Include acceptance_test_results summary from the data above.",
+              ].join("\n");
+              payload.task_prompt = `${payload.task_prompt}${detBlock}`;
+            }
+            payload.acceptance_test_results = {
+              verdict: acceptResult.verdict,
+              deterministic_pass: acceptResult.deterministic_pass || 0,
+              deterministic_fail: acceptResult.deterministic_fail || 0,
+              semantic_pending: acceptResult.semantic_pending || 0,
+            };
+          } catch { /* ignore parse errors */ }
+        }
         const implFeDir = path.resolve(workspaceRoot, artifactRoot, "impl/fe_changes");
         const implBeDir = path.resolve(workspaceRoot, artifactRoot, "impl/be_changes");
         const implFiles = [];
@@ -885,41 +1008,6 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         const suiteCommands = Array.isArray(suite?.commands) ? suite.commands.filter(Boolean) : [];
         if (suiteCommands.length > 0) {
           payload.task_prompt = `${payload.task_prompt}\n\n[Acceptance Suite Commands]\nThe following commands are expected to pass for this project type:\n${suiteCommands.map((c) => `- ${c}`).join("\n")}\nInclude a deterministic check entry for each command result.`;
-        }
-      }
-      if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
-        const archHandoffPath = path.resolve(workspaceRoot, artifactRoot, "handoff/architect_to_impl.json");
-        if (fs.existsSync(archHandoffPath)) {
-          try {
-            const archHandoff = JSON.parse(fs.readFileSync(archHandoffPath, "utf8"));
-            const archBlock = buildArchHandoffBlock(archHandoff);
-            if (archBlock) payload.task_prompt = `${payload.task_prompt}${archBlock}`;
-          } catch { /* ignore read errors */ }
-        }
-      }
-      if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
-        const structuredWorkplan = readStructuredWorkplan({ workspaceRoot, artifactRoot, stepId: stepDef.id });
-        payload.workplan_validation = structuredWorkplan.validation;
-        payload.injected_workplan = structuredWorkplan.injected || null;
-        if (structuredWorkplan.block) {
-          payload.task_prompt = `${payload.task_prompt}${structuredWorkplan.block}`;
-        } else {
-          const fallbackNotice = buildWorkplanFallbackNotice(structuredWorkplan.validation);
-          if (fallbackNotice) payload.task_prompt = `${payload.task_prompt}${fallbackNotice}`;
-          const workplanPath = path.resolve(workspaceRoot, artifactRoot, "plan/workplan.md");
-          if (fs.existsSync(workplanPath)) {
-          try {
-            const workplan = fs.readFileSync(workplanPath, "utf8");
-            const sectionLabel = stepDef.id === "impl_be" ? "BE Tasks" : "FE Tasks";
-            const sectionMatch = workplan.match(new RegExp(`##\\s*${sectionLabel}([\\s\\S]*?)(?=\\n##\\s|$)`));
-            if (sectionMatch) {
-              const taskList = sectionMatch[1].trim();
-              if (taskList) {
-                payload.task_prompt = `${payload.task_prompt}\n\n[Task List from plan/workplan.md — ${sectionLabel}]\n${taskList}\nExecute tasks in order. After completing each task, self-check against its verify condition before proceeding to the next.`;
-              }
-            }
-          } catch { /* graceful fallback — workplan read failure does not block step */ }
-          }
         }
       }
       if (["impl_be", "impl_fe"].includes(String(stepDef.id || "")) && payload.execution_adapter_packet) {
@@ -958,12 +1046,22 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     }
 
     if (String(stepDef.tool || "") === "coding.execute" && String(stepDef.id || "") === "smoke_test") {
-      payload.command = buildSmokeTestCommand({
-        workspaceRoot,
-        artifactRoot,
-        port: 13099,
-      });
+      const smokeCmd = buildSmokeTestCommand({ workspaceRoot, artifactRoot, port: 13099 });
+      const acceptCmd = buildAcceptanceTestCommand({ workspaceRoot, artifactRoot });
+      payload.command = `${smokeCmd} && ${acceptCmd}`;
       payload.max_runtime_s = clampInt(payload.max_runtime_s ?? 120, 30, 600, 120);
+      // smoke_test 步骤现在同时产出 smoke + acceptance 结果
+      if (Array.isArray(payload.expected_artifacts) && !payload.expected_artifacts.includes("verify/acceptance_result.json")) {
+        payload.expected_artifacts.push("verify/acceptance_result.json");
+      }
+      // v3.3 Patch B: refinement re-entry — load regression baseline from parent run
+      if (inputLineage?.parent_run_id) {
+        const parentArtifactRoot = pathForRunArtifacts(inputLineage.parent_run_id);
+        const baselinePath = path.resolve(workspaceRoot, parentArtifactRoot, "release", "regression_baseline.json");
+        if (fs.existsSync(baselinePath)) {
+          payload.regression_baseline_path = baselinePath.replace(/\\/g, "/");
+        }
+      }
     }
 
     if (String(stepDef.tool || "") === "ops.deploy_preview") {

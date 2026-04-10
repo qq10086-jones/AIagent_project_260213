@@ -3,11 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 
 import { createStepBuilder } from "../src/domain/workflow_step_builder.js";
 
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROMPT_SCRIPT_REGISTRY = JSON.parse(
-  fs.readFileSync("E:/AIagent_project_260213/orchestrator/configs/prompt_scripts/registry.json", "utf8")
+  fs.readFileSync(path.resolve(MODULE_DIR, "..", "configs", "prompt_scripts", "registry.json"), "utf8")
 );
 
 function makeWorkspace() {
@@ -402,10 +404,11 @@ test("smoke_test payload includes executable command and smoke artifact", async 
   });
 
   assert.match(payload.command, /run_smoke_test\.mjs/);
+  assert.match(payload.command, /run_acceptance_test\.mjs/);
   assert.match(payload.command, /--artifact-root/);
   assert.match(payload.command, /--api-endpoint "\/api\/books"/);
   assert.equal(payload.max_runtime_s, 120);
-  assert.deepEqual(payload.expected_artifacts, ["smoke/smoke_result.json"]);
+  assert.deepEqual(payload.expected_artifacts, ["smoke/smoke_result.json", "verify/acceptance_result.json"]);
 });
 
 test("impl_be prefers structured workplan json over markdown fallback", async () => {

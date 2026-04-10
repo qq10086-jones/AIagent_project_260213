@@ -7,7 +7,7 @@ import { parseJsonSafe } from "./domain/workflow_runner.js";
 import { normalizeStepStatus, validatePromptScriptBinding } from "./domain/workflow_state.js";
 import { buildReleasePackPaths, classifyArtifactReasons, buildFailurePayload } from "./domain/workflow_artifact_audit.js";
 import { createWorkflowReleasePackService } from "./domain/workflow_release_pack.js";
-import { createStepBuilder } from "./domain/workflow_step_builder.js";
+import { createStepBuilder, pathForRunArtifacts } from "./domain/workflow_step_builder.js";
 import { runStepSuccessValidations } from "./domain/workflow_step_validator.js";
 import { createArtifactPackService } from "./domain/workflow_artifact_pack.js";
 import { createTaskHandlerService } from "./domain/workflow_task_handler.js";
@@ -588,6 +588,7 @@ export function createWorkflowEngine({
       run_id,
       workflow_id,
       project_type: resolvedProjectType,
+      artifact_dir: path.resolve(workspaceRoot, pathForRunArtifacts(run_id)),
       first_step: first,
       first_steps: firstBatch,
     };

@@ -36,7 +36,18 @@ class ScreenConfig:
     top_k: int = 50                   # keep best K by score (after hard filters)
     lot_size_default: int = 100       # 日本股票标准手数
     max_cost_per_lot: float = 150_000 # 1手成本上限(JPY)；100万日元需持≥6只才能分散
-    version: str = "screener_v1"
+    version: str = "screener_v2"
+    # ── Alpha 评分配置 ──
+    use_alpha_scoring: bool = True    # False 时回退旧流动性排序逻辑
+    alpha_weights: dict = field(default_factory=lambda: {
+        "mom_20": 0.25,
+        "mom_60": 0.15,
+        "vol_adj_mom20": 0.15,
+        "sharpe_20": 0.10,
+        "vol_z": 0.15,
+        "adv_rank": 0.10,
+        "high52w_rank": 0.10,
+    })
 
 
 @dataclass
@@ -266,6 +277,59 @@ def apply_fundamental_overlay(
 # 主筛选函数
 # ---------------------------------------------------------------------------
 
+def _compute_alpha_factors(close: pd.DataFrame, vol: pd.DataFrame) -> pd.DataFrame:
+    """截面 alpha 因子计算（用于 screener 评分排序）。
+
+    返回 DataFrame: index=symbol, columns=[mom_20, mom_60, vol_adj_mom20, sharpe_20, vol_z, high52w_rank]
+    所有值为截面 rank percentile (0-1)。
+
+    注意: vol_z 和 high52w_rank 是 sprint_entry_check 的必要条件，
+    必须在 screener 层选入，否则 downstream entry gate 会全部 fail。
+    """
+    ret1 = close.pct_change(fill_method=None)
+
+    # mom_20: 20日收益率
+    mom_20_raw = close.iloc[-1] / close.iloc[-21].where(close.iloc[-21] > 0) - 1.0 \
+        if len(close) > 21 else pd.Series(0.0, index=close.columns)
+
+    # mom_60: 60日收益率
+    mom_60_raw = close.iloc[-1] / close.iloc[-61].where(close.iloc[-61] > 0) - 1.0 \
+        if len(close) > 61 else pd.Series(0.0, index=close.columns)
+
+    # vol_adj_mom20: 波动率调整动量
+    vol_20 = ret1.tail(20).std()
+    vol_adj_mom20_raw = mom_20_raw / (vol_20 + 1e-12)
+
+    # sharpe_20: 20日滚动夏普
+    mean_20 = ret1.tail(20).mean()
+    sharpe_20_raw = (mean_20 / (vol_20 + 1e-12)) * np.sqrt(252)
+
+    # vol_z: 20日成交量 z-score（sprint_entry_check 要求 > 0.50）
+    vol_mean = vol.rolling(60).mean()
+    vol_std = vol.rolling(60).std()
+    vol_z_raw = ((vol.iloc[-1] - vol_mean.iloc[-1]) / (vol_std.iloc[-1] + 1e-12)) \
+        if len(vol) > 60 else pd.Series(0.0, index=close.columns)
+
+    # high52w: 距52周高点距离（sprint_entry_check 要求 > -0.10）
+    high_252 = close.tail(252).max() if len(close) >= 252 else close.max()
+    high52w_raw = close.iloc[-1] / high_252 - 1.0
+
+    factors = pd.DataFrame({
+        "mom_20": mom_20_raw,
+        "mom_60": mom_60_raw,
+        "vol_adj_mom20": vol_adj_mom20_raw,
+        "sharpe_20": sharpe_20_raw,
+        "vol_z": vol_z_raw,
+        "high52w_rank": high52w_raw,
+    })
+
+    # 截面 rank percentile 标准化 (0-1)
+    for col in factors.columns:
+        factors[col] = factors[col].rank(pct=True, na_option="bottom")
+
+    return factors
+
+
 def screen(
     db_path: str,
     symbols: Optional[List[str]],
@@ -294,16 +358,16 @@ def screen(
     vol = vol.reindex(close.index)
 
     # metrics
-    # Avoid deprecated forward-fill behavior; missing bars should stay missing.
     ret1 = close.pct_change(fill_method=None)
     vol_d = ret1.rolling(cfg.vol_window).std()
 
     adv = (close * vol).rolling(cfg.adv_window).mean()   # proxy currency volume
     adv_last = adv.iloc[-1]
     vol_last = vol_d.iloc[-1]
-    close_last = close.iloc[-1]   # latest close price for lot-cost filter
+    close_last = close.iloc[-1]
     missing = close.isna().mean()
 
+    # ── Stage 1: Hard Filter (pass/fail, 不参与评分) ──────────────
     rows = []
     for sym in close.columns:
         m_missing = float(missing.get(sym, 1.0))
@@ -323,37 +387,58 @@ def screen(
         if not np.isfinite(m_vol) or (m_vol < cfg.min_vol) or (m_vol > cfg.max_vol):
             hard_fail = True
             reasons.append(f"vol_out_of_range({cfg.min_vol:.3f}-{cfg.max_vol:.3f})")
-        # 1手成本过滤：确保100万日元可持有至少6只，提供有效分散
         if np.isfinite(m_close):
             cost_per_lot = m_close * cfg.lot_size_default
             if cost_per_lot > cfg.max_cost_per_lot:
                 hard_fail = True
                 reasons.append(f"1手成本过高:{cost_per_lot:,.0f}JPY>{cfg.max_cost_per_lot:,.0f}")
 
-        # score: prefer high ADV, moderate vol, low missing
-        # Normalize with logs; robust to outliers
-        score = 0.0
-        if np.isfinite(m_adv):
-            score += np.log1p(max(m_adv, 0.0))
-        if np.isfinite(m_vol):
-            score -= abs(np.log(max(m_vol, 1e-8)) - np.log(0.02))  # prefer ~2% daily vol
-        score -= m_missing * 50.0
-
         cost_per_lot = m_close * cfg.lot_size_default if np.isfinite(m_close) else np.nan
-        rows.append((sym, score, hard_fail, "; ".join(reasons), m_adv, m_vol, m_missing, m_close, cost_per_lot))
 
-    df = pd.DataFrame(rows, columns=["symbol","score","hard_fail","reason","adv","vol","missing","close","cost_per_lot"]).sort_values("score", ascending=False)
+        # legacy score（use_alpha_scoring=False 回退用）
+        legacy_score = 0.0
+        if np.isfinite(m_adv):
+            legacy_score += np.log1p(max(m_adv, 0.0))
+        if np.isfinite(m_vol):
+            legacy_score -= abs(np.log(max(m_vol, 1e-8)) - np.log(0.02))
+        legacy_score -= m_missing * 50.0
 
-    # 技术硬过滤（流动性/波动率/成本）
-    tech_passed = df.loc[~df["hard_fail"]].head(cfg.top_k).copy()
+        rows.append((sym, legacy_score, hard_fail, "; ".join(reasons),
+                      m_adv, m_vol, m_missing, m_close, cost_per_lot))
 
-    # -----------------------------------------------------------------------
-    # 基本面叠加层：评分降权，而非硬否决
-    # score_adjusted = tech_score × fundamental_score
-    # fundamental_score=1.0  → 基本面健康，不惩罚
-    # fundamental_score=0.7  → 有风险因素，降权后可能排名下滑但不被踢出
-    # fundamental_score=0.0  → 硬否决（营业层面深度亏损+OCF为负，真正危机）
-    # -----------------------------------------------------------------------
+    df = pd.DataFrame(rows, columns=["symbol", "score", "hard_fail", "reason",
+                                      "adv", "vol", "missing", "close", "cost_per_lot"])
+
+    # 通过硬过滤的候选（不限 top_k，让 alpha 评分来排序）
+    passed = df.loc[~df["hard_fail"]].copy()
+
+    # ── Stage 2: Alpha Score (用于排序) ───────────────────────────
+    if cfg.use_alpha_scoring and not passed.empty and len(passed) > 5:
+        alpha_factors = _compute_alpha_factors(close, vol)
+        passed = passed.merge(
+            alpha_factors.reset_index().rename(columns={"index": "symbol"}),
+            on="symbol", how="left",
+        )
+        # ADV rank percentile（流动性加分项）
+        passed["adv_rank"] = passed["adv"].rank(pct=True, na_option="bottom")
+
+        # 加权 alpha score
+        w = cfg.alpha_weights
+        passed["alpha_score"] = 0.0
+        for factor_name, weight in w.items():
+            if factor_name in passed.columns:
+                passed["alpha_score"] += passed[factor_name].fillna(0.5) * weight
+
+        passed["score"] = passed["alpha_score"]
+        passed = passed.sort_values("score", ascending=False)
+    else:
+        # 回���旧逻���
+        passed = passed.sort_values("score", ascending=False)
+
+    # 取 top_k
+    tech_passed = passed.head(cfg.top_k).copy()
+
+    # ── 基本面叠加层 ─────────────────────────────────────────────
     _ocfg = overlay_cfg if overlay_cfg is not None else FundamentalOverlayConfig()
     if _ocfg.enabled and not tech_passed.empty:
         candidate_syms = tech_passed["symbol"].tolist()
@@ -366,20 +451,19 @@ def screen(
         tech_passed["fundamental_note"] = tech_passed["symbol"].map(
             lambda s: overlay.get(s, (1.0, ""))[1]
         )
+        # fundamental_score 参与 alpha scoring 时已作为因子纳入，
+        # 此处仅用于硬否决和最终调整
         tech_passed["score_adjusted"] = tech_passed["score"] * tech_passed["fundamental_score"]
 
-        # 记录硬否决（score==0.0）
         hard_vetoed_mask = tech_passed["fundamental_score"] == 0.0
         if hard_vetoed_mask.any():
             for sym in tech_passed.loc[hard_vetoed_mask, "symbol"]:
                 note = overlay[sym][1]
                 print(f"[screener][fundamental] 硬否决 {sym}: {note}")
 
-        # 按调整后分数重排，硬否决排到末尾
         kept = tech_passed.loc[~hard_vetoed_mask].sort_values("score_adjusted", ascending=False).copy()
         vetoed_df = tech_passed.loc[hard_vetoed_mask].copy()
 
-        # 打印降权股票摘要
         downweighted = tech_passed.loc[
             (~hard_vetoed_mask) & (tech_passed["fundamental_score"] < 1.0)
         ]
@@ -409,6 +493,12 @@ def screen(
             "top_k": cfg.top_k,
             "lot_size_default": cfg.lot_size_default,
             "max_cost_per_lot": cfg.max_cost_per_lot,
+            "use_alpha_scoring": cfg.use_alpha_scoring,
+        },
+        "screening_stats": {
+            "universe_size": len(df),
+            "hard_filter_passed": len(passed),
+            "top_k_selected": len(tech_passed),
         },
         "fundamental_overlay": {
             "enabled": _ocfg.enabled,

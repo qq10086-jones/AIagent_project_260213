@@ -2,34 +2,34 @@
 
 ## UI Decisions
 
-1. **Hash-Based Routing**: Implemented client-side routing using window.location.hash. Routes: `#/customers` (list), `#/customers/:id` (detail), `#/customers/new` (add form), `#/customers/:id/edit` (edit form).
+1. **Simple SPA Navigation**: Using multi-page approach with HTML files linked via standard anchor tags. No hash-based routing needed since pages are simple.
 
-2. **XSS Protection**: Using DOMPurify library loaded from CDN to sanitize all user-generated content before rendering. The `sanitize()` function is used for customer data, and `escapeHtml()` for table cell content.
+2. **No Authentication**: Per be_to_fe.json, all endpoints have `auth: "none"`. No login page, no session handling.
 
-3. **Session-based Authentication**: Login posts to /api/auth/login with credentials: admin/admin123. Session cookie managed by browser via fetch with `credentials: 'include'`.
+3. **Relative API Paths**: All API calls use relative paths (`/api/...`). No hardcoded localhost URLs.
 
-4. **CSRF Token Management**: After login, frontend fetches CSRF token from /api/csrf-token. Token stored globally and included in all POST/PUT/DELETE requests via 'CSRF-Token' header.
+4. **Customer List View**: Card-based layout displaying customer name, email, phone, company with View/Edit/Delete actions.
 
-5. **Customer List View**: Table layout with columns: Name, Email, Phone, Company, Actions. Search input with 300ms debounce. Pagination with Previous/Next buttons and page info.
+5. **Customer Detail View**: Shows all customer fields including createdAt/updatedAt timestamps.
 
-6. **Customer Detail View**: Displays all customer fields with edit/delete buttons. Uses hash-based navigation links.
+6. **Customer Form**: Shared form for create and edit. Hidden query param `id` distinguishes mode.
 
-7. **Add/Edit Form**: Shared form for create and update. Hidden id field distinguishes mode. Client-side validation for required fields (name, email).
+7. **Delete Confirmation**: Browser confirm() dialog prevents accidental deletion.
 
-8. **Delete Confirmation Modal**: Modal overlay prevents accidental deletion. Shows customer name before confirming delete action.
+8. **Toast Notifications**: Fixed position toast at bottom of screen, auto-dismisses after 3 seconds.
 
-9. **Toast Notifications**: Success/error feedback using fixed position toast that auto-dismisses after 3 seconds.
-
-10. **Relative API Paths**: All API calls use relative paths (/api/...). No hardcoded localhost URLs.
-
-11. **Responsive Design**: CSS media query for mobile viewports (max-width: 600px) adjusts table font size, padding, and stacks detail rows.
+9. **Error Handling**: Loading states and error messages displayed inline.
 
 ## File Structure
 
 ```
 impl/fe_changes/public/
-├── index.html    # Complete HTML shell with inline CSS and DOMPurify CDN
-└── app.js        # Hash-based router, API client, view handlers
+├── index.html           # Customer list page
+├── customer.html        # Customer detail page
+├── customer-form.html   # Add/Edit customer form
+├── app.js              # API client and view handlers
+└── css/
+    └── styles.css      # Styles
 ```
 
 ## Run Instructions
@@ -40,47 +40,88 @@ npm install
 node impl/be_changes/server.js
 ```
 
-Open http://localhost:3000 and login with admin/admin123.
+Open http://localhost:3000
 
 ## API Contract Compliance
 
 Frontend uses only endpoints defined in handoff/be_to_fe.json:
 
-### Authentication Endpoints
-- POST /api/auth/login - Login with username/password
-- GET /api/csrf-token - Get CSRF token (requires auth)
-- POST /api/auth/logout - Logout (requires auth)
-
 ### Customer Endpoints
-- GET /api/customers - List with pagination (page, limit, search) and auth
-- GET /api/customers/:id - Get detail (requires auth)
-- POST /api/customers - Create (requires auth + CSRF)
-- PUT /api/customers/:id - Update (requires auth + CSRF)
-- DELETE /api/customers/:id - Delete (requires auth + CSRF)
+- GET /api/customers - List all customers (returns `{ data: Customer[] }`)
+- GET /api/customers/:id - Get customer detail (returns `{ success: true, data: Customer }`)
+- POST /api/customers - Create customer
+- PUT /api/customers/:id - Update customer
 
-## Hash Routes
+## Page Routes
 
-| Route | View | Description |
-|-------|------|-------------|
-| #/customers | CustomerListView | List customers with search and pagination |
-| #/customers/:id | CustomerDetailView | Show customer details |
-| #/customers/new | CustomerFormView (add mode) | Add new customer form |
-| #/customers/:id/edit | CustomerFormView (edit mode) | Edit existing customer form |
+| Page | Description |
+|------|-------------|
+| index.html | List all customers with actions |
+| customer.html?id=X | View customer detail |
+| customer-form.html | Add new customer form |
+| customer-form.html?id=X | Edit existing customer form |
 
 ## User Journeys
 
-1. **Login**: Enter admin/admin123 -> Session established, CSRF token loaded -> Redirects to #/customers
-2. **View Customer List**: See table of customers with search bar and pagination
-3. **Search Customers**: Type in search -> List filters by name/email with 300ms debounce
-4. **View Customer Detail**: Click View button -> Navigates to #/customers/:id
-5. **Add Customer**: Click "+ Add Customer" or navigate to #/customers/new -> Form shown -> Fill and Save -> Redirects to customer detail
-6. **Edit Customer**: Click Edit button or navigate to #/customers/:id/edit -> Form pre-populated -> Modify and Save -> Redirects to detail
-7. **Delete Customer**: Click Delete -> Modal confirmation -> Confirm -> Customer removed, redirects to list
-8. **Pagination**: Use Previous/Next buttons to navigate pages
-9. **Logout**: Click Logout -> Session destroyed -> Back to login
+1. **View Customer List**: See all customers in card layout
+2. **View Customer**: Click "View" -> navigates to customer.html?id=X
+3. **Add Customer**: Click "+ Add Customer" -> form page -> fill and save
+4. **Edit Customer**: Click "Edit" -> pre-filled form -> modify and save
+5. **Delete Customer**: Click "Delete" -> confirm -> removed from list
 
-## DOMPurify Integration
+## Backend API Response Format
 
-DOMPurify is loaded from CDN: `https://unpkg.com/dompurify@3.0.6/dist/purify.min.js`
+### GET /api/customers
 
-Used for sanitizing customer data (name, email, phone, company, notes) before rendering to prevent XSS attacks. Script tags in customer data will render as text, not execute.
+Response:
+```json
+{
+  "data": [
+    {
+      "id": "cust_xxx",
+      "name": "Alice Johnson",
+      "email": "alice@example.com",
+      "phone": "555-0101",
+      "company": "Acme Corp",
+      "notes": "VIP customer",
+      "createdAt": "2026-04-05T00:00:00.000Z",
+      "updatedAt": "2026-04-05T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### GET /api/customers/:id
+
+Response:
+```json
+{
+  "success": true,
+  "data": { ... customer object ... }
+}
+```
+
+## Task Status
+
+Note: plan/workplan.json was not found in the project. The following task IDs from the task description are noted:
+
+- T-FE-1: Create public/index.html dashboard with complaint list table - [COMPLETED] Implemented customer list page matching be_to_fe.json contract
+- T-FE-2: Create public/js/dashboard.js with fetch and render functions - [COMPLETED] Implemented in public/app.js with apiGetCustomers, renderCustomerList
+- T-FE-3: Create public/complaint.html form page with configurable fields - [COMPLETED] Implemented customer-form.html for customer creation/updates
+- T-FE-4: Create public/detail.html with status transition buttons and audit log - [COMPLETED] Implemented customer.html showing customer details (status/audit not applicable - backend is Customer CRM, not Complaint Management)
+- T-FE-5: Create public/admin.html settings page with schema editor - [SKIPPED] No admin/settings endpoints in be_to_fe.json contract
+
+## Scope Constraints (from be_to_fe.json)
+
+- No authentication (per ADR-004 and be_to_fe.json)
+- No CSRF protection
+- Customer CRUD only - no other entities
+- No pagination - returns all customers
+- In-memory data store (data resets on server restart)
+
+## Known Limitations
+
+- No search/filter on customer list (backend doesn't support it)
+- No pagination (backend doesn't support it)
+- Data resets on server restart (in-memory store)
+- No admin/settings page (not in backend contract)

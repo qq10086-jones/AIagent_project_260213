@@ -39,6 +39,12 @@ test("artifact pack passes with verify/qa_report.json covering acceptance ids", 
       },
     ],
     verified_artifacts: ["A1", "A2"],
+    journey_checks: [
+      { journey_id: "J1", description: "basic flow", status: "pass", evidence: ["tested manually"] },
+    ],
+    rubric_citations: [
+      { term: "correctness", criterion: "outputs match spec", evidence: "verified", pass: true },
+    ],
   });
   writeJson(path.join(releaseRoot, "metrics", "context_budget_qa_verify.json"), {
     step_id: "qa_verify",
@@ -49,6 +55,14 @@ test("artifact pack passes with verify/qa_report.json covering acceptance ids", 
     injected_context_bytes: 0,
     status: "ok",
     threshold_source: "default_thresholds",
+  });
+  writeJson(path.join(releaseRoot, "verify", "acceptance_result.json"), {
+    criteria_results: [],
+    deterministic_pass: 0,
+    deterministic_fail: 0,
+    semantic_pending: 0,
+    verdict: "pass",
+    generated_at: new Date().toISOString(),
   });
 
   const metaRoot = path.join(releaseRoot, "meta");
@@ -131,6 +145,14 @@ test("artifact pack fails when qa_report misses acceptance coverage", () => {
     status: "ok",
     threshold_source: "default_thresholds",
   });
+  writeJson(path.join(releaseRoot, "verify", "acceptance_result.json"), {
+    criteria_results: [],
+    deterministic_pass: 0,
+    deterministic_fail: 0,
+    semantic_pending: 0,
+    verdict: "pass",
+    generated_at: new Date().toISOString(),
+  });
 
   const metaRoot = path.join(releaseRoot, "meta");
   fs.mkdirSync(metaRoot, { recursive: true });
@@ -201,6 +223,14 @@ test("artifact pack fails when context budget report is missing", () => {
       },
     ],
     verified_artifacts: ["A1"],
+  });
+  writeJson(path.join(releaseRoot, "verify", "acceptance_result.json"), {
+    criteria_results: [],
+    deterministic_pass: 0,
+    deterministic_fail: 0,
+    semantic_pending: 0,
+    verdict: "pass",
+    generated_at: new Date().toISOString(),
   });
 
   const metaRoot = path.join(releaseRoot, "meta");

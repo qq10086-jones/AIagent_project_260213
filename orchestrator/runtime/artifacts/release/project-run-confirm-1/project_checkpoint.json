@@ -1,0 +1,37 @@
+{
+  "project_id": "proj-test",
+  "saved_at": "2026-04-10T04:45:29.872Z",
+  "run_states": {
+    "R-01": "COMPLETED",
+    "R-02": "COMPLETED"
+  },
+  "run_results": {
+    "R-01": {
+      "workflow_run_id": "wf-proj-test__R-01",
+      "artifact_dir": "/workspace/runtime/artifacts/release/proj-test__R-01",
+      "duration_ms": 0
+    },
+    "R-02": {
+      "workflow_run_id": "wf-proj-test__R-02",
+      "artifact_dir": "/workspace/runtime/artifacts/release/proj-test__R-02",
+      "duration_ms": 1
+    }
+  },
+  "plan_snapshot": {
+    "project_id": "proj-test",
+    "runs": [
+      "R-01",
+      "R-02"
+    ],
+    "dependency_graph": {
+      "R-01": [],
+      "R-02": [
+        "R-01"
+      ]
+    },
+    "execution_strategy": {
+      "max_parallel_runs": 1,
+      "failure_policy": "stop_dependents"
+    }
+  }
+}

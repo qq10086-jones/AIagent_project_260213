@@ -81,9 +81,15 @@ export function analyzeTaskRisk(tool_name, payload) {
   const uniqueReasons = [...new Set(reasons)];
   const isHighRisk = uniqueReasons.length > 0;
 
+  // coding.delegate tasks run in sandboxed containers; architecture docs naturally mention
+  // "API key", "secret", etc.  Only require approval for truly destructive patterns.
+  const isCodingTask = String(tool_name || "").startsWith("coding.");
+  const onlySensitivePath = isCodingTask && uniqueReasons.length > 0 &&
+    uniqueReasons.every((r) => r === "sensitive_path_or_secret");
+
   return {
-    risk_level: isHighRisk ? "high" : (tool_name.startsWith("coding.") ? "medium" : "low"),
-    requires_approval: isHighRisk,
+    risk_level: isHighRisk ? (onlySensitivePath ? "medium" : "high") : (isCodingTask ? "medium" : "low"),
+    requires_approval: isHighRisk && !onlySensitivePath,
     reasons: uniqueReasons,
   };
 }

@@ -1,0 +1,9 @@
+{
+  "criteria_results": [],
+  "deterministic_pass": 0,
+  "deterministic_fail": 0,
+  "semantic_pending": 0,
+  "verdict": "fail",
+  "generated_at": "2026-04-10T04:45:22.982Z",
+  "runner_error": "acceptance.json not found or unreadable"
+}

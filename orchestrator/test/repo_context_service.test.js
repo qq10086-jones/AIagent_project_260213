@@ -16,7 +16,7 @@ function writeFile(workspaceRoot, rel, content) {
   fs.writeFileSync(abs, content, "utf8");
 }
 
-test("repo context service builds repo map and scoped context packet", () => {
+test("repo context service builds repo map and scoped context packet", async () => {
   const workspaceRoot = makeWorkspace();
   writeFile(workspaceRoot, "package.json", JSON.stringify({ name: "crm-app", scripts: { test: "node --test" } }, null, 2));
   writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.js", "export function boot() { return true; }\n");
@@ -24,11 +24,11 @@ test("repo context service builds repo map and scoped context packet", () => {
   writeFile(workspaceRoot, "workspace/sandbox/crm_site/app.test.js", "test('boot', () => {})\n");
 
   const service = createRepoContextService({ workspaceRoot });
-  const repoMap = service.buildRepoMap({
+  const repoMap = await service.buildRepoMap({
     targetPaths: ["workspace/sandbox/crm_site/"],
     recentChangedFiles: ["workspace/sandbox/crm_site/server.js"],
   });
-  const packet = service.buildContextPacket({
+  const packet = await service.buildContextPacket({
     role: "backend",
     stepId: "impl_be",
     targetPaths: ["workspace/sandbox/crm_site/"],

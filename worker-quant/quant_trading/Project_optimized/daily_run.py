@@ -901,11 +901,40 @@ def main():
     expire_stale_orders(db_path, today_str)
     emit_runtime_event(reports_dir, "stale_orders_expired", asof=today_str)
 
+    # 0.5) Universe 動態更新 — 周一自動重建，或 universe.json 不存在時強制
+    ucfg = cfg.get("universe", {}) or {}
+    universe_file = str(ucfg.get("file", "") or cfg.get("update", {}).get("universe_file", "") or "")
+    if universe_file and not is_simulation:
+        rebuild_day = str(ucfg.get("rebuild_day", "monday")).lower()
+        today_weekday = date.today().strftime("%A").lower()
+        universe_exists = Path(universe_file).exists()
+        should_rebuild = (today_weekday == rebuild_day) or not universe_exists
+        if should_rebuild:
+            print(f">> [universe] rebuilding: weekday={today_weekday}, exists={universe_exists}")
+            try:
+                ucmd = ["python", "universe_builder.py", "--output", universe_file]
+                if ucfg.get("min_adv_universe"):
+                    ucmd += ["--min-adv", str(ucfg["min_adv_universe"])]
+                if ucfg.get("max_cost_per_lot_universe"):
+                    ucmd += ["--max-cost", str(ucfg["max_cost_per_lot_universe"])]
+                print(">>", " ".join(ucmd))
+                run_and_capture(ucmd)
+                emit_runtime_event(reports_dir, "universe_rebuilt", file=universe_file)
+            except Exception as _ue:
+                print(f"⚠️  universe_builder (non-fatal): {_ue}")
+                if ucfg.get("fallback_to_hardcoded", True):
+                    print(">> [universe] falling back to hardcoded TARGET_UNIVERSE")
+                    universe_file = ""  # db_update will use TARGET_UNIVERSE
+        else:
+            print(f">> [universe] skip rebuild (weekday={today_weekday}, file exists)")
+
     # 1) Update DB
     dbu = cfg.get("db_update", {})
     should_run_db_update = bool(dbu.get("enabled", True)) and not bool(args.disable_db_update)
     if should_run_db_update:
         cmd = ["python", "db_update.py", "--db", db_path]
+        if universe_file and Path(universe_file).exists():
+            cmd += ["--universe", universe_file]
         if dbu.get("start"):
             cmd += ["--start", str(dbu["start"])]
         if dbu.get("end"):

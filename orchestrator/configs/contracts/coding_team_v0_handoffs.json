@@ -5,7 +5,7 @@
       "from_step": "pm_spec",
       "to_steps": ["arch_design"],
       "required_artifacts": ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md", "handoff/pm_to_architect.json"],
-      "required_sections": ["scope", "user_stories", "acceptance_criteria", "non_goals", "artifact_list"],
+      "required_sections": ["scope", "user_stories", "acceptance_criteria", "non_goals", "milestones"],
       "typed_handoff": {
         "file": "handoff/pm_to_architect.json",
         "required_fields": ["from_step", "to_steps", "scope_summary", "artifacts", "acceptance.criteria"]

@@ -1,0 +1,21 @@
+{
+  "install_ok": false,
+  "server_started": false,
+  "root_check": {
+    "status": 0,
+    "content_type": "",
+    "passed": false
+  },
+  "api_check": {
+    "endpoint": "",
+    "status": 0,
+    "response_sample": "",
+    "passed": false,
+    "skipped": true
+  },
+  "errors": [
+    "spawn EINVAL"
+  ],
+  "verdict": "fail",
+  "evidence_level": "l1_only"
+}

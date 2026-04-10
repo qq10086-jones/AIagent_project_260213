@@ -1,13 +1,13 @@
 {
   "primary_mode": "sprint_momentum",
-  "asof": "2026-04-09",
-  "export_row_sum": 0.6,
+  "asof": "2026-04-10",
+  "export_row_sum": 1.0,
   "history_last_row_is_zero": false,
-  "last_nonzero_asof": "2026-04-09",
-  "last_nonzero_row_sum": 0.6,
-  "benchmark_state": "caution",
-  "benchmark_scale": 0.6,
-  "selected_count": 1,
+  "last_nonzero_asof": "2026-04-10",
+  "last_nonzero_row_sum": 1.0,
+  "benchmark_state": "on",
+  "benchmark_scale": 1.0,
+  "selected_count": 3,
   "zero_cause": "none",
   "zero_detail": ""
 }

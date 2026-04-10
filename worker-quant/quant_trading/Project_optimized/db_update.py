@@ -176,6 +176,10 @@ def load_universe(path: str) -> List[Tuple[str, str, str]]:
     else:
         raise ValueError("Universe file must be .json or .yaml/.yml")
 
+    # 新フォーマット: {"_meta": {...}, "universe": [...]} (universe_builder.py 出力)
+    if isinstance(obj, dict) and "universe" in obj:
+        obj = obj["universe"]
+
     # Accept formats:
     # 1) [{"symbol":"4063.T","name":"...","sector":"..."}, ...]
     # 2) [["4063.T","name","sector"], ...]
@@ -214,13 +218,25 @@ def update_database(db_path: str = "japan_market.db", default_lookback_days: int
     universe = load_universe(universe_path) if universe_path else TARGET_UNIVERSE
     today = date.today()
     db_latest_trade_date = _get_db_latest_trade_date(db_path)
-    if db_latest_trade_date is not None and db_latest_trade_date >= today:
+
+    # 新しい銘柄が universe にあるかチェック（daily_prices にデータがない銘柄）
+    with connect(db_path) as _chk_conn:
+        _price_syms = set(r[0] for r in _chk_conn.execute(
+            "SELECT DISTINCT symbol FROM daily_prices"
+        ).fetchall())
+    universe_syms = {t[0] for t in universe}
+    new_syms = universe_syms - _price_syms
+    has_new_tickers = len(new_syms) > 0
+
+    if db_latest_trade_date is not None and db_latest_trade_date >= today and not has_new_tickers:
         print(
             "Price DB already holds the latest expected trade date "
             f"({db_latest_trade_date}); skipping remote yfinance refresh."
         )
         db.close()
         return
+    if has_new_tickers:
+        print(f"Found {len(new_syms)} new tickers in universe — forcing download.")
 
     # 1) Update ticker metadata
     now = datetime.now()

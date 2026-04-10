@@ -634,7 +634,13 @@ ${prompt}
 
   if (ext === ".json") {
     if (file === "acceptance.json") {
-      return JSON.stringify({ generated_at: now, step_id: stepId || "", criteria: ["feature requirements are listed", "implementation plan is reviewable", "basic validation commands are documented"], artifacts: ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"], owner: "pm", version: "v1", source: "worker-coder artifact scaffold" }, null, 2);
+      // R6: Try to extract acceptance criteria from spec.md if available
+      const specPath = path.join(rootAbs, "plan", "spec.md");
+      const extractedCriteria = extractCriteriaFromSpec(specPath);
+      const criteria = extractedCriteria.length > 0
+        ? extractedCriteria
+        : ["feature requirements are listed", "implementation plan is reviewable", "basic validation commands are documented"];
+      return JSON.stringify({ generated_at: now, step_id: stepId || "", criteria, artifacts: ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"], owner: "pm", version: "v1", source: extractedCriteria.length > 0 ? "extracted from spec.md" : "worker-coder artifact scaffold" }, null, 2);
     }
     if (file === "risk_report.json") {
       return JSON.stringify({ generated_at: now, step_id: stepId || "", risks: [{ level: "medium", title: "implementation drift", mitigation: "step contract + strict artifacts" }, { level: "low", title: "test coverage gap", mitigation: "add smoke checks" }], decision_log: ["Use a thin frontend/backend split for the MVP", "Keep persistence simple and reviewable for this milestone"], source: "worker-coder artifact scaffold" }, null, 2);
@@ -765,6 +771,40 @@ ${prompt}
 `;
 }
 
+/**
+ * Extract acceptance criteria from spec.md by parsing AC-N patterns or numbered items
+ * under an "Acceptance Criteria" heading.
+ */
+function extractCriteriaFromSpec(specPath) {
+  try {
+    if (!fs.existsSync(specPath)) return [];
+    const text = fs.readFileSync(specPath, "utf8");
+    // Find the "Acceptance Criteria" section
+    const sectionMatch = text.match(/##\s*Acceptance\s+Criteria\s*\n([\s\S]*?)(?=\n##\s|$)/i);
+    if (!sectionMatch) return [];
+    const section = sectionMatch[1];
+    const criteria = [];
+    // Match "### AC-N: description" or "- AC-N: description" patterns
+    const acPattern = /(?:###\s*)?(?:[-*]\s*)?(?:AC-\d+[:\s]+)(.+)/gi;
+    let m;
+    while ((m = acPattern.exec(section)) !== null) {
+      const desc = m[1].trim();
+      if (desc) criteria.push({ id: `AC-${criteria.length + 1}`, description: desc, verify_tier: "semantic" });
+    }
+    // If no AC-N patterns, try to extract lines starting with bullet or number
+    if (criteria.length === 0) {
+      const lines = section.split("\n").filter((l) => /^\s*[-*\d]/.test(l));
+      for (const line of lines) {
+        const desc = line.replace(/^\s*[-*\d.)\]]+\s*/, "").trim();
+        if (desc && desc.length > 5) criteria.push({ id: `AC-${criteria.length + 1}`, description: desc, verify_tier: "semantic" });
+      }
+    }
+    return criteria;
+  } catch {
+    return [];
+  }
+}
+
 export function loadAcceptanceIds(rootAbs) {
   try {
     const p = path.join(rootAbs, "plan", "acceptance.json");
@@ -818,7 +858,9 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     if (rel === "plan/spec.md" && ext === ".md") {
       const expectedHeadings = ["scope", "user stories", "acceptance criteria", "non-goals", "artifact list"];
       const minimalCrmMismatch = isMinimalReviewableCrm(taskPrompt) && /\bsearch and filter\b|\bdelete\b/i.test(raw);
-      if (!markdownHasHeadings(raw, expectedHeadings) || minimalCrmMismatch) {
+      // R6: Only overwrite if file is very short (likely placeholder). Preserve LLM content ≥200 chars.
+      const hasSubstantialContent = raw.trim().length >= 200;
+      if ((!markdownHasHeadings(raw, expectedHeadings) || minimalCrmMismatch) && !hasSubstantialContent) {
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "pm_spec_headings_repaired" };
       }
@@ -934,9 +976,33 @@ export function maybeRepairArtifact({ targetAbs, relPath, rootAbs, stepId, taskP
     if (file === "acceptance.json" && ext === ".json") {
       let parsed = null;
       try { parsed = JSON.parse(raw); } catch (_e) { /* malformed JSON */ }
-      if (!(Array.isArray(parsed?.criteria) && parsed.criteria.length > 0 && Array.isArray(parsed?.artifacts) && parsed.artifacts.length > 0 && typeof parsed?.owner === "string" && parsed.owner.trim() && typeof parsed?.version === "string" && parsed.version.trim())) {
+      if (!parsed || typeof parsed !== "object") {
+        // Completely invalid — use template as last resort
         fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
         return { repaired: true, reason: "acceptance_schema_repaired" };
+      }
+      // R6: Preserve LLM criteria — only fill missing metadata fields, never overwrite criteria
+      let patched = false;
+      if (!Array.isArray(parsed.criteria) || parsed.criteria.length === 0) {
+        // No criteria at all — fallback to template
+        fs.writeFileSync(targetAbs, buildArtifactTemplate({ relPath: rel, rootAbs, stepId, taskPrompt }), "utf8");
+        return { repaired: true, reason: "acceptance_schema_repaired" };
+      }
+      if (!Array.isArray(parsed.artifacts) || parsed.artifacts.length === 0) {
+        parsed.artifacts = ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"];
+        patched = true;
+      }
+      if (typeof parsed.owner !== "string" || !parsed.owner.trim()) {
+        parsed.owner = "pm";
+        patched = true;
+      }
+      if (typeof parsed.version !== "string" || !parsed.version.trim()) {
+        parsed.version = "v1";
+        patched = true;
+      }
+      if (patched) {
+        fs.writeFileSync(targetAbs, JSON.stringify(parsed, null, 2), "utf8");
+        return { repaired: true, reason: "acceptance_metadata_patched" };
       }
     }
     if (rel === "handoff/pm_to_architect.json" && ext === ".json") {

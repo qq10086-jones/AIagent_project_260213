@@ -24,19 +24,28 @@
   },
   "worker_coder": {
     "provider_default": "opencode",
-    "model_default": "minimax-coding-plan/MiniMax-M2.7",
+    "model_default": "ollama/gemma4:26b",
     "global_task_timeout_ms": 1800000,
     "verification_command_default": "",
     "max_attempts_default": 2,
     "same_error_repeat_limit_default": 2,
     "wall_clock_timeout_s_default": 900,
-    "execution_lane_default": "stable_cloud_lane",
+    "execution_lane_default": "stable_gemma4_lane",
     "allow_provider_fallback_default": false,
     "stream_batch_size": 1,
     "surgical_patch_enabled": true,
     "refinement_reentry_enabled": true,
     "context_resolver_enabled": true,
     "project_planner_enabled": false,
+    "step_validation_retry_max": 2,
+    "lane_escalation_chain": ["stable_gemma4_lane", "stable_cloud_lane"],
+    "lane_escalation_enabled": true,
+    "step_lane_overrides": {
+      "pm_spec": "stable_cloud_lane",
+      "arch_design": "stable_cloud_lane",
+      "impl_fe": "stable_cloud_lane",
+      "qa_verify": "stable_cloud_lane"
+    },
     "project_planner_max_runs": 12,
     "project_planner_max_parallel_runs": 2,
     "project_planner_failure_policy": "stop_dependents",
@@ -73,6 +82,12 @@
         "model": "minimax-coding-plan/MiniMax-M2.7",
         "provider_class": "opencode-provider",
         "purpose": "primary MiniMax lane retained for release/deploy and generic_app implementation"
+      },
+      "stable_gemma4_lane": {
+        "provider": "opencode",
+        "model": "ollama/gemma4:26b",
+        "provider_class": "opencode-provider",
+        "purpose": "local Gemma4 26B lane for high-quality code generation"
       }
     }
   },

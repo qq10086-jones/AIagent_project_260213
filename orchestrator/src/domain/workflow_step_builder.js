@@ -500,6 +500,37 @@ function applyStepModelRoutingDefaults({ run, stepDef, payload, runtimeConfig })
   }
 }
 
+/**
+ * v3.5.2: Apply per-step lane overrides from runtime config.
+ * step_lane_overrides maps step_id -> lane_id, allowing critical steps
+ * (pm_spec, arch_design, impl_fe, qa_verify) to use a stronger model
+ * without waiting for a validation failure to trigger escalation.
+ */
+function applyStepLaneOverrides({ run, stepDef, payload, runtimeConfig }) {
+  if (String(run?.workflow_id || "") !== "coding_team_v0") return;
+  const runtimeWorkerCoder = runtimeConfig?.worker_coder || {};
+  const overrides = runtimeWorkerCoder.step_lane_overrides;
+  if (!overrides || typeof overrides !== "object") return;
+
+  const stepId = String(stepDef?.id || "");
+  const overrideLane = overrides[stepId];
+  if (!overrideLane || typeof overrideLane !== "string") return;
+
+  const laneConfig = getExecutionLaneConfig(runtimeConfig, overrideLane);
+  if (!laneConfig) {
+    console.warn(`[step_builder] step_lane_overrides: lane "${overrideLane}" for step "${stepId}" not found in execution_lanes, skipping`);
+    return;
+  }
+
+  payload.execution_lane = overrideLane;
+  if (laneConfig.provider) payload.provider = String(laneConfig.provider);
+  if (laneConfig.model) {
+    payload.model = String(laneConfig.model);
+    payload.model_override = String(laneConfig.model);
+  }
+  console.warn(`[step_builder] step_lane_override applied: step=${stepId} lane=${overrideLane} model=${laneConfig.model || "?"}`);
+}
+
 function inferVerificationCommand({ stepId, targetPaths = [], workspaceRoot }) {
   const safeStepId = String(stepId || "");
   const safeTargets = Array.isArray(targetPaths) ? targetPaths : [];
@@ -702,6 +733,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeConfig });
     applyGenericAppPrimaryLaneDefaults({ run, stepDef, payload, runtimeConfig });
     applyStepModelRoutingDefaults({ run, stepDef, payload, runtimeConfig });
+    applyStepLaneOverrides({ run, stepDef, payload, runtimeConfig });
     applyWorkerCodingTemplateDefaults({
       payload,
       templateRegistry: workerCodingTemplateRegistry,
@@ -799,6 +831,32 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         if (memoryContext) {
           payload.task_prompt = `${payload.task_prompt}${memoryContext}`;
         }
+        // Inject spec modules so arch MUST cover each one
+        const specPath = path.resolve(workspaceRoot, artifactRoot, "plan/spec.md");
+        if (fs.existsSync(specPath)) {
+          try {
+            const specText = fs.readFileSync(specPath, "utf8");
+            const moduleHeadings = specText.match(/^###?\s+\d*\.?\d*\s*(.+)/gm) || [];
+            const modules = moduleHeadings
+              .map((h) => h.replace(/^###?\s+\d*\.?\d*\s*/, "").trim())
+              .filter((h) => h.length > 3 && !/overview|scope|non.?goal|artifact|milestone|technical|acceptance/i.test(h));
+            if (modules.length > 1) {
+              const moduleBlock = [
+                "",
+                "[MANDATORY SCOPE — from PM spec]",
+                `The PM spec defines ${modules.length} feature modules. You MUST design ALL of them:`,
+                ...modules.map((m, i) => `  ${i + 1}. ${m}`),
+                "",
+                "For EACH module above:",
+                "  - plan/interfaces.md: list ALL CRUD endpoints (GET/POST/PUT/DELETE) as ## headings",
+                "  - plan/workplan.json: include implementation tasks in be_tasks and fe_tasks",
+                "  - handoff/architect_to_impl.json interfaces[]: list every endpoint",
+                "Omitting any module will FAIL validation. Validation checks that DELETE endpoints exist when the spec mentions delete functionality.",
+              ].join("\n");
+              payload.task_prompt = `${payload.task_prompt}${moduleBlock}`;
+            }
+          } catch { /* graceful — spec injection is best-effort */ }
+        }
         // Reinforce handoff schema — LLM often drops workplan/risks fields
         const handoffReminder = [
           "",
@@ -807,7 +865,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
           '  "from_step": "arch_design",',
           '  "to_steps": ["impl_be", "impl_fe"],',
           '  "modules": ["..."],        // array of strings',
-          '  "interfaces": ["..."],     // array of strings',
+          '  "interfaces": ["GET /api/...", "POST /api/...", "DELETE /api/..."],  // ALL endpoints including DELETE',
           '  "decisions": [{...}],      // array of {adr_id, title, status}',
           '  "risks": ["..."],          // array of strings — DO NOT OMIT',
           '  "workplan": {              // DO NOT OMIT, DO NOT RENAME',
@@ -819,6 +877,36 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         payload.task_prompt = `${payload.task_prompt}${handoffReminder}`;
       }
 
+      // v3.5: Inject per-role design quality rules
+      const designRulesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../configs/design_rules");
+      const roleToRulesFile = { pm_spec: "pm_product_rules.json", arch_design: "arch_interaction_rules.json", impl_fe: "fe_component_rules.json", qa_verify: "qa_ux_checklist.json" };
+      const rulesFile = roleToRulesFile[String(stepDef.id || "")];
+      if (rulesFile) {
+        const rulesPath = path.resolve(designRulesDir, rulesFile);
+        if (fs.existsSync(rulesPath)) {
+          try {
+            const rulesData = JSON.parse(fs.readFileSync(rulesPath, "utf8"));
+            const items = rulesData.rules || rulesData.checks || [];
+            if (items.length > 0) {
+              const rulesBlock = [
+                "",
+                `[DESIGN QUALITY RULES — ${(rulesData.role || stepDef.role || "").toUpperCase()}]`,
+                ...items.map((r) => {
+                  const id = r.id || r.check_id || "";
+                  const text = r.rule || r.check || "";
+                  const extras = [];
+                  if (r.severity) extras.push(`[${r.severity}]`);
+                  if (r.grep_pattern) extras.push(`grep: ${r.grep_pattern}`);
+                  return `- ${id}: ${text}${extras.length > 0 ? ` (${extras.join(", ")})` : ""}`;
+                }),
+                "",
+              ].join("\n");
+              payload.task_prompt = `${payload.task_prompt}${rulesBlock}`;
+            }
+          } catch { /* graceful — design rules injection is best-effort */ }
+        }
+      }
+
       if (fastMode) {
         const fastNote = [
           "",
@@ -827,6 +915,32 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
           "- Prioritize required artifact paths first; avoid unnecessary long prose.",
         ].join("\n");
         payload.task_prompt = `${payload.task_prompt}${fastNote}`;
+      }
+      // Inject validation feedback from previous retry if present
+      const feedbackPath = path.resolve(workspaceRoot, artifactRoot, `meta/validation_feedback_${stepDef.id}.txt`);
+      if (fs.existsSync(feedbackPath)) {
+        try {
+          const feedback = fs.readFileSync(feedbackPath, "utf8").trim();
+          const retryCount = Number((feedback.match(/retry_count:\s*(\d+)/) || [])[1] || 0);
+          const errorCode = (feedback.match(/error_code:\s*(.+)/) || [])[1] || "";
+          const detail = (feedback.match(/detail:\s*([\s\S]+?)(?:\nescalated_lane:|$)/) || [])[1] || "";
+          const escalatedLane = (feedback.match(/escalated_lane:\s*(.+)/) || [])[1] || "";
+          payload.validation_retry_count = retryCount;
+          payload.task_prompt = `${payload.task_prompt}\n\n[VALIDATION FAILURE — RETRY ATTEMPT ${retryCount}]\nYour previous output failed validation: ${errorCode}\nDetail: ${detail.trim().slice(0, 300)}\nFix the specific issues listed above. Do NOT reduce scope — ADD the missing items. Ensure ALL modules from the spec are covered.`;
+          // v3.5: apply model escalation — switch to stronger lane on retry
+          if (escalatedLane) {
+            const laneRegistry = runtimeConfig?.worker_coder?.execution_lanes || {};
+            const laneConfig = laneRegistry[escalatedLane];
+            if (laneConfig) {
+              payload.execution_lane = escalatedLane;
+              if (laneConfig.provider) payload.provider = String(laneConfig.provider);
+              if (laneConfig.model) payload.model = String(laneConfig.model);
+              console.warn(`[step_builder] model escalation applied: lane=${escalatedLane} model=${laneConfig.model || "?"}`);
+            }
+          }
+          // Remove feedback file after consuming
+          fs.unlinkSync(feedbackPath);
+        } catch { /* ignore read errors */ }
       }
       if (!payload.prompt) payload.prompt = payload.task_prompt;
       if (input.provider && !payload.provider) payload.provider = input.provider;
@@ -1047,8 +1161,23 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
 
     if (String(stepDef.tool || "") === "coding.execute" && String(stepDef.id || "") === "smoke_test") {
       const smokeCmd = buildSmokeTestCommand({ workspaceRoot, artifactRoot, port: 13099 });
-      const acceptCmd = buildAcceptanceTestCommand({ workspaceRoot, artifactRoot });
-      payload.command = `${smokeCmd} && ${acceptCmd}`;
+      // v3.4: inject arch endpoints for comprehensive smoke probing
+      let endpointArgs = "";
+      const archHandoffPath = path.resolve(workspaceRoot, artifactRoot, "handoff/architect_to_impl.json");
+      if (fs.existsSync(archHandoffPath)) {
+        try {
+          const archHandoff = JSON.parse(fs.readFileSync(archHandoffPath, "utf8"));
+          const getEndpoints = (archHandoff.interfaces || [])
+            .filter((i) => /^GET\s/i.test(String(i)))
+            .map((i) => String(i).replace(/^GET\s+/i, "").trim())
+            .filter((p) => p.startsWith("/api/") && !/:/.test(p));
+          if (getEndpoints.length > 0) {
+            endpointArgs = getEndpoints.map((ep) => `--api-endpoint ${JSON.stringify(ep)}`).join(" ");
+          }
+        } catch { /* best-effort */ }
+      }
+      // v3.4: acceptance test is now run inside run_smoke_test.mjs while server is alive
+      payload.command = `${smokeCmd}${endpointArgs ? " " + endpointArgs : ""}`;
       payload.max_runtime_s = clampInt(payload.max_runtime_s ?? 120, 30, 600, 120);
       // smoke_test 步骤现在同时产出 smoke + acceptance 结果
       if (Array.isArray(payload.expected_artifacts) && !payload.expected_artifacts.includes("verify/acceptance_result.json")) {

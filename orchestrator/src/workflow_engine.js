@@ -666,6 +666,52 @@ export function createWorkflowEngine({
       }
 
       if (!valResult.ok) {
+        // Step-level validation retry: if the step has retry budget, re-dispatch with feedback
+        const maxRetries = Number(runtimeConfig?.worker_coder?.step_validation_retry_max ?? runtimeConfig?.orchestrator?.step_validation_retry_max ?? 1);
+        const currentRetryCount = Number(payload.validation_retry_count || 0);
+        if (currentRetryCount < maxRetries && ["role", "handoff", "smoke", "impl"].includes(valResult.failKey)) {
+          console.warn(`[workflow] step ${step_id} validation failed (${valResult.code}), retrying ${currentRetryCount + 1}/${maxRetries}...`);
+          await recordEvent(workflow_run_id, "workflow.step.validation_retry", {
+            workflow_run_id, step_id, step_index, retry_count: currentRetryCount + 1,
+            error_code: valResult.code, error_detail: String(valResult.message || "").slice(0, 200),
+          });
+          // Reset step to pending for re-dispatch
+          await updateWorkflowStepFailed(pool, workflow_run_id, step_index, valResult.mergedOutput, valResult.code);
+          // Mark step as pending again for retry
+          const resetStep = await getWorkflowStepByIndex(pool, workflow_run_id, step_index);
+          if (resetStep) {
+            resetStep.status = "pending";
+            await pool.query("UPDATE workflow_steps SET status='pending', error_code=NULL WHERE workflow_run_id=$1 AND step_index=$2", [workflow_run_id, step_index]);
+          }
+          // Inject validation feedback into next dispatch
+          const feedbackKey = `__validation_feedback_${step_index}`;
+          if (!run[feedbackKey]) run[feedbackKey] = [];
+          run[feedbackKey] = `[VALIDATION FAILURE — RETRY ${currentRetryCount + 1}/${maxRetries}]\nYour previous output failed: ${valResult.code}\nDetail: ${String(valResult.message || "").slice(0, 300)}\nFix the issues above. Do NOT reduce scope — ADD the missing items.`;
+          // Store feedback in run metadata for the step builder to pick up
+          try {
+            const feedbackPath = path.resolve(workspaceRoot, pathForRunArtifacts(run.run_id), `meta/validation_feedback_${step_id}.txt`);
+            const feedbackDir = path.dirname(feedbackPath);
+            if (!fs.existsSync(feedbackDir)) fs.mkdirSync(feedbackDir, { recursive: true });
+            // v3.5: model escalation — compute escalated lane for retry
+            const escalationChain = runtimeConfig?.worker_coder?.lane_escalation_chain || [];
+            const escalationEnabled = runtimeConfig?.worker_coder?.lane_escalation_enabled !== false;
+            let escalatedLane = "";
+            if (escalationEnabled && escalationChain.length > 1) {
+              const currentLane = String(payload.execution_lane || runtimeConfig?.worker_coder?.execution_lane_default || "");
+              const currentIdx = escalationChain.indexOf(currentLane);
+              const nextIdx = currentIdx >= 0 ? currentIdx + 1 : 1;
+              if (nextIdx < escalationChain.length && escalationChain[nextIdx] !== currentLane) {
+                escalatedLane = escalationChain[nextIdx];
+                console.warn(`[workflow] model escalation: ${currentLane} → ${escalatedLane} (retry ${currentRetryCount + 1})`);
+              } else if (escalationChain[nextIdx] === currentLane || currentIdx === escalationChain.length - 1) {
+                console.warn(`[workflow] model escalation skipped: step "${step_id}" already on top lane "${currentLane}"`);
+              }
+            }
+            fs.writeFileSync(feedbackPath, `retry_count: ${currentRetryCount + 1}\nerror_code: ${valResult.code}\ndetail: ${String(valResult.message || "").slice(0, 500)}\n${escalatedLane ? `escalated_lane: ${escalatedLane}\n` : ""}`);
+          } catch { /* best-effort */ }
+          const retryResult = await dispatchReadySteps(workflow_run_id);
+          return { handled: true, workflow_run_id, step_index, validation_retry: true, retry_count: currentRetryCount + 1, retryResult };
+        }
         await updateWorkflowStepFailed(pool, workflow_run_id, step_index, valResult.mergedOutput, valResult.code);
         const next = await reconcileWorkflowState(workflow_run_id);
         return { handled: true, workflow_run_id, step_index, [`failed_due_to_${valResult.failKey}_validation`]: true, next };

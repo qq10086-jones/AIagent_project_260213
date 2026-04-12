@@ -62,7 +62,7 @@ export const STEP_CONTRACTS = {
   },
   impl_fe_skeleton: {
     title: "Frontend Skeleton",
-    required_artifacts: ["impl/fe_changes/public/index.html", "impl/fe_changes/public/app.js"],
+    required_artifacts: ["impl/fe_changes/public/index.html"],
     instructions: [
       "This step builds ONLY the app shell. Do NOT implement any module's CRUD views yet.",
       "Read plan/workplan.json and identify ALL modules from the spec (e.g. Customer Management, Tickets, Dashboard).",

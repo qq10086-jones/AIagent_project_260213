@@ -38,7 +38,7 @@
     "context_resolver_enabled": true,
     "project_planner_enabled": false,
     "step_validation_retry_max": 2,
-    "lane_escalation_chain": ["stable_gemma4_lane", "stable_gemma4_31b_lane", "stable_cloud_lane"],
+    "lane_escalation_chain": ["stable_gemma4_lane", "stable_cloud_lane"],
     "lane_escalation_enabled": true,
     "step_lane_overrides": {},
     "project_planner_max_runs": 12,

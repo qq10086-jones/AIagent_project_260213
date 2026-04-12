@@ -63,7 +63,7 @@ function collectChangedFiles(output = {}) {
 function isCodingTeamImplementationStep(run, stepId) {
   return (
     String(run?.workflow_id || "") === "coding_team_v0" &&
-    (["impl_fe", "impl_fe_skeleton", "impl_fe_modules"].includes(String(stepId || "")) || String(stepId || "") === "impl_be")
+    (["impl_fe", "impl_fe_modules"].includes(String(stepId || "")) || String(stepId || "") === "impl_be")
   );
 }
 
@@ -179,7 +179,8 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
     const patchTargets = Array.isArray(patchBundle?.target_files) ? patchBundle.target_files.map((item) => normalizePathText(item)).filter(Boolean) : [];
     const hasPatchBundle = fs.existsSync(patchAbs) && patchBundle && (patchMode === "structured_patch" || patchMode === "full_file_fallback");
     const hasFullFileOutputs = dirExists && (dirEntries.length > 0 || publicEntries.length > 0);
-    if (!fs.existsSync(beHandoffAbs)) {
+    // Skeleton step doesn't consume BE handoff (it only builds the app shell)
+    if (String(stepId || "") !== "impl_fe_skeleton" && !fs.existsSync(beHandoffAbs)) {
       return {
         checked: true,
         ok: false,
@@ -187,12 +188,15 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
         detail: "frontend step requires upstream handoff/be_to_fe.json",
       };
     }
-    if ((!hasPatchBundle && !hasFullFileOutputs) || !fs.existsSync(notesAbs)) {
+    const requireNotes = String(stepId || "") !== "impl_fe_skeleton";
+    if ((!hasPatchBundle && !hasFullFileOutputs) || (requireNotes && !fs.existsSync(notesAbs))) {
       return {
         checked: true,
         ok: false,
         code: "STEP_IMPL_FE_ARTIFACTS_MISSING",
-        detail: "frontend implementation step requires either impl/fe_patch_bundle.json or non-empty impl/fe_changes/public/, plus impl/fe_notes.md",
+        detail: requireNotes
+          ? "frontend implementation step requires either impl/fe_patch_bundle.json or non-empty impl/fe_changes/public/, plus impl/fe_notes.md"
+          : "frontend skeleton step requires non-empty impl/fe_changes/public/",
         dir_exists: dirExists,
         fe_changes_count: dirEntries.length + publicEntries.length,
         patch_bundle_exists: Boolean(hasPatchBundle),

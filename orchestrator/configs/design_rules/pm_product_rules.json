@@ -26,6 +26,24 @@
       "category": "navigation",
       "rule": "For multi-module apps, spec MUST require persistent navigation between all modules with active state.",
       "acceptance_check": "acceptance.json contains navigation criterion."
+    },
+    {
+      "id": "PM-05",
+      "category": "read_vs_edit_views",
+      "rule": "For every entity with an edit form, spec MUST require a distinct read-only detail view that is NOT the edit form pre-populated with data. The detail view shows all fields (including read-only metadata like created_at/updated_at) in display format, with explicit Edit and Delete buttons. Pattern: list → click row → detail modal/page → click Edit → edit form (separate UI).",
+      "acceptance_check": "acceptance.json has a 'view-detail' criterion per entity, distinct from 'edit' criterion. spec.md User Stories include 'As a user I want to VIEW details of X' separate from 'edit X'."
+    },
+    {
+      "id": "PM-06",
+      "category": "activity_feed",
+      "rule": "If the Goal mentions a dashboard with 'activity', 'recent actions', 'audit trail', or similar temporal aggregation, spec MUST require a unified chronological activity feed — NOT separate 'Recent Customers' + 'Recent Tickets' lists. Feed items describe actions ('John created ticket #42', 'Lisa closed customer #7') with timestamp, actor, action_type. This requires a backend activity_log table or derived audit events.",
+      "acceptance_check": "If 'activity' in Goal: acceptance.json has activity-feed criterion; spec.md section describes unified feed with action verbs, timestamps, actors."
+    },
+    {
+      "id": "PM-07",
+      "category": "dashboard_quick_actions",
+      "rule": "If the Goal describes a dashboard as the app's landing page, spec MUST require a 'Quick Actions' row near the top (above stat cards or beside them) with prominent buttons for each module's primary create action (e.g. '+ Add Customer', '+ New Ticket'). These are distinct from in-card action buttons — they are a top-level convenience.",
+      "acceptance_check": "If dashboard is landing: acceptance.json has quick-actions criterion. spec.md dashboard section enumerates ≥2 quick action buttons linked to create flows."
     }
   ]
 }

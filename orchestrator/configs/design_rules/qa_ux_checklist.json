@@ -95,6 +95,25 @@
       "note": "Server.js must reject blank required fields and return 404 on missing delete targets. Enums derived from spec, not hardcoded."
     },
     {
+      "id": "QA-PROD-01",
+      "category": "read_only_detail",
+      "check": "For each entity with an edit form, verify a distinct read-only detail view exists. Look for render<Entity>Detail or view<Entity> function that fetches GET /api/<resource>/:id and renders label-value pairs (not form inputs).",
+      "severity": "warning_if_missing",
+      "note": "Edit form pre-populated with data is NOT a detail view."
+    },
+    {
+      "id": "QA-PROD-02",
+      "category": "activity_feed",
+      "check": "If spec mentions activity feed, verify unified chronological feed exists: grep for '/api/activity' fetch in app.js and a dashboard render block that displays action summaries with timestamps. FAIL if 'activity' is in spec but app.js only has separate 'Recent Customers'/'Recent Tickets' tables.",
+      "severity": "warning_if_missing"
+    },
+    {
+      "id": "QA-PROD-03",
+      "category": "dashboard_quick_actions",
+      "check": "If dashboard is the landing page, verify renderDashboardView renders ≥2 prominent quick action buttons (Add Customer, New Ticket, etc.) at the top level, not only inside per-module cards.",
+      "severity": "warning_if_missing"
+    },
+    {
       "id": "QA-CONSISTENCY-01",
       "category": "report_consistency",
       "check": "qa_report.json must not contradict itself. If semantic_checks marks AC-N as 'warning', acceptance_test_results MUST NOT mark the same AC-N as PASS without explanation.",

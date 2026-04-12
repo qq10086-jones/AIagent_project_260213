@@ -120,6 +120,14 @@ export const STEP_CONTRACTS = {
       "Always write smoke/smoke_result.json, even when checks fail."
     ]
   },
+  static_audit: {
+    title: "Static Audit Gate",
+    required_artifacts: ["verify/static_audit.json"],
+    instructions: [
+      "Deterministic (non-LLM) audit gate. Runs scanners for XSS in FE, DELETE 404 semantics in BE, and other security/contract checks.",
+      "This step executes scripts/static_audit/run_static_audit.mjs against the current run artifact. No prompt — the shell command does the work.",
+    ],
+  },
   qa_verify: {
     title: "QA Verification",
     required_artifacts: ["verify/qa_report.json"],

@@ -1208,6 +1208,24 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       }
     }
 
+    // v3.7: static_audit deterministic gate
+    if (String(stepDef.tool || "") === "coding.execute" && String(stepDef.id || "") === "static_audit") {
+      const runtimeCoder = runtimeConfig?.worker_coder || {};
+      const auditMode = String(runtimeCoder.static_audit_mode || "dry_run").toLowerCase();
+      const scriptPath = path.resolve(workspaceRoot, "orchestrator/scripts/static_audit/run_static_audit.mjs").replace(/\\/g, "/");
+      payload.command = [
+        "node",
+        JSON.stringify(scriptPath),
+        "--artifact-root",
+        JSON.stringify(artifactRoot),
+        "--port",
+        "13101",
+        "--mode",
+        auditMode,
+      ].join(" ");
+      payload.max_runtime_s = clampInt(payload.max_runtime_s ?? 180, 60, 600, 180);
+    }
+
     if (String(stepDef.tool || "") === "ops.deploy_preview") {
       const defaultTargetPaths = Array.isArray(payload.target_paths) && payload.target_paths.length > 0
         ? payload.target_paths

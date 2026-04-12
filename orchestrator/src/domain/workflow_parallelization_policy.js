@@ -14,7 +14,11 @@ function findStepIndex(steps, stepId) {
 // service manages) already carry explicit depends_on.  Post-processing steps
 // like deploy_preview may carry static deps without implying the full DAG is
 // declared, and must not short-circuit the rollout gate evaluation.
-const MANAGED_STEP_IDS = new Set(["impl_be", "impl_fe", "qa_verify"]);
+// v3.7: qa_verify has depends_on: [static_audit] and impl_fe_modules has
+// depends_on: [impl_fe_skeleton] — both are infrastructural, not user-
+// configured parallelization signals. Only explicit BE/FE parallel hints
+// (impl_be or legacy impl_fe with depends_on) indicate DAG metadata.
+const MANAGED_STEP_IDS = new Set(["impl_be", "impl_fe"]);
 function hasExplicitDagMetadata(steps = []) {
   return steps.some((step) => MANAGED_STEP_IDS.has(step.id) && Array.isArray(step?.depends_on));
 }

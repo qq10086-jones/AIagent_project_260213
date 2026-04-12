@@ -248,12 +248,14 @@ function createParallelRegistry() {
   const registry = loadRegistryOrThrow(getDefaultRegistryPath());
   const cloned = JSON.parse(JSON.stringify(registry));
   const steps = cloned.workflows.coding_team_v0.steps.map((step) => ({ ...step }));
-  // steps: 0=pm_spec, 1=arch_design, 2=impl_be, 3=impl_fe_skeleton, 4=impl_fe_modules, 5=smoke_test, 6=qa_verify, 7=release_pack, 8=deploy_preview
-  steps[2].depends_on = ["arch_design"];
-  steps[3].depends_on = ["arch_design"];
-  steps[5].depends_on = ["impl_be", "impl_fe_modules"];
-  steps[6].depends_on = ["smoke_test"];
-  steps[7].depends_on = ["qa_verify"];
+  // steps: 0=pm_spec, 1=arch_design, 2=impl_be, 3=impl_fe_skeleton, 4=impl_fe_modules, 5=smoke_test, 6=static_audit, 7=qa_verify, 8=release_pack, 9=deploy_preview
+  // Map step_id → index lookup to be resilient to order changes
+  const byId = Object.fromEntries(steps.map((s, i) => [s.id, i]));
+  steps[byId.impl_be].depends_on = ["arch_design"];
+  steps[byId.impl_fe_skeleton].depends_on = ["arch_design"];
+  steps[byId.smoke_test].depends_on = ["impl_be", "impl_fe_modules"];
+  // static_audit and qa_verify already have depends_on in registry; no override needed
+  steps[byId.release_pack].depends_on = ["qa_verify"];
   cloned.workflows.coding_team_v0.steps = steps;
   return cloned;
 }
@@ -510,6 +512,19 @@ test("dag readiness dispatches BE and FE after architect success", async () => {
   ensureDir(smokeRoot);
   writeJson(path.join(smokeRoot, "smoke_result.json"), { verdict: "pass", install_ok: true, server_started: true, root_check: { passed: true, status: 200 }, api_check: { passed: true, status: 200 } });
   await completeGenericTask(harness, smokeIdx);
+
+  // v3.7: static_audit dispatches after smoke_test, before qa_verify
+  const staticAuditIdx = harness.pool.state.tasks.findIndex((t) => JSON.parse(t.payload_json).step_id === "static_audit");
+  if (staticAuditIdx >= 0) {
+    // Write a passing static_audit.json so validation (if any) passes
+    const saTask = harness.pool.state.tasks[staticAuditIdx];
+    const saPayload = JSON.parse(saTask.payload_json);
+    const saDir = path.resolve(workspaceRoot, saPayload.artifact_root, "verify");
+    ensureDir(saDir);
+    writeJson(path.join(saDir, "static_audit.json"), { overall_status: "pass", blocking: false, total_findings: { critical: 0, high: 0, medium: 0, low: 0 }, scanners: {} });
+    await completeGenericTask(harness, staticAuditIdx);
+  }
+
   const qaIdx = harness.pool.state.tasks.findIndex((t) => JSON.parse(t.payload_json).step_id === "qa_verify");
   assert.ok(qaIdx >= 0, "qa_verify should be dispatched");
 });

@@ -41,6 +41,7 @@
     "lane_escalation_chain": ["stable_gemma4_lane", "stable_cloud_lane"],
     "lane_escalation_enabled": true,
     "step_lane_overrides": {},
+    "static_audit_mode": "dry_run",
     "project_planner_max_runs": 12,
     "project_planner_max_parallel_runs": 2,
     "project_planner_failure_policy": "stop_dependents",

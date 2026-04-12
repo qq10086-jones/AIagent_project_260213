@@ -369,11 +369,19 @@
           "gate": null
         },
         {
+          "id": "static_audit",
+          "role": "qa",
+          "tool": "coding.execute",
+          "gate": "acceptance",
+          "depends_on": ["smoke_test"]
+        },
+        {
           "id": "qa_verify",
           "role": "qa",
           "tool": "coding.delegate",
           "gate": "acceptance",
-          "prompt_script_id": "qa.verify.v1"
+          "prompt_script_id": "qa.verify.v1",
+          "depends_on": ["static_audit"]
         },
         {
           "id": "release_pack",

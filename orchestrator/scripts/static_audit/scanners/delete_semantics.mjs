@@ -101,7 +101,7 @@ export async function run({ workspaceRoot, artifactRoot, port = 13101 }) {
     }
   } finally {
     if (serverProc) {
-      try { serverProc.kill("SIGTERM"); } catch { /* ignore */ }
+      await stopServer(serverProc);
     }
   }
 
@@ -139,10 +139,15 @@ function skipResult(reason, started, status = "pass") {
 
 function parseDeleteEndpoints(md) {
   const endpoints = [];
-  const re = /^##\s+DELETE\s+(\/[\w/\-:{}.]+)/gm;
+  // v3.7.1 (codex #5): also accept ###, Endpoint: prefix, backticks, lowercase.
+  const re = /^(?:#{2,4}\s+|Endpoint\s*:\s*)\s*`?(DELETE|delete)`?\s+`?(\/[\w/\-:{}.]+)`?/gm;
   let m;
+  const seen = new Set();
   while ((m = re.exec(md)) !== null) {
-    endpoints.push({ method: "DELETE", path: m[1].trim() });
+    const p = m[2].trim();
+    if (seen.has(p)) continue;
+    seen.add(p);
+    endpoints.push({ method: "DELETE", path: p });
   }
   return endpoints;
 }
@@ -168,5 +173,21 @@ function startServer(serverDir, port) {
     proc.on("error", () => {});
     // return immediately; waitForServer handles readiness
     setTimeout(() => resolve(proc), 100);
+  });
+}
+
+/**
+ * v3.7.1 (codex #4): wait for server process to actually exit, not just signal it.
+ * Prevents the next scanner from racing a still-exiting server on an overlapping port.
+ */
+async function stopServer(proc, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    if (!proc || proc.exitCode !== null) return resolve();
+    const timer = setTimeout(() => {
+      try { proc.kill("SIGKILL"); } catch { /* ignore */ }
+      resolve();
+    }, timeoutMs);
+    proc.once("exit", () => { clearTimeout(timer); resolve(); });
+    try { proc.kill("SIGTERM"); } catch { /* ignore */ }
   });
 }

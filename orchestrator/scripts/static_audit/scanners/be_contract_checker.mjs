@@ -21,14 +21,14 @@ import { httpRequest, waitForServer } from "../lib/http_client.mjs";
 export async function run({ workspaceRoot, artifactRoot, port = 13102 }) {
   const started = Date.now();
   const findings = [];
-  const interfacesPath = path.resolve(workspaceRoot, artifactRoot, "plan/interfaces.md");
 
-  if (!fs.existsSync(interfacesPath)) {
-    return skipResult("plan/interfaces.md not found", started);
+  // v3.7.1 (codex #5): prefer structured handoff/be_to_fe.json over scraping markdown.
+  // The arch step already emits api_contracts as JSON; scraping markdown is brittle
+  // to format changes (###, tables, lowercase methods, backticks, etc.).
+  const writeEndpoints = loadWriteEndpoints(workspaceRoot, artifactRoot);
+  if (writeEndpoints === null) {
+    return skipResult("neither handoff/be_to_fe.json nor plan/interfaces.md found", started);
   }
-
-  const md = fs.readFileSync(interfacesPath, "utf8");
-  const writeEndpoints = parseWriteEndpoints(md);
   if (writeEndpoints.length === 0) {
     return {
       scanner_id: "be_contract_checker",
@@ -96,7 +96,7 @@ export async function run({ workspaceRoot, artifactRoot, port = 13102 }) {
     }
   } finally {
     if (serverProc) {
-      try { serverProc.kill("SIGTERM"); } catch { /* ignore */ }
+      await stopServer(serverProc);
     }
   }
 
@@ -129,16 +129,102 @@ function skipResult(reason, started, status = "pass") {
 }
 
 /**
- * Extract POST/PUT endpoints from interfaces.md, along with any required fields
- * and enum-looking fields (status/priority/type) noted in the section body.
+ * v3.7.1 (codex #5): try structured handoff JSON first, then fall back to markdown.
+ */
+function loadWriteEndpoints(workspaceRoot, artifactRoot) {
+  const be2fePath = path.resolve(workspaceRoot, artifactRoot, "handoff/be_to_fe.json");
+  if (fs.existsSync(be2fePath)) {
+    try {
+      const doc = JSON.parse(fs.readFileSync(be2fePath, "utf8"));
+      const endpoints = extractFromBeToFeJson(doc);
+      if (endpoints.length > 0) return endpoints;
+    } catch { /* fall through to markdown */ }
+  }
+
+  const interfacesPath = path.resolve(workspaceRoot, artifactRoot, "plan/interfaces.md");
+  if (fs.existsSync(interfacesPath)) {
+    return parseWriteEndpoints(fs.readFileSync(interfacesPath, "utf8"));
+  }
+  return null;
+}
+
+/**
+ * Extract write endpoints from handoff/be_to_fe.json shape.
+ * Supports common shapes: api_contracts: [{method, path, required, enum}], or
+ * a flat array of contract objects.
+ */
+function extractFromBeToFeJson(doc) {
+  const out = [];
+  const contracts = Array.isArray(doc?.api_contracts)
+    ? doc.api_contracts
+    : Array.isArray(doc?.contracts)
+    ? doc.contracts
+    : Array.isArray(doc)
+    ? doc
+    : [];
+
+  for (const c of contracts) {
+    const method = String(c?.method || "").toUpperCase();
+    const rawPath = String(c?.path || c?.endpoint || c?.route || "").trim();
+    if (!["POST", "PUT", "PATCH"].includes(method) || !rawPath.startsWith("/")) continue;
+
+    const required = Array.isArray(c?.required)
+      ? c.required.filter((s) => typeof s === "string")
+      : Array.isArray(c?.required_fields)
+      ? c.required_fields.filter((s) => typeof s === "string")
+      : extractRequiredFromSchema(c?.request_body || c?.body_schema || c?.request || null);
+
+    const enumFields = extractEnumFields(c?.request_body || c?.body_schema || c?.request || c?.fields || null);
+
+    out.push({
+      method: method === "PATCH" ? "PATCH" : method,
+      path: rawPath,
+      requiredFields: required,
+      enumFields,
+    });
+  }
+  return out;
+}
+
+function extractRequiredFromSchema(schema) {
+  if (!schema || typeof schema !== "object") return [];
+  if (Array.isArray(schema.required)) {
+    return schema.required.filter((s) => typeof s === "string");
+  }
+  // Fallback: inspect properties that declare required: true
+  if (schema.properties && typeof schema.properties === "object") {
+    return Object.entries(schema.properties)
+      .filter(([, v]) => v && typeof v === "object" && v.required === true)
+      .map(([k]) => k);
+  }
+  return [];
+}
+
+function extractEnumFields(schema) {
+  const out = [];
+  if (!schema || typeof schema !== "object") return out;
+  const props = schema.properties && typeof schema.properties === "object" ? schema.properties : schema;
+  for (const [field, def] of Object.entries(props)) {
+    if (!def || typeof def !== "object") continue;
+    if (Array.isArray(def.enum) && def.enum.length >= 2 && def.enum.length <= 10) {
+      out.push({ field, values: def.enum.map(String) });
+    }
+  }
+  return out;
+}
+
+/**
+ * Legacy markdown fallback. Extract POST/PUT endpoints with loose heading recognition.
  */
 function parseWriteEndpoints(md) {
   const endpoints = [];
-  const headerRe = /^##\s+(POST|PUT)\s+(\/[\w/\-:{}.]+)/gm;
+  // v3.7.1 (codex #5): broaden recognition — ## / ### headings, optional backticks,
+  // case-insensitive method, allow "Endpoint:" prefix and whitespace variation.
+  const headerRe = /^(?:#{2,4}\s+|Endpoint\s*:\s*)\s*`?(POST|PUT|PATCH|post|put|patch)`?\s+`?(\/[\w/\-:{}.]+)`?/gm;
   let m;
   const matches = [];
   while ((m = headerRe.exec(md)) !== null) {
-    matches.push({ method: m[1], path: m[2].trim(), startIdx: m.index, headerLen: m[0].length });
+    matches.push({ method: m[1].toUpperCase(), path: m[2].trim(), startIdx: m.index, headerLen: m[0].length });
   }
   for (let i = 0; i < matches.length; i++) {
     const cur = matches[i];
@@ -198,4 +284,19 @@ function startServer(serverDir, port) {
   proc.stderr.on("data", () => {});
   proc.on("error", () => {});
   return proc;
+}
+
+/**
+ * v3.7.1 (codex #4): wait for server process to actually exit, not just signal it.
+ */
+async function stopServer(proc, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    if (!proc || proc.exitCode !== null) return resolve();
+    const timer = setTimeout(() => {
+      try { proc.kill("SIGKILL"); } catch { /* ignore */ }
+      resolve();
+    }, timeoutMs);
+    proc.once("exit", () => { clearTimeout(timer); resolve(); });
+    try { proc.kill("SIGTERM"); } catch { /* ignore */ }
+  });
 }

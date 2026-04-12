@@ -1211,17 +1211,21 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     // v3.7: static_audit deterministic gate
     if (String(stepDef.tool || "") === "coding.execute" && String(stepDef.id || "") === "static_audit") {
       const runtimeCoder = runtimeConfig?.worker_coder || {};
-      const auditMode = String(runtimeCoder.static_audit_mode || "dry_run").toLowerCase();
+      // v3.7.1 (codex #8): whitelist the mode value and JSON.stringify for shell safety.
+      const rawMode = String(runtimeCoder.static_audit_mode || "dry_run").toLowerCase();
+      const auditMode = ["dry_run", "blocking"].includes(rawMode) ? rawMode : "dry_run";
       const scriptPath = path.resolve(workspaceRoot, "orchestrator/scripts/static_audit/run_static_audit.mjs").replace(/\\/g, "/");
+      // v3.7.1 (codex #4): random port base per workflow run to avoid concurrent collisions.
+      const portBase = 13100 + Math.floor(Math.random() * 800);
       payload.command = [
         "node",
         JSON.stringify(scriptPath),
         "--artifact-root",
         JSON.stringify(artifactRoot),
         "--port",
-        "13101",
+        String(portBase),
         "--mode",
-        auditMode,
+        JSON.stringify(auditMode),
       ].join(" ");
       payload.max_runtime_s = clampInt(payload.max_runtime_s ?? 180, 60, 600, 180);
     }

@@ -81,6 +81,9 @@ const anyFail = Object.values(scannerResults).some((r) => r.status === "fail");
 
 let overallStatus;
 if (hasBlocking || anyFail) overallStatus = "fail";
+// v3.7.1 (codex #6): in blocking mode, a scanner crash must also fail the gate —
+// otherwise a broken scanner silently degrades the deterministic-gate guarantee.
+else if (anyError && mode === "blocking") overallStatus = "fail";
 else if (totals.medium > 0) overallStatus = "pass_with_warnings";
 else if (anyError) overallStatus = "pass_with_warnings";
 else overallStatus = "pass";
@@ -90,7 +93,7 @@ const report = {
   artifact_root: artifactRoot,
   audit_mode: mode,
   overall_status: overallStatus,
-  blocking: mode === "blocking" && hasBlocking,
+  blocking: mode === "blocking" && (hasBlocking || anyError),
   total_findings: totals,
   scanners: scannerResults,
   duration_ms: Date.now() - auditStarted,

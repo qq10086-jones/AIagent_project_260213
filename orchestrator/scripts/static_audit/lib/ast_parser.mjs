@@ -101,8 +101,10 @@ export function isSafeInterpolation(expr) {
   if (tern) {
     return isSafeInterpolation(tern[2]) && isSafeInterpolation(tern[3]);
   }
-  // Numeric arithmetic like items.length or foo + 1
-  if (/\.length\b/.test(trimmed) && !/\[/.test(trimmed)) return true;
+  // v3.7.1 (codex #3): only treat BARE `foo.length` as safe. Expressions like
+  // `items.length || fallbackHtml` contain `.length` but can still emit
+  // attacker-controlled strings via the fallback — reject those.
+  if (/^[a-zA-Z_$][\w.$]*\.length$/.test(trimmed)) return true;
   return false;
 }
 

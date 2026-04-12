@@ -1,0 +1,50 @@
+{
+  "role": "architect",
+  "version": "1.0",
+  "description": "Interaction state rules for architect step. Ensures interfaces.md and workplan cover UX states.",
+  "rules": [
+    {
+      "id": "ARCH-01",
+      "category": "api_completeness",
+      "rule": "Every entity in the spec MUST have DELETE endpoint in interfaces.md, not just GET/POST/PUT.",
+      "workplan_check": "be_tasks includes a task for delete handler with confirmation response."
+    },
+    {
+      "id": "ARCH-02",
+      "category": "error_responses",
+      "rule": "Every API endpoint MUST document error response shapes (400 validation, 404 not found, 500 server error).",
+      "workplan_check": "interfaces.md includes error response schemas."
+    },
+    {
+      "id": "ARCH-03",
+      "category": "fe_module_tasks",
+      "rule": "workplan.json fe_tasks MUST cover ALL modules from the spec, not just the first module. Structure: skeleton tasks first (navigation, shared components), then per-module tasks.",
+      "workplan_check": "fe_tasks count >= (module_count * 2) + 2 skeleton tasks."
+    },
+    {
+      "id": "ARCH-04",
+      "category": "interaction_states",
+      "rule": "fe_tasks MUST include tasks for: loading states, empty states, error handling, and operation feedback (toast/notifications).",
+      "workplan_check": "fe_tasks references loading, empty, error, toast/notification."
+    },
+    {
+      "id": "ARCH-05",
+      "category": "input_validation",
+      "rule": "EVERY POST/PUT endpoint MUST validate: (a) required fields non-empty (reject blank name/title/etc with 400); (b) enum fields against whitelist (status in ['open','in_progress','resolved','closed']; priority in ['low','medium','high']); (c) foreign-key existence (comment POST requires ticket_id exists, else 404); (d) max length on text fields. interfaces.md MUST document 400 validation response shape with {error, field, message}.",
+      "workplan_check": "be_tasks includes explicit 'validate input' subtasks per endpoint with enum/FK checks.",
+      "severity": "critical"
+    },
+    {
+      "id": "ARCH-06",
+      "category": "delete_semantics",
+      "rule": "DELETE /resource/:id MUST check existence first. Return 404 if id not found, 204 on successful delete. Never return 200 success for missing rows.",
+      "workplan_check": "be_tasks for DELETE include 'check exists or 404' step."
+    },
+    {
+      "id": "ARCH-07",
+      "category": "escape_html_dep",
+      "rule": "handoff/be_to_fe.json MUST mark which API response fields contain user-controlled strings (names, titles, comments, descriptions). FE uses this list to know what to escape with escapeHtml.",
+      "workplan_check": "handoff/be_to_fe.json has 'user_controlled_fields' key or similar annotation."
+    }
+  ]
+}

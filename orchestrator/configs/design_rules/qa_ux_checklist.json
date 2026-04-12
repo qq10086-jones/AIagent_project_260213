@@ -1,0 +1,88 @@
+{
+  "role": "qa",
+  "version": "1.0",
+  "description": "UX quality checklist for QA verification step. Hard gate — missing items cause fail, not warning.",
+  "checks": [
+    {
+      "id": "QA-UX-01",
+      "category": "crud_delete",
+      "check": "Every entity has a DELETE handler in server.js AND a delete button with confirmation in app.js.",
+      "grep_pattern": "delete|remove|destroy",
+      "severity": "fail_if_missing"
+    },
+    {
+      "id": "QA-UX-02",
+      "category": "operation_feedback",
+      "check": "Write operations (POST/PUT/DELETE) trigger user-visible feedback (toast, alert, status message).",
+      "grep_pattern": "toast|notification|alert|success.*message|error.*message",
+      "severity": "fail_if_missing"
+    },
+    {
+      "id": "QA-UX-03",
+      "category": "empty_state",
+      "check": "List views show empty state text when no data exists, with action button to create first item.",
+      "grep_pattern": "empty|no.*found|no.*yet|get.started|add.*first",
+      "severity": "fail_if_missing"
+    },
+    {
+      "id": "QA-UX-04",
+      "category": "form_validation",
+      "check": "Forms validate required fields before submission with inline error display.",
+      "grep_pattern": "required|invalid|validation|error.*field",
+      "severity": "warning_if_missing"
+    },
+    {
+      "id": "QA-UX-05",
+      "category": "loading_state",
+      "check": "Async data fetches show loading indicator (spinner, skeleton, or text).",
+      "grep_pattern": "loading|spinner|skeleton|fetching",
+      "severity": "warning_if_missing"
+    },
+    {
+      "id": "QA-UX-06",
+      "category": "navigation",
+      "check": "Multi-module app has persistent navigation with all modules listed and active state.",
+      "grep_pattern": "nav|sidebar|menu|navigation",
+      "severity": "fail_if_missing"
+    },
+    {
+      "id": "QA-UX-07",
+      "category": "module_coverage",
+      "check": "Frontend implements ALL modules defined in spec, not just the first one.",
+      "method": "count modules in spec vs rendered routes/views in app.js",
+      "severity": "fail_if_missing"
+    },
+    {
+      "id": "QA-SEC-01",
+      "category": "xss_escapehtml",
+      "check": "Every user-controlled string interpolated into HTML (innerHTML, template literals) passes through escapeHtml(). Specifically: showConfirmDialog message, ticket comments, customer names in delete dialogs.",
+      "grep_pattern": "innerHTML.*\\${(?!escapeHtml)",
+      "severity": "fail_if_missing",
+      "note": "FAIL if any raw ${userValue} appears in innerHTML assignment."
+    },
+    {
+      "id": "QA-SEC-02",
+      "category": "class_injection",
+      "check": "Status/priority badge class names use whitelist lookup, not raw interpolation of user values.",
+      "grep_pattern": "class=\"[^\"]*\\${(status|priority|type)",
+      "severity": "warning_if_missing",
+      "note": "WARN if class attributes interpolate raw status/priority."
+    },
+    {
+      "id": "QA-SEC-03",
+      "category": "be_input_validation",
+      "check": "PUT/POST endpoints validate required fields and enum values. DELETE returns 404 for missing rows.",
+      "grep_pattern": "if\\s*\\(!.*name\\)|if\\s*\\(!.*title\\)|return\\s+.*(400|404)",
+      "severity": "fail_if_missing",
+      "note": "Server.js must reject blank required fields and return 404 on missing delete targets."
+    },
+    {
+      "id": "QA-CONSISTENCY-01",
+      "category": "report_consistency",
+      "check": "qa_report.json must not contradict itself. If semantic_checks marks AC-N as 'warning', acceptance_test_results MUST NOT mark the same AC-N as PASS without explanation.",
+      "method": "cross-reference check_id status with acceptance_test_results details.",
+      "severity": "warning_if_missing",
+      "note": "Prevents false-positive PASS verdicts."
+    }
+  ]
+}

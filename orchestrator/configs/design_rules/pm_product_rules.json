@@ -1,0 +1,31 @@
+{
+  "role": "pm",
+  "version": "1.0",
+  "description": "Product completeness rules for PM spec generation. Injected into pm_spec step only.",
+  "rules": [
+    {
+      "id": "PM-01",
+      "category": "crud_completeness",
+      "rule": "Every entity MUST have Create, Read (list + detail), Update, and DELETE operations in the spec.",
+      "acceptance_check": "Each entity has at least 4 user stories covering C/R/U/D."
+    },
+    {
+      "id": "PM-02",
+      "category": "module_coverage",
+      "rule": "Every module mentioned in the Goal MUST have its own section in spec.md with dedicated user stories.",
+      "acceptance_check": "Count of spec sections >= count of Goal modules."
+    },
+    {
+      "id": "PM-03",
+      "category": "ux_requirements",
+      "rule": "Spec MUST explicitly require: operation feedback (toast/message after writes), empty states (guidance on empty lists), form validation (inline errors), and loading indicators.",
+      "acceptance_check": "acceptance.json contains criteria for feedback, empty states, validation, loading."
+    },
+    {
+      "id": "PM-04",
+      "category": "navigation",
+      "rule": "For multi-module apps, spec MUST require persistent navigation between all modules with active state.",
+      "acceptance_check": "acceptance.json contains navigation criterion."
+    }
+  ]
+}

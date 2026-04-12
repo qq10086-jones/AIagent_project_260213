@@ -1,0 +1,63 @@
+{
+  "role": "frontend",
+  "version": "1.0",
+  "description": "Component pattern rules for frontend implementation step. Ensures UX quality in generated code.",
+  "rules": [
+    {
+      "id": "FE-01",
+      "category": "skeleton_first",
+      "rule": "Implement in TWO phases: (1) Skeleton — app shell with navigation, routing, shared components (toast, dialog, loading spinner). (2) Per-module — implement each module's list/detail/form views consuming the skeleton.",
+      "verify": "index.html has nav element; app.js has route handling for all modules."
+    },
+    {
+      "id": "FE-02",
+      "category": "shared_components",
+      "rule": "Create reusable shared components BEFORE module code: showToast(message, type), showConfirmDialog(message, onConfirm), showLoading(container), showEmptyState(container, message, actionLabel, onAction).",
+      "verify": "app.js defines showToast, showConfirmDialog or confirm() calls, loading indicator function."
+    },
+    {
+      "id": "FE-03",
+      "category": "crud_per_module",
+      "rule": "Each module MUST implement: list view (with empty state), create form (with validation), edit form, delete button (with confirmation dialog). Do NOT skip any module from the spec.",
+      "verify": "app.js has fetch+render+create+update+delete handlers for every module."
+    },
+    {
+      "id": "FE-04",
+      "category": "feedback_states",
+      "rule": "After every API call: show loading during fetch, show toast on success/failure, show empty state when list is empty, show inline validation errors on form submit.",
+      "verify": "Every fetch() call has .then(showToast success) and .catch(showToast error) or equivalent."
+    },
+    {
+      "id": "FE-05",
+      "category": "navigation",
+      "rule": "Multi-module apps: persistent sidebar or top navigation listing ALL modules. Active module highlighted. Click navigates without page reload.",
+      "verify": "index.html has nav/sidebar with links to all modules; app.js highlights active."
+    },
+    {
+      "id": "FE-06",
+      "category": "xss_prevention",
+      "rule": "MANDATORY: ALL user-controlled strings inserted into HTML via innerHTML or template literals MUST go through escapeHtml(). This includes: customer names, ticket titles, descriptions, comments, usernames, AND modal dialog messages (showConfirmDialog message parameter). Never trust data from the API.",
+      "verify": "grep 'innerHTML.*\\${' and confirm every interpolated user value is wrapped in escapeHtml(). showConfirmDialog must call escapeHtml(message) before innerHTML assignment.",
+      "severity": "critical"
+    },
+    {
+      "id": "FE-07",
+      "category": "css_class_injection",
+      "rule": "Do NOT interpolate user-controlled status/priority/type values directly into HTML class attributes. Use a whitelist/map: const STATUS_CLASSES = {open:'badge-open', closed:'badge-closed', ...}; then class=\"${STATUS_CLASSES[status] || 'badge-default'}\". Never class=\"badge ${status.toLowerCase()}\".",
+      "verify": "No template literals of the form class=\"...${userValue}...\" with raw user values. Use lookup tables.",
+      "severity": "critical"
+    },
+    {
+      "id": "FE-08",
+      "category": "async_race_safety",
+      "rule": "When an async operation (e.g. loadOptions) appends to a DOM element inside a modal, check that the modal is still open before appendChild. Pattern: const modal = currentModal; await loadOptions(); if (modal !== currentModal) return;",
+      "verify": "Async append operations guard against modal being closed mid-fetch."
+    },
+    {
+      "id": "FE-09",
+      "category": "consistent_empty_state",
+      "rule": "Dashboard empty sub-lists (e.g. 'Recent Customers' empty) MUST use the shared renderEmptyState component, not plain <p>No data</p>. Consistency across the app.",
+      "verify": "grep 'No .* yet' in app.js returns only renderEmptyState call sites, no raw innerHTML='<p>No...'"
+    }
+  ]
+}

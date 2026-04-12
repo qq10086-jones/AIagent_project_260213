@@ -8,6 +8,11 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+
+/** Returns true for any FE implementation step (legacy impl_fe or decomposed skeleton/modules). */
+function isFrontendStep(stepId) {
+  return ["impl_fe", "impl_fe_skeleton", "impl_fe_modules"].includes(String(stepId || ""));
+}
 import { validateJsonSchemaLite } from "../schema_lite_validator.js";
 import { getProjectContext, getPriorADRs, getTaskHistory } from "./memory_reader.js";
 import {
@@ -114,7 +119,7 @@ function buildArchHandoffBlock(handoff, { stepId = "" } = {}) {
   // R1: Include workplan tasks so LLM knows exactly what to build
   const wp = handoff.workplan;
   if (wp && typeof wp === "object") {
-    const side = stepId === "impl_fe" ? "fe_tasks" : "be_tasks";
+    const side = isFrontendStep(stepId) ? "fe_tasks" : "be_tasks";
     const tasks = Array.isArray(wp[side]) ? wp[side] : [];
     if (tasks.length > 0) {
       lines.push(`\nWorkplan tasks to implement (${side}):`);
@@ -185,8 +190,18 @@ function readStructuredWorkplan({ workspaceRoot, artifactRoot, stepId }) {
         },
       };
     }
-    const tasks = String(stepId || "") === "impl_be" ? parsed?.be_tasks : parsed?.fe_tasks;
-    const sectionLabel = String(stepId || "") === "impl_be" ? "BE Tasks" : "FE Tasks";
+    let tasks = String(stepId || "") === "impl_be" ? parsed?.be_tasks : parsed?.fe_tasks;
+    let sectionLabel = String(stepId || "") === "impl_be" ? "BE Tasks" : "FE Tasks";
+    // v3.6: Split FE tasks for decomposed steps
+    if (String(stepId || "") === "impl_fe_skeleton" && Array.isArray(tasks)) {
+      // Skeleton gets first 3 tasks (app shell, nav, shared components)
+      tasks = tasks.slice(0, 3);
+      sectionLabel = "FE Skeleton Tasks (app shell + shared components ONLY)";
+    } else if (String(stepId || "") === "impl_fe_modules" && Array.isArray(tasks)) {
+      // Modules step gets remaining tasks (per-module CRUD views)
+      tasks = tasks.slice(3);
+      sectionLabel = "FE Module Tasks (implement ALL remaining module views)";
+    }
     return {
       block: buildStructuredWorkplanBlock(tasks, sectionLabel),
       injected: normalizeInjectedWorkplan(
@@ -272,7 +287,7 @@ function chooseImplementationMode({
   workspaceRoot,
   contextBudgetService,
 }) {
-  if (!["impl_be", "impl_fe"].includes(String(stepDef?.id || ""))) {
+  if (!["impl_be"].includes(String(stepDef?.id || "")) && !isFrontendStep(stepDef?.id)) {
     return {
       executionModeRequested: "full_file_fallback",
       promptScriptId: String(stepDef?.prompt_script_id || ""),
@@ -285,7 +300,7 @@ function chooseImplementationMode({
   // stable_cloud_lane currently shows weak structured-patch reliability on impl steps.
   // primary_minimax_lane stays on full_file_fallback to keep prompts smaller and stable.
   // Force full_file_fallback on these lanes to keep prompts smaller and avoid empty patch bundles.
-  if (["impl_be", "impl_fe"].includes(String(stepDef?.id || "")) && ["stable_local_lane", "stable_cloud_lane", "primary_minimax_lane"].includes(requestedLane)) {
+  if ((String(stepDef?.id || "") === "impl_be" || isFrontendStep(stepDef?.id)) && ["stable_local_lane", "stable_cloud_lane", "primary_minimax_lane"].includes(requestedLane)) {
     return {
       executionModeRequested: "full_file_fallback",
       promptScriptId: String(stepDef?.prompt_script_id || ""),
@@ -299,7 +314,7 @@ function chooseImplementationMode({
     ? listTargetFilesWithContent({ workspaceRoot, targetPaths })
     : [];
   const hasTargetFiles = targetFileContext.length > 0;
-  const v2ScriptId = stepDef.id === "impl_be" ? "backend.impl.v2" : "frontend.impl.v2";
+  const v2ScriptId = stepDef.id === "impl_be" ? "backend.impl.v2" : isFrontendStep(stepDef.id) ? "frontend.impl.v2" : null;
   const injectedContext = targetFileContext.map((item) => `${item.path}\n${item.content}`).join("\n");
   const contextBudgetPreview = contextBudgetService.buildReport({
     stepId: stepDef.id,
@@ -443,7 +458,7 @@ function applyStableCodingLaneDefaults({ run, stepDef, payload, input, runtimeCo
 function shouldEnforceGenericAppPrimaryLane({ run, stepDef }) {
   return String(run?.workflow_id || "") === "coding_team_v0"
     && ["generic_app", "single_file_html", "generic_coding_task"].includes(String(run?.project_type || ""))
-    && ["impl_be", "impl_fe"].includes(String(stepDef?.id || ""))
+    && (String(stepDef?.id || "") === "impl_be" || isFrontendStep(stepDef?.id))
     && String(stepDef?.tool || "") === "coding.delegate";
 }
 
@@ -544,7 +559,7 @@ function inferVerificationCommand({ stepId, targetPaths = [], workspaceRoot }) {
       for (const entry of entries) {
         if (!entry.isFile()) continue;
         const relFile = path.posix.join(rel, entry.name);
-        if (entry.name.endsWith(".js") && safeStepId === "impl_fe") return `node --check ${relFile}`;
+        if (entry.name.endsWith(".js") && isFrontendStep(safeStepId)) return `node --check ${relFile}`;
         if (entry.name.endsWith(".js") && safeStepId === "impl_be") return `node --check ${relFile}`;
         if (entry.name.endsWith(".py")) return `python -m py_compile ${relFile}`;
       }
@@ -761,7 +776,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     if (String(stepDef.id || "") === "impl_be" && payload.execution_mode_requested === "structured_patch") {
       payload.expected_artifacts = ["impl/be_patch_bundle.json", "impl/be_notes.md", "handoff/be_to_fe.json"];
     }
-    if (String(stepDef.id || "") === "impl_fe" && payload.execution_mode_requested === "structured_patch") {
+    if (isFrontendStep(stepDef.id) && payload.execution_mode_requested === "structured_patch") {
       payload.expected_artifacts = ["impl/fe_patch_bundle.json", "impl/fe_notes.md"];
     }
 
@@ -779,7 +794,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     payload.llm_role = String(promptScript?.llm_role || effectiveStepDef.role || "");
 
     // Set target_paths BEFORE building execution packets so they get the correct project-specific paths.
-    if (["impl_be", "impl_fe"].includes(String(stepDef.id || "")) && !Array.isArray(payload.target_paths)) {
+    if ((String(stepDef.id || "") === "impl_be" || isFrontendStep(stepDef.id)) && !Array.isArray(payload.target_paths)) {
       payload.target_paths = defaultCodingTargetPaths(payload.project_type);
     }
 
@@ -799,7 +814,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       payload.execution_adapter_packet = executionPacket;
     }
 
-    if (String(stepDef.id || "") === "impl_fe") {
+    if (isFrontendStep(stepDef.id)) {
       const executionPacket = buildFrontendExecutionPacket({
         stepDef: effectiveStepDef,
         payload,
@@ -816,7 +831,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
     }
 
     if (stepDef.tool === "coding.delegate") {
-      const runtimeByStep = { pm_spec: 360, arch_design: 480, impl_fe: 360, impl_be: 240, smoke_test: 120, qa_verify: 180, release_pack: 120 };
+      const runtimeByStep = { pm_spec: 360, arch_design: 480, impl_fe: 360, impl_fe_skeleton: 240, impl_fe_modules: 360, impl_be: 240, smoke_test: 120, qa_verify: 180, release_pack: 120 };
       payload.task_prompt = payload.task_prompt || buildStepPrompt({ run, stepDef: effectiveStepDef, input, payload, promptScript });
       if (Array.isArray(payload.target_file_context) && payload.target_file_context.length > 0) {
         payload.task_prompt = `${payload.task_prompt}${buildTargetFileContextBlock(payload.target_file_context)}`;
@@ -879,7 +894,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
 
       // v3.5: Inject per-role design quality rules
       const designRulesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../configs/design_rules");
-      const roleToRulesFile = { pm_spec: "pm_product_rules.json", arch_design: "arch_interaction_rules.json", impl_fe: "fe_component_rules.json", qa_verify: "qa_ux_checklist.json" };
+      const roleToRulesFile = { pm_spec: "pm_product_rules.json", arch_design: "arch_interaction_rules.json", impl_fe: "fe_component_rules.json", impl_fe_skeleton: "fe_component_rules.json", impl_fe_modules: "fe_component_rules.json", qa_verify: "qa_ux_checklist.json" };
       const rulesFile = roleToRulesFile[String(stepDef.id || "")];
       if (rulesFile) {
         const rulesPath = path.resolve(designRulesDir, rulesFile);
@@ -951,7 +966,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         payload.max_runtime_s = configured > 0 ? configured : (runtimeByStep[stepDef.id] || 240);
       }
       const runtimeWorkerCoder = runtimeConfig?.worker_coder || {};
-      if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
+      if ((String(stepDef.id || "") === "impl_be" || isFrontendStep(stepDef.id))) {
         if (!Array.isArray(payload.verification_plan) || payload.verification_plan.length === 0) {
           payload.verification_plan = resolveTemplateVerificationPlan({
             stepId: stepDef.id,
@@ -990,7 +1005,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
         );
       }
       // R3: For impl steps, inject handoff + workplan BEFORE context so LLM sees spec first
-      if (["impl_be", "impl_fe"].includes(String(stepDef.id || ""))) {
+      if ((String(stepDef.id || "") === "impl_be" || isFrontendStep(stepDef.id))) {
         const archHandoffPath = path.resolve(workspaceRoot, artifactRoot, "handoff/architect_to_impl.json");
         if (fs.existsSync(archHandoffPath)) {
           try {
@@ -1043,7 +1058,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
           recentChangedFiles: payload.target_paths,
           memoryHints,
         });
-        const hasArchHandoff = ["impl_be", "impl_fe"].includes(String(stepDef.id || ""))
+        const hasArchHandoff = (String(stepDef.id || "") === "impl_be" || isFrontendStep(stepDef.id))
           && fs.existsSync(path.resolve(workspaceRoot, artifactRoot, "handoff/architect_to_impl.json"));
         payload.task_prompt = `${payload.task_prompt}${buildCodingContextBlock({
           contextPacket: payload.context_packet,
@@ -1124,7 +1139,7 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
           payload.task_prompt = `${payload.task_prompt}\n\n[Acceptance Suite Commands]\nThe following commands are expected to pass for this project type:\n${suiteCommands.map((c) => `- ${c}`).join("\n")}\nInclude a deterministic check entry for each command result.`;
         }
       }
-      if (["impl_be", "impl_fe"].includes(String(stepDef.id || "")) && payload.execution_adapter_packet) {
+      if ((String(stepDef.id || "") === "impl_be" || isFrontendStep(stepDef.id)) && payload.execution_adapter_packet) {
         const toolAdapterRequest = buildCodingExecutorRequest({
           provider: input.provider || payload.provider || "",
           payload,

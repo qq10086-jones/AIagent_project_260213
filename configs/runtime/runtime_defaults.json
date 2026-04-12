@@ -38,14 +38,9 @@
     "context_resolver_enabled": true,
     "project_planner_enabled": false,
     "step_validation_retry_max": 2,
-    "lane_escalation_chain": ["stable_gemma4_lane", "stable_cloud_lane"],
+    "lane_escalation_chain": ["stable_gemma4_lane", "stable_gemma4_31b_lane", "stable_cloud_lane"],
     "lane_escalation_enabled": true,
-    "step_lane_overrides": {
-      "pm_spec": "stable_cloud_lane",
-      "arch_design": "stable_cloud_lane",
-      "impl_fe": "stable_cloud_lane",
-      "qa_verify": "stable_cloud_lane"
-    },
+    "step_lane_overrides": {},
     "project_planner_max_runs": 12,
     "project_planner_max_parallel_runs": 2,
     "project_planner_failure_policy": "stop_dependents",
@@ -75,7 +70,7 @@
         "provider": "opencode",
         "model": "dashscope/qwen-plus-2025-04-28",
         "provider_class": "opencode-provider",
-        "purpose": "DashScope Qwen Plus lane (16K output cap)"
+        "purpose": "DISABLED — DashScope Qwen models currently unavailable"
       },
       "primary_minimax_lane": {
         "provider": "opencode",
@@ -88,6 +83,12 @@
         "model": "ollama/gemma4:26b",
         "provider_class": "opencode-provider",
         "purpose": "local Gemma4 26B lane for high-quality code generation"
+      },
+      "stable_gemma4_31b_lane": {
+        "provider": "opencode",
+        "model": "ollama/gemma4:31b",
+        "provider_class": "opencode-provider",
+        "purpose": "local Gemma4 31B lane for complex instruction following"
       }
     }
   },

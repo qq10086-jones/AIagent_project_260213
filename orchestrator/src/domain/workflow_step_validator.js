@@ -63,7 +63,7 @@ function collectChangedFiles(output = {}) {
 function isCodingTeamImplementationStep(run, stepId) {
   return (
     String(run?.workflow_id || "") === "coding_team_v0" &&
-    (String(stepId || "") === "impl_fe" || String(stepId || "") === "impl_be")
+    (["impl_fe", "impl_fe_skeleton", "impl_fe_modules"].includes(String(stepId || "")) || String(stepId || "") === "impl_be")
   );
 }
 
@@ -99,6 +99,49 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
         patch_bundle_exists: Boolean(hasPatchBundle),
       };
     }
+    // Module system consistency check: package.json type vs server.js syntax
+    const packageJson = readJsonFileSafe(packageAbs);
+    const serverSource = readTextFileSafe(path.resolve(beDirAbs, "server.js")) || "";
+    if (packageJson && String(packageJson.type || "") === "module" && /\brequire\s*\(/.test(serverSource)) {
+      return {
+        checked: true,
+        ok: false,
+        code: "STEP_MODULE_SYSTEM_MISMATCH",
+        detail: 'package.json declares "type":"module" but server.js uses require() (CommonJS). Server will crash. Remove "type":"module" or convert to ESM imports.',
+      };
+    }
+    // Architecture-implementation consistency: check persistence layer matches arch declaration
+    const archMdAbs = path.resolve(workspaceRoot, relRoot, "plan/arch.md");
+    const archMdText = (readTextFileSafe(archMdAbs) || "").toLowerCase();
+    if (archMdText && serverSource) {
+      const archDeclaresSqlite = /sqlite|sequelize|better-sqlite|knex/.test(archMdText);
+      const implUsesSqlite = /sqlite|sequelize|better-sqlite|knex/.test(serverSource.toLowerCase());
+      const implUsesInMemory = /\bnew Map\b|\bMap\(\)/.test(serverSource) && !/sqlite|sequelize/.test(serverSource.toLowerCase());
+      if (archDeclaresSqlite && implUsesInMemory) {
+        return {
+          checked: true,
+          ok: false,
+          code: "STEP_ARCH_IMPL_MISMATCH",
+          detail: "Architecture declares SQLite persistence but implementation uses in-memory Map. Implement the declared persistence layer or update the architecture.",
+        };
+      }
+    }
+    // Handoff completeness: be_to_fe.json api_contracts should cover architect interfaces
+    const beToFeJson = readJsonFileSafe(handoffAbs);
+    const archHandoffAbs = path.resolve(workspaceRoot, relRoot, "handoff/architect_to_impl.json");
+    const archHandoff = readJsonFileSafe(archHandoffAbs);
+    if (beToFeJson && archHandoff) {
+      const archInterfaces = Array.isArray(archHandoff.interfaces) ? archHandoff.interfaces : [];
+      const beContracts = Array.isArray(beToFeJson.api_contracts) ? beToFeJson.api_contracts : [];
+      const bePaths = new Set(beContracts.map((c) => String(c.path || c.endpoint || "").toLowerCase()));
+      const missingContracts = archInterfaces.filter((iface) => {
+        const ifacePath = String(iface || "").replace(/^(GET|POST|PUT|PATCH|DELETE)\s+/i, "").toLowerCase();
+        return ifacePath && !bePaths.has(ifacePath);
+      });
+      if (missingContracts.length > 0 && archInterfaces.length > 2) {
+        // Warn but don't fail — handoff may legitimately subset for this sprint
+      }
+    }
     const scopedFiles = hasPatchBundle && patchTargets.length > 0
       ? patchTargets
       : dirEntries.map((e) => `${relRoot}/impl/be_changes/${e.name}`.replace(/\/+/g, "/").replace(/^\/+/, ""));
@@ -115,7 +158,7 @@ export function validateImplementationDelta({ run, stepId, output, payload, work
       scoped_files: scopedFiles,
     };
   }
-  if (String(stepId || "") === "impl_fe") {
+  if (["impl_fe", "impl_fe_skeleton", "impl_fe_modules"].includes(String(stepId || ""))) {
     const relRoot = String(payload?.artifact_root || "").trim().replace(/\\/g, "/");
     const feDirRel = `${relRoot}/impl/fe_changes`.replace(/\/+/g, "/").replace(/^\/+/, "");
     const feDirAbs = path.resolve(workspaceRoot, feDirRel);
@@ -212,8 +255,98 @@ export function validateDocumentHandoff({ payload, stepId, workspaceRoot, handof
   return validateCodingTeamHandoff({ workspaceRoot, artifactRoot: payload.artifact_root, handoff });
 }
 
-export function validateRoleOutput({ payload, stepId, workspaceRoot }) {
-  if (String(stepId || "") === "pm_spec") return validatePmOutput({ workspaceRoot, artifactRoot: payload.artifact_root });
+export function validateSmokeVerdict({ run, stepId, payload, workspaceRoot }) {
+  if (!(String(run?.workflow_id || "") === "coding_team_v0" && String(stepId || "") === "smoke_test")) {
+    return { checked: false, ok: true };
+  }
+  const relRoot = String(payload?.artifact_root || "").trim().replace(/\\/g, "/");
+  const smokeResultPath = path.resolve(workspaceRoot, relRoot, "smoke", "smoke_result.json");
+  const smokeResult = readJsonFileSafe(smokeResultPath);
+  if (!smokeResult) {
+    return { checked: true, ok: false, code: "SMOKE_RESULT_MISSING", detail: "smoke/smoke_result.json not found or not valid JSON" };
+  }
+  const verdict = String(smokeResult.verdict || smokeResult.overall_status || "").toLowerCase();
+  if (verdict === "fail" || verdict === "failed") {
+    const errors = Array.isArray(smokeResult.errors) ? smokeResult.errors.map((e) => String(e).slice(0, 120)).join("; ") : "";
+    return {
+      checked: true,
+      ok: false,
+      code: "SMOKE_TEST_VERDICT_FAIL",
+      detail: `smoke test verdict '${verdict}': ${errors || "server could not start or endpoints failed"}`,
+    };
+  }
+  return { checked: true, ok: true, verdict };
+}
+
+export function validateGoalFidelity({ workspaceRoot, artifactRoot, goal }) {
+  if (!goal || typeof goal !== "string" || goal.trim().length < 10) {
+    return { checked: false, ok: true };
+  }
+  const rootAbs = path.resolve(workspaceRoot, String(artifactRoot || "").replace(/\\/g, "/"));
+  if (!fs.existsSync(rootAbs)) return { checked: false, ok: true };
+  const goalLower = goal.toLowerCase();
+  // v3.5: Extract top-level feature phrases more robustly.
+  // Strategy: split on semicolons and numbered markers (1)/(2)/(3) first (module-level),
+  // then fall back to comma+and splitting for simpler goals.
+  let featurePhrases;
+  const hasNumberedModules = /\(\d+\)/.test(goalLower);
+  if (hasNumberedModules) {
+    // Split by numbered markers: "(1) ... ; (2) ... ; (3) ..."
+    // Also capture trailing sentence after last module (e.g. "All modules must have...")
+    featurePhrases = goalLower
+      .split(/\s*[;.]\s*(?:\(\d+\)\s*)?|\s*\(\d+\)\s*/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 5);
+  } else {
+    const stripped = goalLower.replace(/^.*?(?:with|that has|featuring|including)\s+/i, "");
+    featurePhrases = stripped
+      .split(/\s*(?:,\s*|\s+and\s+)/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 3);
+  }
+  if (featurePhrases.length === 0) return { checked: false, ok: true };
+  const specText = (readTextFileSafe(path.resolve(rootAbs, "plan/spec.md")) || "").toLowerCase();
+  const nonGoalsMatch = specText.match(/non[- ]?goals?[\s\S]*?(?=\n#|\n\*\*|$)/i);
+  const nonGoalsText = nonGoalsMatch ? nonGoalsMatch[0] : "";
+  const missing = [];
+  const contradicted = [];
+  for (const phrase of featurePhrases) {
+    // Strip punctuation from keywords before matching
+    const keywords = phrase.split(/\s+/)
+      .map((w) => w.replace(/[^a-z0-9_/-]/g, ""))
+      .filter((w) => w.length > 4);
+    if (keywords.length === 0) continue;
+    const inSpec = keywords.some((w) => specText.includes(w));
+    if (!inSpec) missing.push(phrase);
+    // Check Non-Goals contradiction: require the FULL PHRASE (not single keyword) to appear,
+    // to avoid false positives like "between customers and agents" matching "customer management"
+    const phraseInNonGoals = nonGoalsText.includes(phrase);
+    if (phraseInNonGoals) contradicted.push(phrase);
+  }
+  if (missing.length > 0 || contradicted.length > 0) {
+    const parts = [];
+    if (missing.length > 0) parts.push(`missing from spec: ${missing.join(", ")}`);
+    if (contradicted.length > 0) parts.push(`incorrectly placed in Non-Goals: ${contradicted.join(", ")}`);
+    return {
+      checked: true, ok: false,
+      code: "GOAL_FIDELITY_VIOLATION",
+      detail: `goal features ${parts.join("; ")}`,
+      missing_features: missing,
+      contradicted_features: contradicted,
+      all_features: featurePhrases,
+    };
+  }
+  return { checked: true, ok: true, features_verified: featurePhrases };
+}
+
+export function validateRoleOutput({ payload, stepId, workspaceRoot, goal }) {
+  if (String(stepId || "") === "pm_spec") {
+    const pmResult = validatePmOutput({ workspaceRoot, artifactRoot: payload.artifact_root });
+    if (pmResult.checked && !pmResult.ok) return pmResult;
+    const fidelity = validateGoalFidelity({ workspaceRoot, artifactRoot: payload.artifact_root, goal });
+    if (fidelity.checked && !fidelity.ok) return fidelity;
+    return pmResult.checked ? pmResult : fidelity;
+  }
   if (String(stepId || "") === "arch_design") return validateArchitectOutput({ workspaceRoot, artifactRoot: payload.artifact_root });
   if (String(stepId || "") === "release_pack") return validateReleaseOutput({ workspaceRoot, artifactRoot: payload.artifact_root });
   return { checked: false, ok: true };
@@ -227,7 +360,7 @@ export async function validateQaEvidence({ run, workflow_run_id, payload, pool, 
   if (!qaArtifacts.ok) return qaArtifacts;
 
   const steps = await listWorkflowSteps(pool, workflow_run_id);
-  const implStepRows = steps.filter((s) => ["impl_fe", "impl_be"].includes(String(s?.step_id || "")));
+  const implStepRows = steps.filter((s) => ["impl_fe", "impl_fe_skeleton", "impl_fe_modules", "impl_be"].includes(String(s?.step_id || "")));
   const scoped = [];
   for (const step of implStepRows) {
     const result = parseJsonSafe(step.result_json, {});
@@ -322,7 +455,8 @@ export async function runStepSuccessValidations({
     };
   }
 
-  const roleOutputValidation = validateRoleOutput({ payload, stepId: step_id, workspaceRoot });
+  const inputGoal = String(parseJsonSafe(run?.input_json, {})?.goal || "");
+  const roleOutputValidation = validateRoleOutput({ payload, stepId: step_id, workspaceRoot, goal: inputGoal });
   if (roleOutputValidation.checked) mergedOutput = { ...mergedOutput, role_output_validation: roleOutputValidation };
   if (roleOutputValidation.checked && !roleOutputValidation.ok) {
     const failurePayload = buildFailurePayload({
@@ -351,6 +485,22 @@ export async function runStepSuccessValidations({
       ok: false, code: handoffValidation.code || "HANDOFF_VALIDATION_FAILED",
       message: handoffValidation.detail || "handoff validation failed",
       failurePayload, mergedOutput, logMissingArtifacts, failKey: "handoff",
+    };
+  }
+
+  const smokeValidation = validateSmokeVerdict({ run, stepId: step_id, payload, workspaceRoot });
+  if (smokeValidation.checked) mergedOutput = { ...mergedOutput, smoke_validation: smokeValidation };
+  if (smokeValidation.checked && !smokeValidation.ok) {
+    const failurePayload = buildFailurePayload({
+      errorCode: smokeValidation.code || "SMOKE_TEST_VERDICT_FAIL",
+      failedStep: step_id,
+      detail: smokeValidation.detail || "smoke test verdict indicates failure",
+    });
+    mergedOutput = { ...(output || {}), artifact_check: artifactAudit, smoke_validation: smokeValidation, failure_payload: failurePayload };
+    return {
+      ok: false, code: smokeValidation.code,
+      message: smokeValidation.detail,
+      failurePayload, mergedOutput, logMissingArtifacts, failKey: "smoke",
     };
   }
 

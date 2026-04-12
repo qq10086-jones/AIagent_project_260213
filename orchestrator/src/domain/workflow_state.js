@@ -19,9 +19,12 @@ export const STEP_CONTRACTS = {
     required_artifacts: ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"],
     instructions: [
       "Define user stories, scope boundaries, and non-goals for the actual system described in the Goal field above.",
+      "FEATURE ENUMERATION (mandatory): Before writing spec.md, identify EVERY distinct feature or module in the Goal (e.g. 'customer management', 'complaint tickets', 'file upload', 'dashboard'). Each feature MUST get its own ## section in Scope, at least 2 dedicated User Stories (## User Stories section, formatted as '- **US-N:** As a user, I want to...'), and at least 1 acceptance criterion. If the Goal mentions N features, produce at least N*2 user stories. Omitting ANY feature from the Goal is a validation failure.",
+      "Non-Goals MUST ONLY list items NOT mentioned in the Goal. NEVER move a Goal feature into Non-Goals. If the Goal says 'dashboard analytics', then analytics is a GOAL. Putting a Goal feature in Non-Goals will fail validation.",
       "CRITICAL — plan/acceptance.json: Extract EVERY numbered requirement and feature from the Goal into a SEPARATE acceptance criterion. Do NOT summarize or generalize. Each criterion object must have: id (AC-1, AC-2, ...), description (the specific feature), verify_command (a concrete shell command like 'grep', 'curl', or 'node -e' that can deterministically check), expected_pattern (regex to match output), and verify_tier: 'deterministic'. If no command can verify it, set verify_tier: 'semantic'.",
       "plan/spec.md must reproduce ALL core requirements from the Goal verbatim in the Scope section — do not omit, truncate, or paraphrase them.",
-      "Create phased milestones in plan/milestones.md.",
+      "Create phased milestones in plan/milestones.md with at least one milestone per Goal feature.",
+      "DESIGN QUALITY (mandatory): For EVERY module, the spec MUST include: (a) full CRUD — create, read-list, read-detail, update, DELETE with confirmation dialog; (b) operation feedback — toast or inline message after every write; (c) empty state — guidance text + action button on empty lists; (d) form validation — inline errors on required fields, loading/disabled submit button; (e) loading indicator on every async fetch; (f) error handling — retry on network error, back-nav on not-found. plan/acceptance.json MUST contain at least one criterion per design quality rule with verify_command using grep to check for toast/dialog/empty-state patterns in frontend source.",
     ],
   },
   arch_design: {
@@ -34,10 +37,12 @@ export const STEP_CONTRACTS = {
       "Also write plan/workplan.json with structured be_tasks and fe_tasks arrays so implementation steps can consume the workplan without markdown parsing.",
       "Write handoff/architect_to_impl.json with from_step, to_steps, modules, interfaces, decisions, risks, and a top-level workplan object containing be_tasks and fe_tasks arrays that mirror plan/workplan.json.",
       "For minimal or reviewable CRM goals, do not include responsive design, mobile polish, breakpoints, or device-specific styling tasks unless the goal explicitly requests them.",
-      "Define all API endpoints or internal interfaces in plan/interfaces.md as concrete markdown headings like '## GET /api/books' or '## Event: record.created' (adapt names to the actual domain).",
+      "CRITICAL: plan/interfaces.md MUST list EVERY API endpoint as a '## METHOD /path' heading (e.g. '## GET /api/books', '## DELETE /api/books/:id'). Include ALL CRUD methods (GET/POST/PUT/DELETE) for each resource mentioned in the spec. If the spec mentions delete functionality, you MUST include DELETE endpoints. Omitting endpoints will fail validation.",
       "Under each plan/interfaces.md heading, include request shape, response shape or payload shape, and auth requirement.",
       "Keep the Interfaces section in plan/arch.md brief and point it to plan/interfaces.md for the concrete contract list.",
       "Document the application boot strategy so preview deployment can infer an entrypoint or manifest.",
+      "FE TASK STRUCTURE (v3.5): fe_tasks in workplan.json MUST follow skeleton-first order: first 2-3 tasks create app shell (navigation between ALL modules, shared components like toast/dialog/loading/empty-state), then per-module tasks. Every spec module MUST have at least 2 fe_tasks (list+CRUD view, forms+validation). If spec has N modules, emit at least N*2+3 fe_tasks.",
+      "DELETE ENDPOINTS: Every entity MUST have a DELETE endpoint in interfaces.md with error response shapes (400, 404, 500).",
     ],
   },
   impl_fe: {
@@ -52,6 +57,34 @@ export const STEP_CONTRACTS = {
       "Write impl/fe_notes.md with UI decisions, assumptions, and run instructions.",
       "No placeholders: every component and handler must be complete. After each file, self-review that all API calls match handoff/be_to_fe.json and all DOM IDs are consistent.",
       "Verification before completion: confirm every user journey in plan/acceptance.json is wired up end-to-end before finishing.",
+      "TWO-PHASE FE (v3.5 mandatory): Phase 1 — Skeleton: implement app shell first (nav/sidebar listing ALL modules, shared components: showToast, showConfirmDialog, renderLoading, renderEmptyState, client-side routing). Phase 2 — Per-Module: for EACH module implement list view (with empty state + loading), create/edit forms (with validation + submit loading), delete (with confirmation dialog), success/error toast after every write. Do NOT stop after one module — implement ALL modules from the spec.",
+    ],
+  },
+  impl_fe_skeleton: {
+    title: "Frontend Skeleton",
+    required_artifacts: ["impl/fe_changes/public/index.html", "impl/fe_changes/public/app.js"],
+    instructions: [
+      "This step builds ONLY the app shell. Do NOT implement any module's CRUD views yet.",
+      "Read plan/workplan.json and identify ALL modules from the spec (e.g. Customer Management, Tickets, Dashboard).",
+      "Consume handoff/be_to_fe.json as the backend contract source for API usage.",
+      "Build index.html with: (a) full page layout with sidebar/nav, (b) nav items for EVERY module from the spec, (c) CSS styles for layout, cards, tables, forms, buttons, modals, toasts, loading spinners, empty states, badges.",
+      "Build app.js with: (a) showToast(message, type) function, (b) showConfirmDialog(message, onConfirm) function, (c) renderLoading(container) function, (d) renderEmptyState(container, message, actionLabel, onAction) function, (e) escapeHtml(text) function, (f) apiFetch(url, options) wrapper with error handling, (g) client-side routing via switchView() that calls render functions for each module, (h) setupNavigation() to wire nav clicks, (i) STUB render function for each module: renderDashboardView(), renderCustomersView(), renderTicketsView(), etc. — each stub should call renderLoading() then show a placeholder.",
+      "Use same-origin relative API paths only. Do not hardcode localhost URLs.",
+      "The skeleton must be a working app that shows navigation between all modules with loading placeholders.",
+    ],
+  },
+  impl_fe_modules: {
+    title: "Frontend Module Implementation",
+    required_artifacts: ["impl/fe_changes/public/app.js", "impl/fe_notes.md"],
+    instructions: [
+      "This step fills in ALL module views in the existing app.js skeleton created by the previous step.",
+      "Read the existing impl/fe_changes/public/app.js — it already has the app shell, shared components (showToast, showConfirmDialog, renderLoading, renderEmptyState, escapeHtml, apiFetch), navigation, and stub render functions.",
+      "Read plan/workplan.json for the FE task list. Read handoff/be_to_fe.json for API contracts.",
+      "For EACH module, replace the stub render function with a full implementation: (a) list view with table, empty state when no data, loading indicator during fetch; (b) create form in a modal with required field validation and inline errors; (c) edit form pre-populated with existing data; (d) delete with showConfirmDialog confirmation; (e) showToast after every successful create/update/delete; (f) error handling with showToast on failure.",
+      "CRITICAL: You MUST implement ALL modules — not just the first one. If the spec has Customer, Tickets, Dashboard — implement all three. Count the modules and verify you implemented each one before finishing.",
+      "Keep ALL existing shared components and navigation code intact. Only replace the stub render functions with full implementations.",
+      "Write impl/fe_notes.md with UI decisions and module coverage summary.",
+      "Verification: count the number of render*View functions that are fully implemented (not stubs). This count MUST equal the number of modules from the spec.",
     ],
   },
   impl_be: {
@@ -93,6 +126,7 @@ export const STEP_CONTRACTS = {
       "Run semantic checks: does the implementation address the stated goal? Does UI match acceptance criteria?",
       "Write verify/qa_report.json: checks array items use fields check_id, layer (deterministic|semantic), description, status (pass|fail|warning), detail. journey_checks items use journey_id, description, status, evidence (string array). rubric_citations use term, criterion, evidence (string), pass (boolean).",
       "Every check detail field must quote a specific observation — never use 'pending human review' or placeholder text.",
+      "UX QUALITY GATE (v3.5): In addition to acceptance criteria, check these UX dimensions and include them in rubric_citations. FAIL_IF_MISSING items must set overall_status to 'fail' if not found: (1) CRUD Delete — grep delete/remove in server.js+app.js, (2) Operation Feedback — grep toast/notification in app.js, (3) Empty State — grep empty/no-found in app.js, (4) Navigation — grep nav/sidebar in index.html, (5) Module Coverage — count spec modules vs app.js views. WARN_IF_MISSING: form validation, loading states.",
     ],
   },
   release_pack: {
@@ -100,6 +134,7 @@ export const STEP_CONTRACTS = {
     required_artifacts: ["release/release_notes.md", "release/artifact_manifest.json", "release/README.md", "release/start.sh"],
     instructions: [
       "Assemble release/release_notes.md as the human-readable package summary.",
+      "CRITICAL: release_notes.md MUST describe ONLY features actually implemented and verified. Read verify/qa_report.json and smoke/smoke_result.json to determine which features passed. Do NOT copy the Goal verbatim as 'what was built'. If a Goal feature was not implemented or failed QA, state it explicitly as 'Not included in this release'. Overstating delivered functionality is a release governance violation.",
       "Assemble release/artifact_manifest.json as the machine-readable package manifest.",
       "Assemble impl/fe_changes/public/* into impl/be_changes/public/ before writing run instructions.",
       "Write release/README.md using real commands inferred from impl/be_changes/package.json, impl/be_changes/server.js, and smoke/smoke_result.json when present.",

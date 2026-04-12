@@ -17,6 +17,18 @@
         },
         "qwq:latest": {
           "name": "qwq:latest"
+        },
+        "gemma4:26b": {
+          "name": "gemma4:26b",
+          "options": {
+            "maxTokens": 16000
+          }
+        },
+        "gemma4:31b": {
+          "name": "gemma4:31b",
+          "options": {
+            "maxTokens": 16000
+          }
         }
       }
     },

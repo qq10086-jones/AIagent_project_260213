@@ -23,15 +23,19 @@
       "prompt_script_id": "backend.impl.v1"
     },
     {
-      "id": "impl_fe",
+      "id": "impl_fe_skeleton",
+      "role": "frontend",
+      "tool": "coding.delegate",
+      "gate": "policy",
+      "prompt_script_id": "frontend.impl.v1"
+    },
+    {
+      "id": "impl_fe_modules",
       "role": "frontend",
       "tool": "coding.delegate",
       "gate": "policy",
       "prompt_script_id": "frontend.impl.v1",
-      "fe_safe_input_classes": [
-        "fe_led",
-        "fullstack"
-      ]
+      "depends_on": ["impl_fe_skeleton"]
     },
     {
       "id": "smoke_test",

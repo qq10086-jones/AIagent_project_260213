@@ -30,8 +30,8 @@
     {
       "id": "ARCH-05",
       "category": "input_validation",
-      "rule": "EVERY POST/PUT endpoint MUST validate: (a) required fields non-empty (reject blank name/title/etc with 400); (b) enum fields against whitelist (status in ['open','in_progress','resolved','closed']; priority in ['low','medium','high']); (c) foreign-key existence (comment POST requires ticket_id exists, else 404); (d) max length on text fields. interfaces.md MUST document 400 validation response shape with {error, field, message}.",
-      "workplan_check": "be_tasks includes explicit 'validate input' subtasks per endpoint with enum/FK checks.",
+      "rule": "Derive validation rules from the spec (not hardcoded): (a) required fields = spec fields marked required/not-null; (b) enum whitelists = any spec field with documented allowed values; (c) foreign keys = any spec relationship (e.g. comment→ticket); (d) max length = any spec field with size constraint, else 500 default. interfaces.md MUST document the 400 validation response shape {error: string, field: string, message: string} and apply it to every POST/PUT.",
+      "workplan_check": "be_tasks includes 'validate input' subtask per POST/PUT endpoint referencing the spec's required/enum/FK constraints.",
       "severity": "critical"
     },
     {
@@ -39,12 +39,6 @@
       "category": "delete_semantics",
       "rule": "DELETE /resource/:id MUST check existence first. Return 404 if id not found, 204 on successful delete. Never return 200 success for missing rows.",
       "workplan_check": "be_tasks for DELETE include 'check exists or 404' step."
-    },
-    {
-      "id": "ARCH-07",
-      "category": "escape_html_dep",
-      "rule": "handoff/be_to_fe.json MUST mark which API response fields contain user-controlled strings (names, titles, comments, descriptions). FE uses this list to know what to escape with escapeHtml.",
-      "workplan_check": "handoff/be_to_fe.json has 'user_controlled_fields' key or similar annotation."
     }
   ]
 }

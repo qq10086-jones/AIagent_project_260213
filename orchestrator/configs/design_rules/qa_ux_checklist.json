@@ -55,26 +55,44 @@
     {
       "id": "QA-SEC-01",
       "category": "xss_escapehtml",
-      "check": "Every user-controlled string interpolated into HTML (innerHTML, template literals) passes through escapeHtml(). Specifically: showConfirmDialog message, ticket comments, customer names in delete dialogs.",
-      "grep_pattern": "innerHTML.*\\${(?!escapeHtml)",
-      "severity": "fail_if_missing",
-      "note": "FAIL if any raw ${userValue} appears in innerHTML assignment."
+      "check": "Every user-controlled string interpolated into HTML (innerHTML/outerHTML/insertAdjacentHTML/template literals) passes through escapeHtml(). Specifically: showConfirmDialog message, ticket comments, customer names in delete dialogs, entity names rendered in modals.",
+      "detection_method": "negative_check",
+      "danger_patterns": [
+        "innerHTML\\s*=\\s*.*\\$\\{(?:(?!escapeHtml)[^}])+\\}",
+        "outerHTML\\s*=\\s*.*\\$\\{(?:(?!escapeHtml)[^}])+\\}",
+        "insertAdjacentHTML\\([^)]*\\$\\{(?:(?!escapeHtml)[^}])+\\}"
+      ],
+      "pcre2_required": true,
+      "verify_instructions": "Read app.js and enumerate every innerHTML/outerHTML/insertAdjacentHTML assignment. For each, list the interpolated variables and confirm they either come from constant strings OR pass through escapeHtml(). Manual read is more reliable than regex — do NOT rely solely on grep.",
+      "severity": "fail_if_present",
+      "note": "FAIL if any raw ${userValue} appears in innerHTML-family assignment without escapeHtml wrapper. This is a stored XSS vector."
     },
     {
       "id": "QA-SEC-02",
       "category": "class_injection",
-      "check": "Status/priority badge class names use whitelist lookup, not raw interpolation of user values.",
-      "grep_pattern": "class=\"[^\"]*\\${(status|priority|type)",
-      "severity": "warning_if_missing",
-      "note": "WARN if class attributes interpolate raw status/priority."
+      "check": "Status/priority/type badge class names use whitelist lookup (const STATUS_CLASS = {...}), not raw interpolation of user-controlled enum values into class attributes.",
+      "detection_method": "negative_check",
+      "danger_patterns": [
+        "class\\s*=\\s*[\"'`][^\"'`]*\\$\\{[^}]*(?:status|priority|type|kind|state)[^}]*\\}",
+        "classList\\.add\\([^)]*(?:status|priority|type)[^)]*\\)"
+      ],
+      "verify_instructions": "Read app.js. Find every class attribute interpolation and every classList.add() call. Confirm the value comes from a static whitelist map keyed by the user value, not the raw value itself.",
+      "severity": "warning_if_present",
+      "note": "WARN if class attributes or classList.add calls use raw status/priority/type. CSS class injection can load unintended stylesheets or trigger CSS-based data exfil."
     },
     {
       "id": "QA-SEC-03",
       "category": "be_input_validation",
-      "check": "PUT/POST endpoints validate required fields and enum values. DELETE returns 404 for missing rows.",
-      "grep_pattern": "if\\s*\\(!.*name\\)|if\\s*\\(!.*title\\)|return\\s+.*(400|404)",
+      "check": "PUT/POST endpoints validate required fields and enum values. DELETE returns 404 for missing rows, 204 on success.",
+      "detection_method": "positive_check",
+      "required_patterns": [
+        "400|Bad Request|validation",
+        "404|not found|Not Found",
+        "(res|response)\\.status\\((400|404)\\)"
+      ],
+      "verify_instructions": "Read server.js. For EACH POST/PUT handler: confirm it checks required fields non-empty and returns 400 on failure. For EACH DELETE handler: confirm it checks existence and returns 404 (or 204 on success). For enum fields from the spec (e.g. ticket status/priority if defined), confirm the handler whitelists against the enum.",
       "severity": "fail_if_missing",
-      "note": "Server.js must reject blank required fields and return 404 on missing delete targets."
+      "note": "Server.js must reject blank required fields and return 404 on missing delete targets. Enums derived from spec, not hardcoded."
     },
     {
       "id": "QA-CONSISTENCY-01",

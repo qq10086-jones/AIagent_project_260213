@@ -34,12 +34,13 @@ console.log(`[static_audit] mode=${mode} workspace=${workspaceRoot} artifact_roo
 
 const scannerFiles = [
   "scanners/xss_scanner.mjs",
+  "scanners/class_injection.mjs",
   "scanners/delete_semantics.mjs",
-  // scanners/class_injection.mjs     — Phase 2
-  // scanners/be_contract_checker.mjs — Phase 2
+  "scanners/be_contract_checker.mjs",
 ];
 
 const scannerResults = {};
+let portOffset = 0;
 for (const rel of scannerFiles) {
   const scannerPath = path.resolve(__dirname, rel);
   if (!fs.existsSync(scannerPath)) {
@@ -48,7 +49,10 @@ for (const rel of scannerFiles) {
   }
   try {
     const mod = await import(`file://${scannerPath.replace(/\\/g, "/")}`);
-    const result = await mod.run({ workspaceRoot, artifactRoot, port });
+    // Scanners that need an HTTP server get a unique port so they can run sequentially
+    // without port-in-use races.
+    const result = await mod.run({ workspaceRoot, artifactRoot, port: port + portOffset });
+    portOffset++;
     scannerResults[result.scanner_id || rel] = result;
     console.log(`[static_audit] ${result.scanner_id}: ${result.status} (${result.findings.length} finding(s), ${result.duration_ms}ms)`);
   } catch (err) {

@@ -1,6 +1,6 @@
 {
   "from_step": "impl_be",
-  "to_step": "impl_fe",
+  "to_step": "impl_fe_skeleton",
   "be_changes_path": "impl/be_changes",
   "api_contracts": [
     {

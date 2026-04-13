@@ -1,0 +1,49 @@
+{
+  "version": "1.0",
+  "description": "Design quality rules injected into PM step to ensure production-grade UX in generated systems. Each rule category maps to concrete acceptance criteria the PM must emit.",
+  "source_references": ["twentyhq/twenty", "shadcn-ui/ui", "calcom/cal.com", "makeplane/plane"],
+  "rules": {
+    "crud_completeness": {
+      "rule": "Every entity/resource MUST have Create, Read (list + detail), Update, and DELETE operations.",
+      "delete_requires": "Confirmation dialog or prompt before destructive action.",
+      "list_requires": "Table or card view with at least: name/title column, created date, action buttons (edit, delete).",
+      "detail_requires": "Read-only detail view or inline edit form for each entity."
+    },
+    "operation_feedback": {
+      "rule": "Every write operation (create, update, delete) MUST show success or failure feedback to the user.",
+      "mechanism": "Toast notification, inline status message, or modal confirmation.",
+      "required_states": ["success", "error"],
+      "timing": "Feedback must appear within 2 seconds of operation completion."
+    },
+    "empty_states": {
+      "rule": "Every list or collection view MUST have an empty state when no data exists.",
+      "requirements": [
+        "Descriptive text explaining what will appear here",
+        "Primary action button to create the first item (e.g. 'Add your first customer')"
+      ]
+    },
+    "form_validation": {
+      "rule": "All forms MUST validate required fields before submission.",
+      "inline_errors": "Show field-level error messages next to invalid fields on submit.",
+      "submit_button": "Show loading/disabled state during submission to prevent double-submit."
+    },
+    "loading_states": {
+      "rule": "Every async data fetch MUST show a loading indicator while pending.",
+      "mechanism": "Spinner, skeleton, or 'Loading...' text in the data container."
+    },
+    "error_handling": {
+      "network_error": "Show error message with a retry option when API calls fail.",
+      "not_found": "Show 'not found' message with navigation back to list.",
+      "form_error": "Show server-side validation errors inline without losing form data."
+    },
+    "navigation": {
+      "rule": "Multi-module apps MUST have persistent navigation (sidebar or top nav) between all modules.",
+      "active_state": "Current module must be visually highlighted in navigation.",
+      "breadcrumbs": "Detail/edit views should show path back to list view."
+    },
+    "module_coverage": {
+      "rule": "The frontend MUST implement ALL modules defined in the spec, not just the first one.",
+      "each_module_requires": "Its own list view, create/edit form, and detail view at minimum."
+    }
+  }
+}

@@ -64,7 +64,8 @@ function main() {
   assert.match(crmServerText, /app\.get\('\/api\/customers'/);
   assert.match(crmServerText, /express\.static\(publicDir\)/);
   assert.match(crmServerText, /process\.env\.PORT/);
-  assert.doesNotMatch(crmServerText, /app\.delete\('\/api\/customers\/:id'/);
+  assert.match(crmServerText, /app\.delete\('\/api\/customers\/:id'/);
+  assert.match(crmServerText, /app\.get\('\/api\/activity'/);
   assert.doesNotMatch(crmServerText, /app\.get\('\/health'/);
   const crmSpecText = buildArtifactTemplate({
     relPath: "plan/spec.md",

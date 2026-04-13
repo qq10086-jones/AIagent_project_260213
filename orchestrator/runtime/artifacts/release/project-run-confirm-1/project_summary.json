@@ -2,9 +2,9 @@
   "project_id": "proj-test",
   "project_title": "Test Project",
   "status": "COMPLETED",
-  "started_at": "2026-04-10T04:45:29.862Z",
-  "completed_at": "2026-04-10T04:45:29.874Z",
-  "duration_ms": 12,
+  "started_at": "2026-04-12T13:49:24.245Z",
+  "completed_at": "2026-04-12T13:49:24.246Z",
+  "duration_ms": 1,
   "total_runs": 2,
   "completed": 2,
   "failed": 0,
@@ -26,7 +26,7 @@
       "task_class": "be_create",
       "status": "COMPLETED",
       "workflow_run_id": "wf-proj-test__R-02",
-      "duration_ms": 1,
+      "duration_ms": null,
       "error": null
     }
   ],

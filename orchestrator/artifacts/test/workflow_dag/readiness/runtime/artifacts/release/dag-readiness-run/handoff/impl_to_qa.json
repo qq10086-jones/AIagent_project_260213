@@ -1,7 +1,7 @@
 {
   "from_steps": [
     "impl_be",
-    "impl_fe"
+    "impl_fe_modules"
   ],
   "to_step": "qa_verify",
   "be_changes_path": "impl/be_changes",

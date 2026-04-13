@@ -2,7 +2,7 @@
   "from_step": "arch_design",
   "to_steps": [
     "impl_be",
-    "impl_fe"
+    "impl_fe_skeleton"
   ],
   "modules": [
     "auth-service"

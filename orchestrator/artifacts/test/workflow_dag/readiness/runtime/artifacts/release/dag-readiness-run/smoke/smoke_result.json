@@ -1,0 +1,13 @@
+{
+  "verdict": "pass",
+  "install_ok": true,
+  "server_started": true,
+  "root_check": {
+    "passed": true,
+    "status": 200
+  },
+  "api_check": {
+    "passed": true,
+    "status": 200
+  }
+}

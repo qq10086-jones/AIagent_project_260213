@@ -121,11 +121,26 @@ def compute_features_for_symbol(
 
 # ── DB I/O ───────────────────────────────────────────────────────
 
-def load_prices_from_db(conn: sqlite3.Connection) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load all daily_prices into (close_df, volume_df) pivot tables."""
-    rows = conn.execute(
-        "SELECT symbol, date, close, volume FROM daily_prices ORDER BY date"
-    ).fetchall()
+def load_prices_from_db(
+    conn: sqlite3.Connection,
+    asof: Optional[str] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load daily_prices into (close_df, volume_df) pivot tables.
+
+    ``asof`` (YYYY-MM-DD) bounds the history at the SQL layer so backtest
+    callers cannot accidentally read future data. When ``asof`` is None,
+    the full table is loaded — reserve this for live refresh paths only.
+    """
+    if asof is not None:
+        rows = conn.execute(
+            "SELECT symbol, date, close, volume FROM daily_prices "
+            "WHERE date <= ? ORDER BY date",
+            (str(asof),),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT symbol, date, close, volume FROM daily_prices ORDER BY date"
+        ).fetchall()
     df = pd.DataFrame(rows, columns=["symbol", "date", "close", "volume"])
     df["date"] = pd.to_datetime(df["date"])
     close  = df.pivot(index="date", columns="symbol", values="close").sort_index()
@@ -176,7 +191,7 @@ def run_compute_price_features(
 
     conn = sqlite3.connect(db_path)
     try:
-        close, volume = load_prices_from_db(conn)
+        close, volume = load_prices_from_db(conn, asof=asof)
 
         # Only keep symbols that have a price row on or before asof
         # (point-in-time safe: use data up to and including asof)

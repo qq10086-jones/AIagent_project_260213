@@ -472,10 +472,18 @@ def main() -> None:
     sector_map = load_sector_map(conn)
     review_frequency_days = int(promo_rules.get("review_frequency_days", 30) or 30)
 
-    print("Loading daily_prices from DB...")
+    # PIT guard (D-8 P0): bound price history by the logical review date so
+    # IC computed for historical rebalance points cannot read future closes.
+    # asof_override is the natural anchor (review date). When absent, anchor
+    # to today — live usage is still PIT-correct because "today" is already
+    # the max available asof.
+    pit_asof = str(args.asof_override) if args.asof_override else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    print(f"Loading daily_prices from DB (PIT asof<={pit_asof})...")
     raw = pd.read_sql_query(
-        "SELECT date, symbol, close, volume FROM daily_prices ORDER BY date, symbol",
+        "SELECT date, symbol, close, volume FROM daily_prices "
+        "WHERE date <= :asof ORDER BY date, symbol",
         conn,
+        params={"asof": pit_asof},
     )
     if raw.empty:
         print("No data in daily_prices. Run db_update.py first.")

@@ -218,37 +218,53 @@ def refresh_positions_market_prices(db_path: str, asof: str) -> int:
     return refreshed
 
 
-def _latest_fundamental_status(db_path: str) -> dict:
+def _latest_fundamental_status(db_path: str, asof: str | None = None) -> dict:
+    """Summarise fundamentals freshness bounded by ``asof`` (PIT D-8 P0).
+
+    When ``asof`` is provided, all aggregates respect ``available_ts <= asof``
+    so backfill/replay runs cannot leak future disclosures into today's
+    decision rules. ``asof`` should be the trading-date asof used by the
+    surrounding pipeline step; None preserves legacy all-rows behaviour for
+    live-only diagnostics.
+    """
+    asof_clause = "AND available_ts <= :asof" if asof else ""
+    params = {"asof": asof} if asof else {}
     with sqlite3.connect(db_path) as conn:
         source_rows = conn.execute(
-            """
+            f"""
             SELECT source, COUNT(*), COUNT(DISTINCT symbol), MAX(available_ts)
             FROM fundamental_snapshots
+            WHERE 1=1 {asof_clause}
             GROUP BY source
             ORDER BY MAX(available_ts) DESC
-            """
+            """,
+            params,
         ).fetchall()
         latest_row = conn.execute(
-            """
+            f"""
             SELECT source, available_ts
             FROM fundamental_snapshots
-            WHERE available_ts IS NOT NULL
+            WHERE available_ts IS NOT NULL {asof_clause}
             ORDER BY available_ts DESC
             LIMIT 1
-            """
+            """,
+            params,
         ).fetchone()
         summary_row = conn.execute(
-            """
+            f"""
             SELECT COUNT(*), COUNT(DISTINCT symbol)
             FROM fundamental_snapshots
-            """
+            WHERE 1=1 {asof_clause}
+            """,
+            params,
         ).fetchone()
         null_available_row = conn.execute(
-            """
+            f"""
             SELECT COUNT(*)
             FROM fundamental_snapshots
-            WHERE available_ts IS NULL
-            """
+            WHERE available_ts IS NULL {asof_clause.replace('AND ', 'OR ') if asof else ''}
+            """,
+            params,
         ).fetchone()
     latest_source = str(latest_row[0]) if latest_row and latest_row[0] is not None else None
     latest_rows = int(summary_row[0] or 0) if summary_row else 0
@@ -662,7 +678,7 @@ def export_read_only_paper_snapshot(db_path: str, reports_dir: Path, strategy_id
     return payload
 
 
-def run_fundamentals_step(cfg: dict, db_path: str, reports_dir: Path) -> dict:
+def run_fundamentals_step(cfg: dict, db_path: str, reports_dir: Path, asof: str | None = None) -> dict:
     fund = cfg.get("fundamental", {})
     status = {
         "step_status": "disabled",
@@ -675,7 +691,7 @@ def run_fundamentals_step(cfg: dict, db_path: str, reports_dir: Path) -> dict:
         "message": "Fundamental refresh disabled.",
     }
     if not fund.get("enabled", False):
-        status.update(_latest_fundamental_status(db_path))
+        status.update(_latest_fundamental_status(db_path, asof=asof))
         write_fundamental_status_report(reports_dir, status)
         return status
 
@@ -683,7 +699,7 @@ def run_fundamentals_step(cfg: dict, db_path: str, reports_dir: Path) -> dict:
     if not run_on_main_path:
         status["step_status"] = "skipped_main_path"
         status["message"] = "Refresh skipped on main path; using latest cached fundamentals from DB."
-        status.update(_latest_fundamental_status(db_path))
+        status.update(_latest_fundamental_status(db_path, asof=asof))
         write_fundamental_status_report(reports_dir, status)
         return status
 
@@ -709,7 +725,7 @@ def run_fundamentals_step(cfg: dict, db_path: str, reports_dir: Path) -> dict:
         allow_stale = bool(fund.get("allow_stale_on_failure", True))
         status["step_status"] = "degraded_cached" if allow_stale else "failed"
         status["message"] = str(exc)
-        status.update(_latest_fundamental_status(db_path))
+        status.update(_latest_fundamental_status(db_path, asof=asof))
         write_fundamental_status_report(reports_dir, status)
         if not allow_stale:
             raise
@@ -985,7 +1001,7 @@ def main():
 
     # 1.5) Optional fundamentals update with degraded-cache support
     fund = cfg.get("fundamental", {})
-    fundamentals_status = run_fundamentals_step(cfg, db_path, reports_dir)
+    fundamentals_status = run_fundamentals_step(cfg, db_path, reports_dir, asof=asof)
     emit_runtime_event(
         reports_dir,
         "fundamentals_status",
@@ -1342,18 +1358,47 @@ def main():
             "--initial_cash", str(float(paper.get("initial_cash", exec_cfg.get("initial_capital", 1_000_000)))),
             "--reports_dir", out_dir,
         ]
+        # T0.1: default require_approval=true keeps paper fills behind an explicit
+        # human gate. Override to false only for deterministic simulation/backfill.
+        if not bool(paper.get("require_approval", True)):
+            cmd.append("--no_require_approval")
         if not is_simulation:
             cmd.append("--refresh_data")
         print(">>", " ".join(cmd))
         paper_out = run_and_capture(cmd)
         status_match = re.search(r"run_status:\s*(\S+)", paper_out)
+        paper_status_val = status_match.group(1) if status_match else None
+        # T0.1.1 P0-c: detect the awaiting-approval short-circuit. The
+        # subprocess prints "Paper execution PAUSED" but has no run_status
+        # line, so we also probe the DB state as a fallback.
+        paper_awaiting = bool(re.search(r"approval required", paper_out, re.IGNORECASE))
+        if not paper_awaiting and paper_status_val is None:
+            try:
+                from trade_schema import connect as _connect  # local import to avoid cycle
+                _c = _connect(db_path)
+                row = _c.execute(
+                    "SELECT status FROM decision_runs WHERE run_id=?", (run_id,)
+                ).fetchone()
+                _c.close()
+                if row and row[0] == "awaiting_approval":
+                    paper_awaiting = True
+                    paper_status_val = "awaiting_approval"
+            except Exception:
+                pass
         emit_runtime_event(
             reports_dir,
-            "paper_execute_completed",
+            "paper_awaiting_approval" if paper_awaiting else "paper_execute_completed",
             asof=asof,
             run_id=run_id,
-            paper_status=status_match.group(1) if status_match else None,
+            paper_status=paper_status_val,
+            level="warning" if paper_awaiting else "info",
         )
+        if paper_awaiting:
+            print(
+                f"[paper] run_id={run_id} awaiting approval — skipping downstream "
+                "export/promotion/action_plan/compliance until approved."
+            )
+            return
         try:
             execution_quality = json.loads((Path(out_dir) / "execution_quality.json").read_text(encoding="utf-8"))
         except Exception:

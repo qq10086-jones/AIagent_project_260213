@@ -155,15 +155,18 @@ export function createPatchBundleService({ workspaceRoot }) {
       throw buildPatchError("PATCH_BUNDLE_FILE_MISSING", `patch bundle file not found: ${absoluteBundlePath}`);
     }
     const bundle = JSON.parse(fs.readFileSync(absoluteBundlePath, "utf8"));
-    if (String(bundle?.mode || "") === "full_file_fallback") {
+    const bundleMode = String(bundle?.mode || "");
+    const bundleOps = Array.isArray(bundle?.operations) ? bundle.operations : [];
+    const isPlaceholder = !bundleMode && bundleOps.length === 0;
+    if (bundleMode === "full_file_fallback" || isPlaceholder) {
       return {
         ok: true,
         bundle_id: String(bundle?.bundle_id || ""),
         step_id: String(bundle?.step_id || ""),
-        mode: "full_file_fallback",
+        mode: bundleMode || "full_file_fallback",
         written_files: [],
-        operation_count: Array.isArray(bundle?.operations) ? bundle.operations.length : 0,
-        summary: String(bundle?.summary || ""),
+        operation_count: bundleOps.length,
+        summary: String(bundle?.summary || bundle?.note || ""),
         bundle_path: absoluteBundlePath,
         bundle,
       };

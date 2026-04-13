@@ -214,6 +214,23 @@ export function buildStepPrompt({ run, stepDef, input, payload, promptScript = n
       ...lines,
     ];
   }
+  if (projectType === "webapp_crm") {
+    const crmMandatoryByStep = {
+      arch_design: [
+        "WEBAPP_CRM MANDATORY SURFACE (v3.7.2): plan/interfaces.md MUST include headings for '## GET /api/activity' (returns chronological activity_log stream with fields {id, action, entity, entityId, summary, createdAt}), '## GET /api/dashboard/stats' (returns entity counts + activity count), and per-entity '## GET /api/<resource>/:id' (read-only detail endpoint, distinct from list). plan/workplan.json BE tasks MUST include an 'activity_log' task recording create/update/delete on every entity with a human-readable summary. plan/workplan.json FE tasks MUST include (a) read-only detail view per entity (renderCustomerDetail / renderTicketDetail etc., opened by a 'View' button, distinct from the edit form), (b) dashboard quick action buttons row (Add Customer / New Ticket etc. at top of dashboard, BEFORE stat cards), (c) activity feed rendering GET /api/activity as a single newest-first stream on the dashboard.",
+      ],
+      impl_be: [
+        "WEBAPP_CRM MANDATORY (v3.7.2): You MUST implement an activity_log (in-memory array or table is fine) and record one entry on every POST/PUT/DELETE of other entities with {action, entity, entityId, summary, createdAt}. Expose GET /api/activity returning newest-first, and GET /api/dashboard/stats returning entity counts + activity count. DELETE handlers MUST return 404 if id not found, else 200/204. POST handlers MUST validate required fields per plan/spec.md and return 400 with {error,field,message} on violation.",
+      ],
+      impl_fe_modules: [
+        "WEBAPP_CRM MANDATORY (v3.7.2): renderDashboardView() MUST render, in this order: (1) a row of quick action buttons (e.g. '+ Add Customer', '+ New Ticket') that open each module's create modal, (2) stat cards from GET /api/dashboard/stats, (3) a single chronological activity feed fetched from GET /api/activity (newest-first, one stream, not split per entity). For EACH entity module you MUST implement a dedicated renderCustomerDetail / renderTicketDetail / etc. READ-ONLY view that fetches GET /api/<resource>/:id and renders every field in a <dl>/<dd> layout including createdAt/updatedAt — this is opened by the row's 'View' button and is DISTINCT from the edit form. The detail view MUST have [Edit] and [Delete] action buttons.",
+      ],
+    };
+    const extra = crmMandatoryByStep[String(stepDef?.id || "")] || null;
+    if (extra) {
+      effectiveLines = [...extra, ...effectiveLines];
+    }
+  }
   const guidance = effectiveLines.length > 0
     ? `Execution requirements:\n- ${effectiveLines.join("\n- ")}`
     : "Execution requirements: complete this step with verifiable outputs.";

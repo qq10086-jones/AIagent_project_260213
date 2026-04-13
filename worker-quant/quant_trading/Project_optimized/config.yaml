@@ -198,6 +198,7 @@ decision:
   out_dir: artifacts/decision
 paper:
   enabled: true
+  require_approval: false  # paper auto-fills; decision timing moves intraday (see T1 plan)
   price_mode: latest
   slippage_bps: 5.0
   fee_bps: 0.0

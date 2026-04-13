@@ -1006,6 +1006,28 @@ export function createStepBuilder({ registry, promptScriptRegistry, handoffContr
       }
       // R3: For impl steps, inject handoff + workplan BEFORE context so LLM sees spec first
       if ((String(stepDef.id || "") === "impl_be" || isFrontendStep(stepDef.id))) {
+        // C-path (v3.7.3): impl steps read plan/spec.md directly so they pick up
+        // feature requirements that aren't hard-coded in the project_type contract.
+        const implSpecPath = path.resolve(workspaceRoot, artifactRoot, "plan/spec.md");
+        if (fs.existsSync(implSpecPath)) {
+          try {
+            const specText = fs.readFileSync(implSpecPath, "utf8");
+            const maxSpecChars = 6000;
+            const specBody = specText.length > maxSpecChars
+              ? `${specText.slice(0, maxSpecChars)}\n...[truncated ${specText.length - maxSpecChars} chars]`
+              : specText;
+            const specBlock = [
+              "",
+              "[PM Spec — plan/spec.md (authoritative feature source)]",
+              "Read this spec as the PRIMARY source of required features. The project_type contract is a baseline; any feature named in this spec MUST be implemented even if not in the baseline.",
+              "",
+              specBody,
+              "",
+              "[End plan/spec.md]",
+            ].join("\n");
+            payload.task_prompt = `${payload.task_prompt}${specBlock}`;
+          } catch { /* spec injection is best-effort */ }
+        }
         const archHandoffPath = path.resolve(workspaceRoot, artifactRoot, "handoff/architect_to_impl.json");
         if (fs.existsSync(archHandoffPath)) {
           try {

@@ -1,0 +1,46 @@
+{
+  "generated_at_utc": "2026-04-13T14:39:47Z",
+  "strategy_id": "sprint",
+  "period": {
+    "start": "2026-02-27",
+    "end": "2026-04-13",
+    "n_snapshots": 7
+  },
+  "nav": {
+    "start": 400100.0,
+    "end": 400045.0,
+    "cum_return_pct": -0.013746563359162689,
+    "max_drawdown_pct": -0.5234365286584608,
+    "sharpe_annualised": -0.08162357270598354,
+    "daily_return_t_stat": -0.01259479070440763
+  },
+  "benchmarks": {
+    "topix_1321T_price_return": {
+      "note": "price-return only; total-return unavailable without dividend data",
+      "cum_return_pct": -3.2068062827225186,
+      "sharpe_annualised": -1.568609490742312
+    },
+    "held_universe_equal_weight": {
+      "members": [
+        "9432.T",
+        "7267.T",
+        "4005.T",
+        "3041.T"
+      ],
+      "cum_return_pct": -11.12449157658374,
+      "sharpe_annualised": -6.871064001127565
+    },
+    "cash_zero_risk": {
+      "cum_return_pct": 0.0,
+      "note": "ignores JPY cash rate (~0%)"
+    },
+    "sector_neutral": {
+      "cum_return_pct": null,
+      "note": "TBD — requires TSE 33 sector mapping per Phase -1 D-1 data hygiene"
+    }
+  },
+  "excess_vs_topix_pct": 3.193059719363356,
+  "excess_vs_held_pct": 11.110745013224577,
+  "information_ratio_vs_topix": 1.6174964457755427,
+  "sample_size_warning": "n_snapshots < 20 — Sharpe/IR/t-stat are not statistically meaningful yet. Read the level of the returns, not the ratios."
+}

@@ -63,7 +63,7 @@ function collectChangedFiles(output = {}) {
 function isCodingTeamImplementationStep(run, stepId) {
   return (
     String(run?.workflow_id || "") === "coding_team_v0" &&
-    (["impl_fe", "impl_fe_modules"].includes(String(stepId || "")) || String(stepId || "") === "impl_be")
+    (["impl_fe", "impl_fe_skeleton", "impl_fe_modules"].includes(String(stepId || "")) || String(stepId || "") === "impl_be")
   );
 }
 

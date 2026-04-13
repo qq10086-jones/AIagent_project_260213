@@ -1,1 +1,5 @@
-Sharpe is treated as a governance metric and promotion gate in this patch. It is not used here as a standalone regression target.
+# PROMOTION VOIDED
+
+All v1 promotion recommendations are archived and marked `voided_awaiting_v2_gate`.
+Reason: v1 gate is not out-of-sample and has no multiple-testing correction.
+Next authoritative promotion can only be issued after the v2 Research-Framework Gate (docs/design/2026-04-13_quant_refactor_plan.md) passes.

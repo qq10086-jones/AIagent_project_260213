@@ -8,25 +8,46 @@
       "agent_id": "pm_agent",
       "artifact_type": "design_doc",
       "goal": "Produce a scoped product design document with user stories, acceptance criteria, and phased milestones.",
-      "required_sections": ["user_stories", "scope_boundaries", "acceptance_criteria", "milestones"],
+      "required_sections": [
+        "user_stories",
+        "scope_boundaries",
+        "acceptance_criteria",
+        "milestones"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
-          "goal": { "type": "string" },
-          "project_type": { "type": "string" }
+          "goal": {
+            "type": "string"
+          },
+          "project_type": {
+            "type": "string"
+          }
         }
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "spec_path": { "type": "string" },
-          "acceptance_path": { "type": "string" },
-          "milestones_path": { "type": "string" }
+          "spec_path": {
+            "type": "string"
+          },
+          "acceptance_path": {
+            "type": "string"
+          },
+          "milestones_path": {
+            "type": "string"
+          }
         }
       },
-      "tool_permissions": ["coding.delegate"],
+      "tool_permissions": [
+        "coding.delegate"
+      ],
       "validation": {
-        "required_files": ["plan/spec.md", "plan/acceptance.json", "plan/milestones.md"],
+        "required_files": [
+          "plan/spec.md",
+          "plan/acceptance.json",
+          "plan/milestones.md"
+        ],
         "min_word_count": 200
       }
     },
@@ -37,27 +58,51 @@
       "agent_id": "architect_agent",
       "artifact_type": "system_spec",
       "goal": "Generate a system specification with architecture decisions, module boundaries, and risk notes.",
-      "required_sections": ["module_breakdown", "interfaces", "dependency_choices", "risk_notes"],
+      "required_sections": [
+        "module_breakdown",
+        "interfaces",
+        "dependency_choices",
+        "risk_notes"
+      ],
       "system_prompt": "Generate a system specification with module boundaries, interfaces, dependency choices, implementation sequence, and risk notes. In plan/interfaces.md, define every concrete HTTP endpoint, internal RPC, or event as its own markdown heading such as '## GET /api/customers' or '## Event: customer.created'. Under each heading, include request shape, response shape or payload shape, and auth requirement. In plan/arch.md, keep the Interfaces section as a short summary that points to plan/interfaces.md rather than replacing it.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "goal": { "type": "string" },
-          "project_type": { "type": "string" }
+          "goal": {
+            "type": "string"
+          },
+          "project_type": {
+            "type": "string"
+          }
         }
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "arch_path": { "type": "string" },
-          "interfaces_path": { "type": "string" },
-          "risk_report_path": { "type": "string" },
-          "workplan_path": { "type": "string" }
+          "arch_path": {
+            "type": "string"
+          },
+          "interfaces_path": {
+            "type": "string"
+          },
+          "risk_report_path": {
+            "type": "string"
+          },
+          "workplan_path": {
+            "type": "string"
+          }
         }
       },
-      "tool_permissions": ["coding.delegate"],
+      "tool_permissions": [
+        "coding.delegate"
+      ],
       "validation": {
-        "required_files": ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md"],
+        "required_files": [
+          "plan/arch.md",
+          "plan/interfaces.md",
+          "risk/risk_report.json",
+          "plan/workplan.md"
+        ],
         "min_word_count": 300
       }
     },
@@ -68,32 +113,69 @@
       "agent_id": "architect_agent",
       "artifact_type": "system_spec",
       "goal": "Generate a comprehensive system specification with ADRs, module boundaries, interfaces, and workplan.",
-      "required_sections": ["module_breakdown", "interfaces", "dependency_choices", "risk_notes", "adr", "workplan"],
+      "required_sections": [
+        "module_breakdown",
+        "interfaces",
+        "dependency_choices",
+        "risk_notes",
+        "adr",
+        "workplan"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
-          "goal": { "type": "string" },
-          "project_type": { "type": "string" },
-          "prior_adrs": { "type": "array" },
-          "project_context": { "type": "object" }
+          "goal": {
+            "type": "string"
+          },
+          "project_type": {
+            "type": "string"
+          },
+          "prior_adrs": {
+            "type": "array"
+          },
+          "project_context": {
+            "type": "object"
+          }
         }
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "arch_path": { "type": "string" },
-          "interfaces_path": { "type": "string" },
-          "risk_report_path": { "type": "string" },
-          "workplan_path": { "type": "string" },
-          "workplan_json_path": { "type": "string" },
-          "adr_paths": { "type": "array" }
+          "arch_path": {
+            "type": "string"
+          },
+          "interfaces_path": {
+            "type": "string"
+          },
+          "risk_report_path": {
+            "type": "string"
+          },
+          "workplan_path": {
+            "type": "string"
+          },
+          "workplan_json_path": {
+            "type": "string"
+          },
+          "adr_paths": {
+            "type": "array"
+          }
         }
       },
-      "tool_permissions": ["coding.delegate"],
-      "system_prompt": "You are the system architect. Produce a comprehensive system specification.\n\nADR Template (use for each major technology decision):\n```\n# ADR-{N}: {Title}\n## Status: Proposed | Accepted | Deprecated\n## Context\n{Why this decision is needed}\n## Decision\n{What was decided}\n## Consequences\n{Trade-offs, risks, follow-ups}\n```\n\nRequired outputs:\n- plan/arch.md - Architecture overview with module boundaries and dependency graph\n- plan/interfaces.md - ALL API endpoints with method, path, request/response schemas\n- plan/workplan.md - Human-readable phased implementation tasks split by FE/BE/QA roles\n- plan/workplan.json - Structured workplan with machine-readable be_tasks and fe_tasks arrays for impl step injection\n- risk/risk_report.json - Top risks with severity, mitigation, and owner\n- adr/adr-{N}.md - At least ONE ADR per major technology decision (framework, database, auth, hosting)\n- handoff/architect_to_impl.json - Typed handoff manifest for implementation steps\n\nTyped handoff requirement: handoff/architect_to_impl.json MUST include these exact top-level fields: from_step=\"arch_design\", to_steps=[\"impl_be\",\"impl_fe\"], modules=[\"frontend app\",\"backend api\"], interfaces=[\"GET /api/customers\",\"POST /api/customers\"], decisions=[{\"adr_id\":\"ADR-001\",\"title\":\"Use Express backend\",\"status\":\"accepted\"}], risks=[\"schema drift between FE and BE\",\"missing backend validation\"], workplan={\"be_tasks\":[{\"id\":\"T-BE-1\",\"description\":\"...\",\"verify\":\"...\"}],\"fe_tasks\":[{\"id\":\"T-FE-1\",\"description\":\"...\",\"verify\":\"...\"}]}. Do not omit workplan. Do not rename it to implementation_plan, task_breakdown, or any other alias. modules, interfaces, and risks must be arrays of plain strings. decisions must use adr_id, title, and status fields exactly; do not use id, choice, decision, or description fields there. The handoff workplan object must mirror plan/workplan.json.\n\nInterface contract: plan/interfaces.md must enumerate every HTTP endpoint, internal RPC, or event schema used between modules. Each entry must include: method, path, request body shape, response body shape, and auth requirement. For `single_file_html` projects, do NOT invent CRUD APIs. Instead, define browser-facing contracts such as `## GET /`, `## GET /styles.css`, `## GET /app.js`, and any real UI events such as `## Event: faq.toggle` as markdown headings. Static asset headings must still include request body shape (`none`), response shape, and auth requirement.\n\nProject-type guardrail: when `project_type=single_file_html`, keep the architecture static-site specific. Do not introduce CRM, database, auth, or backend CRUD modules unless the goal explicitly asks for them. In `plan/workplan.md`, BE Tasks must stay concrete for static hosting and packaging work (serving `public/`, wiring `GET /`, preview/startup assembly). Do not emit vague `N/A` placeholders.\n\nCoding-team guardrail: when `project_type=webapp_crm`, keep the backend plan aligned with the coding-team runtime contract. Prefer a Node.js/Express backend that produces `impl/be_changes/server.js` and `impl/be_changes/package.json`. Do NOT introduce Python/Flask/Django/FastAPI stacks, API-key auth, or unrelated security middleware unless the user goal explicitly asks for them. Only include endpoints and flows that are explicitly required by the goal, plan/spec.md, plan/acceptance.json, or plan/interfaces.md. Do not add delete, pagination, responsive/mobile polish, mobile-only layouts, search, filtering, or admin/security scope unless they are explicitly requested. When the goal is a minimal or reviewable CRM, do not mention responsive design, responsive styling, mobile polish, breakpoints, or device-specific layout tasks anywhere in plan/workplan.md, plan/workplan.json, or handoff/architect_to_impl.json.\n\nMinimal-scope rule: when the goal contains terms like minimal, reviewable, lightweight, or small, keep the workplan slice intentionally narrow. Cap at 5 BE tasks and 5 FE tasks. Prefer the minimum viable path that satisfies the requested journeys instead of a full CRUD backlog.\n\nADR requirement: produce at minimum one ADR for each of the following categories where a choice is made - frontend framework, backend runtime, data store, authentication mechanism.\n\nIn plan/workplan.md, produce a structured task list for the implementation team using EXACTLY this format:\n\n## BE Tasks\n- [ ] T-BE-1: <one-sentence description> | verify: <concrete assertion or command>\n- [ ] T-BE-2: ...\n\n## FE Tasks\n- [ ] T-FE-1: <one-sentence description> | verify: <concrete assertion or command>\n- [ ] T-FE-2: ...\n\nIn plan/workplan.json, write valid JSON with EXACTLY this top-level shape:\n{\n  \"be_tasks\": [{ \"id\": \"T-BE-1\", \"description\": \"...\", \"verify\": \"...\" }],\n  \"fe_tasks\": [{ \"id\": \"T-FE-1\", \"description\": \"...\", \"verify\": \"...\" }]\n}\nRules for both markdown and JSON workplans: each task must be completable in one function or one file section; the verify field must be a concrete checkable assertion or command (e.g. 'GET /api/tasks returns 200 with array'); maximum 8 tasks per team unless the minimal-scope rule applies; order tasks by dependency (upstream first); no vague verify fields like 'ensure it works'. The markdown and JSON workplans must describe the same task set.",
+      "tool_permissions": [
+        "coding.delegate"
+      ],
+      "system_prompt": "You are the system architect. Produce a comprehensive system specification.\n\nADR Template (use for each major technology decision):\n```\n# ADR-{N}: {Title}\n## Status: Proposed | Accepted | Deprecated\n## Context\n{Why this decision is needed}\n## Decision\n{What was decided}\n## Consequences\n{Trade-offs, risks, follow-ups}\n```\n\nRequired outputs:\n- plan/arch.md - Architecture overview with module boundaries and dependency graph\n- plan/interfaces.md - ALL API endpoints with method, path, request/response schemas\n- plan/workplan.md - Human-readable phased implementation tasks split by FE/BE/QA roles\n- plan/workplan.json - Structured workplan with machine-readable be_tasks and fe_tasks arrays for impl step injection\n- risk/risk_report.json - Top risks with severity, mitigation, and owner\n- adr/adr-{N}.md - At least ONE ADR per major technology decision (framework, database, auth, hosting)\n- handoff/architect_to_impl.json - Typed handoff manifest for implementation steps\n\nTyped handoff requirement: handoff/architect_to_impl.json MUST include these exact top-level fields: from_step=\"arch_design\", to_steps=[\"impl_be\",\"impl_fe\"], modules=[\"frontend app\",\"backend api\"], interfaces=[\"GET /api/customers\",\"POST /api/customers\"], decisions=[{\"adr_id\":\"ADR-001\",\"title\":\"Use Express backend\",\"status\":\"accepted\"}], risks=[\"schema drift between FE and BE\",\"missing backend validation\"], workplan={\"be_tasks\":[{\"id\":\"T-BE-1\",\"description\":\"...\",\"verify\":\"...\"}],\"fe_tasks\":[{\"id\":\"T-FE-1\",\"description\":\"...\",\"verify\":\"...\"}]}. Do not omit workplan. Do not rename it to implementation_plan, task_breakdown, or any other alias. modules, interfaces, and risks must be arrays of plain strings. decisions must use adr_id, title, and status fields exactly; do not use id, choice, decision, or description fields there. The handoff workplan object must mirror plan/workplan.json.\n\nInterface contract: plan/interfaces.md must enumerate every HTTP endpoint, internal RPC, or event schema used between modules. Each entry must include: method, path, request body shape, response body shape, and auth requirement. For `single_file_html` projects, do NOT invent CRUD APIs. Instead, define browser-facing contracts such as `## GET /`, `## GET /styles.css`, `## GET /app.js`, and any real UI events such as `## Event: faq.toggle` as markdown headings. Static asset headings must still include request body shape (`none`), response shape, and auth requirement.\n\nProject-type guardrail: when `project_type=single_file_html`, keep the architecture static-site specific. Do not introduce CRM, database, auth, or backend CRUD modules unless the goal explicitly asks for them. In `plan/workplan.md`, BE Tasks must stay concrete for static hosting and packaging work (serving `public/`, wiring `GET /`, preview/startup assembly). Do not emit vague `N/A` placeholders.\n\nCoding-team guardrail: when `project_type=webapp_crm`, keep the backend plan aligned with the coding-team runtime contract. Prefer a Node.js/Express backend that produces `impl/be_changes/server.js` and `impl/be_changes/package.json`. Do NOT introduce Python/Flask/Django/FastAPI stacks, API-key auth, or unrelated security middleware unless the user goal explicitly asks for them. Only include endpoints and flows that are explicitly required by the goal, plan/spec.md, plan/acceptance.json, or plan/interfaces.md. Do not add delete, pagination, responsive/mobile polish, mobile-only layouts, search, filtering, or admin/security scope unless they are explicitly requested. When the goal is a minimal or reviewable CRM, do not mention responsive design, responsive styling, mobile polish, breakpoints, or device-specific layout tasks anywhere in plan/workplan.md, plan/workplan.json, or handoff/architect_to_impl.json.\n\nSPEC COVERAGE REQUIREMENT (critical): Before producing interfaces.md or workplan.json, read plan/spec.md and enumerate every distinct feature, entity, widget, endpoint, and UX element it mentions (e.g. activity feed, recent activity log, quick action buttons, read-only detail view, delete confirmation, etc.). Your workplan.json MUST contain at least one task covering each enumerated feature. Your interfaces.md MUST expose a concrete endpoint for each feature that needs backend support (e.g. if spec mentions 'activity feed', interfaces.md needs a `GET /api/activity` or equivalent). Dropping any spec feature silently is a failure.\n\nMinimal-scope rule: when the goal contains terms like minimal, reviewable, lightweight, or small, keep the workplan slice intentionally narrow. Cap at 5 BE tasks and 5 FE tasks. Prefer the minimum viable path that satisfies the requested journeys instead of a full CRUD backlog.\n\nADR requirement: produce at minimum one ADR for each of the following categories where a choice is made - frontend framework, backend runtime, data store, authentication mechanism.\n\nIn plan/workplan.md, produce a structured task list for the implementation team using EXACTLY this format:\n\n## BE Tasks\n- [ ] T-BE-1: <one-sentence description> | verify: <concrete assertion or command>\n- [ ] T-BE-2: ...\n\n## FE Tasks\n- [ ] T-FE-1: <one-sentence description> | verify: <concrete assertion or command>\n- [ ] T-FE-2: ...\n\nIn plan/workplan.json, write valid JSON with EXACTLY this top-level shape:\n{\n  \"be_tasks\": [{ \"id\": \"T-BE-1\", \"description\": \"...\", \"verify\": \"...\" }],\n  \"fe_tasks\": [{ \"id\": \"T-FE-1\", \"description\": \"...\", \"verify\": \"...\" }]\n}\nRules for both markdown and JSON workplans: each task must be completable in one function or one file section; the verify field must be a concrete checkable assertion or command (e.g. 'GET /api/tasks returns 200 with array'); maximum 8 tasks per team unless the minimal-scope rule applies; order tasks by dependency (upstream first); no vague verify fields like 'ensure it works'. The markdown and JSON workplans must describe the same task set.",
       "validation": {
-        "required_files": ["plan/arch.md", "plan/interfaces.md", "risk/risk_report.json", "plan/workplan.md", "plan/workplan.json"],
-        "required_dirs": ["adr"],
+        "required_files": [
+          "plan/arch.md",
+          "plan/interfaces.md",
+          "risk/risk_report.json",
+          "plan/workplan.md",
+          "plan/workplan.json"
+        ],
+        "required_dirs": [
+          "adr"
+        ],
         "min_adr_count": 1,
         "min_word_count": 500,
         "interfaces_must_have_endpoints": true
@@ -106,23 +188,38 @@
       "agent_id": "qa_agent",
       "artifact_type": "test_plan",
       "goal": "Produce a test plan mapping acceptance criteria to verifiable test cases with smoke evidence.",
-      "required_sections": ["test_cases", "smoke_evidence", "verification_matrix"],
+      "required_sections": [
+        "test_cases",
+        "smoke_evidence",
+        "verification_matrix"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
-          "goal": { "type": "string" },
-          "acceptance_criteria": { "type": "array" }
+          "goal": {
+            "type": "string"
+          },
+          "acceptance_criteria": {
+            "type": "array"
+          }
         }
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "qa_report_path": { "type": "string" }
+          "qa_report_path": {
+            "type": "string"
+          }
         }
       },
-      "tool_permissions": ["coding.execute", "coding.delegate"],
+      "tool_permissions": [
+        "coding.execute",
+        "coding.delegate"
+      ],
       "validation": {
-        "required_files": ["verify/qa_report.json"],
+        "required_files": [
+          "verify/qa_report.json"
+        ],
         "min_word_count": 150
       }
     },
@@ -133,28 +230,52 @@
       "agent_id": "backend_agent",
       "artifact_type": "backend_impl",
       "goal": "Produce complete backend implementation files and a typed BE-to-FE handoff manifest.",
-      "required_sections": ["api_contracts", "shared_types", "scope_constraints", "run_instructions"],
+      "required_sections": [
+        "api_contracts",
+        "shared_types",
+        "scope_constraints",
+        "run_instructions"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
-          "goal": { "type": "string" },
-          "project_type": { "type": "string" },
-          "architect_handoff_path": { "type": "string" }
+          "goal": {
+            "type": "string"
+          },
+          "project_type": {
+            "type": "string"
+          },
+          "architect_handoff_path": {
+            "type": "string"
+          }
         }
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "be_changes_path": { "type": "string" },
-          "be_notes_path": { "type": "string" },
-          "handoff_path": { "type": "string" }
+          "be_changes_path": {
+            "type": "string"
+          },
+          "be_notes_path": {
+            "type": "string"
+          },
+          "handoff_path": {
+            "type": "string"
+          }
         }
       },
-      "tool_permissions": ["coding.delegate"],
+      "tool_permissions": [
+        "coding.delegate"
+      ],
       "system_prompt": "Implement the backend step as complete files, not diffs. Required outputs: impl/be_changes/* complete backend files, impl/be_changes/package.json, impl/be_notes.md with decisions and run instructions, and handoff/be_to_fe.json matching the typed schema. \n\nTask Tracking (SP-03): In impl/be_notes.md, you MUST include a 'Task Status' section listing every task ID assigned to you in plan/workplan.json (be_tasks), marking each as [COMPLETED] or [SKIPPED] with a brief rationale. \n\nThe handoff must list implemented API endpoints, shared_types, and explicit scope_constraints. handoff/be_to_fe.json MUST include these exact typed fields: from_step=\"impl_be\", to_step=\"impl_fe\", be_changes_path=\"impl/be_changes\", api_contracts=[...], shared_types=[...], scope_constraints=[...]. Do not replace these fields with nested objects or alternative names. Configure server.js to serve static files from a local public/ subdirectory, return public/index.html from GET /, and listen on process.env.PORT when provided. Never omit package.json.",
       "validation": {
-        "required_files": ["impl/be_notes.md", "handoff/be_to_fe.json"],
-        "required_dirs": ["impl/be_changes"],
+        "required_files": [
+          "impl/be_notes.md",
+          "handoff/be_to_fe.json"
+        ],
+        "required_dirs": [
+          "impl/be_changes"
+        ],
         "min_word_count": 120
       }
     },
@@ -165,31 +286,62 @@
       "agent_id": "backend_agent",
       "artifact_type": "backend_impl_patch_bundle",
       "goal": "Produce a structured patch bundle for backend implementation when target files already exist, with full-file fallback when patch output is not viable.",
-      "required_sections": ["patch_operations", "api_contracts", "scope_constraints", "run_instructions"],
+      "required_sections": [
+        "patch_operations",
+        "api_contracts",
+        "scope_constraints",
+        "run_instructions"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
-          "goal": { "type": "string" },
-          "project_type": { "type": "string" },
-          "architect_handoff_path": { "type": "string" },
-          "target_file_context": { "type": "array" },
-          "diff_first_enabled": { "type": "boolean" }
+          "goal": {
+            "type": "string"
+          },
+          "project_type": {
+            "type": "string"
+          },
+          "architect_handoff_path": {
+            "type": "string"
+          },
+          "target_file_context": {
+            "type": "array"
+          },
+          "diff_first_enabled": {
+            "type": "boolean"
+          }
         }
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "patch_bundle_path": { "type": "string" },
-          "be_notes_path": { "type": "string" },
-          "handoff_path": { "type": "string" },
-          "execution_mode_used": { "type": "string" }
+          "patch_bundle_path": {
+            "type": "string"
+          },
+          "be_notes_path": {
+            "type": "string"
+          },
+          "handoff_path": {
+            "type": "string"
+          },
+          "execution_mode_used": {
+            "type": "string"
+          }
         }
       },
-      "tool_permissions": ["coding.delegate"],
+      "tool_permissions": [
+        "coding.delegate"
+      ],
       "system_prompt": "Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Include only deterministic operations of type replace_range, insert_after_anchor, delete_range, or create_file. Write the bundle under impl/be_patch_bundle.json, write impl/be_notes.md with decisions and run instructions, and write handoff/be_to_fe.json matching the typed schema. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/be_changes/ with the same handoff contract.\n\nAdditional required backend outputs:\n- Write impl/be_changes/package.json with name, version, main entry, and all runtime dependencies detected in server.js.\n- If server.js uses express, include \"express\". If it uses cors, include \"cors\".\n- Configure server.js to serve static files from a local 'public/' subdirectory using express.static.\n- The root GET / must return public/index.html.\n- server.js MUST listen on process.env.PORT when provided.\n- Never omit package.json.\n- handoff/be_to_fe.json MUST include these exact typed fields: from_step=\"impl_be\", to_step=\"impl_fe\", be_changes_path=\"impl/be_changes\", api_contracts=[...], shared_types=[...], scope_constraints=[...].\n\nQuality rules (non-negotiable):\n1. No placeholders: every function body must be complete; no TODO comments, no 'throw new Error(\"not implemented\")', no empty stubs.\n2. Self-review after each file: before moving to the next file, check that all imports resolve, all function calls reference defined functions, and no placeholder bodies remain. Fix issues immediately.\n3. Verification before completion: before writing handoff/be_to_fe.json, confirm every API endpoint defined in plan/interfaces.md has a real handler implemented. List any missing endpoints in impl/be_notes.md under a 'Missing Endpoints' section rather than silently skipping them.\n4. Do not replace typed handoff arrays with keyed objects. If only one endpoint or shared type exists, still emit api_contracts and shared_types as arrays, and still emit scope_constraints as an array of strings.\n\nIf the OpenCode superpowers plugin is available, use test-driven-development: write the failing test or executable verification step before each substantive backend change.\nIf the OpenCode superpowers plugin is available, use verification-before-completion before declaring the backend step finished.\nIf blocked more than twice on the same backend issue, use systematic-debugging before changing approach.",
       "validation": {
-        "required_files": ["impl/be_notes.md", "handoff/be_to_fe.json"],
-        "one_of_files": ["impl/be_patch_bundle.json", "impl/be_changes/server.js"],
+        "required_files": [
+          "impl/be_notes.md",
+          "handoff/be_to_fe.json"
+        ],
+        "one_of_files": [
+          "impl/be_patch_bundle.json",
+          "impl/be_changes/server.js"
+        ],
         "min_word_count": 120
       }
     },
@@ -200,27 +352,47 @@
       "agent_id": "frontend_agent",
       "artifact_type": "frontend_impl",
       "goal": "Produce complete frontend implementation files that consume the backend handoff contract.",
-      "required_sections": ["ui_scope", "api_consumption", "run_instructions"],
+      "required_sections": [
+        "ui_scope",
+        "api_consumption",
+        "run_instructions"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
-          "goal": { "type": "string" },
-          "project_type": { "type": "string" },
-          "be_handoff_path": { "type": "string" }
+          "goal": {
+            "type": "string"
+          },
+          "project_type": {
+            "type": "string"
+          },
+          "be_handoff_path": {
+            "type": "string"
+          }
         }
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "fe_changes_path": { "type": "string" },
-          "fe_notes_path": { "type": "string" }
+          "fe_changes_path": {
+            "type": "string"
+          },
+          "fe_notes_path": {
+            "type": "string"
+          }
         }
       },
-      "tool_permissions": ["coding.delegate"],
-      "system_prompt": "Implement the frontend step as complete files, not diffs. Required outputs: impl/fe_changes/public/* complete frontend files, impl/fe_notes.md with UI decisions and run instructions, and handoff/impl_to_qa.json matching the typed schema. \n\nTask Tracking (SP-03): In impl/fe_notes.md, you MUST include a 'Task Status' section listing every task ID assigned to you in plan/workplan.json (fe_tasks), marking each as [COMPLETED] or [SKIPPED] with a brief rationale. \n\nFrontend must consume handoff/be_to_fe.json, must not assume APIs outside that handoff, and must use same-origin relative API paths instead of hardcoded localhost URLs. The impl_to_qa handoff MUST include from_steps as an array containing impl_be and impl_fe, to_step exactly qa_verify, be_changes_path, fe_changes_path, run_instructions as a string or string array, known_limitations as an array, and api_contracts_path set to handoff/be_to_fe.json.",
+      "tool_permissions": [
+        "coding.delegate"
+      ],
+      "system_prompt": "Implement the frontend step as complete files, not diffs. Required outputs: impl/fe_changes/public/* complete frontend files, impl/fe_notes.md with UI decisions and run instructions, and handoff/impl_to_qa.json matching the typed schema. \n\nFeature source of truth (v3.7.3): Read plan/spec.md as the authoritative feature list — every feature named in the spec MUST be implemented even if it is not in the project_type baseline (e.g. activity feed, read-only detail view, dashboard quick actions). Cross-check plan/workplan.json fe_tasks; if a spec feature lacks a matching FE task, implement it anyway and note the gap in impl/fe_notes.md.\n\nTask Tracking (SP-03): In impl/fe_notes.md, you MUST include a 'Task Status' section listing every task ID assigned to you in plan/workplan.json (fe_tasks), marking each as [COMPLETED] or [SKIPPED] with a brief rationale. \n\nFrontend must consume handoff/be_to_fe.json, must not assume APIs outside that handoff, and must use same-origin relative API paths instead of hardcoded localhost URLs. The impl_to_qa handoff MUST include from_steps as an array containing impl_be and impl_fe, to_step exactly qa_verify, be_changes_path, fe_changes_path, run_instructions as a string or string array, known_limitations as an array, and api_contracts_path set to handoff/be_to_fe.json.",
       "validation": {
-        "required_files": ["impl/fe_notes.md"],
-        "required_dirs": ["impl/fe_changes"],
+        "required_files": [
+          "impl/fe_notes.md"
+        ],
+        "required_dirs": [
+          "impl/fe_changes"
+        ],
         "min_word_count": 120
       }
     },
@@ -231,30 +403,58 @@
       "agent_id": "frontend_agent",
       "artifact_type": "frontend_impl_patch_bundle",
       "goal": "Produce a structured patch bundle for frontend implementation when target files already exist, with full-file fallback when patch output is not viable.",
-      "required_sections": ["patch_operations", "ui_scope", "api_consumption", "run_instructions"],
+      "required_sections": [
+        "patch_operations",
+        "ui_scope",
+        "api_consumption",
+        "run_instructions"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
-          "goal": { "type": "string" },
-          "project_type": { "type": "string" },
-          "be_handoff_path": { "type": "string" },
-          "target_file_context": { "type": "array" },
-          "diff_first_enabled": { "type": "boolean" }
+          "goal": {
+            "type": "string"
+          },
+          "project_type": {
+            "type": "string"
+          },
+          "be_handoff_path": {
+            "type": "string"
+          },
+          "target_file_context": {
+            "type": "array"
+          },
+          "diff_first_enabled": {
+            "type": "boolean"
+          }
         }
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "patch_bundle_path": { "type": "string" },
-          "fe_notes_path": { "type": "string" },
-          "execution_mode_used": { "type": "string" }
+          "patch_bundle_path": {
+            "type": "string"
+          },
+          "fe_notes_path": {
+            "type": "string"
+          },
+          "execution_mode_used": {
+            "type": "string"
+          }
         }
       },
-      "tool_permissions": ["coding.delegate"],
-      "system_prompt": "Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Consume handoff/be_to_fe.json as the only backend contract source. Write the bundle under impl/fe_patch_bundle.json, write impl/fe_notes.md with UI decisions and run instructions, and write handoff/impl_to_qa.json matching the typed schema. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/fe_changes/public/.\n\nAdditional frontend requirements:\n- Write all frontend files to impl/fe_changes/public/.\n- API calls must use same-origin relative paths such as /api/books, never hardcoded localhost URLs.\n- The impl_to_qa handoff MUST include from_steps as an array containing impl_be and impl_fe, to_step exactly qa_verify, be_changes_path, fe_changes_path, run_instructions as a string or string array, known_limitations as an array, and api_contracts_path set to handoff/be_to_fe.json.\n\nQuality rules (non-negotiable):\n1. No placeholders: every UI component and event handler must be complete; no TODO comments, no empty onclick handlers, no hardcoded mock data standing in for real API calls.\n2. Self-review after each file: before moving to the next file, check that all API calls reference endpoints in handoff/be_to_fe.json, all DOM element IDs match across HTML and JS, no placeholder sections remain.\n3. Verification before completion: before finishing, confirm every user journey described in plan/acceptance.json is wired up end-to-end. List any unimplemented journeys in impl/fe_notes.md under a 'Missing Journeys' section.\n\nIf the OpenCode superpowers plugin is available, use verification-before-completion on each primary UI journey before declaring the frontend step complete.\nIf the OpenCode superpowers plugin is available, use test-driven-development where practical for stateful UI logic and data adapters.\nIf blocked more than twice on the same frontend issue, use systematic-debugging before changing approach.",
+      "tool_permissions": [
+        "coding.delegate"
+      ],
+      "system_prompt": "Default to structured patch output using coding_team_patch_bundle.schema.json. When target files exist, emit an ordered operations array using content anchors, never line numbers. Consume handoff/be_to_fe.json as the backend contract source, and read plan/spec.md + plan/workplan.json (fe_tasks) as the authoritative feature source. Any feature named in plan/spec.md MUST be implemented even if absent from the project_type baseline — e.g. activity feed, read-only detail view, dashboard quick actions. Write the bundle under impl/fe_patch_bundle.json, write impl/fe_notes.md with UI decisions and run instructions, and write handoff/impl_to_qa.json matching the typed schema. If patch output is not reliable, emit mode=full_file_fallback and provide complete replacement files under impl/fe_changes/public/.\n\nAdditional frontend requirements:\n- Write all frontend files to impl/fe_changes/public/.\n- API calls must use same-origin relative paths such as /api/books, never hardcoded localhost URLs.\n- The impl_to_qa handoff MUST include from_steps as an array containing impl_be and impl_fe, to_step exactly qa_verify, be_changes_path, fe_changes_path, run_instructions as a string or string array, known_limitations as an array, and api_contracts_path set to handoff/be_to_fe.json.\n\nQuality rules (non-negotiable):\n1. No placeholders: every UI component and event handler must be complete; no TODO comments, no empty onclick handlers, no hardcoded mock data standing in for real API calls.\n2. Self-review after each file: before moving to the next file, check that all API calls reference endpoints in handoff/be_to_fe.json, all DOM element IDs match across HTML and JS, no placeholder sections remain.\n3. Verification before completion: before finishing, confirm every user journey described in plan/acceptance.json is wired up end-to-end. List any unimplemented journeys in impl/fe_notes.md under a 'Missing Journeys' section. Cross-check: every feature named in plan/spec.md has a corresponding render function or handler; flag gaps in impl/fe_notes.md.\n\nIf the OpenCode superpowers plugin is available, use verification-before-completion on each primary UI journey before declaring the frontend step complete.\nIf the OpenCode superpowers plugin is available, use test-driven-development where practical for stateful UI logic and data adapters.\nIf blocked more than twice on the same frontend issue, use systematic-debugging before changing approach.",
       "validation": {
-        "required_files": ["impl/fe_notes.md"],
-        "one_of_files": ["impl/fe_patch_bundle.json", "impl/fe_changes/public/app.js"],
+        "required_files": [
+          "impl/fe_notes.md"
+        ],
+        "one_of_files": [
+          "impl/fe_patch_bundle.json",
+          "impl/fe_changes/public/app.js"
+        ],
         "min_word_count": 120
       }
     },
@@ -265,25 +465,42 @@
       "agent_id": "qa_agent",
       "artifact_type": "qa_verify",
       "goal": "Produce a structured QA verification report with deterministic and semantic checks.",
-      "required_sections": ["deterministic_checks", "semantic_checks", "verified_artifacts"],
+      "required_sections": [
+        "deterministic_checks",
+        "semantic_checks",
+        "verified_artifacts"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
-          "goal": { "type": "string" },
-          "project_type": { "type": "string" },
-          "impl_to_qa_handoff_path": { "type": "string" }
+          "goal": {
+            "type": "string"
+          },
+          "project_type": {
+            "type": "string"
+          },
+          "impl_to_qa_handoff_path": {
+            "type": "string"
+          }
         }
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "qa_report_path": { "type": "string" }
+          "qa_report_path": {
+            "type": "string"
+          }
         }
       },
-      "tool_permissions": ["coding.execute", "coding.delegate"],
+      "tool_permissions": [
+        "coding.execute",
+        "coding.delegate"
+      ],
       "system_prompt": "You are the QA agent. You must write TWO files: verify/qa_report.json AND handoff/qa_to_release.json.\n\nVerification steps:\n1. Read plan/acceptance.json to get acceptance criteria.\n2. Read impl/fe_changes/* and impl/be_changes/* to inspect the implementation.\n3. If smoke/smoke_result.json exists, read it and include the actual root_check and api_check evidence as deterministic checks. Use exact status codes and response samples from smoke_result.json. Distinguish L1 service liveness evidence from L2 API evidence.\n4. Write verify/qa_report.json with this EXACT structure:\n{\n  \"overall_status\": \"pass\" | \"pass_with_warnings\" | \"fail\",\n  \"checks\": [\n    {\n      \"check_id\": \"det_1\",\n      \"layer\": \"deterministic\",\n      \"description\": \"file/dir exists\",\n      \"status\": \"pass\" | \"fail\" | \"warning\",\n      \"detail\": \"concrete evidence - quote file name, function name, or line observed\"\n    }\n  ],\n  \"verified_artifacts\": [\"impl/fe_changes/public/app.js\", \"impl/be_changes/server.js\"],\n  \"journey_checks\": [\n    {\n      \"journey_id\": \"j1\",\n      \"description\": \"user adds a task\",\n      \"status\": \"pass\" | \"fail\" | \"warning\" | \"not_tested\",\n      \"evidence\": [\"app.js handleCreate() POSTs to /api/tasks\"]\n    }\n  ],\n  \"rubric_citations\": [\n    {\n      \"term\": \"demo_usable\",\n      \"criterion\": \"Primary journey is functional\",\n      \"evidence\": \"specific observation from reading files\",\n      \"pass\": true\n    }\n  ]\n}\nFIELD RULES: layer must be exactly 'deterministic' or 'semantic'. check status must be exactly 'pass', 'fail', or 'warning' (NOT 'pass_with_warnings'). detail must be a non-empty string. evidence in journey_checks must be an array of strings.\n5. Write handoff/qa_to_release.json with EXACTLY: {\"from_step\":\"qa_verify\",\"to_step\":\"release_pack\",\"qa_report_path\":\"verify/qa_report.json\",\"overall_status\":\"<same value as qa_report overall_status>\",\"verified_artifacts\":[\"list of file paths\"]}\nCRITICAL: every detail field must quote something you actually read. Do NOT write 'pending human review'.",
       "validation": {
-        "required_files": ["verify/qa_report.json"],
+        "required_files": [
+          "verify/qa_report.json"
+        ],
         "min_word_count": 80
       }
     },
@@ -294,28 +511,52 @@
       "agent_id": "release_agent",
       "artifact_type": "release_pack",
       "goal": "Produce a release notes document and a structured artifact manifest from the verified QA artifacts.",
-      "required_sections": ["artifact_traceability", "go_no_go_summary"],
+      "required_sections": [
+        "artifact_traceability",
+        "go_no_go_summary"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
-          "goal": { "type": "string" },
-          "project_type": { "type": "string" },
-          "qa_to_release_handoff_path": { "type": "string" }
+          "goal": {
+            "type": "string"
+          },
+          "project_type": {
+            "type": "string"
+          },
+          "qa_to_release_handoff_path": {
+            "type": "string"
+          }
         }
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "release_notes_path": { "type": "string" },
-          "artifact_manifest_path": { "type": "string" },
-          "readme_path": { "type": "string" },
-          "start_script_path": { "type": "string" }
+          "release_notes_path": {
+            "type": "string"
+          },
+          "artifact_manifest_path": {
+            "type": "string"
+          },
+          "readme_path": {
+            "type": "string"
+          },
+          "start_script_path": {
+            "type": "string"
+          }
         }
       },
-      "tool_permissions": ["coding.delegate"],
+      "tool_permissions": [
+        "coding.delegate"
+      ],
       "system_prompt": "Before writing release artifacts, inspect the actual backend deliverables first: 1. impl/be_changes/package.json 2. impl/be_changes/server.js 3. smoke/smoke_result.json if present. Use impl/be_notes.md only as supporting context. Never infer the tech stack from the goal description. Produce these outputs: release/release_notes.md (human-readable summary of what was built and verified), release/artifact_manifest.json (machine-readable manifest), release/README.md, and release/start.sh. Also ensure impl/fe_changes/public/ is assembled into impl/be_changes/public/ before finalizing release instructions. The manifest must include run_id, workflow_id, completed_at, and an artifacts array where each entry has path, type, and size_bytes. Source artifact list from handoff/qa_to_release.json verified_artifacts field.\n\nHard requirement for release/README.md:\n- It MUST contain a runnable command block with these exact commands, even if artifact inspection is partial:\n  cd impl/be_changes\n  npm install\n  node server.js\n- It MUST include a browser URL line. Prefer the smoke-test port if smoke/smoke_result.json exists; otherwise use http://localhost:3000.\n- Never replace the command block with text like 'Unable to determine exact commands'. If inspection is incomplete, state the uncertainty in a note AFTER the command block, not instead of it.\n\nHard requirement for release/start.sh:\n- It must execute the same impl/be_changes startup flow using npm install and node server.js.",
       "validation": {
-        "required_files": ["release/release_notes.md", "release/artifact_manifest.json", "release/README.md", "release/start.sh"],
+        "required_files": [
+          "release/release_notes.md",
+          "release/artifact_manifest.json",
+          "release/README.md",
+          "release/start.sh"
+        ],
         "min_word_count": 60
       }
     }

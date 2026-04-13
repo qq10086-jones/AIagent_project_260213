@@ -48,7 +48,7 @@ export function analyzeTaskRisk(tool_name, payload) {
 
   // 1. Static Pattern Matching (Heuristics)
   const highRiskPatterns = [
-    { re: /\b(?:rm\s+-rf|git\s+reset\s+--hard|del\s+\/f|format\s+|mkfs|dd\s+if=)\b/i, reason: "destructive_command" },
+    { re: /(?:\brm\s+-rf\b|\bgit\s+reset\s+--hard\b|\bdel\s+\/f\b|\bformat\s+(?:[a-z]:|\/[qsuvxy])|\bmkfs\b|\bdd\s+if=)/i, reason: "destructive_command" },
     { re: /\b(?:drop\s+table|truncate\s+table|alter\s+table)\b/i, reason: "db_destructive_operation" },
     { re: /(?:^|[\s"'`(/])(?:\.github\/|infra\/|deploy\/|k8s\/|Dockerfile)(?=$|[\s"'`),/\\])/i, reason: "sensitive_path_or_secret" },
     { re: /(^|[\s"'`(])(?:\.env(?:\.[A-Za-z0-9._-]+)?)(?=$|[\s"'`),/\\])/i, reason: "sensitive_path_or_secret" },

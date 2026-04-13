@@ -7,6 +7,7 @@ positions / NAV / execution report so the paper account can move end to end.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -102,6 +103,134 @@ def _load_orders(conn, run_id: str, strategy_id: str = "default") -> list[tuple]
         """,
         (run_id, strategy_id),
     ).fetchall()
+
+
+def _fingerprint_orders(orders: list[tuple] | list[dict]) -> str:
+    """Canonical hash over (order_id, symbol, side, qty, order_type, limit_price).
+
+    Used to detect order-set drift between pending_approval artifact and DB
+    state at approve time.
+    """
+    canonical: list[tuple] = []
+    for o in orders:
+        if isinstance(o, dict):
+            canonical.append((
+                str(o.get("order_id") or ""),
+                str(o.get("symbol") or ""),
+                str(o.get("side") or ""),
+                float(o.get("qty") or 0),
+                str(o.get("order_type") or ""),
+                float(o["limit_price"]) if o.get("limit_price") is not None else None,
+            ))
+        else:
+            canonical.append((
+                str(o[0] or ""),
+                str(o[1] or ""),
+                str(o[2] or ""),
+                float(o[3] or 0),
+                str(o[4] or ""),
+                float(o[5]) if o[5] is not None else None,
+            ))
+    canonical.sort(key=lambda x: x[0])
+    blob = json.dumps(canonical, separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()[:16]
+
+
+def _pending_artifact_paths(reports_dir: Path | str, run_id: str) -> tuple[Path, Path, Path, Path]:
+    """Return (per_run_json, per_run_md, latest_json, latest_md).
+
+    Per-run-id files are the source of truth for approve validation (never
+    overwritten by other concurrent runs). latest_* are human-facing pointers
+    refreshed on every new pending artifact for convenience.
+    """
+    rd = Path(reports_dir)
+    safe = run_id.replace("/", "_").replace("\\", "_")
+    return (
+        rd / f"pending_approval_{safe}.json",
+        rd / f"PENDING_APPROVAL_{safe}.md",
+        rd / "pending_approval.json",
+        rd / "PENDING_APPROVAL.md",
+    )
+
+
+def write_pending_approval(
+    reports_dir: Path | str,
+    run_id: str,
+    asof: str,
+    orders: list[tuple],
+    strategy_id: str,
+) -> tuple[Path, Path]:
+    """Emit pending approval artifacts instead of auto-filling.
+
+    Returns (per_run_json_path, per_run_md_path). Also refreshes
+    pending_approval.json / PENDING_APPROVAL.md as latest-pointer convenience
+    files. The per-run-id artifact is the source of truth consulted by the
+    approve path.
+    """
+    rd = Path(reports_dir)
+    rd.mkdir(parents=True, exist_ok=True)
+    order_rows = [
+        {
+            "order_id": o[0],
+            "symbol": o[1],
+            "side": o[2],
+            "qty": float(o[3] or 0),
+            "order_type": o[4],
+            "limit_price": float(o[5]) if o[5] is not None else None,
+        }
+        for o in orders
+    ]
+    fingerprint = _fingerprint_orders(orders)
+    payload = {
+        "status": "awaiting_approval",
+        "run_id": run_id,
+        "asof": asof,
+        "strategy_id": strategy_id,
+        "generated_at_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "orders": order_rows,
+        "order_fingerprint": fingerprint,
+        "approve_command": (
+            f"python paper_execute.py --run_id {run_id} --asof {asof} --approve"
+        ),
+    }
+    per_run_json, per_run_md, latest_json, latest_md = _pending_artifact_paths(rd, run_id)
+    blob = json.dumps(payload, ensure_ascii=False, indent=2)
+    per_run_json.write_text(blob, encoding="utf-8")
+    latest_json.write_text(blob, encoding="utf-8")  # convenience pointer
+
+    lines = [
+        f"# Pending paper approval — {asof}",
+        "",
+        f"- run_id: `{run_id}`",
+        f"- strategy_id: `{strategy_id}`",
+        f"- generated: {payload['generated_at_utc']}",
+        f"- order_fingerprint: `{fingerprint}`",
+        "",
+        "## Proposed orders",
+        "",
+        "| symbol | side | qty | type | limit |",
+        "|---|---|---|---|---|",
+    ]
+    for o in order_rows:
+        lp = "" if o["limit_price"] is None else f"{o['limit_price']:.2f}"
+        lines.append(f"| {o['symbol']} | {o['side']} | {o['qty']:.0f} | {o['order_type']} | {lp} |")
+    lines += [
+        "",
+        "## Approve",
+        "",
+        "```",
+        payload["approve_command"],
+        "```",
+        "",
+        "Until approved, no simulated fills are generated and the run stays in",
+        "`awaiting_approval` state. Approve will abort if DB orders have drifted",
+        "from the fingerprint above.",
+        "",
+    ]
+    md_blob = "\n".join(lines)
+    per_run_md.write_text(md_blob, encoding="utf-8")
+    latest_md.write_text(md_blob, encoding="utf-8")
+    return per_run_json, per_run_md
 
 
 def _update_run_status_after_paper(conn, run_id: str, order_count: int, fills_inserted: int) -> str:
@@ -269,6 +398,25 @@ def main():
     ap.add_argument("--refresh_data", action="store_true", help="refresh market data before paper execution")
     ap.add_argument("--refresh_lookback", type=int, default=30, help="lookback days used when refresh_data is enabled")
     ap.add_argument("--reports_dir", default="reports")
+    ap.add_argument(
+        "--require_approval",
+        dest="require_approval",
+        action="store_true",
+        default=True,
+        help="(default) skip fills, emit pending_approval artifacts, exit without executing",
+    )
+    ap.add_argument(
+        "--no_require_approval",
+        dest="require_approval",
+        action="store_false",
+        help="legacy auto-fill behaviour (not recommended — pollutes paper/live reconciliation)",
+    )
+    ap.add_argument(
+        "--approve",
+        action="store_true",
+        default=False,
+        help="user has reviewed the pending orders and explicitly approves paper fills for this run",
+    )
     args = ap.parse_args()
 
     if not (0.0 <= args.fill_ratio <= 1.0):
@@ -285,6 +433,92 @@ def main():
             raise ValueError("asof is required (pass --asof or ensure decision_runs has asof for this run_id)")
     finally:
         conn.close()
+
+    # Approval gate runs BEFORE market-data refresh: the whole point is we do
+    # not touch paper state (or depend on live data) until the human has seen
+    # which orders would fill.
+    if args.require_approval and not args.approve:
+        conn = connect(args.db)
+        ensure_trade_tables(conn)
+        try:
+            orders = _load_orders(conn, run_id, strategy_id=strategy_id)
+            if not orders:
+                print(f"No proposed/partial orders for run_id={run_id}. Nothing to approve.")
+                conn.execute(
+                    "UPDATE decision_runs SET status=? WHERE run_id=?",
+                    ("paper_no_orders", run_id),
+                )
+                conn.commit()
+                return
+            json_path, md_path = write_pending_approval(
+                args.reports_dir, run_id=run_id, asof=asof, orders=orders, strategy_id=strategy_id,
+            )
+            conn.execute(
+                "UPDATE decision_runs SET status=? WHERE run_id=?",
+                ("awaiting_approval", run_id),
+            )
+            conn.commit()
+            print("=" * 70)
+            print("Paper execution PAUSED — approval required")
+            print(f"run_id: {run_id}  asof: {asof}  strategy: {strategy_id}")
+            print(f"orders awaiting approval: {len(orders)}")
+            print(f"review: {md_path}")
+            print(f"approve: python paper_execute.py --run_id {run_id} --asof {asof} --approve")
+            print("=" * 70)
+        finally:
+            conn.close()
+        return
+
+    # Approve path: before any fill work, (1) verify the DB orders still match
+    # the pending_approval artifact the user reviewed, and (2) atomically
+    # transition decision_runs.status from awaiting_approval -> approved_in_progress
+    # so a concurrent approve cannot double-fill.
+    if args.approve:
+        per_run_json, _per_run_md, _latest_json, _latest_md = _pending_artifact_paths(
+            args.reports_dir, run_id
+        )
+        if not per_run_json.exists():
+            raise RuntimeError(
+                f"approve aborted: no pending_approval artifact at {per_run_json}. "
+                "Run paper_execute.py without --approve first to generate the review artifact."
+            )
+        pending = json.loads(per_run_json.read_text(encoding="utf-8"))
+        expected_fp = pending.get("order_fingerprint")
+        if not expected_fp:
+            raise RuntimeError(
+                f"approve aborted: pending artifact {per_run_json} missing order_fingerprint "
+                "(regenerate by rerunning without --approve)."
+            )
+
+        conn = connect(args.db)
+        ensure_trade_tables(conn)
+        try:
+            db_orders = _load_orders(conn, run_id, strategy_id=strategy_id)
+            actual_fp = _fingerprint_orders(db_orders)
+            if actual_fp != expected_fp:
+                raise RuntimeError(
+                    f"approve aborted: order-set drift for run_id={run_id}. "
+                    f"pending fingerprint={expected_fp} but DB now={actual_fp}. "
+                    f"Re-review by rerunning paper_execute without --approve."
+                )
+            # CAS: only one approve may advance an awaiting_approval run.
+            cur = conn.execute(
+                "UPDATE decision_runs SET status=? "
+                "WHERE run_id=? AND status=?",
+                ("approved_in_progress", run_id, "awaiting_approval"),
+            )
+            if cur.rowcount != 1:
+                (current_status,) = conn.execute(
+                    "SELECT status FROM decision_runs WHERE run_id=?", (run_id,)
+                ).fetchone() or (None,)
+                raise RuntimeError(
+                    f"approve aborted: run_id={run_id} is not in awaiting_approval "
+                    f"(current status={current_status!r}). Another approve may already be "
+                    "running, or the run has been expired."
+                )
+            conn.commit()
+        finally:
+            conn.close()
 
     if args.refresh_data:
         _before, refreshed_to, _did_refresh = refresh_market_data_if_needed(

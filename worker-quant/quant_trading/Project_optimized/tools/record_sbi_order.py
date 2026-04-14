@@ -84,27 +84,51 @@ def record_order(
 
 
 def list_open_orders(db: str, strategy_id: str = "sprint") -> list[dict]:
+    """v3 E: returns canonical qty breakdown for partial-aware callers.
+
+    Fields per order:
+      * qty          — REMAINING (what's still open to fill)
+      * original_qty — total placed (from expected_value/limit_price invariant)
+      * filled_qty   — cumulative from fills (source-of-truth)
+    """
     conn = connect(db)
     try:
         rows = conn.execute(
-            """SELECT order_id, asof, symbol, side, qty, limit_price,
-                      status, created_ts, reason
-               FROM orders
-               WHERE strategy_id=? AND status IN ('open','proposed','partial')
-                 AND (source='sbi_placed' OR source IS NULL)
-               ORDER BY created_ts DESC""",
+            """SELECT o.order_id, o.asof, o.symbol, o.side, o.qty,
+                      o.limit_price, o.status, o.created_ts, o.reason,
+                      o.expected_value,
+                      COALESCE((SELECT SUM(f.qty) FROM fills f
+                                WHERE f.external_ref=o.order_id
+                                  AND f.source='sbi_actual'), 0) AS filled_qty
+               FROM orders o
+               WHERE o.strategy_id=? AND o.status IN ('open','proposed','partial')
+                 AND (o.source='sbi_placed' OR o.source IS NULL)
+               ORDER BY o.created_ts DESC""",
             (strategy_id,),
         ).fetchall()
     finally:
         conn.close()
-    return [
-        {
+    out = []
+    for r in rows:
+        remaining = float(r[4] or 0)
+        limit_price = float(r[5] or 0)
+        expected_value = float(r[9] or 0)
+        filled_qty = float(r[10] or 0)
+        # Original qty = expected_value / limit_price (invariant at place time).
+        # Fallback: remaining + filled if expected_value absent.
+        if limit_price > 0 and expected_value > 0:
+            original_qty = expected_value / limit_price
+        else:
+            original_qty = remaining + filled_qty
+        out.append({
             "order_id": r[0], "asof": r[1], "symbol": r[2], "side": r[3],
-            "qty": r[4], "limit_price": r[5], "status": r[6],
+            "qty": remaining,
+            "original_qty": original_qty,
+            "filled_qty": filled_qty,
+            "limit_price": limit_price, "status": r[6],
             "created_ts": r[7], "note": r[8],
-        }
-        for r in rows
-    ]
+        })
+    return out
 
 
 def cancel_order(db: str, order_id: str) -> bool:
@@ -151,10 +175,12 @@ def main() -> None:
         if not orders:
             print("no open SBI orders")
             return
-        print(f"{'order_id':<44} {'side':<4} {'symbol':<8} {'qty':>6} {'limit':>8} {'status':<10} created")
+        print(f"{'order_id':<44} {'side':<4} {'symbol':<8} "
+              f"{'remain':>6} {'filled':>6} {'total':>6} {'limit':>8} {'status':<10} created")
         for o in orders:
             print(f"{o['order_id']:<44} {o['side']:<4} {o['symbol']:<8} "
-                  f"{o['qty']:>6.0f} {o['limit_price']:>8.1f} {o['status']:<10} {o['created_ts']}")
+                  f"{o['qty']:>6.0f} {o['filled_qty']:>6.0f} {o['original_qty']:>6.0f} "
+                  f"{o['limit_price']:>8.1f} {o['status']:<10} {o['created_ts']}")
         return
 
     if args.cmd == "cancel":

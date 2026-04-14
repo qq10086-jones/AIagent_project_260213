@@ -24,43 +24,52 @@ def _table_text(df: pd.DataFrame) -> str:
         return df.to_csv(index=False)
 
 
-def generate_execution_report(conn, run_id: str, asof: str, artifact_dir: Path) -> tuple[Path, Path]:
-    """Generate execution_report.md/csv into artifact_dir."""
+def generate_execution_report(conn, run_id: str, asof: str, artifact_dir: Path,
+                              strategy_id: str | None = None) -> tuple[Path, Path]:
+    """Generate execution_report.md/csv into artifact_dir.
+
+    ``strategy_id`` (v3 fix for Codex C): when provided, scope all queries
+    to that strategy track so paper/live reports do not cross-contaminate.
+    Omit only for legacy callers that truly want the global view.
+    """
     artifact_dir.mkdir(parents=True, exist_ok=True)
     out_md = artifact_dir / "execution_report.md"
     out_csv = artifact_dir / "execution_report.csv"
 
+    strat_clause = " AND strategy_id=?" if strategy_id else ""
+    strat_param: tuple = (strategy_id,) if strategy_id else ()
+
     orders = _read_sql(
         conn,
-        """
+        f"""
         SELECT order_id, symbol, side, qty, order_type, limit_price, expected_value, status, created_ts
         FROM orders
-        WHERE run_id=?
+        WHERE run_id=?{strat_clause}
         ORDER BY symbol, side
         """,
-        (run_id,),
+        (run_id,) + strat_param,
     )
 
     fills = _read_sql(
         conn,
-        """
+        f"""
         SELECT fill_id, symbol, side, qty, price, fee, tax, ts, venue, external_ref
         FROM fills
-        WHERE run_id=? AND asof=?
+        WHERE run_id=? AND asof=?{strat_clause}
         ORDER BY ts
         """,
-        (run_id, asof),
+        (run_id, asof) + strat_param,
     )
 
     pos = _read_sql(
         conn,
-        """
+        f"""
         SELECT symbol, qty, avg_cost, market_price, market_value, unrealized_pnl
         FROM positions
-        WHERE asof=?
+        WHERE asof=?{strat_clause}
         ORDER BY symbol
         """,
-        (asof,),
+        (asof,) + strat_param,
     )
 
     # Aggregate fills by symbol+side (future-proof: avoid groupby.apply)

@@ -170,6 +170,69 @@ def test_fill_qty_over_remaining_is_rejected(tmp_path: Path) -> None:
         )
 
 
+def test_partial_order_list_exposes_filled_remaining_original(tmp_path: Path) -> None:
+    """v3 E: list_open_orders must report remaining/filled/original_qty.
+
+    `qty` stays the remaining (legacy semantics); `original_qty` is
+    derived from expected_value/limit_price invariant; `filled_qty`
+    is SUM of fills.
+    """
+    db = _seed_db(tmp_path)
+    oid = _place(db, "BUY", "3041.T", 400, 585.0)
+    # Partial 150 out of 400
+    record_sbi_fill.confirm_fill(db=str(db), order_id=oid, price=585.0, qty=150, rebuild=False)
+    orders = record_sbi_order.list_open_orders(str(db))
+    assert len(orders) == 1
+    o = orders[0]
+    assert o["qty"] == 250  # remaining
+    assert o["filled_qty"] == 150
+    assert o["original_qty"] == 400
+
+
+def test_execution_report_respects_strategy_id(tmp_path: Path) -> None:
+    """v3 C (Codex): execution_report queries must be scoped by strategy_id
+    when provided, or paper/live rows contaminate each other."""
+    from execution_report import generate_execution_report
+
+    db = _seed_db(tmp_path)
+    run_id = "test_run_c"
+    asof = "2026-04-14"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "INSERT INTO decision_runs(run_id, ts, asof, strategy_id, status) VALUES (?,?,?,?,?)",
+        (run_id, f"{asof}T09:00", asof, "sprint", "ok"),
+    )
+    # Two fills under different strategies, same run_id/asof/symbol
+    for strat, qty in [("sprint", 100), ("sprint_paper", 999)]:
+        conn.execute(
+            """INSERT INTO fills(fill_id, run_id, asof, strategy_id, ts, symbol,
+               side, qty, price, fee, tax, venue, source, price_validated)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (f"f_{strat}", run_id, asof, strat, f"{asof}T10:00", "3041.T",
+             "BUY", qty, 585.0, 0.0, 0.0, "SBI", "test", 1),
+        )
+    # Two positions rows for same asof, different strategies
+    for strat, qty in [("sprint", 100), ("sprint_paper", 999)]:
+        conn.execute(
+            """INSERT INTO positions(asof, strategy_id, symbol, qty, avg_cost,
+               market_price, market_value, unrealized_pnl, high_since_entry, entry_date)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (asof, strat, "3041.T", qty, 585.0, 585.0, qty * 585.0, 0.0, 585.0, asof),
+        )
+    conn.commit()
+    conn.close()
+
+    art = tmp_path / "art"
+    md, csv = generate_execution_report(
+        sqlite3.connect(db), run_id, asof, art, strategy_id="sprint",
+    )
+    text = md.read_text(encoding="utf-8")
+    # The paper qty=999 must not appear in the scoped report
+    assert "999" not in text, "execution_report leaked paper positions into sprint scope"
+    # Sanity: the real qty 100 IS there somewhere (table cell)
+    assert "100" in text
+
+
 def test_cancel_order(tmp_path: Path) -> None:
     db = _seed_db(tmp_path)
     oid = _place(db, "SELL", "3041.T", 100, 600.0)

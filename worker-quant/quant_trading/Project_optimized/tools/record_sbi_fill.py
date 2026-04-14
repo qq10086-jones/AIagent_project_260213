@@ -142,20 +142,20 @@ def confirm_fill(
             force=True, source="sbi_actual", strategy_id=strategy_id,
         )
 
-        # Update order status (full vs partial)
-        new_status = "filled" if fill_qty >= order["qty"] else "partial"
-        # If partial, decrement remaining qty — track what's still open
-        if new_status == "partial":
-            remaining = order["qty"] - fill_qty
-            conn.execute(
-                "UPDATE orders SET status=?, qty=? WHERE order_id=?",
-                (new_status, remaining, order_id),
-            )
-        else:
-            conn.execute(
-                "UPDATE orders SET status=? WHERE order_id=?",
-                (new_status, order_id),
-            )
+        # v3 E (Codex): current schema semantics — orders.qty tracks
+        # REMAINING quantity (decrements on each fill). expected_value
+        # carries the original notional commitment at placement time and
+        # is the invariant reference for reconcile. Readers compute:
+        #     original_qty = expected_value / limit_price (for LIMIT)
+        #     filled_qty   = SUM(fills.qty WHERE external_ref=order_id)
+        #     remaining    = orders.qty   ← what we maintain here
+        # See tools/record_sbi_order.list_open_orders for the read path.
+        new_remaining = max(0.0, order["qty"] - fill_qty)
+        new_status = "filled" if new_remaining <= 1e-9 else "partial"
+        conn.execute(
+            "UPDATE orders SET status=?, qty=? WHERE order_id=?",
+            (new_status, new_remaining, order_id),
+        )
         conn.commit()
 
         # Rebuild positions + account snapshot for the live sprint track

@@ -601,7 +601,8 @@ def main():
         artifact_dir = resolve_run_artifact_dir(meta.get("snapshot_path") if meta else None)
         if artifact_dir is None:
             artifact_dir = Path("artifacts/decision") / asof / run_id
-        md_path, csv_path = generate_execution_report(conn, run_id, asof, artifact_dir)
+        md_path, csv_path = generate_execution_report(conn, run_id, asof, artifact_dir,
+                                                       strategy_id=paper_strategy)
         analytics = post_trade_analytics(conn, run_id, strategy_id=paper_strategy)
         reports_dir = Path(args.reports_dir)
         reports_dir.mkdir(parents=True, exist_ok=True)

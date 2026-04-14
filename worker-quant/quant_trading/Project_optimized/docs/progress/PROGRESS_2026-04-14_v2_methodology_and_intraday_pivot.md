@@ -1,154 +1,190 @@
-# PROGRESS 2026-04-14 — v2 方法论修复 + 决策时点转向盘中
+# PROGRESS 2026-04-14 — v3 转向 + intraday 生产线 + A-1 因子库启动
 
 ## 本阶段主题
 
-从 "盘后自动成交" → "盘中 14:45 决策 + Discord 推送 + 用户实时跟单 SBI"。
-同时把底层方法论（PIT、预注册、晋升作废）一并修干净，为后续策略优化提供可信地基。
+两个并行工作面：
+1. **治理底线**：继续修完 codex 提出的数据正确性/幂等/PIT 风险点
+2. **策略进攻**：启动 v3 Phase A 主战场 —— Alpha-extended 因子库
 
-**重要修正（2026-04-14 下午）**：昨日偏向治理/防御，方向错位。用户原始诉求是"优化买卖策略"，我做的是"方法论治理"。v3 计划（`docs/design/2026-04-13_quant_refactor_plan.md`）已把重心扳回 Alpha 因子扩展 + walk-forward runner 为主战场。对标 Qlib / Alphalens 评分 **3.9/10**，10 周目标 5.5+/10。
+**重要修正**：v2 偏向治理/防御，方向错位。v3 计划（`docs/design/2026-04-13_quant_refactor_plan.md`）把主战场扳回 Alpha 因子扩展 + walk-forward runner。对标 Qlib / Alphalens 评分 **3.9/10**，10 周目标 5.5+/10。
 
 ---
 
-## 已完成（可上线）
+## 已完成（截至 2026-04-14 下午）
 
-### 1. 方法论治理
+### 方法论治理（2026-04-13 遗留完成）
 
-| 任务 | 产物 | 说明 |
-|---|---|---|
-| v2 重构计划 | `docs/design/2026-04-13_quant_refactor_plan.md` | 4 Phase，10 周路线图；核心改动：walk-forward 把选择类决策嵌进训练窗 |
-| 预注册协议 | `experiment_log.py`, `docs/design/experiment_log_schema.md` | 任何新因子/阈值/规则先写 JSONL 再跑；供 Deflated Sharpe / FDR 校正使用 |
-| v1 晋升作废 | `archive_stale_promotion.py` | 原 `eligible_for_promotion` 归档 → `voided_awaiting_v2_gate`；原文件保留在 `reports/archive/voided_promotions_v1/20260413T144243Z/` |
-| Reality check 四基准 | `reality_check.py`, `reports/reality_check_2026-04-13.md` | 策略 −0.01% vs TOPIX −3.21% vs 持仓等权 −11.12%（n=7 警告） |
-
-### 2. PIT 数据卫生
-
-| 任务 | 修改 | 验证 |
-|---|---|---|
-| 审计 47 处查询 | `docs/design/pit_audit_2026-04-13.md` | 6 处 leaky（3 P0 已修） |
-| compute_ic.py:477 | 加 `WHERE date <= :asof` + asof_override 锚点 | 测试覆盖 |
-| compute_price_features.py:load_prices_from_db | 加 `asof: Optional[str]` 参数 | 测试覆盖 |
-| daily_run.py:_latest_fundamental_status | 加 `asof` 参数 + 4 处调用点透传 | 测试覆盖 |
-| 不变性测试 | `tests/test_pit_guards.py` (5 测试) | 注入未来数据后输出不变 |
-| 存量 feature_daily 污染核查 | `tools/pit_parity_check.py` → `reports/pit_parity_2026-04-08.md` | **零污染**，无需重建 |
-
-### 3. Paper 闸门（已回滚默认行为）
-
-原来在 T0.1 加了 `require_approval=true` 默认，导致决策更晚 —— 和用户"盘中出单"需求相反，**已回滚**。
-
-| 文件 | 最终状态 |
+| 任务 | 产物 |
 |---|---|
-| `paper_execute.py` | 代码保留 `--require_approval` / `--approve` / fingerprint / CAS，但默认关 |
-| `config.yaml` | `paper.require_approval: false`（默认自动成交） |
-| `daily_run.py` | awaiting_approval 分支保留但默认不触发 |
+| v3 重构计划（3 版迭代，codex review 定稿） | `docs/design/2026-04-13_quant_refactor_plan.md` |
+| 预注册协议 | `experiment_log.py` + `docs/design/experiment_log_schema.md` |
+| v1 晋升作废 | `archive_stale_promotion.py` → `voided_awaiting_v2_gate` |
+| Reality check 四基准 | `reality_check.py` + `reports/reality_check_2026-04-13.md` |
+| PIT 审计 47 点 + 3 P0 修复 | `docs/design/pit_audit_2026-04-13.md`, `compute_ic.py`, `compute_price_features.py`, `daily_run.py` |
+| PIT 不变性测试 + 实证无污染 | `tests/test_pit_guards.py`, `reports/pit_parity_2026-04-08.md` |
 
-审批闸门基建留作可选（多用户/审计场景可开），不影响日常流水线。
+### Paper/SBI 轨道分离 (C-1)
 
-### 4. 测试状态
+| 任务 | 产物 |
+|---|---|
+| paper_execute 写 `_paper` 后缀 | `paper_execute.py` |
+| 历史数据迁移脚本 + 已跑 | `tools/migrate_paper_strategy_id.py` (+ 已 apply) |
+| News 采集 subprocess 编码修复 | `quant_briefing.py` (encoding=utf-8) |
 
-- 总计 **164 / 164 PASS**（原 137 + 本阶段 27 新增）
-- 新增测试集中在 `test_experiment_log`、`test_paper_approval_gate`、`test_reality_check`、`test_archive_stale_promotion`、`test_pit_guards`
+### SBI 手动订单生命周期 (C-5 / C-5b)
+
+| 任务 | 产物 |
+|---|---|
+| 挂单录入 CLI (place/list/cancel) | `tools/record_sbi_order.py` |
+| 成交确认 CLI（幂等/partial） | `tools/record_sbi_fill.py` |
+| Briefing SBI/paper 双栏 (C-2) | `quant_briefing.py` |
+| 8 个生命周期单测 | `tests/test_sbi_order_lifecycle.py` |
+| execution_report 按 strategy_id 隔离 | `execution_report.py` |
+
+### Intraday 生产线 (C 阶段)
+
+| 任务 | 产物 |
+|---|---|
+| `intraday_decision.py` 基础版 | 14:45 JST refresh intraday + target_weights → Discord webhook |
+| 首次人机闭环验证 | 用户挂单 BUY 3041.T 400@¥585 依 14:45 信号 |
+
+### A-1 Alpha-Extended 因子库（v3 Phase A 主战场启动）
+
+| 任务 | 产物 |
+|---|---|
+| 因子目录骨架 | `factors/` 模块（momentum / lottery / liquidity / range_vol / registry） |
+| **11 个学术因子**（每个带出处） | 见下表 |
+| 18 单元测试 | `tests/test_alpha_extended_factors.py` |
+| 11 因子 + 3 supersede 全部 preregister | `reports/experiment_log.jsonl` |
+| Codex 2 轮审视 + 全部修复 | 见"Codex 累计处理"段 |
+
+**当前 Alpha-Extended 因子清单**：
+
+| 家族 | 因子 | 出处 |
+|---|---|---|
+| Momentum | `alpha_roc_3` / `alpha_roc_10` / `alpha_reversal_1` / `alpha_jt_mom_6m_skip1m` | Jegadeesh-Titman 1993 / Jegadeesh 1990 |
+| Lottery | `alpha_max_ret_20` / `alpha_min_ret_20` | Bali-Cakici-Whitelaw 2011 |
+| Higher moment | `alpha_ret_skew_60` | Harvey-Siddique 2000 |
+| Liquidity | `alpha_amihud_20`（支持 exchange turnover override） | Amihud 2002 |
+| Range vol | `alpha_range_proxy_20` / `alpha_hl_ratio_20` / `alpha_parkinson_vol_20` | Parkinson 1980 / Alizadeh-Brandt-Diebold 2002 |
+
+---
+
+## Codex 累计处理（4 轮审视）
+
+| 轮 | 提出 | 修 / 接受 / 延后 |
+|---|---|---|
+| 1 (C-1/C-5 初版) | 5 | 3 修 / 2 延后 |
+| 2 (C-5 round-2) | 5 | 3 修 / 2 延后 |
+| 3 (A-1 初版) | 6 | 4 修 / 2 接受 |
+| 4 (A-1 复核) | 6 | 3 修 / 3 延后 |
+| **合计** | **22 项** | **13 修 + 3 接受 + 6 延后** |
+
+### 本轮处理的关键数学/归因错误（A-1）
+
+- **JT momentum 归因错**：`alpha_roc_120` 不是 Jegadeesh-Titman 经典 → 改为 `alpha_jt_mom_6m_skip1m`（window=120 skip=21），跳过最近 21 天避免 ST reversal 污染
+- **Parkinson 公式错**：原 `(H-L)/close` 不是 Parkinson variance → 新增 `alpha_parkinson_vol_20` 严格按 `sqrt(mean(ln(H/L)²)/(4 ln 2))`；原 proxy 改名 `alpha_range_proxy_20` 并修正 citation
+- **Amihud 复权风险**：添加 `dollar_volume` 参数 + 复权警告 + registry 层 `optional_kwargs` 透传机制
+- **Rolling min_periods**：收紧到 `=window`（防止早期窗口分布偏差）
+
+### 本轮延后（Phase A-2/B 范畴）
+
+- JT 21/120 交易日近似 vs 月度组合 → Phase B 统一
+- Amihud 横截面可比性（停牌股估计方差不同）→ A-2 加 valid_count
+- Range 家族高度同源 → A-2 cross-sectional rank + 正交化
+- execution_report / post_trade / app CLI 传递 strategy_id
+- evaluate_promotion paper_days 按 strategy_id 过滤（v1 已 void，非阻塞）
+
+---
+
+## 关键数据 + 账户状态
+
+### 测试规模
+- 初始 137 → **192**（+55，全 PASS）
+
+### 真实 SBI 账户（2026-04-14）
+- NAV: **¥400,545** 全现金（2026-04-10 后）
+- **Pending 挂单**：BUY 3041.T 400@¥585 (order_id `2026-04-14__sbi__f1cba08b79`, status=open)
+  - 按 14:45 模型信号，首次人机闭环
+  - 盘中 ¥588 越过限价，成交概率 ~40%
+
+### Paper 轨道（与 SBI 物理分离）
+- strategy_id=`sprint_paper`
+- 2 只历史 paper 持仓：3041.T + 7984.T（2026-04-10 进的 paper 单）
+
+### experiment_log 条目
+- 原 2 条（governance）+ 11 因子 + 3 supersede + 2 A-1 revision = **18 条**
+
+### Git 推送
+- 11 次 commit，main 分支，全部 push 到 GitHub
 
 ---
 
 ## 遗留问题（优先级排序）
 
-### ✅ 已完成（2026-04-14 追加）
+### P0 — Phase A 继续推进（本周主线）
 
-- **`intraday_decision.py` 基础版**：14:45 JST 手动/定时触发，refresh intraday quotes → 读 target_weights.csv → 对真实 SBI 仓位（source='sbi_actual'）计算建仓差 → 生成 `reports/TRADE_SIGNAL_<date>.md` + Discord webhook 推送
-- **Paper 闸门默认关闭**：`config.yaml paper.require_approval: false`，撤回昨日 T0.1 错误方向
-- **v3 计划修订**：主战场从"治理"切回"Alpha 扩展 + walk-forward"
+- [ ] **A-2 Cross-sectional rank** — factors.transforms 模块，日内横截面 rank 到 [0,1]
+- [ ] **A-3 行业中性化** — 每因子减去 TSE 33 业种中位数（需要先有业种映射表）
+- [ ] **A-4 Winsorize + z-score 标准化**
+- [ ] **A-5 因子正交化 / 相关性剪枝**（range 家族、reversal vs roc_1 高度同源）
+- [ ] **集成到 feature_daily 流水线** — `compute_alpha_extended_features.py`
 
-### 🔴 新发现的 P0 Bug
+### P1 — Phase B Walk-Forward Runner
 
-**paper_simulator 污染真实 sprint strategy_id**：
-- 当前 `paper_simulator` 的成交写到 `strategy_id='sprint'`（真实策略），而非独立的 `sprint_paper`
-- 结果：`positions` 表里 `sprint/3041.T @ ¥585` 其实是 paper 单，但被当作真实持仓
-- 污染下游：briefing / action_plan / reality_check NAV
-- 修法：paper_execute.py 强制 `strategy_id='sprint_paper'`；briefing 分两栏显示
-- 跟踪：v3 计划 C-1
+- [ ] `walk_forward_runner.py` — 3 年训练 / 6 月验证 / 1 月滚动
+- [ ] Newey-West t-stat + Block bootstrap CI
+- [ ] Ledoit-Wolf 协方差 shrinkage
+- [ ] T+1 open + square-root slippage
 
-### P0 — 决策时点重构（本阶段核心遗留）
+### P2 — Phase D 统计/风险
 
-**问题**：`daily_run.py` 16:30 JST 启动（收盘后），`paper_execute` 收盘后回填成交，用户看到信号时**已来不及在 SBI 跟单**。
+- [ ] Deflated Sharpe Ratio（读 experiment_log 取 N）
+- [ ] FDR (Benjamini-Hochberg)
+- [ ] Barra-lite 5 因子风险分解
 
-**期望**：
-- 14:30 JST 盘中出决策（收盘前 30 分钟）
-- 实时推送（Discord webhook / 文件 / 控制台）
-- 用户手动下单到 SBI
-- Paper 轨迹维持自动化（收盘后补成交即可）
+### P3 — Intraday 生产线完善
 
-**下一步任务**：
-1. `intraday_decision.py` —— 14:30 触发，拉 intraday 价格 + factor_registry 权重 + 当前持仓，调用 `make_decision` 出单
-2. Discord webhook 新事件类型 `intraday_decision`（已有基建 `_post_runtime_alert_webhook`）
-3. Windows 任务计划器每交易日 14:30 触发
-4. **T+1 回测**：近 20 个交易日回放，决策按 14:30 价而非 next_open 成交，产出对比 NAV 曲线 —— 这是后续所有策略调参的基线数据
+- [ ] C-3 Windows Task Scheduler 14:45 JST 自动触发
+- [ ] C-4 yfinance 熔断 + 回退昨收
+- [ ] post_trade / sync_broker_fills / app CLI 传 strategy_id
+- [ ] evaluate_promotion paper_days 按 strategy_id 过滤（v1 已 void，低优）
 
-### P1 — Alpha 因子扩展（v3 新主战场）
+### P4 — Phase -1 数据卫生剩余
 
-用户原始需求 = 买卖策略优化。v3 把这定义为**因子库从 25 → 80+ + 行业中性 + 正交化 + marginal IC**。
-
-对标 Qlib Alpha158，移植 60 个可解释、低相关、有学术出处的因子。**不发明因子**。
-
-候选来源：
-- Alpha158 / Alpha360（Qlib 内置）
-- AQR 因子模型（quality / momentum / value / low-vol）
-- Lopez de Prado "Advances in Financial ML"（fractional differencing, triple barrier）
-
-**硬性要求**：所有新因子/阈值必须先走 `experiment_log.preregister()`，带学术引用。
-
-### P2 — Walk-Forward Runner
-
-项目评分 #4「回测严谨性」2/10 → 6/10 的单点杠杆。
-3 年训练 / 6 月验证 / 1 月滚动，所有选择决策嵌进训练窗。
-
-### P2 — PIT 剩余漏洞（非阻塞）
-
-审计报告剩 3 处 P1 + 2 处 P2：
-- `market_data_utils.py:10,46` — `MAX(date)` 系统时钟；建议加 `@live_only` 注释
-- `macro_event_detector.py:192` — `ORDER BY asof DESC LIMIT 5` 无 WHERE
-- `cross_asset_signals.py:342` — `LIMIT 1` 无 asof 参数
-- `factor_registry` 元数据语义（`compute_ic.py:530` / `evaluate_promotion.py:193`）
-- `db_update.py:197` ETL 路径标注
-
-### P3 — Phase -1 数据卫生剩余 7 项
-
-v2 计划的 D-1 ~ D-7：
-- D-1 survivorship bias（退市票）
-- D-2 公司行动复权
-- D-3 1321.T total-return（当前 reality_check 只用 price-return，低估 TOPIX 表现）
-- D-4 TSE 手数单位历史快照
-- D-5 停牌/涨跌停标记
-- D-6 基本面 `available_at` vs `report_date`
-- D-7 跨市场时区 UTC 化
-
-这些不阻塞 P0/P1，可穿插进行。D-3 工作量最小、收益立即可见（reality_check 基准更诚实）。
-
-### P4 — Paper 闸门配套（如果未来要启用）
-
-当前 `require_approval=false`。若将来启用，尚缺：
-- approval 审计 jsonl
-- reject / cancel / void 路径
-- `stale_orders_expired` 同步清理 `awaiting_approval`
-- PENDING_APPROVAL.md 展示 expected_value
+- [ ] D-3 1321.T total-return 序列
+- [ ] D-6 基本面 available_at vs report_date 审计
+- [ ] D-1 Survivorship / 退市票
+- [ ] D-2 / D-4 / D-5 / D-7 剩余 4 项
 
 ---
 
-## 方向性说明
+## 当前项目评分（自评 + Codex 审视）
 
-**项目定位未变**：alpha 研究 + 决策辅助。不是"已证伪的玩具"，也不是"可投产赚钱机"。当前阶段 = **数据采集期**（模型有基础可靠性，需更多样本验证），本阶段的治理修复是为这个数据采集期**把底层洗干净**，让后续策略优化可信。
+| 维度 | 当前 | 10 周目标 |
+|---|---|---|
+| 数据覆盖 | 5/10 | 6/10 |
+| **因子库** | **3/10 → 4/10** (A-1 初阶完成) | **5/10** |
+| 信号模型 | 4/10 | 5/10 |
+| **回测严谨性** | **2/10** | **6/10** (Phase B) |
+| 统计验证 | 2/10 | 6/10 |
+| 组合构造 | 3/10 | 5/10 |
+| 执行建模 | 3/10 | 5/10 |
+| 实盘集成 | 6/10 | 7/10 |
+| 治理/可复现 | 5/10 → **6/10** | 7/10 |
+| 运维成熟 | 6/10 | 7/10 |
 
-**决策节奏转向**：系统每日 14:30 JST 出单 → 用户实时跟 SBI → 收盘后 paper 自动结算 + NAV 入 reconciliation。这是后续所有工作的前提节拍。
+**总分 3.9/10 → 本阶段 ≈ 4.2/10**（治理+1，因子库 0→1）。核心提升仍靠 Phase B walk-forward。
 
 ---
 
-## 累计指标
+## 方向性原则（不变）
 
-- 新建文件: 12（代码 4 + 测试 5 + 文档 3）
-- 修改生产代码: 5 个（paper_execute / config.yaml / daily_run / compute_ic / compute_price_features）
-- 测试: 137 → **164** (+27)
-- experiment_log 条目: 3（governance 类）
-- 已生成报告: reality_check / pit_parity / pit_audit / promotion_voided
+- 模型经多轮认证，**治理修复不质疑模型**
+- 14:45 JST 出单 + Discord + 用户跟 SBI 是核心节拍
+- "不发明因子"：每个新因子必须有 published 出处 + experiment_log 预注册
+- Paper / SBI 物理分离，absolute 诚实对账
 
 ---
 
-**下一次开工从 `intraday_decision.py` 开始。**
+**下一次开工从 A-2 cross-sectional rank + 集成到 feature_daily 流水线开始。**

@@ -1,0 +1,245 @@
+{
+  "evaluated_at": "2026-04-15",
+  "decisions": [
+    {
+      "strategy_id": "sprint",
+      "tier": "real",
+      "current_state": "paused_sunk_only",
+      "recommended_state": "paused_sunk_only",
+      "passes": {
+        "G1_entry": false,
+        "G2_retention": null,
+        "G3_kill": true,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G1 FAIL: evidence.monthly_excess_vs_ew=-0.0013 <= 0",
+        "G2 N/A: <4 months of NAV history (not enough for 3m trailing)"
+      ],
+      "metrics": {
+        "maxdd": -0.004985701852542546,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 1,
+        "n_nav_rows": 7
+      }
+    },
+    {
+      "strategy_id": "high52w",
+      "tier": "real",
+      "current_state": "active",
+      "recommended_state": "active",
+      "passes": {
+        "G1_entry": true,
+        "G2_retention": null,
+        "G3_kill": true,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G2 N/A: <4 months of NAV history (not enough for 3m trailing)"
+      ],
+      "metrics": {
+        "maxdd": 0.0,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 0,
+        "n_nav_rows": 0
+      }
+    },
+    {
+      "strategy_id": "amihud",
+      "tier": "real",
+      "current_state": "active",
+      "recommended_state": "active",
+      "passes": {
+        "G1_entry": true,
+        "G2_retention": null,
+        "G3_kill": true,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G2 N/A: <4 months of NAV history (not enough for 3m trailing)"
+      ],
+      "metrics": {
+        "maxdd": 0.0,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 0,
+        "n_nav_rows": 1
+      }
+    },
+    {
+      "strategy_id": "sprint_paper",
+      "tier": "paper",
+      "current_state": "active",
+      "recommended_state": "active",
+      "passes": {
+        "G1_entry": null,
+        "G2_retention": null,
+        "G3_kill": null,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G1 N/A: no evidence recorded (run walk_forward_runner + update registry)",
+        "G4 N/A: paper only has 0 monthly returns (<6)"
+      ],
+      "metrics": {
+        "maxdd": -0.001062737099680744,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 0,
+        "n_nav_rows": 3
+      }
+    },
+    {
+      "strategy_id": "high52w_paper",
+      "tier": "paper",
+      "current_state": "active",
+      "recommended_state": "active",
+      "passes": {
+        "G1_entry": null,
+        "G2_retention": null,
+        "G3_kill": null,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G1 N/A: no evidence recorded (run walk_forward_runner + update registry)",
+        "G4 N/A: paper only has 0 monthly returns (<6)"
+      ],
+      "metrics": {
+        "maxdd": 0.0,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 0,
+        "n_nav_rows": 1
+      }
+    },
+    {
+      "strategy_id": "amihud_paper",
+      "tier": "paper",
+      "current_state": "active",
+      "recommended_state": "active",
+      "passes": {
+        "G1_entry": null,
+        "G2_retention": null,
+        "G3_kill": null,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G1 N/A: no evidence recorded (run walk_forward_runner + update registry)",
+        "G4 N/A: paper only has 0 monthly returns (<6)"
+      ],
+      "metrics": {
+        "maxdd": 0.0,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 0,
+        "n_nav_rows": 1
+      }
+    },
+    {
+      "strategy_id": "amihud_k5_paper",
+      "tier": "paper",
+      "current_state": "active",
+      "recommended_state": "active",
+      "passes": {
+        "G1_entry": null,
+        "G2_retention": null,
+        "G3_kill": null,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G1 N/A: no evidence recorded (run walk_forward_runner + update registry)",
+        "G4 N/A: paper only has 0 monthly returns (<6)"
+      ],
+      "metrics": {
+        "maxdd": 0.0,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 0,
+        "n_nav_rows": 1
+      }
+    },
+    {
+      "strategy_id": "amihud_k30_paper",
+      "tier": "paper",
+      "current_state": "active",
+      "recommended_state": "active",
+      "passes": {
+        "G1_entry": null,
+        "G2_retention": null,
+        "G3_kill": null,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G1 N/A: no evidence recorded (run walk_forward_runner + update registry)",
+        "G4 N/A: paper only has 0 monthly returns (<6)"
+      ],
+      "metrics": {
+        "maxdd": 0.0,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 0,
+        "n_nav_rows": 1
+      }
+    },
+    {
+      "strategy_id": "amihud_adv50_paper",
+      "tier": "paper",
+      "current_state": "active",
+      "recommended_state": "active",
+      "passes": {
+        "G1_entry": null,
+        "G2_retention": null,
+        "G3_kill": null,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G1 N/A: no evidence recorded (run walk_forward_runner + update registry)",
+        "G4 N/A: paper only has 0 monthly returns (<6)"
+      ],
+      "metrics": {
+        "maxdd": 0.0,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 0,
+        "n_nav_rows": 1
+      }
+    },
+    {
+      "strategy_id": "min_ret_paper",
+      "tier": "paper",
+      "current_state": "active",
+      "recommended_state": "active",
+      "passes": {
+        "G1_entry": null,
+        "G2_retention": null,
+        "G3_kill": null,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G1 N/A: no evidence recorded (run walk_forward_runner + update registry)",
+        "G4 N/A: paper only has 0 monthly returns (<6)"
+      ],
+      "metrics": {
+        "maxdd": 0.0,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 0,
+        "n_nav_rows": 1
+      }
+    },
+    {
+      "strategy_id": "mom_high52w_paper",
+      "tier": "paper",
+      "current_state": "active",
+      "recommended_state": "active",
+      "passes": {
+        "G1_entry": null,
+        "G2_retention": null,
+        "G3_kill": null,
+        "G4_promotion": null
+      },
+      "reasons": [
+        "G1 N/A: no evidence recorded (run walk_forward_runner + update registry)",
+        "G4 N/A: paper only has 0 monthly returns (<6)"
+      ],
+      "metrics": {
+        "maxdd": 0.0,
+        "trailing_3m_pnl": null,
+        "n_monthly_returns": 0,
+        "n_nav_rows": 1
+      }
+    }
+  ]
+}

@@ -975,6 +975,13 @@ def main():
     ap.add_argument("--max_sector_weight", type=float, default=0.35)
     ap.add_argument("--strategy_id", default="default")
     ap.add_argument("--position_sizing", default="equal_weight")
+    ap.add_argument("--bypass_capital_gate", action="store_true",
+                    help="Skip capital_gate blocking for paused strategies. "
+                         "Emergency/testing use only — logs a warning.")
+    ap.add_argument("--kelly_bootstrap_pct", type=float, default=0.0,
+                    help="per-name weight used when Kelly sample_count < min_samples. "
+                         "Default 0 (no-evidence → no position). Set e.g. 0.10 to "
+                         "allow a small bootstrap position while PnL samples accumulate.")
     ap.add_argument("--max_positions", type=int, default=12)
     ap.add_argument("--out_dir", default="artifacts/decision")
     ap.add_argument("--stop_loss_vol_mult", type=float, default=3.0, help="ATR multiplier for stop-loss")
@@ -1107,7 +1114,13 @@ def main():
             target_weights = target_weights.iloc[0:0].copy()
 
         if args.position_sizing == "half_kelly":
-            kelly = compute_kelly_params(conn, strategy_id=args.strategy_id, lookback_days=60, asof=asof)
+            kelly = compute_kelly_params(
+                conn,
+                strategy_id=args.strategy_id,
+                lookback_days=60,
+                asof=asof,
+                fallback_position_pct=float(args.kelly_bootstrap_pct),
+            )
             target_weights = apply_kelly_sizing(
                 target_weights,
                 suggested_weight=float(kelly.get("suggested_weight", 0.0) or 0.0),
@@ -1295,6 +1308,46 @@ def main():
 
         snapshot_path = out_run / "decision_snapshot.json"
         snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        # ── Capital gate (2026-04-15): FAIL-CLOSED block on BUY emission.
+        # ──────────────────────────────────────────────────────────────────────
+        # Enforces G1-G3. If registry has this strategy and its
+        # recommended_state != "active", OR if gate evaluation fails for
+        # ANY reason, we drop BUY orders and keep only SELL/close.
+        # SELLs are ALWAYS preserved so stop-loss / exit paths can execute.
+        # Explicit override: --bypass_capital_gate (logs loud warning).
+        _bypass = getattr(args, "bypass_capital_gate", False)
+        _block_buys = False
+        _gate_reasons: list[str] = []
+        if _bypass:
+            print(f"[capital_gate] BYPASS enabled (--bypass_capital_gate). "
+                  f"Gate SKIPPED for {args.strategy_id}. USE WITH CAUTION.")
+        else:
+            try:
+                import capital_gate
+                import strategy_registry as _reg
+                if _reg.get(args.strategy_id) is None:
+                    _block_buys = True
+                    _gate_reasons = [f"strategy {args.strategy_id} not in registry — fail-closed"]
+                else:
+                    decision = capital_gate.evaluate(conn, args.strategy_id)
+                    paused_states = {"paused", "retired", "paused_sunk_only"}
+                    if decision.recommended_state in paused_states:
+                        _block_buys = True
+                        _gate_reasons = [f"state={decision.recommended_state}"] + decision.reasons
+            except Exception as _ge:
+                _block_buys = True
+                _gate_reasons = [f"gate evaluation FAILED ({type(_ge).__name__}: {_ge}) — fail-closed"]
+
+        if _block_buys:
+            sells = [o for o in orders
+                     if getattr(o, "side", "").upper() == "SELL"]
+            print(f"[capital_gate] BLOCK BUYs: strategy={args.strategy_id} "
+                  f"fail-closed. Keeping {len(sells)} SELLs, "
+                  f"dropping {len(orders) - len(sells)} BUYs.")
+            for r in _gate_reasons:
+                print(f"  - {r}")
+            orders = sells
 
         # write DB
         write_db(conn, run_id, asof, str(snapshot_path), orders, strategy_id=args.strategy_id)

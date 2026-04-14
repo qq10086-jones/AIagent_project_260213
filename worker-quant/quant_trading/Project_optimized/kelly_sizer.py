@@ -30,7 +30,10 @@ class KellyPositionSizer:
     kelly_fraction: float = 0.5
     min_position_pct: float = 0.05
     max_position_pct: float = 0.50
-    fallback_position_pct: float = 0.25
+    # Default 0.0: when sample_count < min_samples we have no evidence of
+    # edge, so the correct Kelly action is no position. A non-zero value
+    # must be opted-in explicitly (shadow sizing / bootstrap phase).
+    fallback_position_pct: float = 0.0
     min_samples: int = 30
     cooldown_days: int = 5
     cooldown_loss_streak: int = 3
@@ -73,6 +76,7 @@ def compute_kelly_params(
     strategy_id: str,
     lookback_days: int = 60,
     asof: str | None = None,
+    fallback_position_pct: float = 0.0,
 ) -> dict:
     inventory: dict[str, tuple[float, float]] = {}
     realized: list[tuple[date | None, float]] = []
@@ -127,5 +131,6 @@ def compute_kelly_params(
         avg_loss=(sum(losses) / len(losses)) if losses else 0.0,
         sample_count=len(returns),
         cooldown_remaining_days=cooldown_remaining_days,
+        fallback_position_pct=float(fallback_position_pct),
     )
     return sizer.to_dict()

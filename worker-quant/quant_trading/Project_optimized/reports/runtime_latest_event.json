@@ -1,14 +1,7 @@
 {
-  "ts_utc": "2026-04-09T22:33:08+00:00",
-  "level": "warning",
-  "event": "action_plan_generated",
+  "ts_utc": "2026-04-14T07:32:52+00:00",
+  "level": "info",
+  "event": "heartbeat_ok",
   "simulation": false,
-  "simulation_strict_pit": false,
-  "action_summary": "No trades required | Regime: caution",
-  "regime": "caution",
-  "pending_sells": 0,
-  "pending_buys": 0,
-  "held_positions": 0,
-  "risk_alerts": 0,
-  "pipeline": "morning_briefing"
+  "simulation_strict_pit": true
 }

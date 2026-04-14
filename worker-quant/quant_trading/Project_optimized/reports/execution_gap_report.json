@@ -1,0 +1,137 @@
+{
+  "generated_at": "2026-04-15",
+  "rows": [
+    {
+      "strategy_id": "sprint",
+      "tier": "real",
+      "state": "paused_sunk_only",
+      "months": 1.51,
+      "real_pnl": 0.000112,
+      "paper_pnl": 0.223448,
+      "expected_pnl": 0.0172,
+      "exec_gap_real_minus_paper": -0.223336,
+      "expectation_gap_real_minus_expected": -0.017087,
+      "paper_vs_expected": 0.206249
+    },
+    {
+      "strategy_id": "high52w",
+      "tier": "real",
+      "state": "active",
+      "months": 0.0,
+      "real_pnl": null,
+      "paper_pnl": 0.0,
+      "expected_pnl": null,
+      "exec_gap_real_minus_paper": null,
+      "expectation_gap_real_minus_expected": null,
+      "paper_vs_expected": null
+    },
+    {
+      "strategy_id": "amihud",
+      "tier": "real",
+      "state": "active",
+      "months": 0.0,
+      "real_pnl": 0.0,
+      "paper_pnl": 0.0,
+      "expected_pnl": null,
+      "exec_gap_real_minus_paper": 0.0,
+      "expectation_gap_real_minus_expected": null,
+      "paper_vs_expected": null
+    },
+    {
+      "strategy_id": "sprint_paper",
+      "tier": "paper",
+      "state": "active",
+      "months": 0.13,
+      "real_pnl": 0.223448,
+      "paper_pnl": null,
+      "expected_pnl": null,
+      "exec_gap_real_minus_paper": null,
+      "expectation_gap_real_minus_expected": null,
+      "paper_vs_expected": null
+    },
+    {
+      "strategy_id": "high52w_paper",
+      "tier": "paper",
+      "state": "active",
+      "months": 0.0,
+      "real_pnl": 0.0,
+      "paper_pnl": null,
+      "expected_pnl": null,
+      "exec_gap_real_minus_paper": null,
+      "expectation_gap_real_minus_expected": null,
+      "paper_vs_expected": null
+    },
+    {
+      "strategy_id": "amihud_paper",
+      "tier": "paper",
+      "state": "active",
+      "months": 0.0,
+      "real_pnl": 0.0,
+      "paper_pnl": null,
+      "expected_pnl": null,
+      "exec_gap_real_minus_paper": null,
+      "expectation_gap_real_minus_expected": null,
+      "paper_vs_expected": null
+    },
+    {
+      "strategy_id": "amihud_k5_paper",
+      "tier": "paper",
+      "state": "active",
+      "months": 0.0,
+      "real_pnl": 0.0,
+      "paper_pnl": null,
+      "expected_pnl": null,
+      "exec_gap_real_minus_paper": null,
+      "expectation_gap_real_minus_expected": null,
+      "paper_vs_expected": null
+    },
+    {
+      "strategy_id": "amihud_k30_paper",
+      "tier": "paper",
+      "state": "active",
+      "months": 0.0,
+      "real_pnl": 0.0,
+      "paper_pnl": null,
+      "expected_pnl": null,
+      "exec_gap_real_minus_paper": null,
+      "expectation_gap_real_minus_expected": null,
+      "paper_vs_expected": null
+    },
+    {
+      "strategy_id": "amihud_adv50_paper",
+      "tier": "paper",
+      "state": "active",
+      "months": 0.0,
+      "real_pnl": null,
+      "paper_pnl": null,
+      "expected_pnl": null,
+      "exec_gap_real_minus_paper": null,
+      "expectation_gap_real_minus_expected": null,
+      "paper_vs_expected": null
+    },
+    {
+      "strategy_id": "min_ret_paper",
+      "tier": "paper",
+      "state": "active",
+      "months": 0.0,
+      "real_pnl": 0.0,
+      "paper_pnl": null,
+      "expected_pnl": null,
+      "exec_gap_real_minus_paper": null,
+      "expectation_gap_real_minus_expected": null,
+      "paper_vs_expected": null
+    },
+    {
+      "strategy_id": "mom_high52w_paper",
+      "tier": "paper",
+      "state": "active",
+      "months": 0.0,
+      "real_pnl": 0.0,
+      "paper_pnl": null,
+      "expected_pnl": null,
+      "exec_gap_real_minus_paper": null,
+      "expectation_gap_real_minus_expected": null,
+      "paper_vs_expected": null
+    }
+  ]
+}

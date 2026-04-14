@@ -1,0 +1,69 @@
+{
+  "n_periods": 23,
+  "point_estimates": {
+    "cum_net": 0.07078998153455474,
+    "cum_gross": 0.5272086798301794,
+    "sharpe_net": 0.2836700464804488,
+    "mean_monthly_net": 0.004369266488299572,
+    "std_monthly_net": 0.05335629646794235,
+    "skew_monthly": 0.5996351964972046,
+    "kurt_monthly": 2.559006170770113
+  },
+  "bootstrap_ci95_block3": {
+    "cum_mean": 0.11565588341686353,
+    "cum_ci95": [
+      -0.352502339089178,
+      0.9629510098134954
+    ],
+    "cum_p_pos": 0.5634,
+    "sharpe_mean": 0.18627874943873984,
+    "sharpe_ci95": [
+      -1.6927888659800894,
+      1.8537985572912088
+    ],
+    "sharpe_p_pos": 0.6
+  },
+  "deflated_sharpe_p": 7.571635711125636e-21,
+  "top_holdings": {
+    "2016.T": 9,
+    "4438.T": 8,
+    "2837.T": 8,
+    "7426.T": 7,
+    "3908.T": 7,
+    "2721.T": 6,
+    "3913.T": 6,
+    "2334.T": 6,
+    "7138.T": 6,
+    "2015.T": 6,
+    "5256.T": 5,
+    "2254.T": 5,
+    "2248.T": 5,
+    "2094.T": 5,
+    "2252.T": 4,
+    "6046.T": 4,
+    "5031.T": 4,
+    "2629.T": 4,
+    "3192.T": 4,
+    "2648.T": 4
+  },
+  "sector_distribution": {
+    "food/water/fish": 125,
+    "construction/chem": 70,
+    "pharma/oil": 63,
+    "machinery": 54,
+    "electric/transport": 54,
+    "retail/misc": 41,
+    "steel/metals": 28,
+    "finance/services": 20,
+    "ETF/REIT": 5
+  },
+  "top1_name_share_of_month_median": 0.5341713966301173,
+  "config": {
+    "factor": "alpha_amihud_20",
+    "top_k": 20,
+    "min_adv": 20000000.0,
+    "slippage_bps": 100.0,
+    "start": "2024-01-01",
+    "end": "2026-04-14"
+  }
+}

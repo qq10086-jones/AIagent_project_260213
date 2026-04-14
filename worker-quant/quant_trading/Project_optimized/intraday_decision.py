@@ -287,6 +287,15 @@ def main() -> int:
                     help="do not post to Discord")
     ap.add_argument("--symbols", default=None,
                     help="override symbols to refresh (comma-sep); default: targets + holdings")
+    ap.add_argument("--watchlist_only", action="store_true",
+                    default=True,
+                    help="(default 2026-04-15) emit watchlist/risk-alert, NOT buy orders. "
+                         "The walk-forward evidence supports MONTHLY rebalance only; "
+                         "daily BUY emissions are unsupported by 23-month OOS data. "
+                         "Use --emit_orders to override.")
+    ap.add_argument("--emit_orders", dest="watchlist_only", action="store_false",
+                    help="emit BUY/SELL signals for daily execution (legacy). "
+                         "Requires explicit opt-in; default is watchlist-only.")
     args = ap.parse_args()
 
     asof = args.asof or datetime.now(JST).strftime("%Y-%m-%d")
@@ -326,6 +335,28 @@ def main() -> int:
                                    min_notional=args.min_notional)
     finally:
         conn.close()
+
+    # 2026-04-15 downgrade: in watchlist_only mode, the signal message
+    # is informational — we replace `trades` with watchlist alerts and
+    # mark the payload so Discord / markdown render as "observation only".
+    if args.watchlist_only:
+        raw_trades = payload.get("trades", [])
+        watchlist = []
+        for t in raw_trades:
+            watchlist.append({
+                "side": t.get("side", "?"),
+                "symbol": t.get("symbol"),
+                "qty_at_target": t.get("qty"),
+                "last_price": t.get("limit_price_suggest"),
+                "notional": t.get("notional"),
+                "target_weight": t.get("target_weight"),
+                "note": "WATCHLIST ONLY — walk-forward evidence does not support daily BUY. "
+                        "Monthly rebalance only.",
+            })
+        payload["trades"] = []
+        payload["watchlist"] = watchlist
+        payload["mode"] = "watchlist_only"
+        print(f"[intraday] watchlist_only mode: {len(watchlist)} names observed, 0 orders emitted.")
 
     signal_path = _write_signal_file(reports_dir, payload, asof)
     print(f"[intraday] signal written → {signal_path}")

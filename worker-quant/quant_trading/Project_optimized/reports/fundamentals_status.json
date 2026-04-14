@@ -8,16 +8,16 @@
   "attempted_refresh": false,
   "message": "Refresh skipped on main path; using latest cached fundamentals from DB.",
   "latest_source": "yfinance",
-  "latest_rows": 1972,
+  "latest_rows": 2166,
   "latest_symbols": 97,
-  "null_available_ts_rows": 0,
-  "latest_available_ts": "2026-04-09T07:32:35",
+  "null_available_ts_rows": 2166,
+  "latest_available_ts": "2026-04-10T07:33:01",
   "sources": [
     {
       "source": "yfinance",
-      "rows": 1934,
+      "rows": 2128,
       "symbols": 97,
-      "latest_available_ts": "2026-04-09T07:32:35"
+      "latest_available_ts": "2026-04-10T07:33:01"
     },
     {
       "source": "yfinance_deep",
@@ -32,5 +32,5 @@
       "latest_available_ts": "2026-03-01T08:00:00"
     }
   ],
-  "reported_at_utc": "2026-04-09T07:30:08+00:00"
+  "reported_at_utc": "2026-04-14T07:31:31+00:00"
 }

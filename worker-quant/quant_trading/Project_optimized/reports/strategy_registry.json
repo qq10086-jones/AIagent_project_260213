@@ -1,0 +1,218 @@
+{
+  "sprint": {
+    "strategy_id": "sprint",
+    "tier": "real",
+    "signal_module": "sprint_signal",
+    "params": {
+      "factors": [
+        "mom_consist",
+        "high52w"
+      ],
+      "top_k": 3
+    },
+    "capital_cap_jpy": 250000,
+    "state": "paused_sunk_only",
+    "last_paused_reason": "walk-forward 2026-04-14: 2f composite −0.13%/mo vs EW; only hold existing sunk positions until exited",
+    "evidence": {
+      "measured_at": "2026-04-14",
+      "window": "2024-01 → 2026-04",
+      "n_periods": 23,
+      "cum_net": 0.261,
+      "sharpe_ann": 0.85,
+      "maxdd": -0.137,
+      "monthly_excess_vs_ew": -0.0013,
+      "oos_holdout_result": "untested",
+      "dsr_p": 0.0
+    },
+    "notes": "vol_z removed 2026-04-14 (was negative alpha). Current 3041.T held; no new entries until evidence improves."
+  },
+  "high52w": {
+    "strategy_id": "high52w",
+    "tier": "real",
+    "signal_module": "alpha_factor_score",
+    "params": {
+      "factors": [
+        "high52w"
+      ],
+      "top_k": 5,
+      "min_adv": 50000000
+    },
+    "capital_cap_jpy": 100000,
+    "state": "active",
+    "last_paused_reason": null,
+    "evidence": {
+      "measured_at": "2026-04-14",
+      "window": "2024-01 → 2026-04",
+      "n_periods": 23,
+      "cum_net": 0.301,
+      "sharpe_ann": 0.88,
+      "maxdd": -0.131,
+      "monthly_excess_vs_ew": 0.0002,
+      "oos_holdout_result": "untested",
+      "dsr_p": 0.0
+    },
+    "notes": "Lowest-risk WF candidate. Matches EW return with comparable DD."
+  },
+  "amihud": {
+    "strategy_id": "amihud",
+    "tier": "real",
+    "signal_module": "alpha_factor_score",
+    "params": {
+      "factors": [
+        "alpha_amihud_20"
+      ],
+      "top_k": 20,
+      "min_adv": 100000000
+    },
+    "capital_cap_jpy": 100000,
+    "state": "active",
+    "last_paused_reason": null,
+    "evidence": {
+      "measured_at": "2026-04-14",
+      "window": "2024-01 → 2026-04",
+      "n_periods": 23,
+      "cum_net": 0.729,
+      "sharpe_ann": 0.67,
+      "maxdd": -0.157,
+      "monthly_excess_vs_ew": 0.0187,
+      "oos_holdout_result": "negative_2023",
+      "dsr_p": 0.0
+    },
+    "notes": "High IS edge but REGIME-DEPENDENT: 2023 OOS cum -3.1%. Kill-switch if 3m real PnL < -5%."
+  },
+  "sprint_paper": {
+    "strategy_id": "sprint_paper",
+    "tier": "paper",
+    "signal_module": "sprint_signal",
+    "params": {
+      "factors": [
+        "mom_consist",
+        "high52w"
+      ],
+      "top_k": 3
+    },
+    "capital_cap_jpy": 0.0,
+    "state": "active",
+    "last_paused_reason": null,
+    "evidence": null,
+    "notes": "Shadow of sprint. Used to measure execution gap real − paper."
+  },
+  "high52w_paper": {
+    "strategy_id": "high52w_paper",
+    "tier": "paper",
+    "signal_module": "alpha_factor_score",
+    "params": {
+      "factors": [
+        "high52w"
+      ],
+      "top_k": 5,
+      "min_adv": 50000000
+    },
+    "capital_cap_jpy": 0.0,
+    "state": "active",
+    "last_paused_reason": null,
+    "evidence": null,
+    "notes": ""
+  },
+  "amihud_paper": {
+    "strategy_id": "amihud_paper",
+    "tier": "paper",
+    "signal_module": "alpha_factor_score",
+    "params": {
+      "factors": [
+        "alpha_amihud_20"
+      ],
+      "top_k": 20,
+      "min_adv": 100000000
+    },
+    "capital_cap_jpy": 0.0,
+    "state": "active",
+    "last_paused_reason": null,
+    "evidence": null,
+    "notes": ""
+  },
+  "amihud_k5_paper": {
+    "strategy_id": "amihud_k5_paper",
+    "tier": "paper",
+    "signal_module": "alpha_factor_score",
+    "params": {
+      "factors": [
+        "alpha_amihud_20"
+      ],
+      "top_k": 5,
+      "min_adv": 100000000
+    },
+    "capital_cap_jpy": 0.0,
+    "state": "active",
+    "last_paused_reason": null,
+    "evidence": null,
+    "notes": "Amihud with aggressive concentration — test k sensitivity."
+  },
+  "amihud_k30_paper": {
+    "strategy_id": "amihud_k30_paper",
+    "tier": "paper",
+    "signal_module": "alpha_factor_score",
+    "params": {
+      "factors": [
+        "alpha_amihud_20"
+      ],
+      "top_k": 30,
+      "min_adv": 100000000
+    },
+    "capital_cap_jpy": 0.0,
+    "state": "active",
+    "last_paused_reason": null,
+    "evidence": null,
+    "notes": ""
+  },
+  "amihud_adv50_paper": {
+    "strategy_id": "amihud_adv50_paper",
+    "tier": "paper",
+    "signal_module": "alpha_factor_score",
+    "params": {
+      "factors": [
+        "alpha_amihud_20"
+      ],
+      "top_k": 20,
+      "min_adv": 50000000
+    },
+    "capital_cap_jpy": 0.0,
+    "state": "active",
+    "last_paused_reason": null,
+    "evidence": null,
+    "notes": ""
+  },
+  "min_ret_paper": {
+    "strategy_id": "min_ret_paper",
+    "tier": "paper",
+    "signal_module": "alpha_factor_score",
+    "params": {
+      "factors": [
+        "alpha_min_ret_20"
+      ],
+      "top_k": 10
+    },
+    "capital_cap_jpy": 0.0,
+    "state": "active",
+    "last_paused_reason": null,
+    "evidence": null,
+    "notes": "Defensive — 20d min-return factor. MaxDD -3.3% in WF."
+  },
+  "mom_high52w_paper": {
+    "strategy_id": "mom_high52w_paper",
+    "tier": "paper",
+    "signal_module": "alpha_factor_score",
+    "params": {
+      "factors": [
+        "mom_consist",
+        "high52w"
+      ],
+      "top_k": 5
+    },
+    "capital_cap_jpy": 0.0,
+    "state": "active",
+    "last_paused_reason": null,
+    "evidence": null,
+    "notes": "2-factor composite — is averaging better than high52w alone?"
+  }
+}

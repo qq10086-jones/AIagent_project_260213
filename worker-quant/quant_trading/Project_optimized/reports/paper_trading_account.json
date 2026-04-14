@@ -9,51 +9,5 @@
     "nav": 400545.0,
     "run_id": "sbi-2026-04-10"
   },
-  "positions": [
-    {
-      "asof": "2026-04-08",
-      "symbol": "4005.T",
-      "qty": 100.0,
-      "avg_cost": 529.0,
-      "market_price": 555.9000244140625,
-      "market_value": 55590.00244140625,
-      "unrealized_pnl": 2710.0024414062545
-    },
-    {
-      "asof": "2026-04-07",
-      "symbol": "4005.T",
-      "qty": 100.0,
-      "avg_cost": 529.0,
-      "market_price": 533.2000122070312,
-      "market_value": 53320.001220703125,
-      "unrealized_pnl": 440.00122070312955
-    },
-    {
-      "asof": "2026-04-06",
-      "symbol": "4005.T",
-      "qty": 100.0,
-      "avg_cost": 529.0,
-      "market_price": 533.2000122070312,
-      "market_value": 53320.001220703125,
-      "unrealized_pnl": 440.00122070312955
-    },
-    {
-      "asof": "2026-04-06",
-      "symbol": "7267.T",
-      "qty": 100.0,
-      "avg_cost": 1259.5,
-      "market_price": 1262.0,
-      "market_value": 126200.0,
-      "unrealized_pnl": 250.0
-    },
-    {
-      "asof": "2026-04-06",
-      "symbol": "9432.T",
-      "qty": 400.0,
-      "avg_cost": 156.9,
-      "market_price": 157.10000610351562,
-      "market_value": 62840.00244140625,
-      "unrealized_pnl": 80.00244140624773
-    }
-  ]
+  "positions": []
 }

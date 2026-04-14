@@ -44,10 +44,21 @@ def _load_panel(conn: sqlite3.Connection, symbols: list[str], asof: str, lookbac
 
 
 def sprint_score(features: pd.DataFrame, ic_weights: dict | None = None) -> pd.Series:
-    weights = ic_weights or {"mom_consist": 1.0, "high52w": 1.0, "vol_z": 1.0}
+    """Equal-weighted (or IC-weighted) composite of the sprint alpha factors.
+
+    2026-04-14 update (walk-forward OOS Jan 2024 → Apr 2026, 23 months):
+    `vol_z` was removed from the alpha composite after ablation showed it
+    destroys the combined edge. Measured impact:
+        - mom_consist + high52w (2-factor): +26.1% net cum, Sharpe 0.85
+        - mom_consist + high52w + vol_z (3-factor): +14.3% net, Sharpe 0.40
+        - mom_consist + vol_z (drops high52w): +4.2% net, Sharpe 0.21
+    `vol_z` retained as ENTRY FILTER and volume confirmation (see
+    `sprint_entry_check`), just not as a linear alpha component.
+    """
+    weights = ic_weights or {"mom_consist": 1.0, "high52w": 1.0}
     score = pd.Series(0.0, index=features.index, dtype=float)
     denom = 0.0
-    for factor in ["mom_consist", "high52w", "vol_z"]:
+    for factor in ("mom_consist", "high52w"):
         weight = float(weights.get(factor, 1.0))
         score = score + pd.to_numeric(features.get(factor, 0.0), errors="coerce").fillna(0.0) * weight
         denom += abs(weight)

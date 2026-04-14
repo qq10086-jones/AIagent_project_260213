@@ -45,6 +45,16 @@ class TestKellySizer(unittest.TestCase):
         )
         self.assertEqual(sizer.suggested_weight(), 0.10)
 
+    def test_low_sample_defaults_to_zero_no_evidence_no_position(self):
+        sizer = KellyPositionSizer(
+            win_rate=0.70,
+            avg_win=0.08,
+            avg_loss=0.03,
+            sample_count=10,
+            min_samples=30,
+        )
+        self.assertEqual(sizer.suggested_weight(), 0.0)
+
     def test_cooldown_forces_zero_weight(self):
         sizer = KellyPositionSizer(
             win_rate=0.70,

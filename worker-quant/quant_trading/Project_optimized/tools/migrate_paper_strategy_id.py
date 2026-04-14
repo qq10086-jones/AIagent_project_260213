@@ -46,17 +46,36 @@ def migrate(db_path: str, apply: bool) -> dict:
             conn.close()
             return {"apply": False, "counts": before, "note": "dry run"}
 
-        # 1) Fills
-        conn.execute(
-            """UPDATE fills
-               SET strategy_id = strategy_id || '_paper'
-               WHERE source='paper_simulator'
-               AND strategy_id NOT LIKE '%_paper'"""
-        )
-        fills_moved = conn.total_changes
+        # ORDER MATTERS: migrate positions + snapshots FIRST using the
+        # current (still-unsuffixed) fills.strategy_id as the matching key,
+        # then rewrite fills last. If we moved fills first, subsequent
+        # lookups against fills.strategy_id would fail to match the old
+        # positions/snapshots rows (the bug Codex flagged).
 
-        # 2) Account snapshots whose run_id originated from paper fills
-        prev_changes = conn.total_changes
+        # 1) Positions that are tied to paper-sourced fills (by current
+        #    strategy_id + symbol + asof anchor). Snapshot the match set
+        #    upfront in a temp table to decouple from later fills update.
+        conn.execute("DROP TABLE IF EXISTS _paper_match_tmp")
+        conn.execute(
+            """CREATE TEMP TABLE _paper_match_tmp AS
+               SELECT DISTINCT strategy_id, symbol, asof
+               FROM fills
+               WHERE source='paper_simulator'
+                 AND strategy_id NOT LIKE '%_paper'"""
+        )
+        n_before = conn.total_changes
+        conn.execute(
+            """UPDATE positions
+               SET strategy_id = strategy_id || '_paper'
+               WHERE strategy_id NOT LIKE '%_paper'
+               AND (strategy_id, symbol) IN (
+                   SELECT strategy_id, symbol FROM _paper_match_tmp
+               )"""
+        )
+        positions_moved = conn.total_changes - n_before
+
+        # 2) Account snapshots whose run_id traces back to paper fills
+        n_before = conn.total_changes
         conn.execute(
             """UPDATE account_snapshots
                SET strategy_id = strategy_id || '_paper'
@@ -64,21 +83,19 @@ def migrate(db_path: str, apply: bool) -> dict:
                AND run_id IN (SELECT DISTINCT run_id FROM fills
                               WHERE source='paper_simulator')"""
         )
-        snaps_moved = conn.total_changes - prev_changes
+        snaps_moved = conn.total_changes - n_before
 
-        # 3) Positions rows tied to paper-sourced fills on same strategy_id
-        prev_changes = conn.total_changes
+        # 3) Fills last — after everything downstream has been matched.
+        n_before = conn.total_changes
         conn.execute(
-            """UPDATE positions
+            """UPDATE fills
                SET strategy_id = strategy_id || '_paper'
-               WHERE strategy_id NOT LIKE '%_paper'
-               AND (strategy_id, symbol) IN (
-                   SELECT DISTINCT strategy_id, symbol
-                   FROM fills
-                   WHERE source='paper_simulator'
-               )"""
+               WHERE source='paper_simulator'
+               AND strategy_id NOT LIKE '%_paper'"""
         )
-        positions_moved = conn.total_changes - prev_changes
+        fills_moved = conn.total_changes - n_before
+
+        conn.execute("DROP TABLE IF EXISTS _paper_match_tmp")
 
         conn.commit()
         after = _count(conn)

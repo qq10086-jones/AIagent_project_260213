@@ -455,7 +455,7 @@ def read_live_state(db_path: str, strategy_id: str = "default", asof: str = None
         ]
 
         # 挂单（仅 proposed/open）
-        query_ord = "SELECT order_id, symbol, side, qty, limit_price, status, created_ts FROM orders WHERE strategy_id=? AND status IN ('proposed','open','pending')"
+        query_ord = "SELECT order_id, symbol, side, qty, limit_price, status, created_ts FROM orders WHERE strategy_id=? AND status IN ('proposed','open','pending','partial')"
         params_ord = [strategy_id]
         if asof:
             query_ord += " AND asof=?"

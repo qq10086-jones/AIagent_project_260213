@@ -93,9 +93,26 @@ def confirm_fill(
                 f"order {order_id} status={order['status']!r}, cannot fill"
             )
 
+        # Idempotency guard (Codex B): any existing fill row already
+        # keyed to this order_id means we must not double-book. We use
+        # external_ref as the natural key since fill_id is ts-dependent.
+        already_filled_qty = conn.execute(
+            "SELECT COALESCE(SUM(qty), 0) FROM fills "
+            "WHERE external_ref=? AND source='sbi_actual'",
+            (order_id,),
+        ).fetchone()[0] or 0.0
+        already_filled_qty = float(already_filled_qty)
+
         fill_qty = float(qty) if qty is not None else order["qty"]
-        if fill_qty <= 0 or fill_qty > order["qty"]:
-            raise ValueError(f"fill qty {fill_qty} outside [0, {order['qty']}]")
+        if fill_qty <= 0:
+            raise ValueError(f"fill qty {fill_qty} must be > 0")
+        # order["qty"] at this point is REMAINING qty (decremented on
+        # prior partial fills). So the maximum new fill is that remainder.
+        if fill_qty > order["qty"] + 1e-9:
+            raise ValueError(
+                f"fill qty {fill_qty} exceeds remaining {order['qty']} "
+                f"(already filled {already_filled_qty})"
+            )
 
         ts = fill_ts or datetime.now(JST).isoformat(timespec="seconds")
         strategy_id = order["strategy_id"]

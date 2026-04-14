@@ -801,10 +801,26 @@ def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = F
         }
 
         # 仓位 & 挂单（含 ATR 止损计算）
+        # v3 C-2: read both SBI live track and paper track so the briefing
+        # can show both side-by-side. `live_state` always reflects the
+        # requested strategy (typically 'sprint' = SBI); `live_state_paper`
+        # surfaces the shadow paper track when it exists.
         live = read_live_state(DB_PATH, strategy_id=strategy_id, asof=asof)
         if live.get("positions"):
             live["positions"] = _enrich_positions_with_stop_loss(live["positions"])
         report["live_state"] = live
+
+        paper_strategy_id = (
+            strategy_id if strategy_id.endswith("_paper") else f"{strategy_id}_paper"
+        )
+        if paper_strategy_id != strategy_id:
+            live_paper = read_live_state(DB_PATH, strategy_id=paper_strategy_id, asof=asof)
+            if live_paper.get("positions"):
+                live_paper["positions"] = _enrich_positions_with_stop_loss(live_paper["positions"])
+            # Only attach if there is anything to show (avoid empty section noise)
+            if live_paper.get("positions") or live_paper.get("orders"):
+                live_paper["strategy_id"] = paper_strategy_id
+                report["live_state_paper"] = live_paper
 
         # 最新信号（来自 DB）
         report["db_signals"] = read_latest_signals(DB_PATH, top_n=15)
@@ -868,7 +884,7 @@ def write_report(report: dict) -> tuple[Path, Path]:
 
     if "live_state" in report:
         live = report["live_state"]
-        lines.append("## 当前仓位 & 挂单")
+        lines.append("## SBI 实盘持仓 & 挂单")
         pos = live.get("positions", [])
         if pos:
             for p in pos:
@@ -879,6 +895,21 @@ def write_report(report: dict) -> tuple[Path, Path]:
         orders = live.get("orders", [])
         if orders:
             for o in orders:
+                lines.append(f"- 挂单 {o['symbol']} {o['side']} {o['qty']}股 @ {o['limit_price']}  [{o['status']}]")
+        lines.append("")
+
+    if "live_state_paper" in report:
+        livep = report["live_state_paper"]
+        lines.append(f"## Paper 模型轨迹 ({livep.get('strategy_id','paper')})")
+        lines.append("_仅模型假设跟单的理论持仓，与 SBI 实盘解耦_")
+        posp = livep.get("positions", [])
+        if posp:
+            for p in posp:
+                lines.append(f"- 持仓 {p['symbol']}  {p['qty']}股  均价{p['avg_cost']}  "
+                              f"浮盈{p.get('unrealized_pnl','N/A')}")
+        ordp = livep.get("orders", [])
+        if ordp:
+            for o in ordp:
                 lines.append(f"- 挂单 {o['symbol']} {o['side']} {o['qty']}股 @ {o['limit_price']}  [{o['status']}]")
         lines.append("")
 

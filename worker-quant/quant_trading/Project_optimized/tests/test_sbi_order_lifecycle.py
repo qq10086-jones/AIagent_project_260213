@@ -126,6 +126,41 @@ def test_fill_is_idempotent_refuses_double_booking(tmp_path: Path) -> None:
     assert cnt == 1
 
 
+def test_partial_fill_retry_without_additional_is_refused(tmp_path: Path) -> None:
+    """Codex gotcha #1: after a partial fill, rerunning the same command
+    must be refused to prevent double-booking. Users opt in with
+    additional=True only when SBI truly delivered another partial."""
+    db = _seed_db(tmp_path)
+    oid = _place(db, "BUY", "3041.T", 400, 585.0)
+    record_sbi_fill.confirm_fill(db=str(db), order_id=oid, price=585.0, qty=100, rebuild=False)
+    with pytest.raises(RuntimeError) as exc:
+        record_sbi_fill.confirm_fill(db=str(db), order_id=oid, price=585.0, qty=100, rebuild=False)
+    assert "already has filled" in str(exc.value).lower()
+    # Only one fill row, remaining = 300
+    conn = sqlite3.connect(db)
+    cnt = conn.execute("SELECT COUNT(*) FROM fills WHERE external_ref=?", (oid,)).fetchone()[0]
+    remaining = conn.execute("SELECT qty FROM orders WHERE order_id=?", (oid,)).fetchone()[0]
+    conn.close()
+    assert cnt == 1
+    assert remaining == 300
+
+
+def test_partial_fill_additional_opt_in_books_next_partial(tmp_path: Path) -> None:
+    """When SBI legitimately delivers a second partial, --additional
+    allows the operator to opt in."""
+    db = _seed_db(tmp_path)
+    oid = _place(db, "BUY", "3041.T", 400, 585.0)
+    record_sbi_fill.confirm_fill(db=str(db), order_id=oid, price=585.0, qty=100, rebuild=False)
+    record_sbi_fill.confirm_fill(db=str(db), order_id=oid, price=585.0, qty=100, rebuild=False,
+                                  additional=True)
+    conn = sqlite3.connect(db)
+    rows = conn.execute("SELECT COUNT(*), SUM(qty) FROM fills WHERE external_ref=?", (oid,)).fetchone()
+    remaining = conn.execute("SELECT qty FROM orders WHERE order_id=?", (oid,)).fetchone()[0]
+    conn.close()
+    assert rows == (2, 200.0)
+    assert remaining == 200
+
+
 def test_partial_fill_decrements_remaining_and_stays_visible(tmp_path: Path) -> None:
     """Codex D/E: after partial fill, order.status='partial' and order.qty
     tracks remaining. The open-order listing must still surface it."""
@@ -143,9 +178,10 @@ def test_partial_fill_decrements_remaining_and_stays_visible(tmp_path: Path) -> 
     assert orders[0]["status"] == "partial"
     assert orders[0]["qty"] == 200  # remaining
 
-    # Finish it
+    # Finish it — pass additional=True because prior partial already exists
     out2 = record_sbi_fill.confirm_fill(
         db=str(db), order_id=oid, price=586.0, qty=200, rebuild=False,
+        additional=True,
     )
     assert out2["new_status"] == "filled"
 
@@ -181,6 +217,7 @@ def test_partial_order_list_exposes_filled_remaining_original(tmp_path: Path) ->
     oid = _place(db, "BUY", "3041.T", 400, 585.0)
     # Partial 150 out of 400
     record_sbi_fill.confirm_fill(db=str(db), order_id=oid, price=585.0, qty=150, rebuild=False)
+    # No retry — just inspect the state.
     orders = record_sbi_order.list_open_orders(str(db))
     assert len(orders) == 1
     o = orders[0]

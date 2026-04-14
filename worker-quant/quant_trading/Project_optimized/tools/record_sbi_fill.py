@@ -81,6 +81,7 @@ def confirm_fill(
     tax: float = 0.0,
     fill_ts: str | None = None,
     rebuild: bool = True,
+    additional: bool = False,
 ) -> dict:
     conn = connect(db)
     ensure_trade_tables(conn)
@@ -103,6 +104,19 @@ def confirm_fill(
         ).fetchone()[0] or 0.0
         already_filled_qty = float(already_filled_qty)
 
+        # Codex gotcha #1: once an order has ANY filled qty, a second
+        # invocation is most likely a human rerun of the same command.
+        # Refuse additional fills unless `additional=True` is set
+        # explicitly (e.g. when SBI delivers truly separate partial fills
+        # over the day). This closes the "rerun the same CLI = double
+        # booking" footgun that the test suite previously only documented.
+        if already_filled_qty > 0 and not additional:
+            raise RuntimeError(
+                f"order {order_id} already has filled qty={already_filled_qty}. "
+                f"Pass --additional to book another partial, or double-check "
+                f"you are not rerunning the same confirmation."
+            )
+
         fill_qty = float(qty) if qty is not None else order["qty"]
         if fill_qty <= 0:
             raise ValueError(f"fill qty {fill_qty} must be > 0")
@@ -114,7 +128,10 @@ def confirm_fill(
                 f"(already filled {already_filled_qty})"
             )
 
-        ts = fill_ts or datetime.now(JST).isoformat(timespec="seconds")
+        # Microseconds prevent fill_id collision when the same order is
+        # partial-filled twice in quick succession (INSERT OR REPLACE on
+        # duplicate fill_id would silently overwrite the first fill).
+        ts = fill_ts or datetime.now(JST).isoformat(timespec="microseconds")
         strategy_id = order["strategy_id"]
         asof = order["asof"]
         run_id = order["run_id"]
@@ -193,12 +210,15 @@ def main() -> None:
     ap.add_argument("--db", default="japan_market.db")
     ap.add_argument("--no_rebuild", action="store_true",
                     help="skip positions/snapshot rebuild (fast, reconcile later)")
+    ap.add_argument("--additional", action="store_true",
+                    help="order already has prior fills and SBI delivered another "
+                         "partial — required to opt in, prevents rerun double-booking")
     args = ap.parse_args()
 
     out = confirm_fill(
         db=args.db, order_id=args.order_id, price=args.price,
         qty=args.qty, fee=args.fee, tax=args.tax, fill_ts=args.ts,
-        rebuild=not args.no_rebuild,
+        rebuild=not args.no_rebuild, additional=args.additional,
     )
     import json
     print(json.dumps(out, ensure_ascii=False, indent=2, default=str))

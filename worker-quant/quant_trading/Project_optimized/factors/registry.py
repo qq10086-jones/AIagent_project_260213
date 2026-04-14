@@ -58,12 +58,12 @@ FACTOR_REGISTRY: dict[str, FactorSpec] = {
         citation="Jegadeesh-Titman 1993",
         expected_sign="+",
     ),
-    "alpha_roc_120": FactorSpec(
-        name="alpha_roc_120",
-        fn=momentum.roc,
+    "alpha_jt_mom_6m_skip1m": FactorSpec(
+        name="alpha_jt_mom_6m_skip1m",
+        fn=momentum.jt_momentum,
         inputs=("close",),
-        params={"window": 120},
-        description="120-day (~6M) rate of change — classic medium-term momentum",
+        params={"window": 120, "skip": 21},
+        description="Jegadeesh-Titman 6M momentum skipping last 1M (separates from ST reversal)",
         citation="Jegadeesh-Titman 1993",
         expected_sign="+",
     ),
@@ -115,13 +115,13 @@ FACTOR_REGISTRY: dict[str, FactorSpec] = {
         expected_sign="+",
     ),
     # ── Range volatility ─────────────────────────────────────────────
-    "alpha_range_20": FactorSpec(
-        name="alpha_range_20",
-        fn=range_vol.intraday_range,
+    "alpha_range_proxy_20": FactorSpec(
+        name="alpha_range_proxy_20",
+        fn=range_vol.intraday_range_proxy,
         inputs=("high", "low", "close"),
         params={"window": 20},
-        description="Parkinson-style (high-low)/close mean over 20d",
-        citation="Parkinson 1980",
+        description="range proxy: mean (H-L)/close over 20d (NOT Parkinson variance)",
+        citation="plain range proxy; see Parkinson 1980 for variance estimator",
         expected_sign="?",
     ),
     "alpha_hl_ratio_20": FactorSpec(
@@ -129,8 +129,17 @@ FACTOR_REGISTRY: dict[str, FactorSpec] = {
         fn=range_vol.high_low_ratio,
         inputs=("high", "low"),
         params={"window": 20},
-        description="mean(high/low - 1) 20d",
-        citation="Alizadeh-Brandt-Diebold 2002",
+        description="mean(H/L - 1) 20d — scale-free range proxy",
+        citation="range proxy; see Alizadeh-Brandt-Diebold 2002 for log(H/L) estimator",
+        expected_sign="?",
+    ),
+    "alpha_parkinson_vol_20": FactorSpec(
+        name="alpha_parkinson_vol_20",
+        fn=range_vol.parkinson_volatility,
+        inputs=("high", "low"),
+        params={"window": 20},
+        description="Parkinson (1980) range-based volatility estimator: sqrt(mean(ln(H/L)^2)/(4 ln 2))",
+        citation="Parkinson 1980",
         expected_sign="?",
     ),
 }

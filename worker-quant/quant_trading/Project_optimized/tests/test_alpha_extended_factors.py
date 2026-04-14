@@ -34,8 +34,8 @@ def _synthetic_prices(n: int = 250, start: float = 100.0, trend: float = 0.001,
 # ---------- Registry sanity ----------
 
 
-def test_registry_exposes_ten_factors() -> None:
-    assert len(factor_names()) == 10
+def test_registry_exposes_eleven_factors() -> None:
+    assert len(factor_names()) == 11
 
 
 def test_all_factors_have_citation_and_direction() -> None:
@@ -63,8 +63,47 @@ def test_roc_3_on_constant_trend() -> None:
 
 def test_roc_longer_window_bigger_than_short_on_uptrend() -> None:
     df = _synthetic_prices(n=260, trend=0.005)
-    last = {n: compute(n, df).iloc[-1] for n in ["alpha_roc_3", "alpha_roc_10", "alpha_roc_120"]}
-    assert last["alpha_roc_120"] > last["alpha_roc_10"] > last["alpha_roc_3"]
+    # alpha_jt_mom_6m_skip1m (window=120, skip=21) is also longer horizon
+    short = compute("alpha_roc_3", df).iloc[-1]
+    med = compute("alpha_roc_10", df).iloc[-1]
+    long = compute("alpha_jt_mom_6m_skip1m", df).iloc[-1]
+    assert long > med > short
+
+
+def test_jt_momentum_skips_last_month() -> None:
+    """JT momentum at T must equal raw ROC computed at T-skip."""
+    df = _synthetic_prices(n=260, trend=0.002)
+    from factors.momentum import jt_momentum, roc
+    jt = jt_momentum(df["close"], window=60, skip=21)
+    # Equivalent: shift close by skip, then pct_change window
+    baseline = df["close"].shift(21).pct_change(60)
+    pd.testing.assert_series_equal(jt, baseline, check_names=False)
+
+
+def test_parkinson_vol_matches_formula_on_constant_hl_ratio() -> None:
+    """If H/L is constant r across the window, sigma_hat = |ln r| / sqrt(4 ln 2)."""
+    from factors.range_vol import parkinson_volatility
+    n = 60
+    idx = pd.date_range("2024-01-01", periods=n, freq="B")
+    low = pd.Series(100.0, index=idx)
+    high = pd.Series(101.0, index=idx)  # H/L = 1.01 constant
+    out = parkinson_volatility(high, low, window=20)
+    import math
+    expected = abs(math.log(1.01)) / math.sqrt(4 * math.log(2))
+    assert out.iloc[-1] == pytest.approx(expected, rel=1e-9)
+
+
+def test_parkinson_vol_handles_one_sided_limit_days() -> None:
+    """Zero-low or equal-high-low (一字板) days should not blow up."""
+    from factors.range_vol import parkinson_volatility
+    n = 40
+    idx = pd.date_range("2024-01-01", periods=n, freq="B")
+    high = pd.Series(np.linspace(100, 110, n), index=idx)
+    low = pd.Series(np.linspace(99, 109, n), index=idx)
+    # Inject a limit day (high == low)
+    low.iloc[-5] = high.iloc[-5]
+    out = parkinson_volatility(high, low, window=20)
+    assert np.isfinite(out.iloc[-1])
 
 
 def test_reversal_1_is_negated_ret1() -> None:
@@ -141,7 +180,7 @@ def test_amihud_handles_zero_volume_without_inf() -> None:
 
 def test_range_20_positive_for_nonzero_span() -> None:
     df = _synthetic_prices(n=60)
-    out = compute("alpha_range_20", df)
+    out = compute("alpha_range_proxy_20", df)
     assert (out.dropna() > 0).all()
 
 

@@ -15,22 +15,28 @@ import pandas as pd
 
 
 def max_single_day_return(close: pd.Series, window: int = 20) -> pd.Series:
-    """Rolling max of 1-day returns. Positive = recent lottery-like spike."""
+    """Rolling max of 1-day returns. Positive = recent lottery-like spike.
+
+    Uses ``min_periods=window`` so early-sample values are NaN rather
+    than computed from a variable-length window (Codex audit: variable
+    windows make the distribution non-stationary and bias walk-forward).
+    """
     ret1 = close.pct_change()
-    return ret1.rolling(window, min_periods=max(5, window // 2)).max()
+    return ret1.rolling(window, min_periods=window).max()
 
 
 def min_single_day_return(close: pd.Series, window: int = 20) -> pd.Series:
-    """Rolling min of 1-day returns (most negative)."""
+    """Rolling min of 1-day returns (most negative). Same min_periods rule."""
     ret1 = close.pct_change()
-    return ret1.rolling(window, min_periods=max(5, window // 2)).min()
+    return ret1.rolling(window, min_periods=window).min()
 
 
 def return_skew(close: pd.Series, window: int = 60) -> pd.Series:
     """Rolling skewness of daily returns.
 
     Negative skew = fat left tail (bad); positive skew = lottery-like.
-    Harvey-Siddique show systematic skewness is priced.
+    Harvey-Siddique show systematic skewness is priced. Same strict
+    min_periods rule as MAX/MIN for distributional consistency.
     """
     ret1 = close.pct_change()
-    return ret1.rolling(window, min_periods=max(20, window // 2)).skew()
+    return ret1.rolling(window, min_periods=window).skew()

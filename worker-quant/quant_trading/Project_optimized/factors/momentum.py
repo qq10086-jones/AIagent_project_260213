@@ -16,13 +16,29 @@ import pandas as pd
 def roc(close: pd.Series, window: int) -> pd.Series:
     """Simple k-day rate of change: close_t / close_{t-k} - 1.
 
-    Academic canonical horizons used by this project:
-      - 3d, 10d: short-to-medium momentum
-      - 120d (approx 6 months): Jegadeesh-Titman classic winner horizon
+    This is a RAW lookback return — includes the most recent day. For
+    medium-term momentum signals the canonical Jegadeesh-Titman formation
+    is "past J months SKIP 1 month" to separate momentum from short-term
+    reversal / microstructure noise; use ``jt_momentum`` for that.
     """
     if window <= 0:
         raise ValueError("window must be positive")
     return close.pct_change(window)
+
+
+def jt_momentum(close: pd.Series, window: int = 120, skip: int = 21) -> pd.Series:
+    """Jegadeesh-Titman (1993) canonical momentum: past-``window``-day
+    return but skipping the most recent ``skip`` days.
+
+    Default 120 / 21 ≈ past 6 months, skip the last month. This isolates
+    medium-term momentum from short-term reversal contamination.
+
+        momentum_t = close_{t-skip} / close_{t-skip-window} - 1
+    """
+    if window <= 0 or skip < 0:
+        raise ValueError("window must be > 0, skip >= 0")
+    anchor = close.shift(skip)
+    return anchor.pct_change(window)
 
 
 def reversal(close: pd.Series, window: int = 1) -> pd.Series:

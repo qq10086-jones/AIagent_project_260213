@@ -709,12 +709,13 @@ def _run_preflight(db_path: str, mode: str = "market") -> None:
     for step in steps:
         try:
             print(f"[preflight] {step['name']}...")
-            r = subprocess.run(step["cmd"], capture_output=True, text=True, timeout=120)
+            r = subprocess.run(step["cmd"], capture_output=True, text=True, timeout=120,
+                               encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 print(f"[preflight] ⚠️ {step['name']} 返回非零 ({r.returncode})，继续")
             else:
                 # 只打印最后一行有效输出，避免刷屏
-                out = r.stdout.strip().splitlines()
+                out = (r.stdout or "").strip().splitlines()
                 if out:
                     print(f"[preflight] ✓ {out[-1]}")
         except Exception as e:

@@ -551,8 +551,17 @@ def main():
     ensure_trade_tables(conn)
     try:
         meta = get_run_meta(conn, run_id)
-        strategy_id = str((meta or {}).get("strategy_id", "default") or "default")
-        order_count = len(_load_orders(conn, run_id, strategy_id=strategy_id))
+        source_strategy = str((meta or {}).get("strategy_id", "default") or "default")
+        # v3 C-1: paper track is physically separated from live to stop
+        # paper simulator from polluting the real SBI strategy state.
+        # Orders are still READ from source_strategy (that is where the
+        # signal chain wrote them); fills / positions / account snapshots
+        # are WRITTEN under <source>_paper unless already suffixed.
+        if source_strategy.endswith("_paper"):
+            paper_strategy = source_strategy
+        else:
+            paper_strategy = f"{source_strategy}_paper"
+        order_count = len(_load_orders(conn, run_id, strategy_id=source_strategy))
         fills_df, missing = simulate_fills(
             conn,
             run_id=run_id,
@@ -561,7 +570,7 @@ def main():
             slippage_bps=float(args.slippage_bps),
             fee_bps=float(args.fee_bps),
             fill_ratio=float(args.fill_ratio),
-            strategy_id=strategy_id,
+            strategy_id=source_strategy,
             fee_mode=str(args.fee_mode),
         )
 
@@ -575,25 +584,25 @@ def main():
                 venue="PAPER",
                 force=False,
                 source="paper_simulator",
-                strategy_id=strategy_id,
+                strategy_id=paper_strategy,
             )
 
-        prev_asof, rows_out, missing_px = build_positions(conn, run_id, asof, strategy_id=strategy_id)
-        starting_cash = _existing_cash_snapshot(conn, asof, strategy_id=strategy_id)
+        prev_asof, rows_out, missing_px = build_positions(conn, run_id, asof, strategy_id=paper_strategy)
+        starting_cash = _existing_cash_snapshot(conn, asof, strategy_id=paper_strategy)
         if starting_cash is not None:
             # Today's snapshot already exists (re-run) — pass it so it is preserved
-            snap = build_account_snapshot(conn, run_id, asof, initial_cash=starting_cash, strategy_id=strategy_id)
+            snap = build_account_snapshot(conn, run_id, asof, initial_cash=starting_cash, strategy_id=paper_strategy)
         else:
             # No snapshot for today yet — let build_account_snapshot derive
             # cash_start from the previous day's snapshot.  Only fall back to
             # args.initial_cash when there is no prior snapshot at all.
-            snap = build_account_snapshot(conn, run_id, asof, initial_cash=0.0, strategy_id=strategy_id)
+            snap = build_account_snapshot(conn, run_id, asof, initial_cash=0.0, strategy_id=paper_strategy)
 
         artifact_dir = resolve_run_artifact_dir(meta.get("snapshot_path") if meta else None)
         if artifact_dir is None:
             artifact_dir = Path("artifacts/decision") / asof / run_id
         md_path, csv_path = generate_execution_report(conn, run_id, asof, artifact_dir)
-        analytics = post_trade_analytics(conn, run_id, strategy_id=strategy_id)
+        analytics = post_trade_analytics(conn, run_id, strategy_id=paper_strategy)
         reports_dir = Path(args.reports_dir)
         reports_dir.mkdir(parents=True, exist_ok=True)
         (reports_dir / "execution_quality.json").write_text(json.dumps(analytics, ensure_ascii=False, indent=2), encoding="utf-8")

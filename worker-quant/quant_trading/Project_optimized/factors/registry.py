@@ -28,13 +28,27 @@ class FactorSpec:
     description: str = ""
     citation: str = ""
     expected_sign: str = "?"  # "+", "-", "?" (ambiguous / sector-conditional)
+    # Optional df columns → kwargs. When a listed column exists in the
+    # input df it is forwarded to the factor function as a keyword arg.
+    # Example: Amihud takes optional dollar_volume override; listing
+    # ("dollar_volume",) here lets downstream pipelines plug in exchange
+    # turnover (売買代金) without changing the function signature.
+    optional_kwargs: tuple[str, ...] = ()
 
 
-def _wrap(fn: Callable, inputs: tuple[str, ...], **params) -> Callable:
-    """Given an input name list, extract columns from a df and call fn."""
+def _wrap(fn: Callable, inputs: tuple[str, ...],
+          optional_kwargs: tuple[str, ...] = (), **params) -> Callable:
+    """Given an input name list, extract columns from a df and call fn.
+
+    Optional kwargs (by column name) are forwarded when present.
+    """
     def runner(df: pd.DataFrame) -> pd.Series:
         args = [df[c] for c in inputs]
-        return fn(*args, **params)
+        kwargs = dict(params)
+        for k in optional_kwargs:
+            if k in df.columns:
+                kwargs[k] = df[k]
+        return fn(*args, **kwargs)
     return runner
 
 
@@ -113,6 +127,9 @@ FACTOR_REGISTRY: dict[str, FactorSpec] = {
         description="Amihud 20d illiquidity proxy (×1e6 scale)",
         citation="Amihud 2002",
         expected_sign="+",
+        # Exchange turnover override when available (more robust than
+        # close*volume across corporate actions — Codex audit).
+        optional_kwargs=("dollar_volume",),
     ),
     # ── Range volatility ─────────────────────────────────────────────
     "alpha_range_proxy_20": FactorSpec(
@@ -154,5 +171,6 @@ def compute(factor_name: str, df: pd.DataFrame) -> pd.Series:
     spec = FACTOR_REGISTRY.get(factor_name)
     if spec is None:
         raise KeyError(f"unknown factor {factor_name!r}; known={factor_names()}")
-    runner = _wrap(spec.fn, spec.inputs, **spec.params)
+    runner = _wrap(spec.fn, spec.inputs,
+                   optional_kwargs=spec.optional_kwargs, **spec.params)
     return runner(df)

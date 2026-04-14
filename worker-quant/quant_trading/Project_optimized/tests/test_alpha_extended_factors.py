@@ -70,14 +70,38 @@ def test_roc_longer_window_bigger_than_short_on_uptrend() -> None:
     assert long > med > short
 
 
-def test_jt_momentum_skips_last_month() -> None:
-    """JT momentum at T must equal raw ROC computed at T-skip."""
-    df = _synthetic_prices(n=260, trend=0.002)
+def test_jt_momentum_ignores_recent_month_crash() -> None:
+    """Codex: JT momentum must NOT react to returns inside the skip window.
+    Construct a series with clean 6-month uptrend, then a −20% crash in
+    the last 21 days. Raw ROC(120) would be polluted; JT(window=120,
+    skip=21) should still reflect the pre-crash trend."""
     from factors.momentum import jt_momentum, roc
-    jt = jt_momentum(df["close"], window=60, skip=21)
-    # Equivalent: shift close by skip, then pct_change window
-    baseline = df["close"].shift(21).pct_change(60)
-    pd.testing.assert_series_equal(jt, baseline, check_names=False)
+    n = 260
+    idx = pd.date_range("2024-01-01", periods=n, freq="B")
+    close = pd.Series(100.0 * 1.002 ** np.arange(n), index=idx)
+    # Inject −20% crash over the last 21 days
+    close.iloc[-21:] *= np.linspace(1.0, 0.80, 21)
+
+    raw = roc(close, 120).iloc[-1]
+    jt = jt_momentum(close, window=120, skip=21).iloc[-1]
+
+    # JT should be clean 6-month trend BEFORE the crash window
+    assert jt > 0.15, f"JT should preserve pre-crash uptrend, got {jt:.4f}"
+    # Raw ROC is dragged down by the crash (definitely smaller than jt)
+    assert raw < jt - 0.05, f"raw={raw:.4f}  jt={jt:.4f}"
+
+
+def test_amihud_accepts_exchange_turnover_override() -> None:
+    """Codex #4: registry must forward dollar_volume when df has the column."""
+    df = _synthetic_prices(n=60)
+    # Baseline Amihud uses close*volume
+    baseline = compute("alpha_amihud_20", df).iloc[-1]
+    # Provide explicit dollar_volume = 10x close*volume (much more liquid)
+    df2 = df.copy()
+    df2["dollar_volume"] = df["close"] * df["volume"] * 10
+    override = compute("alpha_amihud_20", df2).iloc[-1]
+    # ILLIQ ≈ 1/dollar_volume, so 10x liquid → ~1/10x illiquidity
+    assert override == pytest.approx(baseline / 10, rel=1e-6)
 
 
 def test_parkinson_vol_matches_formula_on_constant_hl_ratio() -> None:

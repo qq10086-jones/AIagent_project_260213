@@ -42,7 +42,8 @@ def parkinson_volatility(high: pd.Series, low: pd.Series,
 
     sigma_hat = sqrt( mean(log(H/L)^2) / (4 ln 2) )
 
-    Returns annualised-scale daily volatility estimate. Handles zero/nan
+    Returns a **daily** volatility estimate (same units as log-return std);
+    multiply by sqrt(252) for annualised comparison. Handles zero/nan
     highs/lows (one-sided limit days) by masking so they don't blow up.
     """
     valid = (high > 0) & (low > 0) & (high >= low)

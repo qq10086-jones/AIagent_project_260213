@@ -2,8 +2,10 @@
 
 ## 本阶段主题
 
-从 "盘后自动成交" → "盘中 14:30 决策 + 用户实时跟单 SBI"。
+从 "盘后自动成交" → "盘中 14:45 决策 + Discord 推送 + 用户实时跟单 SBI"。
 同时把底层方法论（PIT、预注册、晋升作废）一并修干净，为后续策略优化提供可信地基。
+
+**重要修正（2026-04-14 下午）**：昨日偏向治理/防御，方向错位。用户原始诉求是"优化买卖策略"，我做的是"方法论治理"。v3 计划（`docs/design/2026-04-13_quant_refactor_plan.md`）已把重心扳回 Alpha 因子扩展 + walk-forward runner 为主战场。对标 Qlib / Alphalens 评分 **3.9/10**，10 周目标 5.5+/10。
 
 ---
 
@@ -50,6 +52,21 @@
 
 ## 遗留问题（优先级排序）
 
+### ✅ 已完成（2026-04-14 追加）
+
+- **`intraday_decision.py` 基础版**：14:45 JST 手动/定时触发，refresh intraday quotes → 读 target_weights.csv → 对真实 SBI 仓位（source='sbi_actual'）计算建仓差 → 生成 `reports/TRADE_SIGNAL_<date>.md` + Discord webhook 推送
+- **Paper 闸门默认关闭**：`config.yaml paper.require_approval: false`，撤回昨日 T0.1 错误方向
+- **v3 计划修订**：主战场从"治理"切回"Alpha 扩展 + walk-forward"
+
+### 🔴 新发现的 P0 Bug
+
+**paper_simulator 污染真实 sprint strategy_id**：
+- 当前 `paper_simulator` 的成交写到 `strategy_id='sprint'`（真实策略），而非独立的 `sprint_paper`
+- 结果：`positions` 表里 `sprint/3041.T @ ¥585` 其实是 paper 单，但被当作真实持仓
+- 污染下游：briefing / action_plan / reality_check NAV
+- 修法：paper_execute.py 强制 `strategy_id='sprint_paper'`；briefing 分两栏显示
+- 跟踪：v3 计划 C-1
+
 ### P0 — 决策时点重构（本阶段核心遗留）
 
 **问题**：`daily_run.py` 16:30 JST 启动（收盘后），`paper_execute` 收盘后回填成交，用户看到信号时**已来不及在 SBI 跟单**。
@@ -66,16 +83,23 @@
 3. Windows 任务计划器每交易日 14:30 触发
 4. **T+1 回测**：近 20 个交易日回放，决策按 14:30 价而非 next_open 成交，产出对比 NAV 曲线 —— 这是后续所有策略调参的基线数据
 
-### P1 — 买卖策略优化（用户原始需求）
+### P1 — Alpha 因子扩展（v3 新主战场）
 
-必须在 P0 完成后启动，否则回测假设（`close → next_open fill`）和真实跟单节奏不一致。
+用户原始需求 = 买卖策略优化。v3 把这定义为**因子库从 25 → 80+ + 行业中性 + 正交化 + marginal IC**。
 
-候选方向（按 Codex 建议）：
-- 周频调仓 vs 当前日频
-- lot_size + cash 约束下的 tradable portfolio 验证
-- 三基准对齐（TOPIX TR / 持仓等权 / 现金）
+对标 Qlib Alpha158，移植 60 个可解释、低相关、有学术出处的因子。**不发明因子**。
 
-**硬性要求**：启动前所有新因子/阈值必须先走 `experiment_log.preregister()`。
+候选来源：
+- Alpha158 / Alpha360（Qlib 内置）
+- AQR 因子模型（quality / momentum / value / low-vol）
+- Lopez de Prado "Advances in Financial ML"（fractional differencing, triple barrier）
+
+**硬性要求**：所有新因子/阈值必须先走 `experiment_log.preregister()`，带学术引用。
+
+### P2 — Walk-Forward Runner
+
+项目评分 #4「回测严谨性」2/10 → 6/10 的单点杠杆。
+3 年训练 / 6 月验证 / 1 月滚动，所有选择决策嵌进训练窗。
 
 ### P2 — PIT 剩余漏洞（非阻塞）
 

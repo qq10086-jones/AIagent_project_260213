@@ -48,18 +48,21 @@ def sprint_score(features: pd.DataFrame, ic_weights: dict | None = None) -> pd.S
 
     2026-04-14 update (walk-forward OOS Jan 2024 → Apr 2026, 23 months):
     `vol_z` was removed from the alpha composite after ablation showed it
-    destroys the combined edge. Measured impact:
-        - mom_consist + high52w (2-factor): +26.1% net cum, Sharpe 0.85
-        - mom_consist + high52w + vol_z (3-factor): +14.3% net, Sharpe 0.40
-        - mom_consist + vol_z (drops high52w): +4.2% net, Sharpe 0.21
-    `vol_z` retained as ENTRY FILTER and volume confirmation (see
-    `sprint_entry_check`), just not as a linear alpha component.
+    destroys the combined edge when sign=+1.
+
+    2026-04-16 root-cause fix: vol_z sign was INVERTED. sign=+1 buys volume
+    climax (mean-reversion trap). sign=-1 buys quiet accumulation → breakout.
+    Ablation with corrected sign:
+        - mom_consist + high52w (2-factor): +30.4% net, Sharpe 1.66
+        - mom_consist + high52w + vol_z sign=-1 (3-factor): +35.0% net, Sharpe 3.07
+        - Full period 2024-01~2026-04: +30.4% net, Sharpe 0.97, maxDD -18%
+    vol_z RESTORED to composite with sign=-1.
     """
-    weights = ic_weights or {"mom_consist": 1.0, "high52w": 1.0}
+    weights = ic_weights or {"mom_consist": 1.0, "high52w": 1.0, "vol_z": -1.0}
     score = pd.Series(0.0, index=features.index, dtype=float)
     denom = 0.0
-    for factor in ("mom_consist", "high52w"):
-        weight = float(weights.get(factor, 1.0))
+    for factor in ("mom_consist", "high52w", "vol_z"):
+        weight = float(weights.get(factor, 1.0 if factor != "vol_z" else -1.0))
         score = score + pd.to_numeric(features.get(factor, 0.0), errors="coerce").fillna(0.0) * weight
         denom += abs(weight)
     return score / max(denom, 1e-12)
@@ -179,44 +182,61 @@ def sprint_score_v2(
     return score
 
 
-def sprint_entry_check(row: pd.Series, benchmark_state: str, *, off_scale: float = 0.0) -> bool:
-    """Check all Sprint entry conditions.
+def sprint_entry_check(
+    row: pd.Series,
+    benchmark_state: str,
+    *,
+    off_scale: float = 0.0,
+    threshold_on: float = 0.70,
+    threshold_caution: float = 0.75,
+) -> bool:
+    """Check all Sprint entry conditions (v4.0 aggressive).
 
-    ``mom_consist_pctile`` is the cross-section percentile rank (0-1) computed
-    by the caller.  The threshold 0.80 means "top 20% of the universe".
+    v4.0 changes:
+      * threshold on: 0.80 → 0.70 (more entries in on regime)
+      * threshold caution: new 0.75 (enter in caution with stricter bar)
+      * vol_z flipped: reject climax (>= 1.5), not demand volume
+        (承接 vol_z sign=-1 的 alpha 逻辑)
 
-    When benchmark is "off" but ``off_scale > 0``, entries are allowed with
-    relaxed thresholds for high52w and vol_z.  The position sizing (off_scale)
-    already caps risk exposure, so the entry filter focuses on momentum quality
-    (mom_consist) rather than requiring stocks to be near their highs.
+    ``mom_consist_pctile`` is the cross-section percentile rank (0-1).
     """
     state = str(benchmark_state).lower()
     if state == "off" and float(off_scale) <= 0:
-        return False  # hard block when no off-regime exposure allowed
+        return False
 
-    # In "off" regime with reduced exposure, relax distance-to-high and volume
-    # requirements -- the whole market is beaten down, so these filters would
-    # block everything.  mom_consist (relative momentum quality) still gates.
+    mom_pct = float(row.get("mom_consist_pctile", 0.0))
+    high52 = float(row.get("high52w", -1.0))
+    vol_z = float(row.get("vol_z", 0.0))
+    fund = float(row.get("fundamental_score", 1.0))
+
     if state == "off":
         return (
-            float(row.get("mom_consist_pctile", 0.0)) >= 0.80
-            and float(row.get("high52w", -1.0)) > -0.30
-            and float(row.get("fundamental_score", 1.0)) > 0.50
+            mom_pct >= threshold_on
+            and high52 > -0.30
+            and fund > 0.50
         )
 
-    # vol_z >= 0.0 : 当日出来高が60日平均以上であれば OK（0.50 だと非触媒日にほぼ全滅）
+    if state == "caution":
+        return (
+            mom_pct >= threshold_caution
+            and high52 > -0.15
+            and vol_z <= 1.0           # 避免量能高潮陷阱
+            and fund > 0.50
+        )
+
+    # on
     return (
-        float(row.get("mom_consist_pctile", 0.0)) >= 0.80
-        and float(row.get("high52w", -1.0)) > -0.10
-        and float(row.get("vol_z", 0.0)) >= 0.0
-        and float(row.get("fundamental_score", 1.0)) > 0.50
+        mom_pct >= threshold_on
+        and high52 > -0.10
+        and vol_z <= 1.5               # 允许轻度放量，过滤 climax
+        and fund > 0.50
     )
 
 
 def sprint_exit_check(row: pd.Series, holding_days: int, benchmark_state: str) -> tuple[bool, str]:
     if str(benchmark_state).lower() == "off":
         return True, "benchmark_off"
-    if int(holding_days) >= int(row.get("holding_period_target", 5) or 5):
+    if int(holding_days) >= int(row.get("holding_period_target", 2) or 2):
         return True, "holding_period"
     if float(row.get("vol_z", 0.0)) < -0.5:
         return True, "volume_reversal"

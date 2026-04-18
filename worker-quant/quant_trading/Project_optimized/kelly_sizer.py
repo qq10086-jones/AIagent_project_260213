@@ -71,6 +71,107 @@ class KellyPositionSizer:
         return payload
 
 
+@dataclass
+class AggressiveKellySizer:
+    """v4.0 激进 Kelly: Kelly 0.75 + 信号强度缩放 + vol target + 杠杆触发.
+
+    核心公式:
+        base   = edge * kelly_fraction  （标准 fractional Kelly）
+        signal = (score + 1) / 2        （映射 [-1,1] → [0,1]）
+        vol    = target_vol / max(atr*sqrt(252), min)   （vol target）
+        weight = base * signal * vol
+        if score >= leverage_trigger and regime == "on":
+            weight = min(weight * 1.5, leverage_max)
+
+    注意: 此 sizer 期望 win_rate/avg_win/avg_loss 足够样本，若
+    sample_count < min_samples 则回落到 fallback_position_pct（和 half 版一致）.
+    """
+    win_rate: float
+    avg_win: float
+    avg_loss: float
+    sample_count: int
+    kelly_fraction: float = 0.75
+    signal_score: float = 0.0
+    atr_pct: float = 0.0
+    vol_target_annual: float = 0.25        # 年化 25% 波动目标（激进）
+    regime: str = "on"
+    leverage_enabled: bool = False
+    leverage_max: float = 2.0
+    leverage_trigger_score: float = 0.85
+    min_position_pct: float = 0.05
+    max_position_pct: float = 0.60         # 单股 60% 集中上限
+    fallback_position_pct: float = 0.0
+    min_samples: int = 30
+    cooldown_remaining_days: int = 0
+
+    def edge(self) -> float:
+        if self.sample_count < self.min_samples:
+            return 0.0
+        if not (0.0 < self.win_rate < 1.0):
+            return 0.0
+        if self.avg_win <= 0.0 or self.avg_loss <= 0.0:
+            return 0.0
+        b = self.avg_win / self.avg_loss
+        if b <= 0.0:
+            return 0.0
+        q = 1.0 - self.win_rate
+        value = (self.win_rate * b - q) / b
+        return float(value) if value > 0.0 else 0.0
+
+    def _signal_scale(self) -> float:
+        s = max(-1.0, min(1.0, float(self.signal_score)))
+        return (s + 1.0) / 2.0
+
+    def _vol_scale(self) -> float:
+        if self.vol_target_annual <= 0 or self.atr_pct <= 0:
+            return 1.0
+        annualized_vol = self.atr_pct * (252 ** 0.5)
+        scale = self.vol_target_annual / max(annualized_vol, 0.02)
+        return max(0.5, min(1.5, scale))
+
+    def _regime_scale(self) -> float:
+        r = str(self.regime).lower()
+        if r == "off":
+            return 0.0
+        if r == "caution":
+            return 0.8
+        return 1.0
+
+    def suggested_weight(self) -> float:
+        if self.cooldown_remaining_days > 0:
+            return 0.0
+        regime_scale = self._regime_scale()
+        if regime_scale <= 0.0:
+            return 0.0
+
+        edge = self.edge()
+        if edge <= 0.0:
+            if self.sample_count < self.min_samples:
+                return min(self.fallback_position_pct, self.max_position_pct)
+            return 0.0
+
+        raw = edge * self.kelly_fraction * self._signal_scale() * self._vol_scale() * regime_scale
+
+        # 杠杆触发：score ≥ trigger 且 regime == on
+        if (
+            self.leverage_enabled
+            and self.signal_score >= self.leverage_trigger_score
+            and str(self.regime).lower() == "on"
+        ):
+            raw = min(raw * 1.5, self.leverage_max)
+
+        return float(max(self.min_position_pct, min(raw, max(self.max_position_pct, self.leverage_max))))
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["edge"] = self.edge()
+        payload["signal_scale"] = self._signal_scale()
+        payload["vol_scale"] = self._vol_scale()
+        payload["regime_scale"] = self._regime_scale()
+        payload["suggested_weight"] = self.suggested_weight()
+        return payload
+
+
 def compute_kelly_params(
     conn: sqlite3.Connection,
     strategy_id: str,

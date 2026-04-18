@@ -26,46 +26,89 @@ screener:
   top_k: 50
   min_adv: null
   auto_min_adv_from_capital: false
-  min_adv_floor: 2000000
+  # 2026-04-16: 5M → 50M，切入大盘流动池。小盘因子在 2025 大盘蓝筹牛市跑输。
+  min_adv_floor: 50000000
   max_single_position_pct: 0.25
   target_adv_participation: 0.05
   max_cost_per_lot: 500000
   auto_max_cost_per_lot_from_capital: false
   lot_cost_position_budget_frac: 1.0
   max_cost_per_lot_floor: 50000
+# v4.0 付费 API 功能门控：实盘累计盈利 ≥ 年费前不解锁
+feature_gates:
+  jquants_light:
+    monthly_cost_jpy: 1650
+    min_realized_pnl_jpy: 19800      # = 1650 × 12
+    strategy_id: sprint
+    description: "J-Quants Light - TOPIX-17 行业 + 分红调整"
+  jquants_premium:
+    monthly_cost_jpy: 16500
+    min_realized_pnl_jpy: 198000
+    strategy_id: sprint
+    description: "J-Quants Premium - 分钟数据 + 公告日"
+  polygon_starter:
+    monthly_cost_jpy: 4500
+    min_realized_pnl_jpy: 54000
+    strategy_id: sprint
+    description: "Polygon Starter - 美股实时"
+
 strategy_profiles:
+  # 2026-04-16 v4.0 Aggressive Swing-Day
+  # 目标：年化 60-80%, Sharpe 2.0+, MaxDD 容忍 -20%
+  # 核心：Kelly 0.75 + 集中持仓 + 信用取引 2x 杠杆（conviction-triggered）
   sprint:
     enabled: true
     strategy_id: sprint
     capital_allocation_pct: 1.0
     activation_threshold: 0
-    max_positions: 3
-    top_k: 20
-    min_adv_floor: 5000000
+    max_positions: 2
+    top_k: 10
+    min_adv_floor: 50000000
     max_cost_per_lot: 100000
     signal_mode: sprint_momentum
-    position_sizing: half_kelly
-    max_single_position_pct: 0.35
+    # v4.0 激进 sizing
+    position_sizing: aggressive_kelly
+    kelly_fraction: 0.75               # half(0.5) → aggressive(0.75)
+    max_single_position_pct: 0.60      # 原 0.35 → 允许单股 60% 集中
     max_sector_weight: 0.6
-    benchmark_off_scale: 0.25
-    benchmark_caution_scale: 0.6
+    holding_period_target: 2
+    # regime 梯度
+    benchmark_off_scale: 0.0           # off 完全空仓
+    benchmark_caution_scale: 0.8       # 原 0.6 → caution 下更积极
+    entry_threshold_on: 0.70           # 原 0.80 → 放宽
+    entry_threshold_caution: 0.75      # caution 下仍严
     use_vix_confirmation: false
     vix_ticker: 1552.T
     vix_off_threshold: 30.0
     vix_missing_policy: ma_only
-    stop_loss_vol_mult: 3.0
-    stop_loss_min_pct: 0.04
-    stop_loss_max_pct: 0.12
+    # 短线止损 + trailing
+    stop_loss_vol_mult: 2.0
+    stop_loss_min_pct: 0.03
+    stop_loss_max_pct: 0.08
     atr_window: 20
-    trailing_activate_pct: 0.03
-    trailing_stop_pct: 0.02
-    max_dd_half: 0.08
-    max_dd_full: 0.12
+    trailing_activate_pct: 0.015       # 原 0.02 → 1.5% 就激活
+    trailing_stop_pct: 0.012           # 原 0.015 → 1.2% 回撤就走
+    # 激进回撤容忍
+    max_dd_half: 0.10                  # 原 0.06 → 允许单次大亏
+    max_dd_full: 0.20                  # 原 0.10 → -20% 才熔断
+    # 信用取引杠杆（v4.0 新）
+    leverage_enabled: true
+    leverage_max: 2.0                  # SBI 一日信用 2x（现金 1x + 保证金 1x）
+    leverage_trigger_score: 0.85       # score ≥ 0.85 conviction 才上杠杆
+    # 卫星仓 T+1 反转（回测 Sharpe -0.84, 默认关闭）
+    # 启用需要先在 satellite_backtest 验证正收益或改做 market-neutral long-short
+    satellite_enabled: false
+    # Kill switch（PATCH 11 实现）
+    kill_switch_enabled: true
+    kill_single_day_loss_pct: 0.05     # 单日亏 5% → 半仓
+    kill_3day_loss_pct: 0.10           # 3日亏 10% → 清仓冷却
+    kill_consecutive_stops: 3          # 连续 3 次止损 → 冷却
+    cooldown_days: 3
   harvest:
-    enabled: false
+    enabled: true
     strategy_id: harvest
     capital_allocation_pct: 0.7
-    activation_threshold: 2000000
+    activation_threshold: 0
     max_positions: 12
     top_k: 50
     min_adv_floor: 2000000

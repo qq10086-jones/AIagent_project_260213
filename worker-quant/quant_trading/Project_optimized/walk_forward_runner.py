@@ -213,20 +213,22 @@ class RunConfig:
     tag: str = "v1"
     # v1 additions
     use_factors: tuple[str, ...] = ("mom_consist", "high52w", "vol_z")
-    vol_z_sign: float = 1.0
+    vol_z_sign: float = -1.0
     fill_at: str = "open"          # "open" or "close" (at d+1)
     exclude_etf_reit: bool = True
-    # Long-short vs long-only: if True also report short bottom-K.
     long_short: bool = False
-    # When set, overrides `use_factors` and loads a single named factor
-    # from `factors.registry`. `alpha_sign` flips direction (e.g., use -1
-    # for Amihud if low-ILLIQ should be preferred).
     alpha_factor: str | None = None
     alpha_sign: float = 1.0
-    # Multi-factor composite: list of "factor_name[:sign]" items, averaged
-    # after xs-zscore. e.g. ("alpha_amihud_20:+1", "high52w:+1") —
-    # allows mixing registry factors with the legacy high52w impl.
     alpha_composite: tuple[str, ...] = ()
+    # v4.0 PATCH 6: 严谨回测扩展
+    sqrt_slippage: bool = True         # Almgren 平方根冲击成本替代固定 bps
+    sqrt_slippage_k: float = 10.0      # bps 系数
+    participation_rate: float = 0.05   # 假设下单占 ADV 的 5%
+    purge_days: int = 0                # 信号日和收益窗口之间留白
+    embargo_days: int = 0              # 收益窗口结束后空仓天数
+    bootstrap_enabled: bool = True
+    bootstrap_block: int = 3           # 块长（月度 = 3 个月）
+    bootstrap_n: int = 500             # bootstrap 次数
 
 
 def month_ends(index: pd.DatetimeIndex) -> list[pd.Timestamp]:
@@ -235,6 +237,51 @@ def month_ends(index: pd.DatetimeIndex) -> list[pd.Timestamp]:
     df["ym"] = df.index.to_period("M")
     last = df.groupby("ym").tail(1)
     return list(last.index)
+
+
+def sqrt_slippage_bps(participation_rate: float, k: float = 10.0) -> float:
+    """Almgren sqrt-impact: bps = k * sqrt(participation%).
+
+    For 5% ADV participation, k=10 gives ~22 bps per side — realistic for
+    liquid JP mid-caps. Fixed `slippage_bps` under-estimates big-trade cost
+    and over-estimates small-trade cost.
+    """
+    return k * np.sqrt(max(participation_rate, 1e-6) * 100.0)
+
+
+def block_bootstrap_sharpe(
+    returns: pd.Series,
+    block_len: int = 3,
+    n: int = 500,
+    seed: int = 42,
+) -> dict:
+    """Block-bootstrap Sharpe 95% CI.
+
+    Monthly returns → block_len=3 preserves quarterly autocorrelation while
+    enabling resampling variance estimation. Returns mean, 5/95 pct and CI.
+    """
+    r = returns.dropna().values
+    if len(r) < block_len * 3:
+        return {"sharpe_mean": None, "sharpe_lo": None, "sharpe_hi": None, "n_samples": len(r)}
+
+    rng = np.random.default_rng(seed)
+    n_blocks = max(1, len(r) // block_len)
+    sharpes = []
+    for _ in range(n):
+        starts = rng.integers(0, len(r) - block_len + 1, n_blocks)
+        sample = np.concatenate([r[s:s + block_len] for s in starts])
+        m, s = sample.mean(), sample.std()
+        if s > 0:
+            sharpes.append(m / s * np.sqrt(12))
+
+    arr = np.array(sharpes)
+    return {
+        "sharpe_mean": float(arr.mean()),
+        "sharpe_lo": float(np.percentile(arr, 2.5)),
+        "sharpe_hi": float(np.percentile(arr, 97.5)),
+        "n_samples": len(r),
+        "n_bootstrap": n,
+    }
 
 
 def run_walk_forward(cfg: RunConfig) -> dict:
@@ -288,7 +335,13 @@ def run_walk_forward(cfg: RunConfig) -> dict:
     if len(rebal_dates) < 3:
         raise RuntimeError(f"too few rebalance dates: {len(rebal_dates)}")
 
-    cost_per_side = (cfg.fee_bps + cfg.slippage_bps) / 10_000.0
+    # v4.0 PATCH 6: 费用 = 固定 fee + (固定 slippage 或 sqrt-impact)
+    fee_per_side = cfg.fee_bps / 10_000.0
+    if cfg.sqrt_slippage:
+        slip_per_side = sqrt_slippage_bps(cfg.participation_rate, cfg.sqrt_slippage_k) / 10_000.0
+    else:
+        slip_per_side = cfg.slippage_bps / 10_000.0
+    cost_per_side = fee_per_side + slip_per_side
 
     port_returns: list[tuple[pd.Timestamp, float, float, int]] = []
     prev_holdings: set[str] = set()
@@ -310,17 +363,20 @@ def run_walk_forward(cfg: RunConfig) -> dict:
             pos = close.index.get_loc(d_signal)
         except KeyError:
             continue
-        if pos + 1 >= len(close.index):
+        # v4.0 PATCH 6: purge = 信号日后等 purge_days 天再进场
+        purge_offset = 1 + max(0, cfg.purge_days)
+        if pos + purge_offset >= len(close.index):
             break
-        fill_day = close.index[pos + 1]
-        # Next-period fill day = first trading day AFTER d_next.
+        fill_day = close.index[pos + purge_offset]
+        # Next-period fill day = first trading day AFTER d_next, plus embargo.
         try:
             pos_next = close.index.get_loc(d_next)
         except KeyError:
             continue
-        if pos_next + 1 >= len(close.index):
+        embargo_offset = 1 + max(0, cfg.embargo_days)
+        if pos_next + embargo_offset >= len(close.index):
             break
-        exit_day = close.index[pos_next + 1]
+        exit_day = close.index[pos_next + embargo_offset]
 
         def _ret(names: list[str]) -> float | None:
             if not names:
@@ -365,10 +421,27 @@ def run_walk_forward(cfg: RunConfig) -> dict:
     pr["bench_ew"] = bench_ew
 
     metrics = _metrics(pr)
+
+    # v4.0 PATCH 6: block bootstrap Sharpe 95% CI
+    bootstrap = {}
+    if cfg.bootstrap_enabled:
+        bootstrap = {
+            "net": block_bootstrap_sharpe(pr["net"], cfg.bootstrap_block, cfg.bootstrap_n),
+            "gross": block_bootstrap_sharpe(pr["gross"], cfg.bootstrap_block, cfg.bootstrap_n),
+            "bench_1321": block_bootstrap_sharpe(pr["bench_1321"], cfg.bootstrap_block, cfg.bootstrap_n),
+            "bench_ew": block_bootstrap_sharpe(pr["bench_ew"], cfg.bootstrap_block, cfg.bootstrap_n),
+        }
+
     out = {
         "config": asdict(cfg),
         "n_periods": len(pr),
         "metrics": metrics,
+        "bootstrap_sharpe_95ci": bootstrap,
+        "cost_model": {
+            "fee_per_side_bps": fee_per_side * 10_000,
+            "slippage_per_side_bps": slip_per_side * 10_000,
+            "mode": "sqrt_impact" if cfg.sqrt_slippage else "fixed",
+        },
         "monthly": pr.reset_index().assign(date=lambda d: d["date"].astype(str)).to_dict(orient="records"),
     }
     return out
@@ -498,7 +571,7 @@ def main() -> int:
     ap.add_argument("--out", default=None)
     ap.add_argument("--factors", default="mom_consist,high52w,vol_z",
                     help="comma-sep subset")
-    ap.add_argument("--vol_z_sign", type=float, default=1.0)
+    ap.add_argument("--vol_z_sign", type=float, default=-1.0)
     ap.add_argument("--fill_at", default="open", choices=("open", "close"))
     ap.add_argument("--no_exclude_etf", action="store_true")
     ap.add_argument("--long_short", action="store_true")
@@ -507,6 +580,16 @@ def main() -> int:
     ap.add_argument("--alpha_sign", type=float, default=1.0)
     ap.add_argument("--alpha_composite", default=None,
                     help="comma-sep list of 'name:sign', e.g. 'alpha_amihud_20:1,high52w:1'")
+    # v4.0 PATCH 6
+    ap.add_argument("--sqrt_slippage", action="store_true", default=True)
+    ap.add_argument("--no_sqrt_slippage", dest="sqrt_slippage", action="store_false")
+    ap.add_argument("--sqrt_slippage_k", type=float, default=10.0)
+    ap.add_argument("--participation_rate", type=float, default=0.05)
+    ap.add_argument("--purge_days", type=int, default=0)
+    ap.add_argument("--embargo_days", type=int, default=0)
+    ap.add_argument("--no_bootstrap", dest="bootstrap_enabled", action="store_false", default=True)
+    ap.add_argument("--bootstrap_block", type=int, default=3)
+    ap.add_argument("--bootstrap_n", type=int, default=500)
     args = ap.parse_args()
 
     cfg = RunConfig(
@@ -521,6 +604,14 @@ def main() -> int:
         alpha_factor=args.alpha_factor,
         alpha_sign=args.alpha_sign,
         alpha_composite=tuple(x.strip() for x in args.alpha_composite.split(",")) if args.alpha_composite else (),
+        sqrt_slippage=args.sqrt_slippage,
+        sqrt_slippage_k=args.sqrt_slippage_k,
+        participation_rate=args.participation_rate,
+        purge_days=args.purge_days,
+        embargo_days=args.embargo_days,
+        bootstrap_enabled=args.bootstrap_enabled,
+        bootstrap_block=args.bootstrap_block,
+        bootstrap_n=args.bootstrap_n,
     )
     out = run_walk_forward(cfg)
 
@@ -530,9 +621,19 @@ def main() -> int:
 
     m = out["metrics"]
     print(f"periods={out['n_periods']}")
+    cost = out.get("cost_model", {})
+    if cost:
+        print(f"  cost_model: fee={cost.get('fee_per_side_bps',0):.1f}bps + "
+              f"slippage={cost.get('slippage_per_side_bps',0):.1f}bps ({cost.get('mode','?')})")
     for k in ("gross", "net", "bench_1321", "bench_ew"):
         s = m[k]
         print(f"  {k:>12} cum={s['cum']:+.1%} sharpe={s['sharpe_ann']} maxdd={s['maxdd']}")
+    boot = out.get("bootstrap_sharpe_95ci") or {}
+    for k in ("net", "bench_1321"):
+        b = boot.get(k) or {}
+        if b.get("sharpe_lo") is not None:
+            print(f"  [bootstrap] {k:>10} Sharpe 95% CI: [{b['sharpe_lo']:+.2f}, {b['sharpe_hi']:+.2f}] "
+                  f"(mean={b['sharpe_mean']:+.2f}, n={b['n_samples']})")
     print(f"  excess_net_vs_1321_monthly={m['excess_net_vs_1321']}")
     print(f"  excess_net_vs_ew_monthly  ={m['excess_net_vs_ew']}")
     print(f"→ {out_path}")

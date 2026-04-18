@@ -3,11 +3,48 @@
   "source_of_truth": "japan_market.db (positions + account_snapshots tables)",
   "strategy_id": "sprint",
   "account": {
-    "asof": "2026-04-10",
-    "cash": 400545.0,
-    "positions_value": 0.0,
-    "nav": 400545.0,
-    "run_id": "sbi-2026-04-10"
+    "asof": "2026-04-14",
+    "cash": 166545.0,
+    "positions_value": 233600.0,
+    "nav": 400145.0,
+    "run_id": "manual__2026-04-14"
   },
-  "positions": []
+  "positions": [
+    {
+      "asof": "2026-04-17",
+      "symbol": "3041.T",
+      "qty": 400.0,
+      "avg_cost": 585.0,
+      "market_price": 577.0,
+      "market_value": 230800.0,
+      "unrealized_pnl": -3200.0
+    },
+    {
+      "asof": "2026-04-16",
+      "symbol": "3041.T",
+      "qty": 400.0,
+      "avg_cost": 585.0,
+      "market_price": 581.0,
+      "market_value": 232400.0,
+      "unrealized_pnl": -1600.0
+    },
+    {
+      "asof": "2026-04-15",
+      "symbol": "3041.T",
+      "qty": 400.0,
+      "avg_cost": 585.0,
+      "market_price": 582.0,
+      "market_value": 232800.0,
+      "unrealized_pnl": -1200.0
+    },
+    {
+      "asof": "2026-04-14",
+      "symbol": "3041.T",
+      "qty": 400.0,
+      "avg_cost": 585.0,
+      "market_price": 584.0,
+      "market_value": 233600.0,
+      "unrealized_pnl": -400.0
+    }
+  ]
 }

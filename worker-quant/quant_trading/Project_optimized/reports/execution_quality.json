@@ -1,8 +1,8 @@
 {
-  "run_id": "2026-04-14__mom_high52w_paper__51d99024",
-  "strategy_id": "mom_high52w_paper",
-  "fill_count": 2,
-  "avg_slippage_bps": 4.999999999999449,
+  "run_id": "2026-04-17__d963ebd654",
+  "strategy_id": "sprint_paper",
+  "fill_count": 0,
+  "avg_slippage_bps": 0.0,
   "total_commission": 0.0,
   "fill_validation_rate": 1.0
 }

@@ -1,0 +1,16 @@
+{
+  "triggered": false,
+  "action": "none",
+  "reason": "all clear",
+  "trigger_rule": "",
+  "metrics": {
+    "latest_nav": 400145.0,
+    "day1_return": -0.001,
+    "day3_return": -0.005,
+    "drawdown_from_peak": -0.005,
+    "consecutive_stops": 0,
+    "peak_nav": 402150.0
+  },
+  "cooldown_until": null,
+  "asof": "2026-04-16"
+}

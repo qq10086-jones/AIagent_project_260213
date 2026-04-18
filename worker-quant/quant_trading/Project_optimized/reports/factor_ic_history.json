@@ -1,0 +1,43 @@
+{
+  "asof": "2026-04-16",
+  "window": 30,
+  "factors": [
+    {
+      "factor": "mom_consist",
+      "expected_sign": 1.0,
+      "ic_mean_recent": 0.0237,
+      "ic_std_recent": 0.1207,
+      "ic_ir_recent": 0.196,
+      "ic_days": 6,
+      "reversal_days": 2,
+      "is_reversed": false,
+      "action": "KEEP",
+      "status": "ok"
+    },
+    {
+      "factor": "high52w",
+      "expected_sign": 1.0,
+      "ic_mean_recent": 0.0187,
+      "ic_std_recent": 0.099,
+      "ic_ir_recent": 0.189,
+      "ic_days": 6,
+      "reversal_days": 2,
+      "is_reversed": false,
+      "action": "KEEP",
+      "status": "ok"
+    },
+    {
+      "factor": "vol_z",
+      "expected_sign": -1.0,
+      "ic_mean_recent": -0.026,
+      "ic_std_recent": 0.0543,
+      "ic_ir_recent": -0.479,
+      "ic_days": 6,
+      "reversal_days": 1,
+      "is_reversed": false,
+      "action": "KEEP",
+      "status": "ok"
+    }
+  ],
+  "alerts": []
+}

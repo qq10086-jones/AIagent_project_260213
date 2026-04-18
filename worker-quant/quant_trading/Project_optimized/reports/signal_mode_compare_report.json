@@ -1,6 +1,6 @@
 {
   "recommended_mode": "sprint_momentum",
-  "recommendation_note": "Recommendation is based on current comparison metrics.",
+  "recommendation_note": "All compared modes currently export zero target weights. Shared latest cause: entry_filter.",
   "ranking": [
     {
       "mode": "sprint_momentum",
@@ -11,21 +11,21 @@
       "avg_turnover_pct": 0.0,
       "turnover_cv": 0.0,
       "score": 0.0,
-      "current_weights_zero": false,
-      "last_nonzero_asof": "2026-04-14",
-      "last_nonzero_row_sum": 0.6,
-      "export_row_sum": 0.6,
-      "actionable_now": true
+      "current_weights_zero": true,
+      "last_nonzero_asof": null,
+      "last_nonzero_row_sum": 0.0,
+      "export_row_sum": 0.0,
+      "actionable_now": false
     }
   ],
   "summary": {
     "mode_count": 1,
-    "actionable_mode_count": 1,
-    "all_modes_zero_now": false,
-    "latest_zero_exposure_days": 0,
+    "actionable_mode_count": 0,
+    "all_modes_zero_now": true,
+    "latest_zero_exposure_days": 1,
     "max_zero_exposure_days_allowed": 3,
     "zero_exposure_alert": false,
-    "zero_exposure_primary_cause": "none",
+    "zero_exposure_primary_cause": "entry_filter",
     "best_sharpe_mode": "sprint_momentum",
     "best_return_mode": "sprint_momentum",
     "lowest_drawdown_mode": "sprint_momentum"
@@ -33,7 +33,7 @@
   "qa": {
     "status": "ok",
     "checks": {
-      "all_modes_actionable": true,
+      "all_modes_actionable": false,
       "zero_exposure_within_limit": true
     }
   }

@@ -1,0 +1,88 @@
+{
+  "asof": "2026-04-16",
+  "universe_size": 1990,
+  "signal_threshold_sigma": 2.0,
+  "factor_weights": {
+    "ksft2": -1.5,
+    "ma_gap_3": -1.0,
+    "kmid": -1.0,
+    "high52w": 0.3
+  },
+  "candidates": [
+    {
+      "symbol": "2437.T",
+      "score": 3.9432032214372126,
+      "z_score": 11.378454116326767,
+      "current_price": 634.0,
+      "entry_range_low": 630.8,
+      "entry_range_high": 637.2,
+      "stop_loss": 511.9,
+      "profit_target": 707.3,
+      "hold_days": 2,
+      "atr": 7.71,
+      "reason": "反转 z=+11.38σ  ATR=7.7%",
+      "fundamentals_pass": true,
+      "volume_warning": false
+    },
+    {
+      "symbol": "2884.T",
+      "score": 2.9235787121179375,
+      "z_score": 8.43623936257056,
+      "current_price": 750.0,
+      "entry_range_low": 746.2,
+      "entry_range_high": 753.7,
+      "stop_loss": 648.8,
+      "profit_target": 810.8,
+      "hold_days": 2,
+      "atr": 5.4,
+      "reason": "反转 z=+8.44σ  ATR=5.4%",
+      "fundamentals_pass": true,
+      "volume_warning": true
+    },
+    {
+      "symbol": "6326.T",
+      "score": 1.9789765690046113,
+      "z_score": 5.710508138481771,
+      "current_price": 2616.0,
+      "entry_range_low": 2602.9,
+      "entry_range_high": 2629.1,
+      "stop_loss": 2368.3,
+      "profit_target": 2764.6,
+      "hold_days": 2,
+      "atr": 3.79,
+      "reason": "反转 z=+5.71σ  ATR=3.8%",
+      "fundamentals_pass": true,
+      "volume_warning": false
+    },
+    {
+      "symbol": "2585.T",
+      "score": 1.7317727217190804,
+      "z_score": 4.9971800456190705,
+      "current_price": 1411.0,
+      "entry_range_low": 1403.9,
+      "entry_range_high": 1418.1,
+      "stop_loss": 1122.4,
+      "profit_target": 1584.1,
+      "hold_days": 2,
+      "atr": 8.18,
+      "reason": "反转 z=+5.00σ  ATR=8.2%",
+      "fundamentals_pass": true,
+      "volume_warning": false
+    },
+    {
+      "symbol": "2379.T",
+      "score": 1.726445810491994,
+      "z_score": 4.9818087823147525,
+      "current_price": 1812.0,
+      "entry_range_low": 1802.9,
+      "entry_range_high": 1821.1,
+      "stop_loss": 1690.2,
+      "profit_target": 1885.1,
+      "hold_days": 2,
+      "atr": 2.69,
+      "reason": "反转 z=+4.98σ  ATR=2.7%",
+      "fundamentals_pass": true,
+      "volume_warning": false
+    }
+  ]
+}

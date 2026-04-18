@@ -75,8 +75,15 @@ def _vol_stability(vol20: pd.Series, window: int = 60) -> pd.Series:
 def compute_features_for_symbol(
     close: pd.Series,
     volume: Optional[pd.Series] = None,
+    high: Optional[pd.Series] = None,
+    low: Optional[pd.Series] = None,
+    open_: Optional[pd.Series] = None,
 ) -> pd.DataFrame:
-    """Compute all price-based features for one symbol. Returns DataFrame indexed by date."""
+    """Compute all price-based features for one symbol. Returns DataFrame indexed by date.
+
+    v4.0: 新增 Alpha158 风格短期因子（via factor_library.compute_short_term_factors）。
+    如 high/low/open 缺失，仅 K 线形态/跳空相关因子为 NaN，其他照常。
+    """
     df = pd.DataFrame(index=close.index)
 
     ret1 = close.pct_change()
@@ -116,6 +123,18 @@ def compute_features_for_symbol(
     df["sortino_60"]   = _sortino(ret1, 60)
     df["vol_stability"] = _vol_stability(vol20, 60)
 
+    # v4.0: Alpha158-style short-term factors (41 个新因子)
+    try:
+        from factor_library import compute_short_term_factors
+        short_term = compute_short_term_factors(close, high, low, open_, volume)
+        for name, series in short_term.items():
+            # 避免冲突（factor_library 可能和现有因子名重叠）
+            col = name if name not in df.columns else f"ext_{name}"
+            df[col] = series
+    except Exception as e:
+        # 不中断原有流程
+        pass
+
     return df
 
 
@@ -125,27 +144,51 @@ def load_prices_from_db(
     conn: sqlite3.Connection,
     asof: Optional[str] = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load daily_prices into (close_df, volume_df) pivot tables.
+    """Load daily_prices → (close_df, volume_df). Back-compat 2-tuple API."""
+    c, v, _, _, _ = load_ohlcv_from_db(conn, asof)
+    return c, v
 
-    ``asof`` (YYYY-MM-DD) bounds the history at the SQL layer so backtest
-    callers cannot accidentally read future data. When ``asof`` is None,
-    the full table is loaded — reserve this for live refresh paths only.
+
+def load_ohlcv_from_db(
+    conn: sqlite3.Connection,
+    asof: Optional[str] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """v4.0: Load full OHLCV panels. Returns (close, volume, high, low, open_).
+
+    如果 daily_prices 表缺 open/high/low 列（legacy 表），返回空 DataFrame —
+    下游 compute_features_for_symbol 会 fallback 到仅 close+volume.
     """
+    # 探测列是否存在
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(daily_prices)").fetchall()}
+    has_ohl = {"open", "high", "low"}.issubset(cols)
+
+    select_cols = "symbol, date, close, volume"
+    if has_ohl:
+        select_cols = "symbol, date, close, volume, open, high, low"
+
     if asof is not None:
         rows = conn.execute(
-            "SELECT symbol, date, close, volume FROM daily_prices "
-            "WHERE date <= ? ORDER BY date",
+            f"SELECT {select_cols} FROM daily_prices WHERE date <= ? ORDER BY date",
             (str(asof),),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT symbol, date, close, volume FROM daily_prices ORDER BY date"
+            f"SELECT {select_cols} FROM daily_prices ORDER BY date"
         ).fetchall()
-    df = pd.DataFrame(rows, columns=["symbol", "date", "close", "volume"])
+
+    base_cols = ["symbol", "date", "close", "volume"] + (["open", "high", "low"] if has_ohl else [])
+    df = pd.DataFrame(rows, columns=base_cols)
     df["date"] = pd.to_datetime(df["date"])
+
     close  = df.pivot(index="date", columns="symbol", values="close").sort_index()
     volume = df.pivot(index="date", columns="symbol", values="volume").sort_index()
-    return close, volume
+    if has_ohl:
+        high = df.pivot(index="date", columns="symbol", values="high").sort_index()
+        low = df.pivot(index="date", columns="symbol", values="low").sort_index()
+        open_ = df.pivot(index="date", columns="symbol", values="open").sort_index()
+    else:
+        high = low = open_ = pd.DataFrame()
+    return close, volume, high, low, open_
 
 
 def write_features_to_db(
@@ -191,13 +234,17 @@ def run_compute_price_features(
 
     conn = sqlite3.connect(db_path)
     try:
-        close, volume = load_prices_from_db(conn, asof=asof)
+        close, volume, high, low, open_ = load_ohlcv_from_db(conn, asof=asof)
 
         # Only keep symbols that have a price row on or before asof
         # (point-in-time safe: use data up to and including asof)
         asof_dt = pd.Timestamp(asof)
         close  = close[close.index <= asof_dt]
         volume = volume[volume.index <= asof_dt]
+        if not high.empty:
+            high = high[high.index <= asof_dt]
+            low = low[low.index <= asof_dt]
+            open_ = open_[open_.index <= asof_dt]
 
         if close.empty:
             print(f"[price_features] No price data up to {asof}")
@@ -211,7 +258,10 @@ def run_compute_price_features(
         for sym in symbols:
             c = close[sym].dropna()
             v = volume[sym].dropna() if sym in volume.columns else None
-            feat_df = compute_features_for_symbol(c, v)
+            h = high[sym].dropna() if (not high.empty and sym in high.columns) else None
+            l = low[sym].dropna() if (not low.empty and sym in low.columns) else None
+            o = open_[sym].dropna() if (not open_.empty and sym in open_.columns) else None
+            feat_df = compute_features_for_symbol(c, v, high=h, low=l, open_=o)
             # Take only the last available row on or before asof
             feat_df = feat_df[feat_df.index <= asof_dt]
             if feat_df.empty:

@@ -1,0 +1,35 @@
+{
+  "asof": "2026-04-16T23:44:17.942647",
+  "gates": {
+    "jquants_light": {
+      "feature": "jquants_light",
+      "unlocked": false,
+      "realized_pnl_jpy": 420.0,
+      "threshold_jpy": 19800.0,
+      "remaining_jpy": 19380.0,
+      "progress_pct": 2.1,
+      "description": "J-Quants Light - TOPIX-17 行业 + 分红调整",
+      "last_checked": "2026-04-16T23:44:17.921324"
+    },
+    "jquants_premium": {
+      "feature": "jquants_premium",
+      "unlocked": false,
+      "realized_pnl_jpy": 420.0,
+      "threshold_jpy": 198000.0,
+      "remaining_jpy": 197580.0,
+      "progress_pct": 0.2,
+      "description": "J-Quants Premium - 分钟数据 + 公告日",
+      "last_checked": "2026-04-16T23:44:17.931919"
+    },
+    "polygon_starter": {
+      "feature": "polygon_starter",
+      "unlocked": false,
+      "realized_pnl_jpy": 420.0,
+      "threshold_jpy": 54000.0,
+      "remaining_jpy": 53580.0,
+      "progress_pct": 0.8,
+      "description": "Polygon Starter - 美股实时",
+      "last_checked": "2026-04-16T23:44:17.942640"
+    }
+  }
+}

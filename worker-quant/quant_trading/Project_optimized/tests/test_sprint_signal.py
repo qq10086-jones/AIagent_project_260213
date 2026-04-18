@@ -38,8 +38,9 @@ class TestSprintSignal(unittest.TestCase):
         row_deep_crash["high52w"] = -0.35
         self.assertFalse(sprint_entry_check(row_deep_crash, "off", off_scale=0.25))
         # Below percentile threshold → rejected in all regimes
+        # v4.0: threshold_on=0.70, so use 0.65 to test rejection
         row_low = row.copy()
-        row_low["mom_consist_pctile"] = 0.70
+        row_low["mom_consist_pctile"] = 0.65
         self.assertFalse(sprint_entry_check(row_low, "on"))
         self.assertFalse(sprint_entry_check(row_low, "off", off_scale=0.25))
 
@@ -51,8 +52,8 @@ class TestSprintSignal(unittest.TestCase):
     def test_sprint_score_combines_factors(self):
         df = pd.DataFrame(
             [
-                {"mom_consist": 0.8, "high52w": -0.01, "vol_z": 1.2},
-                {"mom_consist": 0.3, "high52w": -0.09, "vol_z": 0.6},
+                {"mom_consist": 0.8, "high52w": -0.01, "vol_z": 0.1},
+                {"mom_consist": 0.3, "high52w": -0.09, "vol_z": 1.5},
             ],
             index=["AAA.T", "BBB.T"],
         )
@@ -71,7 +72,9 @@ class TestSprintSignal(unittest.TestCase):
             rows = []
             for idx, dt in enumerate(dates):
                 date_str = dt.strftime("%Y-%m-%d")
-                rows.append((date_str, "7203.T", 100.0 + idx, 1_000_000 if idx < 259 else 5_000_000))
+                # v4.0: 不再要求 volume spike 进场，反而过滤 climax。
+                # 最后一天维持平稳量，避免 vol_z 过高被拒。
+                rows.append((date_str, "7203.T", 100.0 + idx, 1_000_000))
                 rows.append((date_str, "1321.T", 300.0 - idx * 0.6, 2_000_000))
                 rows.append((date_str, "1552.T", 20.0, 100_000))
             conn.executemany("INSERT INTO daily_prices(date, symbol, close, volume) VALUES (?, ?, ?, ?)", rows)

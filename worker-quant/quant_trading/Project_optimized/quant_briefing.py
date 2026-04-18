@@ -32,6 +32,7 @@ DB_PATH    = "japan_market.db"
 REPORT_DIR = Path("reports")
 JST        = pytz.timezone("Asia/Tokyo")
 NIKKEI_ETF = "1321.T"   # 日经225 ETF（野村，1:1跟踪指数），用作大盘代理；1570.T为2倍杠杆不适合做基准
+HOLDING_DAYS_SATELLITE = 2   # v4.0 方案 B: T+1 反转卫星仓目标持仓
 
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────
@@ -377,9 +378,14 @@ def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
         tp_triggered = False
         atr_note     = ""
 
+        ma20 = None
+        ma20_break = False
+        vol_break = False
+        vol_ratio = None
+
         if cost and cur and sym:
             try:
-                df = yf.Ticker(sym).history(period="20d")
+                df = yf.Ticker(sym).history(period="30d")
                 if len(df) >= 5:
                     highs = df["High"]
                     lows  = df["Low"]
@@ -391,15 +397,23 @@ def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
                     ], axis=1).max(axis=1)
                     atr14 = float(tr.iloc[-14:].mean()) if len(tr) >= 14 else float(tr.mean())
                     atr_pct = atr14 / float(cost)
-                    # 止损
                     stop_pct = min(STOP_CAP, max(STOP_FLOOR, atr_pct * VOL_MULT))
                     stop_price = round(float(cost) * (1 - stop_pct), 1)
                     stop_triggered = float(cur) < stop_price
-                    # 止盈
                     tp_pct = min(TP_CAP, max(TP_FLOOR, atr_pct * TP_MULT))
                     tp_price = round(float(cost) * (1 + tp_pct), 1)
                     tp_triggered = float(cur) >= tp_price
                     atr_note = f"ATR14={atr14:.1f} → 止损{stop_pct*100:.1f}%/止盈{tp_pct*100:.1f}%"
+                    # MA20 与 5 日成交量（exit 硬规则）
+                    if len(df) >= 20:
+                        ma20 = float(df["Close"].iloc[-20:].mean())
+                        ma20_break = float(cur) < ma20
+                    if len(df) >= 5:
+                        vol5 = float(df["Volume"].iloc[-6:-1].mean()) if len(df) >= 6 else float(df["Volume"].iloc[-5:].mean())
+                        vol_today = float(df["Volume"].iloc[-1])
+                        if vol5 > 0:
+                            vol_ratio = vol_today / vol5
+                            vol_break = (vol_ratio >= 1.5) and ma20_break
             except Exception:
                 pass
 
@@ -411,14 +425,108 @@ def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
         updated["take_profit_pct"]   = round(tp_pct * 100, 1) if tp_pct else None
         updated["tp_triggered"]      = tp_triggered
         updated["stop_note"]         = atr_note
-        # pnl_pct
+        updated["ma20"]              = round(ma20, 1) if ma20 else None
+        updated["ma20_break"]        = ma20_break
+        updated["volume_ratio_5d"]   = round(vol_ratio, 2) if vol_ratio else None
+        updated["volume_break_ma20"] = vol_break
         if cost and cur:
             try:
                 updated["pnl_pct"] = round((float(cur) / float(cost) - 1) * 100, 2)
+                # 距止损 %: (cur - stop_price) / cur
+                if stop_price:
+                    updated["dist_to_stop_pct"] = round((float(cur) - stop_price) / float(cur) * 100, 2)
             except Exception:
                 pass
         enriched.append(updated)
     return enriched
+
+
+def _annotate_position_health(positions: list[dict], asof: str, db_path: str) -> list[dict]:
+    """
+    为持仓注入：持有天数、建仓保护期、hold_score、exit 硬触发、基本面恶化标记。
+
+    Exit 硬规则（三选一触发即建议卖出）:
+      1. ATR 止损触发（stop_triggered）
+      2. 营业利润率翻负（op_margin < 0，来自 fundamental_snapshots 最新一期）
+      3. 5 日放量（vol_today >= 1.5×vol5）且跌破 MA20
+
+    Hold score（持仓健康度 0~1）:
+      + 0.4 if 未破 MA20
+      + 0.3 if 距止损 > 3%
+      + 0.3 if 基本面未恶化（op_margin >= 0）
+    """
+    PROTECTION_DAYS = 3
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+    except Exception:
+        return positions
+
+    out = []
+    for p in positions:
+        sym = p.get("symbol", "")
+        entry_date = p.get("entry_date") or ""
+        days_held = None
+        if entry_date and asof:
+            try:
+                d0 = datetime.strptime(entry_date, "%Y-%m-%d").date()
+                d1 = datetime.strptime(asof, "%Y-%m-%d").date()
+                days_held = (d1 - d0).days
+            except Exception:
+                pass
+        in_protection = (days_held is not None) and (days_held <= PROTECTION_DAYS)
+
+        op_margin = None
+        eps_latest = None
+        try:
+            r = cur.execute(
+                "SELECT operating_income, revenue, eps FROM fundamental_snapshots "
+                "WHERE symbol=? ORDER BY fiscal_period_end DESC LIMIT 1",
+                (sym,)
+            ).fetchone()
+            if r and r[1]:
+                op_margin = float(r[0] or 0) / float(r[1])
+                eps_latest = r[2]
+        except Exception:
+            pass
+
+        fundamental_bad = (op_margin is not None) and (op_margin < 0)
+
+        exit_reasons = []
+        if p.get("stop_triggered"):
+            exit_reasons.append("ATR止损")
+        if fundamental_bad:
+            exit_reasons.append("营业利润率<0")
+        if p.get("volume_break_ma20"):
+            exit_reasons.append("放量破MA20")
+        exit_hard = len(exit_reasons) > 0 and not in_protection
+
+        # hold score
+        score = 0.0
+        if not p.get("ma20_break"):
+            score += 0.4
+        dist = p.get("dist_to_stop_pct")
+        if dist is not None and dist > 3.0:
+            score += 0.3
+        if not fundamental_bad:
+            score += 0.3
+
+        q = dict(p)
+        q["days_held"] = days_held
+        q["in_protection"] = in_protection
+        q["op_margin"] = round(op_margin, 4) if op_margin is not None else None
+        q["eps_latest"] = eps_latest
+        q["fundamental_bad"] = fundamental_bad
+        q["exit_reasons"] = exit_reasons
+        q["exit_hard_triggered"] = exit_hard
+        q["hold_score"] = round(score, 2)
+        out.append(q)
+
+    try:
+        conn.close()
+    except Exception:
+        pass
+    return out
 
 
 # ── DB 数据读取 ────────────────────────────────────────────────────────────
@@ -441,16 +549,21 @@ def read_live_state(db_path: str, strategy_id: str = "default", asof: str = None
                 (strategy_id,)
             ).fetchone()[0]
 
-        query_pos = "SELECT symbol, qty, avg_cost, market_price, market_value, unrealized_pnl FROM positions WHERE strategy_id=?"
+        query_pos = (
+            "SELECT symbol, qty, avg_cost, market_price, market_value, unrealized_pnl, "
+            "COALESCE(high_since_entry,0), COALESCE(entry_date,'') "
+            "FROM positions WHERE strategy_id=?"
+        )
         params_pos = [strategy_id]
         if latest_pos_date:
             query_pos += " AND asof=?"
             params_pos.append(latest_pos_date)
-            
+
         cur.execute(query_pos, params_pos)
         positions = [
             {"symbol": r[0], "qty": r[1], "avg_cost": r[2],
-             "market_price": r[3], "market_value": r[4], "unrealized_pnl": r[5]}
+             "market_price": r[3], "market_value": r[4], "unrealized_pnl": r[5],
+             "high_since_entry": r[6], "entry_date": r[7]}
             for r in cur.fetchall()
         ]
 
@@ -519,7 +632,13 @@ def run_screener(db_path: str, asof: str) -> dict:
     try:
         sys.path.insert(0, str(Path(__file__).parent))
         from screener import ScreenConfig, FundamentalOverlayConfig, screen
-        cfg  = ScreenConfig(top_k=30, min_adv=5_000_000)
+        ycfg = _load_config()
+        scr = ycfg.get("screener", {}) or {}
+        min_adv = scr.get("min_adv")
+        if min_adv is None:
+            min_adv = scr.get("min_adv_floor", 50_000_000)
+        top_k = int(scr.get("top_k", 30))
+        cfg  = ScreenConfig(top_k=top_k, min_adv=float(min_adv))
         ocfg = FundamentalOverlayConfig(enabled=True)
         result = screen(db_path, None, asof, None, cfg, write_db=False, overlay_cfg=ocfg)
         return result
@@ -806,8 +925,10 @@ def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = F
         # requested strategy (typically 'sprint' = SBI); `live_state_paper`
         # surfaces the shadow paper track when it exists.
         live = read_live_state(DB_PATH, strategy_id=strategy_id, asof=asof)
+        asof_str = asof or now_jst().strftime("%Y-%m-%d")
         if live.get("positions"):
             live["positions"] = _enrich_positions_with_stop_loss(live["positions"])
+            live["positions"] = _annotate_position_health(live["positions"], asof_str, DB_PATH)
         report["live_state"] = live
 
         paper_strategy_id = (
@@ -817,6 +938,7 @@ def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = F
             live_paper = read_live_state(DB_PATH, strategy_id=paper_strategy_id, asof=asof)
             if live_paper.get("positions"):
                 live_paper["positions"] = _enrich_positions_with_stop_loss(live_paper["positions"])
+                live_paper["positions"] = _annotate_position_health(live_paper["positions"], asof_str, DB_PATH)
             # Only attach if there is anything to show (avoid empty section noise)
             if live_paper.get("positions") or live_paper.get("orders"):
                 live_paper["strategy_id"] = paper_strategy_id
@@ -824,6 +946,22 @@ def build_briefing(mode: str, extra_symbols: List[str], skip_preflight: bool = F
 
         # 最新信号（来自 DB）
         report["db_signals"] = read_latest_signals(DB_PATH, top_n=15)
+
+        # 卫星仓 T+1 反转候选（v4.0 方案 B）
+        # 2026-04-16: 回测失败（Sharpe -0.84, 累计 -100%）→ 默认关闭，
+        # 仅在 config.yaml strategy_profiles.sprint.satellite_enabled=true 时生成。
+        _cfg = _load_config()
+        _sat_enabled = bool(
+            (_cfg.get("strategy_profiles", {}) or {})
+            .get("sprint", {}).get("satellite_enabled", False)
+        )
+        if _sat_enabled:
+            try:
+                from satellite_signal import run_scan as _sat_scan
+                asof_str = asof or now_jst().strftime("%Y-%m-%d")
+                report["satellite_candidates"] = _sat_scan(DB_PATH, asof_str, top_k=5)
+            except Exception as e:
+                report["satellite_candidates"] = {"error": str(e), "candidates": []}
 
     # ── 模式：stock（个股深析）───────────────────────────────────────────
     if mode in ("stock", "full") and extra_symbols:
@@ -884,18 +1022,96 @@ def write_report(report: dict) -> tuple[Path, Path]:
 
     if "live_state" in report:
         live = report["live_state"]
-        lines.append("## SBI 实盘持仓 & 挂单")
+        lines.append("## SBI 实盘持仓健康表")
+        lines.append(
+            "_持仓决策与候选池 entry score 解耦：只看止损距离 / 趋势 / 基本面 / 保护期_"
+        )
         pos = live.get("positions", [])
         if pos:
+            lines.append(
+                "| 代码 | 股数 | 均价 | 现价 | 浮盈% | 距止损% | 止损价 | MA20 | 保护期 | HoldScore | Exit信号 |"
+            )
+            lines.append(
+                "|------|------|------|------|-------|---------|--------|------|--------|-----------|----------|"
+            )
             for p in pos:
-                lines.append(f"- 持仓 {p['symbol']}  {p['qty']}股  均价{p['avg_cost']}  "
-                              f"浮盈{p.get('unrealized_pnl','N/A')}")
+                sym = p.get("symbol", "")
+                qty = p.get("qty", "")
+                cost = p.get("avg_cost", "")
+                cur = p.get("market_price", "")
+                pnl_pct = p.get("pnl_pct")
+                pnl_s = f"{pnl_pct:+.2f}%" if pnl_pct is not None else "—"
+                dist = p.get("dist_to_stop_pct")
+                dist_s = f"{dist:+.2f}%" if dist is not None else "—"
+                stop_p = p.get("stop_loss_price") or "—"
+                ma20 = p.get("ma20")
+                ma_s = f"{ma20} {'破' if p.get('ma20_break') else '上'}" if ma20 else "—"
+                days = p.get("days_held")
+                prot = f"🛡️ D{days}/3" if p.get("in_protection") else (f"D{days}" if days is not None else "—")
+                hs = p.get("hold_score", 0)
+                reasons = p.get("exit_reasons") or []
+                if p.get("exit_hard_triggered"):
+                    exit_s = "🔴 " + "+".join(reasons)
+                elif reasons and p.get("in_protection"):
+                    exit_s = "🟡 保护期内抑制: " + "+".join(reasons)
+                else:
+                    exit_s = "✓ 持有"
+                lines.append(
+                    f"| {sym} | {qty} | {cost} | {cur} | {pnl_s} | {dist_s} | {stop_p} | {ma_s} | {prot} | {hs} | {exit_s} |"
+                )
+            # Exit 规则说明
+            lines.append("")
+            lines.append(
+                "**Exit 硬规则**（三选一触发才建议卖出，entry score 衰减不触发）: "
+                "① ATR 止损跌破 ② 营业利润率翻负 ③ 5日放量+跌破MA20。"
+                "建仓前 3 个交易日为保护期，硬规则仅提示不强制。"
+            )
         else:
             lines.append("- 当前空仓")
+        lines.append("")
+        lines.append("### 挂单")
         orders = live.get("orders", [])
         if orders:
             for o in orders:
-                lines.append(f"- 挂单 {o['symbol']} {o['side']} {o['qty']}股 @ {o['limit_price']}  [{o['status']}]")
+                lines.append(f"- {o['symbol']} {o['side']} {o['qty']}股 @ {o['limit_price']}  [{o['status']}]")
+        else:
+            lines.append("- 无")
+        lines.append("")
+
+    # 卫星仓候选（T+1 反转）— v4.0 方案 B
+    if report.get("satellite_candidates"):
+        sat = report["satellite_candidates"]
+        cands = sat.get("candidates", [])
+        lines.append("## 卫星仓 T+1 反转候选 ⚠️ EXPERIMENTAL")
+        lines.append("> **⚠️ 回测警告**: 2025-06~2026-04 历史模拟 1050 笔交易，"
+                     "胜率 39.8%, 年化 Sharpe **-0.84**, 累计 **-100%**。**切勿按此直接下单**。")
+        lines.append("> 启用方式: config.yaml 设 `strategy_profiles.sprint.satellite_enabled: true`")
+        lines.append("")
+        lines.append(
+            f"_反转策略: 昨日强动量 → 次日做多反弹。宇宙 {sat.get('universe_size',0)} 只流动股，"
+            f"阈值 |z| ≥ {sat.get('signal_threshold_sigma',2.0):.1f}σ，持 {HOLDING_DAYS_SATELLITE} 天_"
+        )
+        if not cands:
+            lines.append("- 今日无达阈值候选（反转信号不够极端或被基本面否决）")
+        else:
+            lines.append("| # | 代码 | zσ | 现价 | 挂单区间 | 止损 | 止盈 | ATR% | 检验 |")
+            lines.append("|---|------|-----|------|----------|------|------|------|------|")
+            for i, c in enumerate(cands, 1):
+                flags = []
+                if not c.get("fundamentals_pass", True):
+                    flags.append("⚠️基本面")
+                if c.get("volume_warning"):
+                    flags.append("🟡量能")
+                flag_s = " ".join(flags) if flags else "✓"
+                lines.append(
+                    f"| {i} | {c['symbol']} | {c['z_score']:+.2f} | {c['current_price']} "
+                    f"| {c['entry_range_low']}~{c['entry_range_high']} | {c['stop_loss']} "
+                    f"| {c['profit_target']} | {c['atr']}% | {flag_s} |"
+                )
+            lines.append("")
+            lines.append(
+                f"_操作规则: 次日 09:00 挂单区间内买入 → 持 {HOLDING_DAYS_SATELLITE} 天或触止损/止盈 → 无条件平仓_"
+            )
         lines.append("")
 
     if "live_state_paper" in report:
@@ -971,10 +1187,72 @@ def write_report(report: dict) -> tuple[Path, Path]:
                     lines.append(f"- [{n.get('score',0):+.1f}] {n.get('summary','')}")
         lines.append("")
 
+    # 交易日志自动追加（新建仓 pre-commitment）
+    try:
+        _update_trade_journal(report)
+    except Exception:
+        pass
+
     with open(md_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
     return json_path, md_path
+
+
+def _update_trade_journal(report: dict) -> None:
+    """
+    对任何 entry_date == 今天 的持仓，追加一条 pre-commitment 模板条目到
+    reports/trade_journal.md（若该 symbol+date 尚未记录）。
+    模板逼使用户在买入时就写清：买入理由 / 止损价 / 卖出条件，避免事后合理化。
+    """
+    journal = REPORT_DIR / "trade_journal.md"
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    asof = now_jst().strftime("%Y-%m-%d")
+    live = report.get("live_state", {}) or {}
+    positions = live.get("positions", []) or []
+
+    existing = ""
+    if journal.exists():
+        existing = journal.read_text(encoding="utf-8")
+    else:
+        header = (
+            "# 交易日志（Pre-Commitment Journal）\n\n"
+            "_每次建仓必须填写：买入理由 / 止损价 / 卖出条件。卖出时对照日志，禁止事后合理化。_\n\n"
+            "**模板字段含义**：\n"
+            "- **买入理由**：触发信号（score / 基本面 / 事件）— 越具体越难反悔\n"
+            "- **止损价**：ATR 硬止损价，跌破无条件离场\n"
+            "- **卖出条件**：除止损外，额外的退出触发（目标价 / 基本面恶化 / 趋势破位）\n"
+            "- **持有上限**：超过这个天数仍未达预期则评估是否离场\n\n"
+            "---\n\n"
+        )
+        existing = header
+
+    appended = False
+    for p in positions:
+        sym = p.get("symbol", "")
+        entry_date = p.get("entry_date") or ""
+        if entry_date != asof:
+            continue
+        marker = f"## {entry_date} {sym}"
+        if marker in existing:
+            continue
+        cost = p.get("avg_cost", "")
+        qty = p.get("qty", "")
+        stop = p.get("stop_loss_price", "—")
+        entry = (
+            f"{marker}\n"
+            f"- 股数: {qty}  均价: {cost}  止损价: {stop}\n"
+            f"- **买入理由**: _（填入信号分数 / 基本面亮点 / 事件驱动）_\n"
+            f"- **止损价**: {stop}（ATR 动态止损，跌破即平仓）\n"
+            f"- **卖出条件**: _（三选一：目标价达成 / 营业利润率翻负 / 放量破MA20）_\n"
+            f"- **持有上限**: _（N 个交易日）_\n"
+            f"- **入场情绪自评（1-5）**: _（冲动=1，冷静=5）_\n\n"
+        )
+        existing += entry
+        appended = True
+
+    if appended:
+        journal.write_text(existing, encoding="utf-8")
 
 
 def write_report_v2(report: dict) -> tuple[Path, Path]:

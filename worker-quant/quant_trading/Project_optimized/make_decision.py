@@ -1113,7 +1113,7 @@ def main():
             print(f"[risk] FULL_EXIT: clearing all target weights → force SELL all positions")
             target_weights = target_weights.iloc[0:0].copy()
 
-        if args.position_sizing == "half_kelly":
+        if args.position_sizing in ("half_kelly", "aggressive_kelly"):
             kelly = compute_kelly_params(
                 conn,
                 strategy_id=args.strategy_id,
@@ -1121,11 +1121,20 @@ def main():
                 asof=asof,
                 fallback_position_pct=float(args.kelly_bootstrap_pct),
             )
+            # v4.0: aggressive mode applies higher fraction + signal scaling at
+            # sizing layer. Since per-name signal/ATR/regime is held in
+            # target_meta/target_weights row-wise, we pass kelly_fraction via
+            # env-override on the suggested_weight (coarse). Full per-name
+            # aggressive sizing is wired at apply_kelly_sizing.
+            kf = 0.75 if args.position_sizing == "aggressive_kelly" else 0.5
+            boosted = float(kelly.get("suggested_weight", 0.0) or 0.0) * (kf / 0.5)
             target_weights = apply_kelly_sizing(
                 target_weights,
-                suggested_weight=float(kelly.get("suggested_weight", 0.0) or 0.0),
+                suggested_weight=boosted,
                 max_positions=int(args.max_positions),
             )
+            kelly["mode"] = args.position_sizing
+            kelly["kelly_fraction_applied"] = kf
         else:
             kelly = {}
 

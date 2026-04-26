@@ -696,12 +696,13 @@ def _load_latest_fundamental_values(
         SELECT asof, symbol, feature_name, value
         FROM feature_daily
         WHERE asof <= ?
+          AND (available_ts IS NULL OR available_ts <= ?)
           AND symbol IN ({placeholders_symbol})
           AND feature_name IN ({placeholders_feature})
         ORDER BY asof DESC
         """,
         conn,
-        params=[asof] + list(symbols) + list(FUNDAMENTAL_FACTOR_NAMES),
+        params=[asof, asof + " 23:59:59"] + list(symbols) + list(FUNDAMENTAL_FACTOR_NAMES),
     )
     if rows.empty:
         return pd.DataFrame(index=symbols)
@@ -1234,6 +1235,7 @@ def main():
             "atr_window": int(getattr(args, "atr_window", 20)),
         }
         forced_exits, stop_loss_diag = _check_stop_losses(conn, asof, args.strategy_id, stop_loss_cfg)
+        stop_loss_syms = set(forced_exits)
         if forced_exits:
             print(f"[risk] stop-loss/trailing triggered for: {forced_exits}")
             # 从 target_weights 中移除被止损的股票（强制平仓）
@@ -1380,6 +1382,19 @@ def main():
         if _bypass:
             print(f"[capital_gate] BYPASS enabled (--bypass_capital_gate). "
                   f"Gate SKIPPED for {args.strategy_id}. USE WITH CAUTION.")
+            try:
+                import json as _json
+                from datetime import datetime as _dt
+                _bypass_log = Path(args.reports_dir) / "capital_gate_bypass_events.jsonl"
+                with open(_bypass_log, "a", encoding="utf-8") as _bf:
+                    _bf.write(_json.dumps({
+                        "ts": _dt.now().isoformat(),
+                        "strategy_id": args.strategy_id,
+                        "asof": asof,
+                        "event": "capital_gate_bypassed",
+                    }) + "\n")
+            except Exception:
+                pass
         else:
             try:
                 import capital_gate
@@ -1397,9 +1412,6 @@ def main():
                         # 2026-04-25 hardening (Codex #2): `paused_sunk_only`
                         # means "let existing positions play out, do not
                         # trade". Rebalance-driven SELLs are NOT allowed.
-                        # Stop-loss exits still reach the user via the
-                        # briefing risk_alerts path, which does not go
-                        # through the orders table.
                         if decision.recommended_state == "paused_sunk_only":
                             _block_all = True
             except Exception as _ge:
@@ -1407,12 +1419,12 @@ def main():
                 _gate_reasons = [f"gate evaluation FAILED ({type(_ge).__name__}: {_ge}) — fail-closed"]
 
         if _block_all:
-            dropped_total = len(orders)
-            print(f"[capital_gate] PAUSED_SUNK_ONLY: strategy={args.strategy_id} "
-                  f"→ dropping ALL {dropped_total} orders (no rebalance BUYs or SELLs).")
+            stop_loss_orders = [o for o in orders if getattr(o, 'symbol', '') in stop_loss_syms and getattr(o, 'side', '').upper() == 'SELL']
+            dropped = len(orders) - len(stop_loss_orders)
+            print(f"[capital_gate] PAUSED_SUNK_ONLY: dropping {dropped} non-stop-loss orders, keeping {len(stop_loss_orders)} stop-loss SELLs")
             for r in _gate_reasons:
                 print(f"  - {r}")
-            orders = []
+            orders = stop_loss_orders
         elif _block_buys:
             sells = [o for o in orders
                      if getattr(o, "side", "").upper() == "SELL"]

@@ -165,6 +165,40 @@ def apply_simulation_env(*, asof: str | None, mode: str | None, state_path: str 
     os.environ["WORKER_QUANT_SIMULATION_STRICT_PIT"] = "1" if strict_pit else "0"
 
 
+def _extract_universe_symbols(payload) -> list[str]:
+    if isinstance(payload, dict):
+        if isinstance(payload.get("symbols"), list):
+            items = payload["symbols"]
+        elif isinstance(payload.get("universe"), list):
+            items = payload["universe"]
+        else:
+            return []
+    elif isinstance(payload, list):
+        items = payload
+    else:
+        return []
+    symbols: list[str] = []
+    for item in items:
+        if isinstance(item, str):
+            symbols.append(item)
+        elif isinstance(item, dict) and item.get("symbol"):
+            symbols.append(str(item["symbol"]))
+    return symbols
+
+
+def _load_universe_symbols(universe_file: str) -> list[str]:
+    if not universe_file:
+        return []
+    path = Path(universe_file)
+    if not path.exists():
+        return []
+    try:
+        return _extract_universe_symbols(json.loads(path.read_text(encoding="utf-8")))
+    except Exception as e:
+        print(f"[price_features] universe load skipped: {e}", file=sys.stderr)
+        return []
+
+
 def refresh_positions_market_prices(db_path: str, asof: str) -> int:
     """
     Insert a fresh positions snapshot for today with updated market prices.
@@ -476,7 +510,12 @@ def _format_action_plan_embed(payload: dict) -> str:
     pending_sells = int(payload.get("pending_sells", 0))
     pending_buys = int(payload.get("pending_buys", 0))
     held = int(payload.get("held_positions", 0))
-    alerts = int(payload.get("risk_alerts", 0))
+    risk_alert_list = payload.get("risk_alerts_detail", [])
+    stop_syms = [a.get("symbol", "?") for a in risk_alert_list if isinstance(a, dict) and a.get("type") == "stop_loss_triggered"]
+    alerts_count = int(payload.get("risk_alerts", 0))
+    alerts_text = f"**{alerts_count}** 条"
+    if stop_syms:
+        alerts_text += f" — ⛔ STOP TRIGGERED: {', '.join(stop_syms)}"
 
     regime_emoji = {"off": "🔴", "caution": "🟡", "on": "🟢"}.get(regime, "⚪")
 
@@ -490,8 +529,8 @@ def _format_action_plan_embed(payload: dict) -> str:
         f"🔻 待卖 **{pending_sells}** 只　｜　"
         f"🔺 待买 **{pending_buys}** 只",
     ]
-    if alerts > 0:
-        lines.append(f"⚠️ 风险警报 **{alerts}** 条 — 请立即查看 action_plan_today.json")
+    if alerts_count > 0:
+        lines.append(f"⚠️ 风险警报 {alerts_text} — 请立即查看 action_plan_today.json")
 
     return "\n".join(lines)
 
@@ -1092,7 +1131,8 @@ def main():
     if not is_simulation:
         try:
             from compute_price_features import run_compute_price_features
-            _pf_result = run_compute_price_features(db_path, asof)
+            _universe_syms = _load_universe_symbols(universe_file)
+            _pf_result = run_compute_price_features(db_path, asof, universe_symbols=_universe_syms)
             print(f">> [price_features] {_pf_result.get('status')}  "
                   f"symbols={_pf_result.get('symbols', 0)}  "
                   f"rows={_pf_result.get('rows_written', 0)}")
@@ -1114,6 +1154,9 @@ def main():
                 reports_dir, "feature_health_check_failed", level="warning",
                 asof=asof, missing_features=list(_hc_missing),
             )
+            _fail_closed = bool((cfg.get("update") or {}).get("feature_health_check_fail_closed", False))
+            if _fail_closed:
+                raise RuntimeError(f"[health_check] fail-closed: missing sprint features {_hc_missing}")
         else:
             print(f">> [health_check] feature_daily OK — {len(_hc_feats)} features for {asof}")
     except Exception as _hc_err:
@@ -1599,6 +1642,15 @@ def main():
     print(">>", " ".join(cmd))
     out = run_and_capture(cmd)
     emit_runtime_event(reports_dir, "make_decision_completed", asof=asof)
+
+    # Refresh capital_gate_state.json after each decision run
+    try:
+        from capital_gate import evaluate_all, write_audit
+        _gate_decisions = evaluate_all()
+        write_audit(_gate_decisions)
+        print(">> [capital_gate] audit refreshed")
+    except Exception as _cge:
+        print(f"⚠️  capital_gate write_audit (non-fatal): {_cge}")
 
     # Refresh action_plan_today.json immediately after make_decision so the
     # canonical artifact's asof matches the current run even if downstream

@@ -10,6 +10,7 @@ universe:
 update:
   lookback_days: 730
   universe_file: universe.json
+  feature_health_check_fail_closed: false  # set true to abort pipeline on missing sprint features
 fundamental:
   enabled: true
   source: yfinance

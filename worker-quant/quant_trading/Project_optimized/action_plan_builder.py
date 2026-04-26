@@ -87,7 +87,8 @@ def _load_stop_loss_info(artifact_root: Path, asof: str) -> list[dict]:
     try:
         snap = json.loads(candidates[-1].read_text(encoding="utf-8"))
         return snap.get("risk_management", {}).get("stop_loss_diagnostics", [])
-    except Exception:
+    except Exception as e:
+        print(f"[action_plan_builder] WARNING: failed to load stop-loss diagnostics from {candidates[-1]}: {e}")
         return []
 
 def build_action_plan(
@@ -105,6 +106,22 @@ def build_action_plan(
     positions = _load_positions(conn, asof, strategy_id)
     regime = _load_regime(reports_dir)
     stop_diags = _load_stop_loss_info(artifact_root, asof)
+    if not stop_diags and positions:
+        print(f"[action_plan_builder] WARNING: no stop-loss diagnostics for {len(positions)} position(s) — stop_loss_price will be None")
+
+    # Load account snapshot
+    account_info = {}
+    try:
+        row = conn.execute("""
+            SELECT asof, nav, cash, strategy_id
+            FROM account_snapshots
+            WHERE strategy_id=?
+            ORDER BY asof DESC LIMIT 1
+        """, (strategy_id,)).fetchone()
+        if row:
+            account_info = {"asof": row[0], "nav": row[1], "cash": row[2], "strategy_id": row[3]}
+    except Exception as e:
+        print(f"[action_plan_builder] WARNING: failed to load account snapshot: {e}")
 
     # Classify pending actions
     pending_sells = [o for o in orders if o["side"] == "SELL"]
@@ -163,6 +180,7 @@ def build_action_plan(
         "asof": asof,
         "generated_at": now.isoformat(),
         "strategy_id": strategy_id,
+        "account": account_info,
         "regime": regime_state,
         "regime_detail": {
             "ma_gap_pct": round((regime.get("fast_ma", 0) - regime.get("slow_ma", 1)) / max(regime.get("slow_ma", 1), 1) * 100, 2) if regime.get("slow_ma") else None,

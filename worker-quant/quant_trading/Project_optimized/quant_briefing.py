@@ -31,7 +31,8 @@ import pytz
 DB_PATH    = "japan_market.db"
 REPORT_DIR = Path("reports")
 JST        = pytz.timezone("Asia/Tokyo")
-NIKKEI_ETF = "1321.T"   # 日经225 ETF（野村，1:1跟踪指数），用作大盘代理；1570.T为2倍杠杆不适合做基准
+NIKKEI_ETF = "1321.T"   # 日经225 ETF（野村，1:1跟踪指数），用作 live benchmark / 大盘代理；1570.T 为 2 倍杠杆不适合做基准
+TOPIX_SHADOW_ETF = "1306.T"
 HOLDING_DAYS_SATELLITE = 2   # v4.0 方案 B: T+1 反转卫星仓目标持仓
 
 
@@ -48,6 +49,243 @@ def _load_config(path: str = "config.yaml") -> dict:
 
 def now_jst() -> datetime:
     return datetime.now(JST)
+
+
+def _load_benchmark_role_note(reports_dir: Path | None = None) -> str | None:
+    reports_dir = reports_dir or REPORT_DIR
+    path = reports_dir / "benchmark_shadow_compare.json"
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+    live = payload.get("live", {}) or {}
+    shadow = payload.get("shadow", {}) or {}
+    live_ticker = str(live.get("ticker") or NIKKEI_ETF)
+    shadow_ticker = str(shadow.get("ticker") or TOPIX_SHADOW_ETF)
+    live_name = str(live.get("label") or live.get("name") or "Nikkei 225 ETF")
+    shadow_name = str(shadow.get("label") or shadow.get("name") or "TOPIX ETF")
+    return (
+        f"{live_ticker} = live benchmark ({live_name}); "
+        f"{shadow_ticker} = shadow benchmark ({shadow_name}, compare-only)."
+    )
+
+
+def _load_benchmark_broadcast_summary(reports_dir: Path | None = None) -> list[str]:
+    """把 benchmark / shadow 审计产物翻译成适合聊天广播的中文短句。
+
+    底层审计文件 (reports/benchmark_shadow_compare.{json,md},
+    reports/benchmark_shadow_short_window_summary_latest.{json,md})
+    保持原样, 内部仍可用作技术追溯; 这里只做"翻译层", 把
+    contaminated / withheld / diagnosis 等内部状态转成人话, 适合
+    Discord / nexus 等用户面广播。1321.T 永远是 live benchmark, 1306.T
+    永远是 shadow-only。文件缺失或解析失败时返回空列表。
+    """
+    reports_dir = reports_dir or REPORT_DIR
+    out: list[str] = []
+
+    compare_path = reports_dir / "benchmark_shadow_compare.json"
+    if not compare_path.exists():
+        return out
+    try:
+        cmp_payload = json.loads(compare_path.read_text(encoding="utf-8"))
+    except Exception:
+        return out
+
+    live = cmp_payload.get("live") or {}
+    shadow = cmp_payload.get("shadow") or {}
+    live_ticker = str(live.get("ticker") or NIKKEI_ETF)
+    shadow_ticker = str(shadow.get("ticker") or TOPIX_SHADOW_ETF)
+    state_cn = {"on": "正常", "caution": "谨慎", "off": "关闭"}
+
+    live_state = str(live.get("state") or "").lower()
+    shadow_state = str(shadow.get("state") or "").lower()
+
+    if live_state in state_cn:
+        out.append(
+            f"实盘基准 {live_ticker}: **{state_cn[live_state]}**（驱动当日大盘判断）"
+        )
+    elif live_state:
+        out.append(f"实盘基准 {live_ticker}: 状态 {live_state}")
+
+    if shadow_state == "contaminated":
+        out.append(
+            f"影子基准 {shadow_ticker}: 暂停使用 — 历史价格序列检测到未复权拆股, "
+            f"短期内不作为信号证据；实盘判断不受影响 (技术细节见 audit 报告)"
+        )
+    elif shadow_state in state_cn:
+        diverge = cmp_payload.get("divergence") or {}
+        if diverge.get("comparable") is False:
+            tail = "仅供观察, 暂不与实盘对照"
+        elif diverge.get("state_differs"):
+            tail = "与实盘有分歧, 仅供参考"
+        else:
+            tail = "与实盘一致"
+        out.append(
+            f"影子基准 {shadow_ticker}: **{state_cn[shadow_state]}** ({tail})"
+        )
+    elif shadow_state:
+        out.append(f"影子基准 {shadow_ticker}: 状态 {shadow_state} (仅供观察)")
+
+    sw_path = reports_dir / "benchmark_shadow_short_window_summary_latest.json"
+    if sw_path.exists():
+        try:
+            sw = json.loads(sw_path.read_text(encoding="utf-8"))
+        except Exception:
+            sw = None
+        if isinstance(sw, dict):
+            if sw.get("decision_discussion_ready") is False:
+                out.append(
+                    "短窗口对比: 暂停发布 (等待影子数据修复, 不影响实盘决策)"
+                )
+            else:
+                head = sw.get("headline_metrics") or {}
+                days = head.get("state_diff_days")
+                avg = head.get("avg_abs_scale_delta")
+                window = sw.get("window") or {}
+                if days is not None or avg is not None:
+                    parts = [f"{window.get('trading_days', '?')}日窗口"]
+                    if days is not None:
+                        parts.append(f"状态分歧 {days} 天")
+                    if avg is not None:
+                        try:
+                            parts.append(f"规模差均值 {float(avg):.3f}")
+                        except (TypeError, ValueError):
+                            parts.append(f"规模差均值 {avg}")
+                    out.append("短窗口对比: " + "; ".join(parts))
+
+    return out
+
+
+def _load_data_sanity_benchmark_caution(
+    reports_dir: Path | None = None,
+    *,
+    benchmark_ticker: str | None = None,
+) -> dict:
+    """Translate data_sanity_alerts_latest.json benchmark/ETF warnings into briefing input.
+
+    The market-state section of the briefing must show a clear caution badge —
+    rather than "正常操作" — whenever benchmark/ETF reference warnings exist for
+    the asof date. This helper returns:
+      {
+        "active":         bool,
+        "asof":           str | None,
+        "lines":          list[str]   # chat-friendly caution lines for headers
+        "warnings":       list[dict]  # raw warning payload for nexus JSON
+        "benchmark_hit":  bool        # True when the live benchmark is in warnings
+      }
+
+    Returns ``active=False`` (with empty lists) when the JSON is missing,
+    unreadable, has no reference warnings, or only contains warnings unrelated
+    to a benchmark/ETF reference scope.
+    """
+    reports_dir = reports_dir or REPORT_DIR
+    bench = str(benchmark_ticker or NIKKEI_ETF)
+    inactive = {
+        "active": False,
+        "asof": None,
+        "lines": [],
+        "warnings": [],
+        "benchmark_hit": False,
+    }
+
+    path = reports_dir / "data_sanity_alerts_latest.json"
+    if not path.exists():
+        return inactive
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return inactive
+
+    warnings = payload.get("reference_warnings") or []
+    if not isinstance(warnings, list) or not warnings:
+        return inactive
+
+    benchmark_hit = False
+    lines: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for w in warnings:
+        if not isinstance(w, dict):
+            continue
+        symbol = str(w.get("symbol") or "").strip()
+        scope = str(w.get("reference_scope") or "").strip().lower()
+        atype = str(w.get("alert_type") or "").strip()
+        if not symbol or scope not in {"benchmark", "etf"}:
+            continue
+        if symbol == bench or scope == "benchmark":
+            benchmark_hit = True
+        key = (symbol, atype)
+        if key in seen:
+            continue
+        seen.add(key)
+        observed = w.get("observed")
+        atype_cn = {
+            "reference_volume_spike": "量能异常",
+            "reference_price_jump":   "价格跳变",
+            "reference_missing_date": "数据缺失",
+        }.get(atype, atype or "异常")
+        try:
+            obs_num = float(observed) if observed is not None else None
+        except (TypeError, ValueError):
+            obs_num = None
+        if atype == "reference_volume_spike" and obs_num is not None:
+            obs_str = f"{obs_num:.1f}x"
+        elif atype == "reference_price_jump" and obs_num is not None:
+            obs_str = f"{obs_num:+.1%}"
+        elif atype == "reference_missing_date":
+            obs_str = "缺失"
+        else:
+            obs_str = str(observed) if observed is not None else "—"
+        scope_cn = "实盘基准" if scope == "benchmark" else "ETF 参照"
+        lines.append(f"{scope_cn} {symbol}: {atype_cn} {obs_str}")
+
+    if not lines:
+        return inactive
+
+    return {
+        "active": True,
+        "asof": payload.get("asof"),
+        "lines": lines,
+        "warnings": warnings,
+        "benchmark_hit": benchmark_hit,
+    }
+
+
+def _load_opportunity_waterfall(
+    asof: str | None,
+    reports_dir: Path | None = None,
+) -> dict:
+    """Read-only loader for A-3 opportunity_waterfall_<asof>.json (A-4).
+
+    Shadow-safe: never writes, never raises. Routes are:
+      - missing asof / file → status='missing'
+      - unreadable JSON     → status='unreadable'
+      - empty horizons list → status='empty'
+      - otherwise           → status='ok', payload merged in
+    """
+    reports_dir = reports_dir or REPORT_DIR
+    out: dict = {"status": "missing", "path": None, "payload": None}
+    if not asof:
+        return out
+    path = reports_dir / f"opportunity_waterfall_{asof}.json"
+    out["path"] = str(path)
+    if not path.exists():
+        return out
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        out["status"] = "unreadable"
+        out["error"] = str(e)
+        return out
+    if not isinstance(payload, dict) or not payload.get("horizons"):
+        out["status"] = "empty"
+        out["payload"] = payload if isinstance(payload, dict) else None
+        return out
+    out["status"] = "ok"
+    out["payload"] = payload
+    return out
 
 
 def _safe_pct(a, b) -> Optional[float]:
@@ -85,48 +323,69 @@ def market_session_status(now: datetime) -> dict:
 # ── 市场数据获取 ───────────────────────────────────────────────────────────
 
 def fetch_price_snapshot(symbols: List[str]) -> Dict[str, dict]:
-    """批量拉取今日日内行情快照。"""
+    """批量拉取今日日内行情快照。
+
+    Fail-closed: 如果盘前/停牌导致今天没有 1m bar，不再把过去 2 天分钟线
+    误当成“今日快照”；改为回退到最近一个已完成日线 bar。
+    """
     try:
         import yfinance as yf
     except ImportError:
         return {}
 
     result: Dict[str, dict] = {}
+    today_str = now_jst().strftime("%Y-%m-%d")
     for sym in symbols:
         try:
             tk = yf.Ticker(sym)
             df = tk.history(period="2d", interval="1m")  # 拉2天以便得到昨收
-            if df.empty:
+            if df is None or df.empty:
                 continue
             df.index = df.index.tz_convert(JST)
-            today_str = now_jst().strftime("%Y-%m-%d")
-            today_df  = df[df.index.strftime("%Y-%m-%d") == today_str]
-            if today_df.empty:
-                today_df = df  # 回退用全部
-            open_p  = float(today_df["Open"].iloc[0])
-            cur     = float(today_df["Close"].iloc[-1])
-            low     = float(today_df["Low"].min())
-            high    = float(today_df["High"].max())
-            vol     = int(today_df["Volume"].sum())
-            last_t  = today_df.index[-1].strftime("%H:%M")
+            today_df = df[df.index.strftime("%Y-%m-%d") == today_str]
 
-            # 用昨收作为涨跌基准（与券商显示一致）
-            prev_df = df[df.index.strftime("%Y-%m-%d") < today_str]
-            if not prev_df.empty:
-                prev_close = float(prev_df["Close"].iloc[-1])
+            if not today_df.empty:
+                open_p = float(today_df["Open"].iloc[0])
+                cur = float(today_df["Close"].iloc[-1])
+                low = float(today_df["Low"].min())
+                high = float(today_df["High"].max())
+                vol = int(today_df["Volume"].sum())
+                last_t = today_df.index[-1].strftime("%H:%M")
+
+                prev_df = df[df.index.strftime("%Y-%m-%d") < today_str]
+                if not prev_df.empty:
+                    prev_close = float(prev_df["Close"].iloc[-1])
+                else:
+                    prev_close = open_p
+                chg_pct = _safe_pct(cur, prev_close)
+
+                recent = today_df["Close"].tail(5)
+                trend = "up" if recent.iloc[-1] > recent.iloc[0] else \
+                        "down" if recent.iloc[-1] < recent.iloc[0] else "flat"
+
+                avg_vol = today_df["Volume"].mean()
+                max_vol = int(today_df["Volume"].max())
+                volume_spike = round(max_vol / avg_vol, 1) if avg_vol > 0 else None
+                source = "intraday"
             else:
-                prev_close = open_p  # 无昨收时退化到开盘价
-            chg_pct = _safe_pct(cur, prev_close)
-
-            # 5分钟趋势（最近5根K线）
-            recent  = df["Close"].tail(5)
-            trend   = "up" if recent.iloc[-1] > recent.iloc[0] else \
-                      "down" if recent.iloc[-1] < recent.iloc[0] else "flat"
-
-            # 异常大量检测（最大单分钟量 vs 均量）
-            avg_vol = df["Volume"].mean()
-            max_vol = int(df["Volume"].max())
-            volume_spike = round(max_vol / avg_vol, 1) if avg_vol > 0 else 0
+                daily_df = tk.history(period="5d", interval="1d")
+                if daily_df is None or daily_df.empty:
+                    continue
+                daily_df = daily_df.dropna(subset=["Open", "High", "Low", "Close"])
+                if daily_df.empty:
+                    continue
+                last_bar = daily_df.iloc[-1]
+                prev_close = float(daily_df["Close"].iloc[-2]) if len(daily_df) >= 2 else float(last_bar["Open"])
+                open_p = float(last_bar["Open"])
+                cur = float(last_bar["Close"])
+                low = float(last_bar["Low"])
+                high = float(last_bar["High"])
+                vol = int(last_bar.get("Volume", 0) or 0)
+                last_t = "close"
+                chg_pct = _safe_pct(cur, prev_close)
+                trend = None
+                volume_spike = None
+                source = "daily_fallback"
 
             result[sym] = {
                 "open": open_p, "cur": cur, "low": low, "high": high,
@@ -135,6 +394,7 @@ def fetch_price_snapshot(symbols: List[str]) -> Dict[str, dict]:
                 "chg_pct": round(chg_pct, 2) if chg_pct is not None else None,
                 "trend_5m": trend,
                 "volume_spike_ratio": volume_spike,
+                "snapshot_source": source,
             }
         except Exception:
             pass
@@ -190,7 +450,7 @@ def compute_momentum_stats(closes: Dict[str, pd.Series], market_sym: str) -> Dic
 
 def _detect_market_regime() -> dict:
     """
-    检测当前市场状态（Regime），基于日经ETF 1570.T 近60日K线。
+    检测当前市场状态（Regime），基于日经225 ETF 1321.T 近60日K线。
     vol_level 使用真实振幅(ATR/Close)：5日均值 vs 60日均值，>1.5倍判定为 HIGH。
     返回: {trend, vol_level, bias, sma5, sma20, atr_5d_pct, atr_60d_pct, ret_5d_pct, action_bias}
     """
@@ -357,9 +617,11 @@ def _enrich_positions_with_stop_loss(positions: list[dict]) -> list[dict]:
     except ImportError:
         return positions
 
-    VOL_MULT   = 6.0    # 与 config.yaml stop_loss_vol_mult 一致
-    STOP_FLOOR = 0.06   # 6% 最低止损线
-    STOP_CAP   = 0.20   # 20% 最大止损线
+    cfg = _load_config()
+    _sprint = (cfg.get("strategy_profiles") or cfg.get("strategies", {})).get("sprint", {})
+    VOL_MULT   = float(_sprint.get("stop_loss_vol_mult", 2.0))
+    STOP_FLOOR = float(_sprint.get("stop_loss_min_pct", 0.046))
+    STOP_CAP   = float(_sprint.get("stop_loss_max_pct", 0.20))
     TP_MULT    = 8.0    # 止盈 ATR 乘数（风险回报比 > 1）
     TP_FLOOR   = 0.08   # 8% 最低止盈线
     TP_CAP     = 0.30   # 30% 最大止盈线
@@ -537,35 +799,35 @@ def read_live_state(db_path: str, strategy_id: str = "default", asof: str = None
         conn = sqlite3.connect(db_path)
         cur  = conn.cursor()
 
-        # 仓位 — 取 <= asof 的最新日期
+        # 仓位 — 仅取选定 strategy 内 qty>0 的最新 eligible asof，
+        # 杜绝 paper 泳道 / 旧日期 / 已清仓（qty<=0）行泄漏到真实持仓视图。
         if asof:
             latest_pos_date = cur.execute(
-                "SELECT MAX(asof) FROM positions WHERE strategy_id=? AND asof<=?",
+                "SELECT MAX(asof) FROM positions "
+                "WHERE strategy_id=? AND qty>0 AND asof<=?",
                 (strategy_id, asof)
             ).fetchone()[0]
         else:
             latest_pos_date = cur.execute(
-                "SELECT MAX(asof) FROM positions WHERE strategy_id=?",
+                "SELECT MAX(asof) FROM positions WHERE strategy_id=? AND qty>0",
                 (strategy_id,)
             ).fetchone()[0]
 
-        query_pos = (
-            "SELECT symbol, qty, avg_cost, market_price, market_value, unrealized_pnl, "
-            "COALESCE(high_since_entry,0), COALESCE(entry_date,'') "
-            "FROM positions WHERE strategy_id=?"
-        )
-        params_pos = [strategy_id]
+        positions: list[dict] = []
         if latest_pos_date:
-            query_pos += " AND asof=?"
-            params_pos.append(latest_pos_date)
-
-        cur.execute(query_pos, params_pos)
-        positions = [
-            {"symbol": r[0], "qty": r[1], "avg_cost": r[2],
-             "market_price": r[3], "market_value": r[4], "unrealized_pnl": r[5],
-             "high_since_entry": r[6], "entry_date": r[7]}
-            for r in cur.fetchall()
-        ]
+            cur.execute(
+                "SELECT symbol, qty, avg_cost, market_price, market_value, unrealized_pnl, "
+                "COALESCE(high_since_entry,0), COALESCE(entry_date,'') "
+                "FROM positions "
+                "WHERE strategy_id=? AND qty>0 AND asof=?",
+                (strategy_id, latest_pos_date),
+            )
+            positions = [
+                {"symbol": r[0], "qty": r[1], "avg_cost": r[2],
+                 "market_price": r[3], "market_value": r[4], "unrealized_pnl": r[5],
+                 "high_since_entry": r[6], "entry_date": r[7]}
+                for r in cur.fetchall()
+            ]
 
         # 挂单（仅 proposed/open）
         query_ord = "SELECT order_id, symbol, side, qty, limit_price, status, created_ts FROM orders WHERE strategy_id=? AND status IN ('proposed','open','pending','partial')"
@@ -582,17 +844,18 @@ def read_live_state(db_path: str, strategy_id: str = "default", asof: str = None
             for r in cur.fetchall()
         ]
 
-        # 账户快照 — 取 <= asof 的最新
+        # 账户快照 — 取 <= asof 的最新；保留其自身 asof，不拉齐到持仓日期
         query_snap = "SELECT asof, nav, cash FROM account_snapshots WHERE strategy_id=?"
         params_snap = [strategy_id]
         if asof:
             query_snap += " AND asof<=?"
             params_snap.append(asof)
         query_snap += " ORDER BY asof DESC, ts DESC LIMIT 1"
-        
+
         cur.execute(query_snap, params_snap)
         snap = cur.fetchone()
         account = {"asof": snap[0], "nav": snap[1], "cash": snap[2]} if snap else {}
+        account_snapshot_asof = snap[0] if snap else None
 
         # 账户状态（初始资本）
         cur.execute("SELECT starting_capital, cash_balance FROM account_state ORDER BY updated_at DESC LIMIT 1")
@@ -601,8 +864,27 @@ def read_live_state(db_path: str, strategy_id: str = "default", asof: str = None
             account.setdefault("starting_capital", state[0])
             account.setdefault("cash_balance", state[1])
 
+        # 证据链元数据 — 分别暴露持仓 asof 与账户快照 asof，
+        # 避免把旧快照伪装成最新交易日的 NAV/现金。
+        positions_asof = latest_pos_date
+        account_snapshot_stale = bool(
+            positions_asof
+            and account_snapshot_asof
+            and account_snapshot_asof < positions_asof
+        )
+        if account_snapshot_stale:
+            account["snapshot_stale"] = True
+            account["positions_asof"] = positions_asof
+
         conn.close()
-        return {"positions": positions, "orders": orders, "account": account}
+        return {
+            "positions": positions,
+            "orders": orders,
+            "account": account,
+            "positions_asof": positions_asof,
+            "account_snapshot_asof": account_snapshot_asof,
+            "account_snapshot_stale": account_snapshot_stale,
+        }
     except Exception as e:
         return {"error": str(e)}
 
@@ -1000,11 +1282,17 @@ def write_report(report: dict) -> tuple[Path, Path]:
         etf = mkt.get("nikkei_etf", {})
         lines += [
             "## 大盘",
-            f"- 日经ETF: {etf.get('cur','N/A')}  "
+            f"- 日经225 ETF ({NIKKEI_ETF}, live benchmark): {etf.get('cur','N/A')}  "
             f"({'+' if (etf.get('chg_pct') or 0) >= 0 else ''}{etf.get('chg_pct','N/A')}%)  "
             f"情绪: **{mkt.get('sentiment','N/A')}**",
-            f"- 日内区间: H {etf.get('high','N/A')} / L {etf.get('low','N/A')}\n",
+            f"- 日内区间: H {etf.get('high','N/A')} / L {etf.get('low','N/A')}",
         ]
+        benchmark_role_note = _load_benchmark_role_note(REPORT_DIR)
+        if benchmark_role_note:
+            lines.append(f"- benchmark 角色说明: {benchmark_role_note}")
+        for bl in _load_benchmark_broadcast_summary(REPORT_DIR):
+            lines.append(f"- {bl}")
+        lines.append("")
 
     if "candidates" in report:
         lines.append("## 候选池（调整分排序）")
@@ -1271,6 +1559,10 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
     candidates = report.get("candidates", [])
     account   = live.get("account", {})
 
+    # benchmark/ETF data-sanity 警告 → 用户面降级；放在最前以便后续 risk_alerts /
+    # action_bias 展示同步降级，避免 "正常操作" 与污染基准并存
+    sanity_caution = _load_data_sanity_benchmark_caution(REPORT_DIR)
+
     # 持仓对象（v2 规范字段）— 使用 _enrich_positions_with_stop_loss 计算的完整数据
     pos_v2 = []
     for p in positions:
@@ -1315,6 +1607,17 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
 
     # 风险提示（宏观新闻只汇总一次，公司级负面按标的列出）
     risk_alerts = []
+    # 账户快照与持仓日期不一致 → 对外直接暴露，避免把旧 NAV 当作当日数据
+    if live.get("account_snapshot_stale"):
+        pos_asof = live.get("positions_asof") or "?"
+        snap_asof = live.get("account_snapshot_asof") or "缺失"
+        risk_alerts.append(
+            f"账户快照滞后：持仓最新 {pos_asof}，account_snapshot 仅到 {snap_asof}；"
+            "NAV/现金为旧值，请以 positions_asof 为准"
+        )
+    if sanity_caution.get("active"):
+        for cl in sanity_caution.get("lines", []):
+            risk_alerts.append(f"基准数据可能失真: {cl}")
     if regime.get("trend") == "DOWN":
         risk_alerts.append(f"大盘下行趋势，{regime.get('action_bias','')}")
     if regime.get("vol_level") == "HIGH":
@@ -1328,11 +1631,22 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
         if nv.get("news_risk") == "HIGH":
             risk_alerts.append(f"{c['symbol']} 公司级负面新闻: {'; '.join(nv.get('news_notes', []))}")
 
+    # 基准失真时降级 action_bias：原始 regime 字段保留，对外仅展示加注的副本
+    regime_display = dict(regime)
+    if sanity_caution.get("active"):
+        original_bias = str(regime.get("action_bias") or "")
+        regime_display["original_action_bias"] = original_bias
+        regime_display["sanity_downgraded"] = True
+        regime_display["action_bias"] = (
+            "⚠️ 基准数据失真，降级为人工确认；原始建议: "
+            + (original_bias or "（无）")
+        )
+
     nexus_json = {
         "date":         report.get("asof"),
         "generated_at": report.get("generated_at"),
         "session":      report.get("session", {}),
-        "regime":       regime,
+        "regime":       regime_display,
         "market":       report.get("market", {}),
         "positions":    pos_v2,
         "candidates":   candidates,
@@ -1340,6 +1654,8 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
         "risk_alerts":  risk_alerts,
         "account":      account,
         "ipo_watchlist": report.get("ipo_watchlist"),
+        "benchmark_broadcast": _load_benchmark_broadcast_summary(REPORT_DIR),
+        "data_sanity_caution": sanity_caution,
     }
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(nexus_json, f, ensure_ascii=False, indent=2, default=str)
@@ -1397,7 +1713,7 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
     # 宏观事件检测 (from macro_events table)
     try:
         from macro_event_detector import load_active_event
-        asof_for_event = report.get("asof") or datetime.now().strftime("%Y-%m-%d")
+        asof_for_event = report.get("asof") or now_jst().strftime("%Y-%m-%d")
         macro_ev = load_active_event(_v2_conn, asof_for_event)
         if macro_ev and macro_ev.get("alert_level") in ("L1", "L2"):
             level = macro_ev["alert_level"]
@@ -1422,19 +1738,34 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
     finally:
         _v2_conn.close()
 
+    volume_spike = etf.get("volume_spike_ratio")
+    volume_spike_str = f"{volume_spike}x" if volume_spike is not None else "N/A"
+    benchmark_role_note = _load_benchmark_role_note(REPORT_DIR)
+    market_action_bias = regime_display.get("action_bias", regime.get("action_bias", "观望"))
+    lines.append("## 一、市场状态")
+    if sanity_caution.get("active"):
+        lines.append(
+            "- ⚠️ **基准数据可能失真**: data_sanity 检测到 benchmark/ETF 异常，"
+            "本节判断仅供参考，建议人工确认。"
+        )
+        for cl in sanity_caution.get("lines", []):
+            lines.append(f"  - {cl}")
     lines += [
-        "## 一、市场状态",
-        f"- 日经ETF ({NIKKEI_ETF}): **{etf.get('cur','N/A')}**  "
+        f"- 日经225 ETF ({NIKKEI_ETF}, live benchmark): **{etf.get('cur','N/A')}**  "
         f"({'+' if (etf.get('chg_pct') or 0) >= 0 else ''}{etf.get('chg_pct','N/A')}%)",
-        f"- 日内区间: H {etf.get('high','N/A')} / L {etf.get('low','N/A')}  |  量能异常倍数: {etf.get('volume_spike_ratio','N/A')}x",
+        f"- 日内区间: H {etf.get('high','N/A')} / L {etf.get('low','N/A')}  |  量能异常倍数: {volume_spike_str}",
         f"- 趋势: **{trend_cn.get(regime.get('trend',''), regime.get('trend',''))}**  "
         f"偏向: **{bias_cn.get(regime.get('bias',''), regime.get('bias',''))}**  "
         f"波动: **{vol_cn.get(regime.get('vol_level',''), regime.get('vol_level',''))}**",
         f"- SMA5={regime.get('sma5','N/A')} / SMA20={regime.get('sma20','N/A')}  "
         f"ATR5日={regime.get('atr_5d_pct','N/A')}% vs ATR60日均={regime.get('atr_60d_pct','N/A')}%",
-        f"- **操作基调**: {regime.get('action_bias', '观望')}",
-        "",
+        f"- **操作基调**: {market_action_bias}",
     ]
+    if benchmark_role_note:
+        lines.append(f"- benchmark 角色说明: {benchmark_role_note}")
+    for bl in _load_benchmark_broadcast_summary(REPORT_DIR):
+        lines.append(f"- {bl}")
+    lines.append("")
 
     # ── 二、今日有效情报 ──────────────────────────────────────────────────
     lines += ["## 二、今日有效情报", ""]
@@ -1481,6 +1812,13 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
     cash = account.get("cash_balance") or account.get("cash")
     nav  = account.get("nav")
     if cash or nav:
+        if live.get("account_snapshot_stale"):
+            pos_asof = live.get("positions_asof") or "?"
+            snap_asof = live.get("account_snapshot_asof") or "缺失"
+            lines.append(
+                f"\n> ⚠️ 账户快照滞后：持仓 {pos_asof} vs account_snapshot {snap_asof}，"
+                "下列 NAV/现金为旧值，仅供参考"
+            )
         lines.append(f"\n现金余额: ¥{cash:,.0f}" if cash else "")
         lines.append(f"组合 NAV: ¥{nav:,.0f}" if nav else "")
     lines.append("")
@@ -1519,10 +1857,76 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
     else:
         lines.append("- 暂无特殊风险提示")
     lines.append("")
-    # ── 七、个股深析（仅当 --symbols 指定时出现）────────────────────────────
+
+    # ── 七、机会归因（影子）──────────────────────────────────────────────
+    # A-4: read-only JSON mount from opportunity_waterfall (A-3).
+    # Never drives real-book routing; strategy_id='adaptive_sprint_paper'.
+    ow_asof = report.get("asof") or ""
+    ow_load = _load_opportunity_waterfall(ow_asof, REPORT_DIR)
+    lines += ["", "---", "## 七、机会归因（影子）", ""]
+    lines.append("_影子链路（不参与真实账本），strategy_id=adaptive_sprint_paper_")
+    lines.append("")
+    if ow_load["status"] == "missing":
+        lines.append(f"- N/A （未找到 {ow_load.get('path') or 'opportunity_waterfall JSON'}）")
+        lines.append("")
+    elif ow_load["status"] == "unreadable":
+        lines.append(f"- N/A （JSON 解析失败: {ow_load.get('error','')}）")
+        lines.append("")
+    elif ow_load["status"] == "empty":
+        lines.append("- N/A （JSON 存在但 horizons 为空）")
+        lines.append("")
+    else:
+        payload = ow_load["payload"] or {}
+        strat = payload.get("strategy_id", "adaptive_sprint_paper")
+        status = payload.get("status", "ok")
+        regime_label = payload.get("regime_label") or "—"
+        vol_tier = payload.get("vol_tier") or "—"
+        event_day = payload.get("event_day")
+        lines.append(
+            f"- asof: `{payload.get('asof','?')}`  "
+            f"strategy_id: `{strat}`  "
+            f"status: `{status}`  "
+            f"regime: {regime_label}  vol_tier: {vol_tier}  event_day: {event_day}"
+        )
+        lines.append("")
+        lines.append("| Horizon | Opps | L0_universe | L1_ranking | L2_threshold | L3_sizing | L4_execution | Captured | Missed α mass |")
+        lines.append("|---------|------|-------------|------------|--------------|-----------|--------------|----------|---------------|")
+        for h in payload.get("horizons", []):
+            layers = h.get("layers", {}) or {}
+            def _fmt_layer(name: str) -> str:
+                ls = layers.get(name, {}) or {}
+                mc = ls.get("missed_count")
+                ma = ls.get("missed_alpha_sum")
+                if mc is None:
+                    return "—"
+                try:
+                    ma_bps = float(ma) * 1e4 if ma is not None else 0.0
+                except (TypeError, ValueError):
+                    ma_bps = 0.0
+                return f"{int(mc)} / {ma_bps:+.0f}bps"
+            h_label = f"{int(h.get('horizon_days', 0))}d × {float(h.get('net_edge_multiple', 0)):.1f}"
+            try:
+                mass = float(h.get("total_missed_alpha_mass") or 0.0)
+            except (TypeError, ValueError):
+                mass = 0.0
+            lines.append(
+                f"| {h_label} | {int(h.get('n_opportunities', 0))} "
+                f"| {_fmt_layer('L0_universe')} "
+                f"| {_fmt_layer('L1_ranking')} "
+                f"| {_fmt_layer('L2_threshold')} "
+                f"| {_fmt_layer('L3_sizing')} "
+                f"| {_fmt_layer('L4_execution')} "
+                f"| {int(h.get('final_captured', 0))} "
+                f"| {mass*100:.1f}% |"
+            )
+        lines.append("")
+        lines.append("_表格含义: 每一格为 `missed_count / missed_alpha_sum(bps)`；L4_execution 仅占位（手工下单）_")
+        lines.append("")
+
+    # ── 八、个股深析（仅当 --symbols 指定时出现）────────────────────────────
     stock_analysis = report.get("stock_analysis", [])
     if stock_analysis:
-        lines += ["", "---", "## 七、个股深析", ""]
+        lines += ["", "---", "## 八、个股深析", ""]
         for s in stock_analysis:
             if "error" in s:
                 lines.append(f"### {s['symbol']}  ⚠️ 数据获取失败: {s['error']}")
@@ -1567,15 +1971,15 @@ def write_report_v2(report: dict) -> tuple[Path, Path]:
         if syms:
             stock_path = stock_dir / f"{today_str}_{syms}.md"
             stock_lines = [f"# 个股深析报告  {report.get('generated_at','')}  —  {syms}", ""]
-            stock_lines += lines[lines.index("## 七、个股深析"):]
+            stock_lines += lines[lines.index("## 八、个股深析"):]
             with open(stock_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(stock_lines))
             print(f"[briefing] 个股报告 → {stock_path}")
 
-    # ── 八、IPO 打新监控（仅当 mode=ipo/full 时出现）─────────────────────────
+    # ── 九、IPO 打新监控（仅当 mode=ipo/full 时出现）─────────────────────────
     ipo_wl = report.get("ipo_watchlist")
     if ipo_wl and "error" not in ipo_wl:
-        lines += ["", "---", "## 八、IPO 打新监控", ""]
+        lines += ["", "---", "## 九、IPO 打新监控", ""]
         lines.append(f"**Regime Score**: {ipo_wl.get('regime_score', 0):.2f}")
         cap = ipo_wl.get("capital", {})
         lines.append(f"**资金余力**: {cap.get('message', 'N/A')}")
@@ -1653,7 +2057,7 @@ def main():
     # 打印关键摘要到 stdout（供 Claude 快速读取）
     if "market" in report:
         mkt = report["market"]
-        print(f"\n大盘: {mkt.get('nikkei_etf',{}).get('cur','N/A')} "
+        print(f"\n大盘 / live benchmark({NIKKEI_ETF}): {mkt.get('nikkei_etf',{}).get('cur','N/A')} "
               f"({mkt.get('market_ret_pct','N/A')}%)  情绪: {mkt.get('sentiment')}")
         print(f"候选池: {report.get('screener_meta',{}).get('count',0)}只  "
               f"降权: {report.get('screener_meta',{}).get('downweighted_count',0)}只")

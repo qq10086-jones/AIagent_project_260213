@@ -12,9 +12,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures as _cf
 import json
 import sqlite3
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import List, Dict, Tuple, Optional
@@ -23,6 +25,9 @@ import numpy as np
 import pandas as pd
 
 from market_db_v2 import MarketDB
+
+_YFINANCE_PER_SYMBOL_TIMEOUT = 8
+_YFINANCE_TOTAL_TIMEOUT = 60
 
 @dataclass
 class ScreenConfig:
@@ -150,7 +155,75 @@ def _fetch_fundamental_from_db(db_path: str, symbols: List[str], asof: str) -> D
     return result
 
 
+def _fetch_one_yfinance(sym: str) -> tuple[str, dict | None]:
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(sym)
+        info = tk.info or {}
+        op_margin = info.get("operatingMargins")
+        ocf = info.get("operatingCashflow")
+        d2e = info.get("debtToEquity")
+        if d2e is not None:
+            d2e = d2e / 100.0
+
+        eps_quarters: List[float] = []
+        try:
+            qi = tk.quarterly_income_stmt
+            if not qi.empty and "Diluted EPS" in qi.index:
+                eps_quarters = [float(v) for v in qi.loc["Diluted EPS"].dropna().head(4).tolist()]
+        except Exception as e:
+            print(f"[screener][fundamental] {sym} yfinance EPS fetch failed: {e}", file=sys.stderr)
+
+        return sym, {
+            "operating_margin": op_margin,
+            "operating_cf": float(ocf) if ocf is not None else None,
+            "debt_to_equity": d2e,
+            "eps_quarters": eps_quarters,
+            "source": "yfinance",
+        }
+    except Exception as e:
+        print(f"[screener][fundamental] {sym} yfinance fetch failed: {e}", file=sys.stderr)
+        return sym, None
+
+
 def _fetch_fundamental_from_yfinance(symbols: List[str]) -> Dict[str, dict]:
+    """yfinance fallback with bounded per-symbol and total waits."""
+    result: Dict[str, dict] = {}
+    if not symbols:
+        return result
+
+    deadline = time.monotonic() + _YFINANCE_TOTAL_TIMEOUT
+    executor = _cf.ThreadPoolExecutor(max_workers=4)
+    fut_to_sym = {executor.submit(_fetch_one_yfinance, sym): sym for sym in symbols}
+    try:
+        try:
+            for fut in _cf.as_completed(fut_to_sym, timeout=_YFINANCE_TOTAL_TIMEOUT):
+                sym = fut_to_sym[fut]
+                if time.monotonic() > deadline:
+                    print("[screener][fundamental] yfinance total timeout reached", file=sys.stderr)
+                    break
+                try:
+                    got_sym, data = fut.result(timeout=_YFINANCE_PER_SYMBOL_TIMEOUT)
+                except _cf.TimeoutError:
+                    print(f"[screener][fundamental] {sym} yfinance per-symbol timeout", file=sys.stderr)
+                    continue
+                except Exception as e:
+                    print(f"[screener][fundamental] {sym} yfinance worker failed: {e}", file=sys.stderr)
+                    continue
+                if data is not None:
+                    result[got_sym] = data
+        except _cf.TimeoutError:
+            print("[screener][fundamental] yfinance total timeout reached", file=sys.stderr)
+    finally:
+        for fut, sym in fut_to_sym.items():
+            if not fut.done():
+                fut.cancel()
+                print(f"[screener][fundamental] {sym} yfinance canceled after timeout", file=sys.stderr)
+        executor.shutdown(wait=False, cancel_futures=True)
+    return result
+
+
+def _fetch_fundamental_from_yfinance_legacy(symbols: List[str]) -> Dict[str, dict]:
     """yfinance 回退：拉取营业利润率、经营现金流、D/E、季度EPS。"""
     result: Dict[str, dict] = {}
     try:

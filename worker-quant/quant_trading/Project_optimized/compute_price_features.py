@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import sqlite3
+import sys
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -132,8 +133,9 @@ def compute_features_for_symbol(
             col = name if name not in df.columns else f"ext_{name}"
             df[col] = series
     except Exception as e:
-        # 不中断原有流程
-        pass
+        if not getattr(compute_features_for_symbol, '_alpha158_warned', False):
+            print(f"[price_features] WARNING: Alpha158 short-term factors failed (further errors suppressed): {e}", file=sys.stderr)
+            compute_features_for_symbol._alpha158_warned = True
 
     return df
 
@@ -224,6 +226,7 @@ def write_features_to_db(
 def run_compute_price_features(
     db_path: str,
     asof: Optional[str] = None,
+    universe_symbols: list | None = None,
 ) -> dict:
     """Compute price features for `asof` and write to feature_daily.
 
@@ -251,6 +254,10 @@ def run_compute_price_features(
             return {"status": "no_data", "rows_written": 0}
 
         symbols = [s for s in close.columns if close[s].dropna().shape[0] >= 60]
+        if universe_symbols:
+            universe_set = set(universe_symbols)
+            symbols = [s for s in symbols if s in universe_set]
+            print(f"[price_features] Filtered to {len(symbols)} universe symbols (from {len(close.columns)} in DB)")
         print(f"[price_features] Computing features for {len(symbols)} symbols (asof={asof})")
 
         # Compute per-symbol features

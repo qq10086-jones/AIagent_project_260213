@@ -294,6 +294,112 @@ def sprint_exit_check_v2(
 
     return False, ""
 
+def _ln_positive(x: float) -> float:
+    if x <= 0:
+        return float("nan")
+    y = (x - 1.0) / (x + 1.0)
+    term = y
+    total = 0.0
+    n = 1.0
+    for _ in range(80):
+        total += term / n
+        term *= y * y
+        n += 2.0
+    return 2.0 * total
+
+
+def _detect_shadow_continuity_break(series: pd.Series, logret_threshold: float = 0.50) -> dict | None:
+    clean = pd.to_numeric(series, errors="coerce").dropna()
+    if len(clean) < 2:
+        return None
+    worst = None
+    worst_abs = 0.0
+    for i in range(1, len(clean)):
+        prev_close = float(clean.iloc[i - 1])
+        curr_close = float(clean.iloc[i])
+        if prev_close <= 0.0 or curr_close <= 0.0:
+            continue
+        ratio = curr_close / prev_close
+        log_return = _ln_positive(ratio)
+        if abs(log_return) > worst_abs:
+            worst_abs = abs(log_return)
+            worst = {
+                "prev_date": str(clean.index[i - 1].date() if hasattr(clean.index[i - 1], "date") else clean.index[i - 1]),
+                "curr_date": str(clean.index[i].date() if hasattr(clean.index[i], "date") else clean.index[i]),
+                "prev_close": prev_close,
+                "curr_close": curr_close,
+                "price_ratio": ratio,
+                "log_return": log_return,
+            }
+    if worst is not None and worst_abs > float(logret_threshold):
+        return worst
+    return None
+
+
+def _compute_shadow_regime(
+    conn: sqlite3.Connection,
+    *,
+    ticker: str,
+    asof: str,
+    fast_window: int,
+    slow_window: int,
+    strategy_config: dict,
+    model_config: dict,
+    benchmark_regime_config: dict,
+) -> dict:
+    bench_px, _ = _load_panel(conn, [ticker], asof, lookback_days=max(slow_window + 5, 80))
+    if bench_px.empty or ticker not in bench_px.columns:
+        return {"ticker": ticker, "state": "off", "scale": 0.0, "px_b": None, "fast_ma": None, "slow_ma": None, "regime_version": str(benchmark_regime_config.get("version", "v1")), "diagnosis": "missing benchmark history"}
+    bench_series = bench_px[ticker].dropna()
+    shadow_cfg = benchmark_regime_config.get("shadow_compare") or {}
+    continuity_threshold = float(shadow_cfg.get("continuity_logret_threshold", 0.50))
+    continuity_break = _detect_shadow_continuity_break(bench_series, logret_threshold=continuity_threshold)
+    if continuity_break is not None:
+        return {
+            "ticker": ticker,
+            "state": "contaminated",
+            "scale": None,
+            "px_b": float(bench_series.iloc[-1]) if len(bench_series) else None,
+            "fast_ma": None,
+            "slow_ma": None,
+            "regime_version": str(benchmark_regime_config.get("version", "v1")),
+            "diagnosis": "shadow_contaminated_continuity",
+            "continuity_flag": "likely_split",
+            "continuity_break": continuity_break,
+            "continuity_logret_threshold": continuity_threshold,
+        }
+    px_b = float(bench_series.iloc[-1])
+    fast_ma = float(bench_series.rolling(fast_window).mean().iloc[-1])
+    slow_ma = float(bench_series.rolling(slow_window).mean().iloc[-1])
+    state, scale, diag = benchmark_regime_scale_v2(
+        px_b=px_b,
+        fast_ma_b=fast_ma,
+        slow_ma_b=slow_ma,
+        prev_state="off",
+        enter_pct=float(model_config.get("benchmark_hysteresis_enter_pct", 0.01)),
+        exit_pct=float(model_config.get("benchmark_hysteresis_exit_pct", 0.01)),
+        off_scale=float(strategy_config.get("benchmark_off_scale", 0.0)),
+        caution_scale=float(strategy_config.get("benchmark_caution_scale", 0.40)),
+        use_vix_confirmation=False,
+        vix_value=None,
+    )
+    return {"ticker": ticker, "state": state, "scale": float(scale), "px_b": px_b, "fast_ma": fast_ma, "slow_ma": slow_ma, "regime_version": "v1", "diagnosis": str(diag.get("diagnosis", ""))}
+
+
+def _render_shadow_compare_md(payload: dict) -> str:
+    live = payload.get("live", {})
+    shadow = payload.get("shadow", {})
+    divergence = payload.get("divergence", {})
+    lines = ["# Benchmark Shadow Compare", ""]
+    if shadow.get("continuity_flag"):
+        lines.append("> **SHADOW CONTAMINATED - continuity guard tripped.**")
+        lines.append("")
+    lines.append(f"- live_ticker: {live.get('ticker', '-')}  state: {live.get('state', '-')}  scale: {live.get('scale', '-')}")
+    lines.append(f"{live.get('ticker', '-')} = live benchmark (Nikkei 225 ETF); {shadow.get('ticker', '-')} = shadow benchmark (TOPIX ETF, compare-only).")
+    lines.append(f"- shadow_ticker: {shadow.get('ticker', '-')}  state: {shadow.get('state', '-')}  scale: {shadow.get('scale', '-')}")
+    if divergence:
+        lines.append(f"- divergence: state_differs={divergence.get('state_differs', False)}  scale_delta={float(divergence.get('scale_delta') or 0):.3f}")
+    return "\n".join(lines) + "\n"
 
 def _load_prev_regime_state(reports_dir: Path) -> str:
     """Read previous Sprint regime state from the last regime_diagnosis.json."""
@@ -428,8 +534,10 @@ def generate_sprint_artifacts(
         _fd_pctile: dict[str, float] = {}
         try:
             _fd_rows = conn.execute(
-                "SELECT symbol, value FROM feature_daily WHERE asof=? AND feature_name='mom_consist_pctile'",
-                (asof,),
+                "SELECT symbol, value FROM feature_daily "
+                "WHERE asof=? AND feature_name='mom_consist_pctile' "
+                "AND (available_ts IS NULL OR available_ts <= ?)",
+                (asof, asof + " 23:59:59"),
             ).fetchall()
             _fd_pctile = {str(r[0]): float(r[1]) for r in _fd_rows if r[1] is not None}
         except Exception:
@@ -551,6 +659,58 @@ def generate_sprint_artifacts(
                     vix_missing_policy=str(strategy_config.get("vix_missing_policy", "fail_closed")),
                 )
 
+        shadow_summary: dict | None = None
+        _shadow_cfg = (benchmark_regime_config or {}).get("shadow_compare") or {}
+        if bool(_shadow_cfg.get("enabled", False)):
+            shadow_ticker = str(_shadow_cfg.get("shadow_ticker", "1306.T"))
+            _shadow = _compute_shadow_regime(
+                conn,
+                ticker=shadow_ticker,
+                asof=asof,
+                fast_window=fast_window,
+                slow_window=slow_window,
+                strategy_config=strategy_config,
+                model_config=model_config,
+                benchmark_regime_config=benchmark_regime_config or {},
+            )
+            _live_snapshot = {
+                "ticker": bench,
+                "state": benchmark_state,
+                "scale": float(benchmark_scale),
+                "px_b": px_b,
+                "fast_ma": fast_ma_b,
+                "slow_ma": slow_ma_b,
+            }
+            _shadow_scale_raw = _shadow.get("scale")
+            _shadow_scale_numeric = float(_shadow_scale_raw) if isinstance(_shadow_scale_raw, (int, float)) else None
+            _scale_delta = _shadow_scale_numeric - float(_live_snapshot["scale"]) if _shadow_scale_numeric is not None else None
+            _contaminated = bool(_shadow.get("continuity_flag"))
+            compare_payload = {
+                "asof": asof,
+                "regime_version": str((benchmark_regime_config or {}).get("version", "v1")),
+                "live": _live_snapshot,
+                "shadow": _shadow,
+                "divergence": {
+                    "state_differs": bool(_live_snapshot["state"] != _shadow.get("state")),
+                    "scale_delta": _scale_delta,
+                    "comparable": (not _contaminated) and _shadow_scale_numeric is not None,
+                },
+            }
+            if _contaminated:
+                compare_payload["note"] = "Shadow benchmark history failed continuity check inside MA window."
+            shadow_summary = {
+                "shadow_ticker": shadow_ticker,
+                "live_state": _live_snapshot["state"],
+                "live_scale": _live_snapshot["scale"],
+                "shadow_state": _shadow.get("state"),
+                "shadow_scale": _shadow_scale_numeric,
+                "state_differs": compare_payload["divergence"]["state_differs"],
+                "scale_delta": _scale_delta,
+                "comparable": compare_payload["divergence"]["comparable"],
+                "continuity_flag": _shadow.get("continuity_flag"),
+            }
+            (reports_dir / "benchmark_shadow_compare.json").write_text(json.dumps(compare_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            (reports_dir / "benchmark_shadow_compare.md").write_text(_render_shadow_compare_md(compare_payload), encoding="utf-8")
         if strict_pit:
             news_rows = conn.execute(
                 """
@@ -721,6 +881,8 @@ def generate_sprint_artifacts(
         "sprint_scale": benchmark_scale,
         **regime_diag,
     }
+    if shadow_summary is not None:
+        regime_payload["shadow_compare"] = shadow_summary
     (reports_dir / "regime_diagnosis.json").write_text(
         json.dumps(regime_payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -740,6 +902,8 @@ def generate_sprint_artifacts(
         "zero_cause": _zero_diag["cause"] if _zero_diag else "none",
         "zero_detail": _zero_diag["detail"] if _zero_diag else "",
     }
+    if shadow_summary is not None:
+        meta["shadow_compare"] = shadow_summary
     for path in [reports_dir / "target_weights_meta.json", reports_dir / "target_weights_sprint_momentum_meta.json"]:
         path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 

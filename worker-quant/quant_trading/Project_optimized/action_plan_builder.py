@@ -110,14 +110,26 @@ def build_action_plan(
     pending_sells = [o for o in orders if o["side"] == "SELL"]
     pending_buys = [o for o in orders if o["side"] == "BUY"]
 
+    # 2026-04-25 (Codex #3): current_status must reconcile with pending
+    # orders. Previously a symbol could appear as HOLD while simultaneously
+    # showing up in pending_sells — downstream readers then got contradictory
+    # guidance. Mark symbols with pending SELLs as SELL_PENDING so the JSON
+    # is internally consistent.
+    pending_sell_syms = {o["symbol"] for o in pending_sells}
+
     # Enrich positions with stop-loss info
     stop_map = {d["symbol"]: d for d in stop_diags}
     for pos in positions:
         sd = stop_map.get(pos["symbol"], {})
         pos["stop_loss_price"] = sd.get("stop_loss_price")
-        pos["stop_loss_pct"] = sd.get("atr_pct")
+        pos["stop_loss_pct"] = sd.get("stop_loss_pct_effective")
         pos["stop_triggered"] = sd.get("triggered", False)
-        pos["current_status"] = "STOP_LOSS" if sd.get("triggered") else "HOLD"
+        if sd.get("triggered"):
+            pos["current_status"] = "STOP_LOSS"
+        elif pos["symbol"] in pending_sell_syms:
+            pos["current_status"] = "SELL_PENDING"
+        else:
+            pos["current_status"] = "HOLD"
 
     # Risk alerts
     risk_alerts = []

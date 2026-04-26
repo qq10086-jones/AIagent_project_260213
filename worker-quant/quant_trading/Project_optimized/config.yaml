@@ -19,7 +19,7 @@ fundamental:
   csv_path: null
   fail_closed: false
   require_available_ts: false
-  use_in_live_scoring: true
+  use_in_live_scoring: false  # PIT guard blocks this when require_available_ts=false; set true only after available_ts coverage exists
   use_in_learning: true
 screener:
   asof: null
@@ -53,9 +53,10 @@ feature_gates:
     description: "Polygon Starter - 美股实时"
 
 strategy_profiles:
-  # 2026-04-16 v4.0 Aggressive Swing-Day
-  # 目标：年化 60-80%, Sharpe 2.0+, MaxDD 容忍 -20%
-  # 核心：Kelly 0.75 + 集中持仓 + 信用取引 2x 杠杆（conviction-triggered）
+  # 2026-04-20 · M1 S-02 冻结档（保守）
+  # 评审依据：docs/design/claude_code_full_review_2026-04-M1.md §P0-1
+  # 激进档（Kelly 0.75 / 单股 60% / 信用 2x）已迁至下方 sprint_aggressive
+  # 且 enabled: false，待 R-01 扩样本 walk-forward 证据通过后再解冻。
   sprint:
     enabled: true
     strategy_id: sprint
@@ -66,35 +67,35 @@ strategy_profiles:
     min_adv_floor: 50000000
     max_cost_per_lot: 100000
     signal_mode: sprint_momentum
-    # v4.0 激进 sizing
-    position_sizing: aggressive_kelly
-    kelly_fraction: 0.75               # half(0.5) → aggressive(0.75)
-    max_single_position_pct: 0.60      # 原 0.35 → 允许单股 60% 集中
+    # S-02 冻结 sizing（fail-closed 由 kelly_sizer.validate_sprint_risk_controls 保护）
+    position_sizing: half_kelly
+    kelly_fraction: 0.50               # S-02 上限
+    max_single_position_pct: 0.35      # S-02 上限
     max_sector_weight: 0.6
     holding_period_target: 2
     # regime 梯度
     benchmark_off_scale: 0.0           # off 完全空仓
-    benchmark_caution_scale: 0.8       # 原 0.6 → caution 下更积极
-    entry_threshold_on: 0.70           # 原 0.80 → 放宽
-    entry_threshold_caution: 0.75      # caution 下仍严
+    benchmark_caution_scale: 0.6
+    entry_threshold_on: 0.80           # S-02 下限
+    entry_threshold_caution: 0.80
     use_vix_confirmation: false
     vix_ticker: 1552.T
     vix_off_threshold: 30.0
     vix_missing_policy: ma_only
-    # 短线止损 + trailing
+    # 止损 + trailing
     stop_loss_vol_mult: 2.0
-    stop_loss_min_pct: 0.03
+    stop_loss_min_pct: 0.046   # floor ¥558 for 3041.T @cost ¥585 (2026-04-26)
     stop_loss_max_pct: 0.08
     atr_window: 20
-    trailing_activate_pct: 0.015       # 原 0.02 → 1.5% 就激活
-    trailing_stop_pct: 0.012           # 原 0.015 → 1.2% 回撤就走
-    # 激进回撤容忍
-    max_dd_half: 0.10                  # 原 0.06 → 允许单次大亏
-    max_dd_full: 0.20                  # 原 0.10 → -20% 才熔断
-    # 信用取引杠杆（v4.0 新）
-    leverage_enabled: true
-    leverage_max: 2.0                  # SBI 一日信用 2x（现金 1x + 保证金 1x）
-    leverage_trigger_score: 0.85       # score ≥ 0.85 conviction 才上杠杆
+    trailing_activate_pct: 0.02
+    trailing_stop_pct: 0.015
+    # 保守回撤容忍
+    max_dd_half: 0.06
+    max_dd_full: 0.10
+    # 信用取引杠杆（R-01 evidence 通过前禁用）
+    leverage_enabled: false
+    leverage_max: 1.0
+    leverage_trigger_score: 0.85
     # 卫星仓 T+1 反转（回测 Sharpe -0.84, 默认关闭）
     # 启用需要先在 satellite_backtest 验证正收益或改做 market-neutral long-short
     satellite_enabled: false
@@ -103,6 +104,50 @@ strategy_profiles:
     kill_single_day_loss_pct: 0.05     # 单日亏 5% → 半仓
     kill_3day_loss_pct: 0.10           # 3日亏 10% → 清仓冷却
     kill_consecutive_stops: 3          # 连续 3 次止损 → 冷却
+    cooldown_days: 3
+  # v4.0 Aggressive Swing-Day 档（暂停激活，待 R-01 解冻）
+  # 目标：年化 60-80%, Sharpe 2.0+, MaxDD 容忍 -20%
+  # 核心：Kelly 0.75 + 集中持仓 + 信用取引 2x 杠杆（conviction-triggered）
+  # 解冻条件：R-01 扩样本 walk-forward Sharpe > 1.5 且 DSR p < 0.10
+  sprint_aggressive:
+    enabled: false
+    strategy_id: sprint_aggressive
+    capital_allocation_pct: 1.0
+    activation_threshold: 0
+    max_positions: 2
+    top_k: 10
+    min_adv_floor: 50000000
+    max_cost_per_lot: 100000
+    signal_mode: sprint_momentum
+    position_sizing: aggressive_kelly
+    kelly_fraction: 0.75
+    max_single_position_pct: 0.60
+    max_sector_weight: 0.6
+    holding_period_target: 2
+    benchmark_off_scale: 0.0
+    benchmark_caution_scale: 0.8
+    entry_threshold_on: 0.70
+    entry_threshold_caution: 0.75
+    use_vix_confirmation: false
+    vix_ticker: 1552.T
+    vix_off_threshold: 30.0
+    vix_missing_policy: ma_only
+    stop_loss_vol_mult: 2.0
+    stop_loss_min_pct: 0.03
+    stop_loss_max_pct: 0.08
+    atr_window: 20
+    trailing_activate_pct: 0.015
+    trailing_stop_pct: 0.012
+    max_dd_half: 0.10
+    max_dd_full: 0.20
+    leverage_enabled: true
+    leverage_max: 2.0
+    leverage_trigger_score: 0.85
+    satellite_enabled: false
+    kill_switch_enabled: true
+    kill_single_day_loss_pct: 0.05
+    kill_3day_loss_pct: 0.10
+    kill_consecutive_stops: 3
     cooldown_days: 3
   harvest:
     enabled: true
@@ -135,7 +180,7 @@ model:
   H: 10
   train_window: 252
   rebalance_every: 10
-  benchmark_ticker: 1321.T
+  benchmark_ticker: 1321.T  # live benchmark = Nikkei 225 ETF; keep trading gate on 1321.T
   benchmark_fast_ma_window: 20
   benchmark_slow_ma_window: 60
   benchmark_hysteresis_enter_pct: 0.01
@@ -304,6 +349,9 @@ benchmark_regime:
   v2_thresholds:
     full_position: 0.7
     zero_position: 0.15
+  shadow_compare:
+    enabled: true
+    shadow_ticker: 1306.T  # shadow benchmark = TOPIX ETF; compare-only, no live gating impact
 macro_events:
   enabled: true
   llm:

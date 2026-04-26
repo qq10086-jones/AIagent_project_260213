@@ -24,6 +24,16 @@ from kelly_sizer import compute_kelly_params
 from sprint_signal import sprint_exit_check_v2
 
 
+def validate_runtime_risk_controls(args: argparse.Namespace) -> None:
+    """Fail closed on sprint's temporarily frozen aggressive runtime knobs."""
+    if str(getattr(args, "strategy_id", "")) != "sprint":
+        return
+    if str(getattr(args, "position_sizing", "")) == "aggressive_kelly":
+        raise ValueError("sprint position_sizing=aggressive_kelly is disabled before R-01 evidence completes")
+    if float(getattr(args, "max_single_position_pct", 0.0) or 0.0) > 0.35:
+        raise ValueError("sprint max_single_position_pct cannot exceed 0.35 before R-01 evidence completes")
+
+
 @dataclass
 class OrderRow:
     symbol: str
@@ -135,31 +145,32 @@ def _latest_account_snapshot(conn: sqlite3.Connection, asof: str, strategy_id: s
         return None, None, None
     snap_asof = str(row[0])
 
-    # ── NAV 鮮度チェック: snapshot 以降に fills があれば自動再構築 ──
+    # ── NAV 鮮度チェック: snapshot 以降に fills / positions があれば自動再構築 ──
+    # hold-only 日（持仓 mark-to-market 更新但无新 fills）也需要推进，
+    # 否则 account_snapshot.asof 会永远落后于 positions.asof。
     try:
         newer_fills = conn.execute(
-            "SELECT COUNT(*) FROM fills WHERE asof > ? AND strategy_id=?",
-            (snap_asof, strategy_id),
+            "SELECT COUNT(*) FROM fills WHERE asof > ? AND strategy_id=? AND asof <= ?",
+            (snap_asof, strategy_id, asof),
         ).fetchone()
-        if newer_fills and newer_fills[0] > 0:
-            print(f"[risk] ⚠️  account_snapshot stale: snapshot asof={snap_asof} but "
-                  f"{newer_fills[0]} fills found after that date — auto-rebuilding")
+        newer_positions = conn.execute(
+            "SELECT COUNT(DISTINCT asof) FROM positions WHERE asof > ? AND strategy_id=? AND asof <= ?",
+            (snap_asof, strategy_id, asof),
+        ).fetchone()
+        nfills = int(newer_fills[0]) if newer_fills else 0
+        npos_days = int(newer_positions[0]) if newer_positions else 0
+        if nfills > 0 or npos_days > 0:
+            print(f"[risk] ⚠️  account_snapshot stale: snapshot asof={snap_asof}, "
+                  f"{nfills} newer fills, {npos_days} newer position days — auto-rebuilding")
             try:
-                from build_account_snapshot import build_account_snapshot as _rebuild_snap
-                # 逐日重建从 snap_asof 之后到 asof 的每一天的 snapshot
-                fill_dates = conn.execute(
-                    "SELECT DISTINCT asof FROM fills WHERE asof > ? AND strategy_id=? AND asof <= ? ORDER BY asof",
-                    (snap_asof, strategy_id, asof),
-                ).fetchall()
-                for (fill_asof,) in fill_dates:
-                    # 找该日 fills 的 run_id（取最新的）
-                    rid_row = conn.execute(
-                        "SELECT run_id FROM fills WHERE asof=? AND strategy_id=? ORDER BY ts DESC LIMIT 1",
-                        (fill_asof, strategy_id),
-                    ).fetchone()
-                    rid = rid_row[0] if rid_row else "manual"
-                    _rebuild_snap(conn, rid, fill_asof, strategy_id=strategy_id)
-                    print(f"  >> rebuilt snapshot for {fill_asof} (run_id={rid})")
+                from build_account_snapshot import rebuild_snapshot_chain
+                results = rebuild_snapshot_chain(
+                    conn, asof=asof, strategy_id=strategy_id
+                )
+                for res in results:
+                    print(f"  >> rebuilt snapshot for {res['asof']} "
+                          f"(run_id={res['run_id']}, n_fills={res['n_fills']}, "
+                          f"nav={res['nav']:,.0f})")
                 # 重新查询
                 row = conn.execute(
                     "SELECT asof, cash, nav FROM account_snapshots WHERE asof<=? AND strategy_id=? ORDER BY asof DESC LIMIT 1",
@@ -171,7 +182,7 @@ def _latest_account_snapshot(conn: sqlite3.Connection, asof: str, strategy_id: s
                 print(f"[risk] ⚠️  auto-rebuild failed ({e}), using stale snapshot — "
                       "run build_account_snapshot.py manually!")
     except sqlite3.OperationalError:
-        pass  # fills 表可能还没建
+        pass  # fills / positions 表可能还没建
 
     return snap_asof, float(row[1]), float(row[2])
 
@@ -268,18 +279,46 @@ def _check_stop_losses(
             stop_loss_config=stop_loss_config,
         )
 
+        vol_mult = float(stop_loss_config.get("stop_loss_vol_mult", 3.0))
+        min_pct = float(stop_loss_config.get("stop_loss_min_pct", 0.04))
+        max_pct = float(stop_loss_config.get("stop_loss_max_pct", 0.12))
+        if atr_pct and atr_pct > 0.0:
+            eff_stop_pct = min(max(atr_pct * vol_mult, min_pct), max_pct)
+        else:
+            eff_stop_pct = min_pct
         diag = {
             "symbol": sym,
             "avg_cost": pos["avg_cost"],
             "current_price": current_price,
             "high_since_entry": pos["high_since_entry"],
             "atr_pct": atr_pct,
+            "stop_loss_price": round(pos["avg_cost"] * (1.0 - eff_stop_pct), 1),
+            "stop_loss_pct_effective": round(eff_stop_pct, 4),
             "triggered": should_exit,
             "reason": reason,
         }
         diagnostics.append(diag)
         if should_exit:
             forced_exits.append(sym)
+            # --- Dynamic Research Layer: position anomaly callback ---
+            try:
+                from dynamic_research import research_position_anomaly
+                _name = sym
+                try:
+                    _row = conn.execute(
+                        "SELECT name FROM tickers WHERE symbol=?", (sym,)
+                    ).fetchone()
+                    if _row:
+                        _name = _row[0]
+                except Exception:
+                    pass
+                _db_path = getattr(conn, 'database', '') or 'japan_market.db'
+                research_position_anomaly(
+                    symbol=sym, company_name=_name,
+                    reason=reason, db_path=_db_path,
+                )
+            except Exception:
+                pass
 
     return forced_exits, diagnostics
 
@@ -991,6 +1030,7 @@ def main():
     ap.add_argument("--trailing_stop_pct", type=float, default=0.02, help="trailing stop drawdown from high")
     ap.add_argument("--atr_window", type=int, default=20, help="ATR lookback window")
     args = ap.parse_args()
+    validate_runtime_risk_controls(args)
 
     requested_asof = args.asof
     if args.refresh_data:
@@ -1327,7 +1367,16 @@ def main():
         # Explicit override: --bypass_capital_gate (logs loud warning).
         _bypass = getattr(args, "bypass_capital_gate", False)
         _block_buys = False
+        _block_all = False  # paused_sunk_only / kill_switch → no rebalance SELLs either
         _gate_reasons: list[str] = []
+        _gate_state: str | None = None
+        # 2026-04-25 (Codex #1): daily_run sets this env var when kill_switch
+        # fires with action in {halt, full_exit}. Treat same as paused_sunk_only
+        # — drop all new orders. Existing positions liquidate via separate
+        # user-visible risk_alerts pipeline.
+        if os.environ.get("QUANT_KILL_SWITCH_HALT") == "1":
+            _block_all = True
+            _gate_reasons.append("kill_switch halt/full_exit → all orders dropped")
         if _bypass:
             print(f"[capital_gate] BYPASS enabled (--bypass_capital_gate). "
                   f"Gate SKIPPED for {args.strategy_id}. USE WITH CAUTION.")
@@ -1340,15 +1389,31 @@ def main():
                     _gate_reasons = [f"strategy {args.strategy_id} not in registry — fail-closed"]
                 else:
                     decision = capital_gate.evaluate(conn, args.strategy_id)
+                    _gate_state = decision.recommended_state
                     paused_states = {"paused", "retired", "paused_sunk_only"}
                     if decision.recommended_state in paused_states:
                         _block_buys = True
                         _gate_reasons = [f"state={decision.recommended_state}"] + decision.reasons
+                        # 2026-04-25 hardening (Codex #2): `paused_sunk_only`
+                        # means "let existing positions play out, do not
+                        # trade". Rebalance-driven SELLs are NOT allowed.
+                        # Stop-loss exits still reach the user via the
+                        # briefing risk_alerts path, which does not go
+                        # through the orders table.
+                        if decision.recommended_state == "paused_sunk_only":
+                            _block_all = True
             except Exception as _ge:
                 _block_buys = True
                 _gate_reasons = [f"gate evaluation FAILED ({type(_ge).__name__}: {_ge}) — fail-closed"]
 
-        if _block_buys:
+        if _block_all:
+            dropped_total = len(orders)
+            print(f"[capital_gate] PAUSED_SUNK_ONLY: strategy={args.strategy_id} "
+                  f"→ dropping ALL {dropped_total} orders (no rebalance BUYs or SELLs).")
+            for r in _gate_reasons:
+                print(f"  - {r}")
+            orders = []
+        elif _block_buys:
             sells = [o for o in orders
                      if getattr(o, "side", "").upper() == "SELL"]
             print(f"[capital_gate] BLOCK BUYs: strategy={args.strategy_id} "
@@ -1357,6 +1422,25 @@ def main():
             for r in _gate_reasons:
                 print(f"  - {r}")
             orders = sells
+
+        # 2026-04-25 (Codex #3): rewrite orders_proposal.csv AFTER the
+        # capital_gate / kill_switch filter actually mutates `orders`.
+        # Previously the CSV was written at line ~1274 BEFORE the filter,
+        # so paused_sunk_only runs still left a stale SELL row on disk
+        # that action_plan_builder then picked up. Rewrite unconditionally
+        # so the artifact mirrors the DB write below.
+        with orders_csv.open("w", newline="", encoding="utf-8") as _f:
+            _w = csv.writer(_f)
+            _w.writerow(["symbol", "side", "qty", "suggested_type", "suggested_limit",
+                         "est_notional", "comment", "target_limit", "aggressive_limit",
+                         "walk_away_price"])
+            for o in orders:
+                ez = entry_zones.get(o.symbol, {})
+                _w.writerow([o.symbol, o.side, o.qty, o.suggested_type,
+                             o.suggested_limit or "",
+                             f"{o.est_notional:.2f}", o.comment,
+                             ez.get("target_limit", ""), ez.get("aggressive_limit", ""),
+                             ez.get("walk_away_price", "")])
 
         # write DB
         write_db(conn, run_id, asof, str(snapshot_path), orders, strategy_id=args.strategy_id)

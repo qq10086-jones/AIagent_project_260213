@@ -43,6 +43,8 @@ from urllib.parse import urlparse
 
 from trade_schema import connect, ensure_learning_tables, ensure_trade_tables, save_screening_history
 from sprint_signal import generate_sprint_artifacts
+from kelly_sizer import validate_sprint_risk_controls
+from pit_guard import evaluate_fundamental_live_scoring_guard
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -221,15 +223,29 @@ def refresh_positions_market_prices(db_path: str, asof: str) -> int:
 def _latest_fundamental_status(db_path: str, asof: str | None = None) -> dict:
     """Summarise fundamentals freshness bounded by ``asof`` (PIT D-8 P0).
 
-    When ``asof`` is provided, all aggregates respect ``available_ts <= asof``
-    so backfill/replay runs cannot leak future disclosures into today's
-    decision rules. ``asof`` should be the trading-date asof used by the
-    surrounding pipeline step; None preserves legacy all-rows behaviour for
-    live-only diagnostics.
+    When ``asof`` is provided, freshness/coverage aggregates respect
+    ``available_ts <= asof_end_of_day`` so backfill/replay runs cannot leak
+    future disclosures into today's decision rules while still including
+    same-day timestamps like ``2026-04-20T10:03:55`` for a trading-date asof
+    of ``2026-04-20``.
+
+    Null/blank ``available_ts`` counts intentionally use the global PIT guard
+    semantics (same as ``pit_guard.latest_fundamental_status``): count true
+    null/blank rows only, without rewriting the asof predicate into an ``OR``.
     """
-    asof_clause = "AND available_ts <= :asof" if asof else ""
-    params = {"asof": asof} if asof else {}
-    with sqlite3.connect(db_path) as conn:
+    asof_bound = None
+    if asof:
+        asof_text = str(asof).strip()
+        if asof_text:
+            asof_bound = asof_text if "T" in asof_text else f"{asof_text}T23:59:59"
+    asof_clause = "AND available_ts <= :asof" if asof_bound else ""
+    params = {"asof": asof_bound} if asof_bound else {}
+    # 2026-04-25: Python's `with sqlite3.connect(...) as conn` only auto-
+    # commits on exit; it does NOT close. On Windows that leaves a file
+    # lock until GC and breaks tempfile-based teardown in tests. Use
+    # explicit try/finally.
+    conn = sqlite3.connect(db_path)
+    try:
         source_rows = conn.execute(
             f"""
             SELECT source, COUNT(*), COUNT(DISTINCT symbol), MAX(available_ts)
@@ -259,13 +275,14 @@ def _latest_fundamental_status(db_path: str, asof: str | None = None) -> dict:
             params,
         ).fetchone()
         null_available_row = conn.execute(
-            f"""
+            """
             SELECT COUNT(*)
             FROM fundamental_snapshots
-            WHERE available_ts IS NULL {asof_clause.replace('AND ', 'OR ') if asof else ''}
-            """,
-            params,
+            WHERE available_ts IS NULL OR TRIM(COALESCE(available_ts, '')) = ''
+            """
         ).fetchone()
+    finally:
+        conn.close()
     latest_source = str(latest_row[0]) if latest_row and latest_row[0] is not None else None
     latest_rows = int(summary_row[0] or 0) if summary_row else 0
     latest_symbols = int(summary_row[1] or 0) if summary_row else 0
@@ -671,10 +688,18 @@ def export_read_only_paper_snapshot(db_path: str, reports_dir: Path, strategy_id
         ],
     }
     reports_dir.mkdir(parents=True, exist_ok=True)
-    (reports_dir / "paper_trading_account.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    # 2026-04-25 (Codex #6): renamed from `paper_trading_account.json` to
+    # `paper_trading_account_diagnostic.json`. The old filename was
+    # ambiguous next to the SQLite source of truth (per CLAUDE.md Dual
+    # Strategy Update 2026-04-04 this payload is *read-only diagnostic*).
+    # We continue to write the legacy filename for one cycle so existing
+    # briefings / external tooling don't break; new code should read only
+    # the `_diagnostic` variant.
+    diagnostic_path = reports_dir / "paper_trading_account_diagnostic.json"
+    legacy_path = reports_dir / "paper_trading_account.json"
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    diagnostic_path.write_text(body, encoding="utf-8")
+    legacy_path.write_text(body, encoding="utf-8")  # backwards-compat shim
     return payload
 
 
@@ -735,6 +760,50 @@ def run_fundamentals_step(cfg: dict, db_path: str, reports_dir: Path, asof: str 
     status.update(_latest_fundamental_status(db_path))
     write_fundamental_status_report(reports_dir, status)
     return status
+
+
+def resolve_fundamental_live_scoring_flag(
+    fund_cfg: dict,
+    fundamentals_status: dict,
+) -> dict:
+    """Decide whether ss7 may use fundamental features in the live path.
+
+    The combination ``use_in_live_scoring=true`` + ``require_available_ts=false``
+    (and a few related variants) means the live scoring would consume a
+    forward-looking ``available_ts``. ``pit_guard`` enforces the rule; this
+    helper reduces it to: should we set ``SS7_USE_FUNDAMENTAL_FEATURES`` to 1
+    or downgrade to 0? The decision is fail-closed — when the guard rejects we
+    return ``flag="0"`` regardless of the original config.
+
+    Returns a dict so callers can both apply the flag and emit a structured
+    runtime event:
+        {
+          "flag": "0" | "1",
+          "requested_use_in_live_scoring": bool,
+          "guard_ready": bool,
+          "guard_reason": str,
+          "downgraded": bool,    # True when config wanted "1" but guard says no
+        }
+    """
+    requested = bool((fund_cfg or {}).get("use_in_live_scoring", False))
+    if not requested:
+        return {
+            "flag": "0",
+            "requested_use_in_live_scoring": False,
+            "guard_ready": False,
+            "guard_reason": "use_in_live_scoring_disabled",
+            "downgraded": False,
+        }
+    ready, reason = evaluate_fundamental_live_scoring_guard(
+        fund_cfg or {}, fundamentals_status or {}
+    )
+    return {
+        "flag": "1" if ready else "0",
+        "requested_use_in_live_scoring": True,
+        "guard_ready": bool(ready),
+        "guard_reason": str(reason),
+        "downgraded": (not ready) and requested,
+    }
 
 
 def resolve_asof(db_path: str, asof_override: str | None = None) -> str:
@@ -810,6 +879,51 @@ def run_and_capture(cmd: list[str]) -> str:
     return p.stdout
 
 
+def refresh_action_plan_artifact(
+    db_path: str,
+    asof: str,
+    strategy_id: str,
+    reports_dir: Path,
+    decision_out_dir: Path,
+) -> dict | None:
+    """Rewrite reports/action_plan_today.json for the given asof.
+
+    Safe to call multiple times per run. Must run unconditionally after
+    make_decision succeeds so the canonical artifact's asof matches the
+    current run, even if downstream optional steps (paper_awaiting
+    approval, IC compute, reality_check, …) return early or raise.
+    Compliance journaling is NOT done here — that still runs at the tail
+    so it can see post-fill rows.
+    """
+    try:
+        from action_plan_builder import build_action_plan
+        conn = __import__("trade_schema").connect(db_path)
+        __import__("trade_schema").ensure_trade_tables(conn)
+        try:
+            plan = build_action_plan(
+                conn, asof, strategy_id,
+                reports_dir, decision_out_dir,
+            )
+        finally:
+            conn.close()
+        emit_runtime_event(
+            reports_dir, "action_plan_generated",
+            level="warning",
+            asof=asof,
+            action_summary=plan["action_summary"],
+            regime=plan["regime"],
+            pending_sells=len(plan["pending_sells"]),
+            pending_buys=len(plan["pending_buys"]),
+            held_positions=len(plan["held_positions"]),
+            risk_alerts=len(plan["risk_alerts"]),
+        )
+        print(f">> Action plan refreshed (asof={asof}): {plan['action_summary']}")
+        return plan
+    except Exception as e:
+        print(f"⚠️  Action plan refresh (non-fatal, asof={asof}): {e}")
+        return None
+
+
 def expire_stale_orders(db_path: str, today: str) -> int:
     """将非今日的 proposed/open 挂单自动过期（DAY 订单隔夜失效）。"""
     with sqlite3.connect(db_path) as conn:
@@ -859,6 +973,12 @@ def main():
     base_nav = float(cfg.get("decision", {}).get("cash", cfg.get("model", {}).get("exec", {}).get("initial_capital", 400_000)))
     total_nav = latest_portfolio_nav(db_path, fallback_nav=base_nav)
     phase, strategy_profiles = load_strategy_profiles(cfg, total_nav)
+    # Fail-closed: any enabled sprint profile must satisfy S-02 frozen caps
+    # (Kelly ≤ 0.5, single-name ≤ 35%, entry ≥ 0.80, leverage off, no
+    # aggressive_kelly) before R-01 evidence lands. See
+    # docs/design/claude_code_full_review_2026-04-M1.md §P0-2.
+    for _profile in strategy_profiles:
+        validate_sprint_risk_controls(_profile)
     # Pick first (highest allocation) for the shared pipeline steps; loop later for per-strategy work
     strategy_profile = strategy_profiles[0]
     strategy_id = str(strategy_profile.get("strategy_id", "default"))
@@ -1283,7 +1403,26 @@ def main():
             level="warning",
             prior_zero_days=int(zero_days),
         )
-    env["SS7_USE_FUNDAMENTAL_FEATURES"] = "1" if bool(fund.get("use_in_live_scoring", False)) else "0"
+    fund_live_decision = resolve_fundamental_live_scoring_flag(fund, fundamentals_status)
+    env["SS7_USE_FUNDAMENTAL_FEATURES"] = fund_live_decision["flag"]
+    if fund_live_decision["downgraded"]:
+        print(
+            "[fundamentals] live scoring DOWNGRADED to 0 — guard reason: "
+            f"{fund_live_decision['guard_reason']} (config requested "
+            "use_in_live_scoring=true but PIT guard refused)."
+        )
+        emit_runtime_event(
+            reports_dir,
+            "fundamental_live_scoring_blocked",
+            level="warning",
+            guard_reason=fund_live_decision["guard_reason"],
+            requested_use_in_live_scoring=fund_live_decision["requested_use_in_live_scoring"],
+            applied_flag=fund_live_decision["flag"],
+            require_available_ts=bool(fund.get("require_available_ts", False)),
+            configured_source=str(fund.get("source", "")),
+            latest_source=str(fundamentals_status.get("latest_source") or ""),
+            null_available_ts_rows=int(fundamentals_status.get("null_available_ts_rows", 0) or 0),
+        )
 
     if not skip_ss7:
         print(f">> execution max_adv_frac={max_adv_frac:.4f}")
@@ -1296,6 +1435,144 @@ def main():
         if p.returncode != 0:
             raise RuntimeError(f"ss7_sqlite_news_overlay.py failed (rc={p.returncode})")
         emit_runtime_event(reports_dir, "ss7_completed", signal_mode=str(env.get("SS7_SIGNAL_MODE", "")))
+
+    # 2.9) Drift monitor (B-1) — paper-only / non-blocking / record-only.
+    # Runs after signal generation, before make_decision.  Failures here
+    # MUST NOT block the decision pipeline (governance ISO-B + §3 record-only).
+    try:
+        import drift_monitor as _drift_monitor
+        _drift_cfg = _drift_monitor.load_config()
+        _drift_current_scores = None
+        try:
+            _sprint_csv = reports_dir / "sprint_candidates.csv"
+            if _sprint_csv.exists():
+                import pandas as _pd
+                _candidates_df = _pd.read_csv(_sprint_csv)
+                if "sprint_score" in _candidates_df.columns:
+                    _drift_current_scores = _candidates_df.rename(
+                        columns={"sprint_score": "score"}
+                    )[["symbol", "score"]] if "symbol" in _candidates_df.columns else _candidates_df.rename(
+                        columns={"sprint_score": "score"}
+                    )[["score"]]
+        except Exception:
+            _drift_current_scores = None
+        _drift_summary = _drift_monitor.run_daily_drift_check(
+            reports_dir=reports_dir,
+            db_path=db_path,
+            asof=asof,
+            current_scores=_drift_current_scores,
+            config=_drift_cfg,
+        )
+        if not _drift_summary.get("triggered"):
+            print(f"[drift_monitor] {_drift_summary.get('rationale', 'ok')}")
+        else:
+            print(
+                f"[drift_monitor] DRIFT TRIGGERED axes={_drift_summary.get('breached_axes')} "
+                f"rationale={_drift_summary.get('rationale')}"
+            )
+    except Exception as _drift_err:
+        # Hard fail-closed: the drift monitor is record-only and must
+        # never break the daily pipeline.
+        print(f"⚠️  drift_monitor (non-fatal): {_drift_err}")
+        try:
+            emit_runtime_event(
+                reports_dir,
+                "drift_check_error",
+                level="warning",
+                error=str(_drift_err),
+            )
+        except Exception:
+            pass
+
+    # 2.9b) Calibration updater (B-2) — paper-only / non-blocking / record-only.
+    # Governance §3: runs in the post-signal window (JST 17:00–20:00), after
+    # drift_monitor.  Fail-closed: any exception here is recorded but MUST NOT
+    # block the decision pipeline — the real `sprint` ledger is untouched.
+    try:
+        import calibration_updater as _calibration_updater
+        _cal_cfg = _calibration_updater.load_config()
+        _cal_summary = _calibration_updater.run_daily_calibration_update(
+            reports_dir=reports_dir,
+            db_path=db_path,
+            asof=asof,
+            config=_cal_cfg,
+            drift_summary=locals().get("_drift_summary"),
+        )
+        if _cal_summary.get("promoted"):
+            print(
+                f"[calibration_updater] promoted asof={asof} "
+                f"rationale={_cal_summary.get('rationale', '')}"
+            )
+        else:
+            print(
+                f"[calibration_updater] held asof={asof} "
+                f"rationale={_cal_summary.get('rationale', '')}"
+            )
+    except Exception as _cal_err:
+        print(f"⚠️  calibration_updater (non-fatal): {_cal_err}")
+        try:
+            emit_runtime_event(
+                reports_dir,
+                "calibration_update_error",
+                level="warning",
+                error=str(_cal_err),
+            )
+        except Exception:
+            pass
+
+    # 2026-04-25 (Codex #1): wire risk_kill_switch into the live path.
+    # Previously check_kill_switch() existed but was never invoked from
+    # daily_run, so a halt/full_exit state would not stop downstream
+    # BUY proposal generation. Call it AFTER signals but BEFORE
+    # make_decision so the gate can short-circuit order packaging.
+    try:
+        from risk_kill_switch import check_kill_switch as _check_kill
+        kill_cfg = cfg.get("risk", {}).get("kill_switch", {})
+        kill_state = _check_kill(
+            db_path=db_path,
+            strategy_id=strategy_id,
+            asof=asof,
+            single_day_loss_pct=float(kill_cfg.get("single_day_loss_pct", 0.05)),
+            three_day_loss_pct=float(kill_cfg.get("three_day_loss_pct", 0.10)),
+            consecutive_stops=int(kill_cfg.get("consecutive_stops", 3)),
+            portfolio_dd_pct=float(kill_cfg.get("portfolio_dd_pct", 0.20)),
+            cooldown_days=int(kill_cfg.get("cooldown_days", 3)),
+        )
+        if kill_state.triggered:
+            emit_runtime_event(
+                reports_dir,
+                "kill_switch_triggered",
+                level="warning",
+                strategy_id=strategy_id,
+                asof=asof,
+                action=kill_state.action,
+                reason=kill_state.reason,
+                trigger_rule=kill_state.trigger_rule,
+            )
+            print(
+                f"[kill_switch] TRIGGERED: action={kill_state.action} "
+                f"rule={kill_state.trigger_rule} reason={kill_state.reason}"
+            )
+            if kill_state.action in ("halt", "full_exit"):
+                # Do NOT package any new BUY proposals — strategy is gated.
+                # Force bypass of make_decision's order generation by
+                # routing through --bypass_capital_gate=False + stripping
+                # BUYs via the capital_gate path that already exists. The
+                # simplest safe action is to add an env var that make_decision
+                # reads to know it was gated.
+                import os as _os
+                _os.environ["QUANT_KILL_SWITCH_HALT"] = "1"
+    except Exception as _ks_err:
+        print(f"⚠️  kill_switch check non-fatal: {_ks_err}")
+        try:
+            emit_runtime_event(
+                reports_dir,
+                "kill_switch_check_error",
+                level="warning",
+                error=str(_ks_err),
+            )
+        except Exception:
+            pass
 
     # 4) Package decision
     dec = cfg.get("decision", {})
@@ -1314,10 +1591,25 @@ def main():
         "--max_positions", str(int(strategy_profile.get("max_positions", 12))),
         "--out_dir", str(dec.get("out_dir", "artifacts/decision")),
         "--refresh_data",
+        "--stop_loss_vol_mult", str(float(strategy_profile.get("stop_loss_vol_mult", 3.0))),
+        "--stop_loss_min_pct", str(float(strategy_profile.get("stop_loss_min_pct", 0.04))),
+        "--stop_loss_max_pct", str(float(strategy_profile.get("stop_loss_max_pct", 0.12))),
+        "--atr_window", str(int(strategy_profile.get("atr_window", 20))),
     ]
     print(">>", " ".join(cmd))
     out = run_and_capture(cmd)
     emit_runtime_event(reports_dir, "make_decision_completed", asof=asof)
+
+    # Refresh action_plan_today.json immediately after make_decision so the
+    # canonical artifact's asof matches the current run even if downstream
+    # optional steps (paper_awaiting approval, IC compute, reality_check, …)
+    # return early or raise. The tail-end block re-runs this plus compliance
+    # so post-fill positions are reflected; the early call is purely a
+    # safety net for artifact freshness.
+    refresh_action_plan_artifact(
+        db_path, asof, strategy_id, reports_dir,
+        Path(str(dec.get("out_dir", "artifacts/decision"))),
+    )
 
     m = re.search(r"run_id:\s*(\S+)", out)
     if m:
@@ -1466,34 +1758,30 @@ def main():
             except RuntimeError as e:
                 print(f"⚠️  compute_ic.py failed (non-fatal): {e}")
  
-    # ── Post-decision: Action Plan + Compliance ──────────────────────
+    # ── Post-decision: Action Plan (post-fill) + Compliance ────────────
+    # The early refresh right after make_decision_completed already wrote
+    # action_plan_today.json for this asof. This tail-end call re-runs it
+    # so held_positions reflects post-paper-fill state, and records
+    # compliance (which needs fills in DB to exist).
+    refresh_action_plan_artifact(
+        db_path, asof, strategy_id, reports_dir,
+        Path(str(dec.get("out_dir", "artifacts/decision"))),
+    )
     try:
-        from action_plan_builder import build_action_plan
         from compliance_tracker import record_daily_compliance, ensure_journal_table
         _conn = __import__("trade_schema").connect(db_path)
         __import__("trade_schema").ensure_trade_tables(_conn)
         ensure_journal_table(_conn)
-        plan = build_action_plan(
-            _conn, asof, strategy_id,
-            reports_dir, Path(str(dec.get("out_dir", "artifacts/decision"))),
-        )
-        emit_runtime_event(
-            reports_dir, "action_plan_generated",
-            level="warning",
-            action_summary=plan["action_summary"],
-            regime=plan["regime"],
-            pending_sells=len(plan["pending_sells"]),
-            pending_buys=len(plan["pending_buys"]),
-            held_positions=len(plan["held_positions"]),
-            risk_alerts=len(plan["risk_alerts"]),
-        )
-        print(f">> Action plan generated: {plan['action_summary']}")
-        comp = record_daily_compliance(_conn, asof, strategy_id,
-                                       Path(str(dec.get("out_dir", "artifacts/decision"))))
-        print(f">> Compliance recorded: {comp['entries_recorded']} entries, {comp['deviations']} deviations")
-        _conn.close()
+        try:
+            comp = record_daily_compliance(
+                _conn, asof, strategy_id,
+                Path(str(dec.get("out_dir", "artifacts/decision"))),
+            )
+            print(f">> Compliance recorded: {comp['entries_recorded']} entries, {comp['deviations']} deviations")
+        finally:
+            _conn.close()
     except Exception as e:
-        print(f"⚠️  Action plan / compliance (non-fatal): {e}")
+        print(f"⚠️  Compliance (non-fatal): {e}")
 
     # ── Macro event accuracy tracking: backfill actual returns for past events ──
     try:
@@ -1724,6 +2012,24 @@ def main():
 
     except Exception as _hb_err:
         print(f"⚠️  heartbeat check failed: {_hb_err}")
+
+    # ── 13) Evening briefing refresh — regenerate with today's closing prices ──
+    # Runs after account_snapshots are written so briefing_v2_latest.md reflects
+    # the same NAV as the DB, not the previous morning's stale snapshot.
+    if not is_simulation:
+        try:
+            _briefing_cmd = ["python", "quant_briefing.py", "--mode", "market"]
+            print(">> [briefing_refresh] regenerating briefing with end-of-day prices")
+            _br = subprocess.run(
+                _briefing_cmd, text=True, capture_output=True,
+                encoding="utf-8", errors="replace"
+            )
+            if _br.returncode == 0:
+                print(">> [briefing_refresh] briefing_v2_latest.md updated ✓")
+            else:
+                print(f"⚠️  [briefing_refresh] non-fatal: rc={_br.returncode} {_br.stderr[:300]}")
+        except Exception as _br_err:
+            print(f"⚠️  [briefing_refresh] non-fatal: {_br_err}")
 
 
 if __name__ == "__main__":

@@ -312,6 +312,26 @@ def _validate_fill(fill_price: float, quote: dict) -> tuple[int, str]:
     return 0, f"fill price {fill_price:.6f} outside quote range [{q_low:.6f}, {q_high:.6f}]"
 
 
+def _current_paper_position(conn, asof: str, symbol: str, strategy_id: str) -> float:
+    """Return current paper-strategy position qty for symbol as of latest snapshot <= asof.
+
+    Used for inventory validation in simulate_fills to prevent phantom shorts
+    that previously inflated paper NAV (2026-04-28 audit).
+    """
+    row = conn.execute(
+        """
+        SELECT qty FROM positions
+        WHERE strategy_id=? AND symbol=?
+          AND asof = (
+              SELECT MAX(asof) FROM positions
+              WHERE strategy_id=? AND symbol=? AND asof<=?
+          )
+        """,
+        (strategy_id, str(symbol), strategy_id, str(symbol), asof),
+    ).fetchone()
+    return float(row[0]) if row and row[0] is not None else 0.0
+
+
 def simulate_fills(
     conn,
     run_id: str,
@@ -326,6 +346,7 @@ def simulate_fills(
     rows = []
     missing = []
     ts = f"{asof} 09:00:00" if price_mode == "open" else f"{asof} 15:00:00"
+    intra_run_position_delta: dict[str, float] = {}
 
     for order_id, symbol, side, qty, _order_type, _limit_price in _load_orders(conn, run_id, strategy_id=strategy_id):
         quote = _market_quote(conn, str(symbol), asof, price_mode)
@@ -337,6 +358,25 @@ def simulate_fills(
         fill_qty = int(order_qty * fill_ratio)
         if fill_qty <= 0:
             continue
+
+        # 2026-04-28 inventory validation: paper sims must not short.
+        # Without this, build_positions clamps position to 0 but cashflow
+        # in build_account_snapshot still credits full sell_notional → NAV phantom.
+        # Reject SELL orders exceeding current paper position (factoring in
+        # this run's prior fills).
+        if str(side).upper() == "SELL":
+            held = _current_paper_position(conn, asof, str(symbol), strategy_id)
+            held += intra_run_position_delta.get(str(symbol), 0.0)
+            if fill_qty > held + 1e-9:
+                print(
+                    f"[paper_execute] REJECT SELL {symbol} qty={fill_qty} > held={held:.0f} "
+                    f"(strategy_id={strategy_id}, asof={asof}, order_id={order_id}). "
+                    f"No phantom-short allowed."
+                )
+                continue
+            intra_run_position_delta[str(symbol)] = intra_run_position_delta.get(str(symbol), 0.0) - fill_qty
+        else:
+            intra_run_position_delta[str(symbol)] = intra_run_position_delta.get(str(symbol), 0.0) + fill_qty
 
         price = _fill_price(float(quote["price"]), str(side), slippage_bps)
         notional = fill_qty * price

@@ -342,11 +342,22 @@ def simulate_fills(
     fill_ratio: float,
     strategy_id: str = "default",
     fee_mode: str = "sbi_zero",
+    inventory_strategy_id: str | None = None,
 ) -> tuple[pd.DataFrame, list[str]]:
+    """Simulate fills for orders in (run_id, strategy_id).
+
+    `strategy_id` selects which orders to load (source lane).
+    `inventory_strategy_id` selects which positions table to validate against
+    for SELL inventory checks. When None, defaults to `strategy_id`.
+    For paper-execute pipelines, the caller MUST pass the paper lane
+    (e.g. `sprint_paper`) here, not the source lane (`sprint`), otherwise
+    SELL guards check the wrong inventory.
+    """
     rows = []
     missing = []
     ts = f"{asof} 09:00:00" if price_mode == "open" else f"{asof} 15:00:00"
     intra_run_position_delta: dict[str, float] = {}
+    inv_sid = inventory_strategy_id if inventory_strategy_id is not None else strategy_id
 
     for order_id, symbol, side, qty, _order_type, _limit_price in _load_orders(conn, run_id, strategy_id=strategy_id):
         quote = _market_quote(conn, str(symbol), asof, price_mode)
@@ -365,12 +376,12 @@ def simulate_fills(
         # Reject SELL orders exceeding current paper position (factoring in
         # this run's prior fills).
         if str(side).upper() == "SELL":
-            held = _current_paper_position(conn, asof, str(symbol), strategy_id)
+            held = _current_paper_position(conn, asof, str(symbol), inv_sid)
             held += intra_run_position_delta.get(str(symbol), 0.0)
             if fill_qty > held + 1e-9:
                 print(
                     f"[paper_execute] REJECT SELL {symbol} qty={fill_qty} > held={held:.0f} "
-                    f"(strategy_id={strategy_id}, asof={asof}, order_id={order_id}). "
+                    f"(inventory_strategy_id={inv_sid}, asof={asof}, order_id={order_id}). "
                     f"No phantom-short allowed."
                 )
                 continue
@@ -612,6 +623,7 @@ def main():
             fill_ratio=float(args.fill_ratio),
             strategy_id=source_strategy,
             fee_mode=str(args.fee_mode),
+            inventory_strategy_id=paper_strategy,  # 2026-04-28: validate inventory against paper lane, not source
         )
 
         inserted = 0

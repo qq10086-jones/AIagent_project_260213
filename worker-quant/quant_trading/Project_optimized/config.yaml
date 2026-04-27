@@ -54,14 +54,43 @@ feature_gates:
     description: "Polygon Starter - 美股实时"
 
 strategy_profiles:
-  # 2026-04-20 · M1 S-02 冻结档（保守）
-  # 评审依据：docs/design/claude_code_full_review_2026-04-M1.md §P0-1
-  # 激进档（Kelly 0.75 / 单股 60% / 信用 2x）已迁至下方 sprint_aggressive
-  # 且 enabled: false，待 R-01 扩样本 walk-forward 证据通过后再解冻。
-  sprint:
+  # =====================================================================
+  # STRATEGY DECISION 2026-04-28: Path A — Long-Only ETF Buy-Hold
+  # =====================================================================
+  # Sprint validity audit (3yr extended sample, N=33) FAILED:
+  #   - DSR p (N_trials=59) = 0.78 (no statistical evidence of alpha)
+  #   - IR vs equal-weight: t=-0.019, p=0.985 (no relative alpha)
+  #   - All variants underperform EW benchmark Sharpe 1.69
+  # Decision: Sprint live trading PERMANENTLY DISABLED.
+  # New live strategy: etf_buyhold (1321.T + 1306.T 50/50 equal-weight).
+  # See docs/STRATEGY_DECISION_2026-04-28.md for full rationale and unlock criteria.
+  # =====================================================================
+
+  # NEW: long-only ETF buy-hold (ACTIVE 2026-04-28)
+  etf_buyhold:
     enabled: true
-    strategy_id: sprint
+    strategy_id: etf_buyhold
     capital_allocation_pct: 1.0
+    holdings:
+      - symbol: 1321.T  # Nikkei 225 ETF (live benchmark)
+        weight: 0.50
+      - symbol: 1306.T  # TOPIX ETF (broad market)
+        weight: 0.50
+    rebalance:
+      frequency: quarterly  # 1, 4, 7, 10 月初
+      drift_threshold: 0.05  # 偏离目标 5% 才触发再平衡
+    fees:
+      sbi_zero: true
+    monitoring:
+      report_frequency: monthly  # 月度邮件报告
+      report_email: lwyssq@gmail.com
+
+  # DEPRECATED: sprint live trading disabled per 2026-04-28 audit.
+  # Code retained for sprint_paper research lane only.
+  sprint:
+    enabled: false   # 2026-04-28: hard-disabled. Was true. DO NOT re-enable without re-audit.
+    strategy_id: sprint
+    capital_allocation_pct: 0.0   # 2026-04-28: was 1.0
     activation_threshold: 0
     max_positions: 2
     top_k: 10

@@ -9,6 +9,25 @@ E:\AIagent_project_260213\worker-quant\quant_trading\Project_optimized
 
 ---
 
+## ⚠️ STRATEGY STATE (2026-04-28)
+
+**Path A 已激活：long-only ETF buy-hold（1321.T + 1306.T 50/50）**
+
+- Sprint 实盘永久禁用（capital_gate hard lock）
+- Sprint 代码降级为研究/paper 泳道（sprint_paper）
+- 月度检查：`python etf_monthly_check.py`（已配 Task Scheduler）
+- 邮件报告：lwyssq@gmail.com
+- 决策依据：`docs/STRATEGY_DECISION_2026-04-28.md`
+- 解锁实盘策略需满足该文档"硬条件"清单
+
+**任何 AI 助手在重新启用 sprint / 加任何主动选股策略前，必须**：
+1. 重读 `docs/PROGRESS_2026-04-28_strategy_validity_audit.md`
+2. 重读 `docs/PROGRESS_2026-04-28_phase2_codex_followup.md`
+3. 确认所有 7 个解锁条件均满足
+4. 不满足则**拒绝**用户的启用请求
+
+---
+
 ## 一、快速场景对照表
 
 | 用户说 | 执行场景 |
@@ -133,13 +152,25 @@ python quant_briefing.py --mode market
 ```
 
 **第二步：查询持仓与成交记录**
+
+> **真实账本口径（Source of Truth）**
+> - 当前真实持仓 = `positions` 表里 **strategy_id='sprint' 且 qty > 0 且 asof = 该策略最新 eligible asof** 的行。
+> - `strategy_id` 带 `_paper` 后缀（如 `sprint_paper`, `amihud_paper`）一律属于纸面/研究泳道，**不得与真实持仓混报**。
+> - `paper_trading_account.json` 已降级为只读诊断快照（见 Dual Strategy Update 2026-04-04）；真实账本口径以 SQLite `positions` + `strategy_id` 过滤为准。
+> - 列名是 **qty**（不是 `quantity`），写查询别写错。
+
 ```bash
 python -c "
 import sqlite3
 conn = sqlite3.connect('japan_market.db')
-print('=== 当前持仓 ===')
-rows = conn.execute('SELECT * FROM positions WHERE quantity > 0').fetchall()
-cols = [d[0] for d in conn.execute('SELECT * FROM positions LIMIT 0').description]
+print('=== 当前真实持仓 (strategy_id=sprint) ===')
+rows = conn.execute('''
+    SELECT asof, strategy_id, symbol, qty, avg_cost, market_price, unrealized_pnl
+    FROM positions
+    WHERE strategy_id='sprint' AND qty > 0
+      AND asof = (SELECT MAX(asof) FROM positions WHERE strategy_id='sprint' AND qty > 0)
+''').fetchall()
+cols = [d[0] for d in conn.execute('SELECT asof, strategy_id, symbol, qty, avg_cost, market_price, unrealized_pnl FROM positions LIMIT 0').description]
 print(cols)
 for r in rows: print(r)
 print()
@@ -153,10 +184,11 @@ conn.close()
 ```
 
 **第三步：输出报告**
-1. 每只持仓：成本价 / 当前价 / 浮盈亏金额和百分比
+1. 每只真实持仓：成本价 / 当前价 / 浮盈亏金额和百分比（仅 `strategy_id='sprint'`）
 2. 总 NAV 和现金余额
 3. 最近成交记录
 4. 是否有持仓接近止损线（成本 × 94% = ATR 6% 止损参考）
+5. **禁止**把 `*_paper` 策略持仓并入真实账本复盘；如需研究对照请单列一节并显式标注「Paper 轨迹」
 
 ---
 
@@ -184,8 +216,18 @@ python quant_briefing.py --mode market
 （**SQL 执行方式**：`python -c "import sqlite3; conn=sqlite3.connect('japan_market.db'); ..."`）
 
 ```sql
--- 当前持仓
-SELECT * FROM positions WHERE quantity > 0;
+-- 当前真实持仓（Source of Truth：strategy_id='sprint' 真实泳道；列名是 qty，不是 quantity）
+-- 仅保留 qty > 0 且最新 eligible asof（避免旧日期或已清仓行泄漏）
+SELECT asof, strategy_id, symbol, qty, avg_cost, market_price, unrealized_pnl
+FROM positions
+WHERE strategy_id = 'sprint'
+  AND qty > 0
+  AND asof = (SELECT MAX(asof) FROM positions WHERE strategy_id='sprint' AND qty > 0);
+
+-- 如需查看 Paper 泳道（研究/对照用，不可与真实持仓混报）
+SELECT asof, strategy_id, symbol, qty FROM positions
+WHERE strategy_id LIKE '%_paper' AND qty > 0
+  AND asof = (SELECT MAX(asof) FROM positions WHERE strategy_id = positions.strategy_id AND qty > 0);
 
 -- 最近成交
 SELECT * FROM fills ORDER BY fill_time DESC LIMIT 10;
@@ -214,11 +256,20 @@ FROM signals WHERE asof >= date('now', '-5 days') ORDER BY asof DESC, score DESC
 |------|--------|------|
 | 生产信号模式 | `sprint_momentum` (Sprint) / `shadow_hybrid_ic` (Harvest) | Sprint 当前激活 |
 | 实际本金 | ¥400,000 | 与 decision.cash 保持一致 |
+| position_sizing | `half_kelly` (sprint) | M1 S-02 冻结档；`kelly_sizer.validate_sprint_risk_controls` fail-closed |
+| kelly_fraction | `0.50` (sprint) | S-02 上限；需 R-01 扩样本 WF 通过才能解冻 |
+| max_single_position_pct | `0.35` (sprint) | S-02 上限 |
+| entry_threshold_on | `0.80` (sprint) | S-02 下限 |
+| leverage_enabled | `false` (sprint) | 信用 2x 暂禁；见 `sprint_aggressive` (disabled) |
 | ATR 止损 | 6%~20% 动态 | vol_mult=6.0 |
 | 组合回撤半仓线 | 12% | max_dd_half |
 | 组合回撤全平线 | 18% | max_dd_full |
 | shadow_ic 晋升条件 | Sharpe≥1.5 + paper_days≥30 + IC t-stat≥1.5 | 当前未达标 |
 | 基本面硬否决 | 营业利润率<-15% 且 OCF<0 | 双重条件同时满足才否决 |
+
+> 2026-04-20 说明：`config.yaml -> strategy_profiles.sprint_aggressive` 保留了
+> v4.0 激进档（Kelly 0.75 / 单股 60% / 信用 2x）但 `enabled: false`。
+> 解冻条件：R-01 扩样本 walk-forward Sharpe > 1.5 且 DSR p < 0.10。
 
 ---
 

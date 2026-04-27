@@ -1,0 +1,35 @@
+version: 2026-04-28
+notes: >-
+  Capital gate config. As of 2026-04-28, sprint is permanently locked to
+  paper-only per Path A decision. See docs/STRATEGY_DECISION_2026-04-28.md.
+
+# 2026-04-28: Hard lock on sprint live trading.
+# Even if g1_entry passes naturally, this overrides any unfreeze.
+# Removing this lock requires meeting ALL unlock criteria in STRATEGY_DECISION_2026-04-28.md.
+strategy_locks:
+  sprint:
+    locked_state: paused_sunk_only
+    reason: "Path A audit 2026-04-28 — DSR fail, IR vs EW fail across all variants"
+    unlock_requires_signoff: true
+  sprint_aggressive:
+    locked_state: disabled
+    reason: "MaxDD -34.8% in extended sample; never to be enabled in live"
+    unlock_requires_signoff: true
+
+g1_entry:
+  min_monthly_excess_vs_ew: 0.0
+
+g2_retention:
+  trailing_months: 3
+  min_trailing_pnl_pct: 0.0
+
+g3_kill:
+  max_drawdown_pct: 0.15
+  trailing_months: 3
+  min_trailing_pnl_pct: -0.05
+  early_inception_min_pnl_pct: -0.05
+
+g4_promotion:
+  min_monthly_returns: 6
+  min_sharpe_ann: 0.5
+  min_dsr_score: 0.10

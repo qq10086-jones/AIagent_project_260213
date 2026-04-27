@@ -285,6 +285,22 @@ def evaluate(
             "but is not enabled in config.yaml / daily_run iteration."
         )
 
+    # 2026-04-28: Path A hard lock. strategy_locks in capital_gate_config.yaml
+    # can override any computed recommendation. This implements the permanent
+    # sprint disable per the validity audit decision.
+    locks = cfg.get("strategy_locks") or {}
+    lock = locks.get(strategy_id)
+    if lock and isinstance(lock, dict):
+        locked_state = str(lock.get("locked_state", ""))
+        if locked_state:
+            recommended = locked_state
+            reasons.append(
+                f"STRATEGY LOCK ACTIVE: {strategy_id} forced to '{locked_state}' "
+                f"by capital_gate_config.yaml strategy_locks. "
+                f"Reason: {lock.get('reason', 'no reason given')}. "
+                f"Unlock requires signoff: {lock.get('unlock_requires_signoff', True)}."
+            )
+
     return GateDecision(
         strategy_id=strategy_id,
         tier=s.tier,

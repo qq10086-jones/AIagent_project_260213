@@ -349,7 +349,7 @@ def write_audit(
         "gate_config_version": cfg.get("version"),
         "gate_config_path": cfg.get("config_path", str(DEFAULT_CONFIG_PATH)),
         "decisions": [asdict(d) for d in decisions],
-    }, indent=2, ensure_ascii=False), encoding="utf-8")
+    }, indent=2, ensure_ascii=False, default=str), encoding="utf-8")  # default=str: coerce date/datetime
 
 
 if __name__ == "__main__":

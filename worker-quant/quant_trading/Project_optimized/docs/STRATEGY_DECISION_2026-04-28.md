@@ -12,6 +12,8 @@ status: ACTIVE
 
 **放弃 sprint 主动选股策略。资金转入 long-only ETF 等权配置长期持有。**
 
+**2026-04-28 配置更正**：1321.T 单位 ¥6.2M 超账户规模，改用 **1346.T（NF Nikkei 225 ETF, ¥30k/100sh）+ 1306.T（NF TOPIX ETF, ¥3k/100sh）50/50 配置**。两者跟踪同样的日経/TOPIX 大盘指数，仅最小交易单位价格不同。
+
 # 为什么（一句话）
 
 3 年扩样本 + 多重检验校正后，sprint 任何档位都没有 selection alpha；等权基准 Sharpe 1.69 / MaxDD -7.8% 在每个维度都碾压策略 (Sharpe 0.75-1.00 / MaxDD -19% to -35%)。**最优策略是不要策略**。

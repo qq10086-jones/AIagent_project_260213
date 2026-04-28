@@ -67,14 +67,18 @@ strategy_profiles:
   # =====================================================================
 
   # NEW: long-only ETF buy-hold (ACTIVE 2026-04-28)
+  # 2026-04-28 size fix: 1321.T (Nikkei 225 ETF) lot size 100 sh × ¥62k =
+  # ¥6.2M required — exceeds ¥400k account. Replaced with 1346.T (NF
+  # Nikkei 225 ETF, ¥30k/100sh) and 1306.T (NF TOPIX ETF, ¥3k/100sh).
+  # Both track the same broad indices, just smaller per-lot price.
   etf_buyhold:
     enabled: true
     strategy_id: etf_buyhold
     capital_allocation_pct: 1.0
     holdings:
-      - symbol: 1321.T  # Nikkei 225 ETF (live benchmark)
+      - symbol: 1346.T  # NF Nikkei 225 ETF (smaller-lot Nikkei tracker)
         weight: 0.50
-      - symbol: 1306.T  # TOPIX ETF (broad market)
+      - symbol: 1306.T  # NF TOPIX ETF (broad market)
         weight: 0.50
     rebalance:
       frequency: quarterly  # 1, 4, 7, 10 月初

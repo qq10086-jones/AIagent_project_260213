@@ -80,8 +80,8 @@ _REGISTRY: dict[str, StrategyEntry] = {
         signal_module="passive_buyhold",
         params={
             "holdings": [
-                {"symbol": "1321.T", "weight": 0.50},  # Nikkei 225 ETF
-                {"symbol": "1306.T", "weight": 0.50},  # TOPIX ETF
+                {"symbol": "1346.T", "weight": 0.50},  # NF Nikkei 225 ETF (¥30k/100sh)
+                {"symbol": "1306.T", "weight": 0.50},  # NF TOPIX ETF (¥3k/100sh)
             ],
             "rebalance_frequency": "quarterly",
             "drift_threshold": 0.05,

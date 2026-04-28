@@ -36,7 +36,7 @@ class Evidence:
     maxdd: float
     monthly_excess_vs_ew: float   # +0.02 = +2% / month
     oos_holdout_result: str       # "positive" | "negative" | "untested"
-    dsr_p: float | None = None    # Deflated Sharpe p-value vs trials
+    dsr_p: float | None = None    # Legacy field name; stores DSR pass-score (higher=better, 0.0=reject)
 
 
 @dataclass
@@ -46,10 +46,18 @@ class StrategyEntry:
     signal_module: str            # e.g. "sprint_signal" | "alpha_factor_score"
     params: dict = field(default_factory=dict)
     capital_cap_jpy: float = 0.0
-    state: str = "active"         # "active" | "paused" | "retired"
+    state: str = "active"         # "active" | "paused" | "retired" | "inactive_not_wired"
     last_paused_reason: str | None = None
     evidence: Evidence | None = None
     notes: str = ""
+    # 2026-04-25 (Codex #4): governance vs implementation split.
+    # A strategy can pass walk-forward evidence (tier=real, evidence OK) yet
+    # have no production wiring: config.yaml doesn't enable it, daily_run.py
+    # picks only the first enabled profile. Setting execution_wired=False
+    # signals "gate-passed but not operational". capital_gate.evaluate then
+    # returns recommended_state="inactive_not_wired" so downstream readers
+    # don't assume it's running.
+    execution_wired: bool = True
 
 
 # ── Seed registry (2026-04-14 verdict) ────────────────────────────────
@@ -60,7 +68,47 @@ class StrategyEntry:
 # augmentation / execution-gap measurement.
 
 _REGISTRY: dict[str, StrategyEntry] = {
-    # ── sprint: existing real account, sunk 3041.T position ─────────
+    # ── etf_buyhold: PATH A ACTIVE STRATEGY (2026-04-28) ─────────────
+    # No signal generation — pure long-only buy & hold of broad ETFs.
+    # `signal_module="passive_buyhold"` is a sentinel that daily_run/
+    # make_decision skip via the buyhold short-circuit (no model, no
+    # screener, no make_decision call). Monthly drift check + email is
+    # the only operational loop (etf_monthly_check.py).
+    "etf_buyhold": StrategyEntry(
+        strategy_id="etf_buyhold",
+        tier="real",
+        signal_module="passive_buyhold",
+        params={
+            "holdings": [
+                {"symbol": "1321.T", "weight": 0.50},  # Nikkei 225 ETF
+                {"symbol": "1306.T", "weight": 0.50},  # TOPIX ETF
+            ],
+            "rebalance_frequency": "quarterly",
+            "drift_threshold": 0.05,
+        },
+        capital_cap_jpy=400_000,  # full account
+        state="active",
+        evidence=Evidence(
+            measured_at="2026-04-28",
+            window="2023-04 → 2026-04 (3yr extended sample)",
+            n_periods=33,
+            cum_net=0.615,        # EW benchmark cum (proxy)
+            sharpe_ann=1.69,      # EW benchmark Sharpe (proxy; real ETF may differ)
+            maxdd=-0.078,
+            monthly_excess_vs_ew=0.0,  # by definition (we ARE the benchmark)
+            oos_holdout_result="N/A_passive",
+            dsr_p=0.0,            # not applicable for passive strategies
+        ),
+        notes="Path A active strategy. Decision in docs/STRATEGY_DECISION_2026-04-28.md. "
+              "Caveat: 1321/1306 50/50 Sharpe likely 0.8-1.1 (closer to bench_1321=1.02), "
+              "NOT the EW benchmark Sharpe 1.69 from filtered universe of small-mid caps. "
+              "Unlock to active strategy required only ALL 7 conditions in decision doc.",
+    ),
+
+    # ── sprint: DISABLED 2026-04-28 (Path A audit) ──────────────────
+    # Was real, now permanently locked to paused_sunk_only by capital_gate.
+    # Existing 3041.T position runs out via SBI OCO ¥600/¥558.
+    # Code retained for sprint_paper research lane only.
     "sprint": StrategyEntry(
         strategy_id="sprint",
         tier="real",
@@ -68,6 +116,7 @@ _REGISTRY: dict[str, StrategyEntry] = {
         params={"factors": ["mom_consist", "high52w"], "top_k": 3},
         capital_cap_jpy=250_000,  # Current 3041.T position ~¥234k — cap near it
         state="paused_sunk_only",
+        execution_wired=False,    # 2026-04-28: severed from daily_run live path
         last_paused_reason="walk-forward 2026-04-14: 2f composite −0.13%/mo vs EW; only hold existing sunk positions until exited",
         evidence=Evidence(
             measured_at="2026-04-14",
@@ -90,7 +139,8 @@ _REGISTRY: dict[str, StrategyEntry] = {
         signal_module="alpha_factor_score",
         params={"factors": ["high52w"], "top_k": 5, "min_adv": 50_000_000},
         capital_cap_jpy=100_000,
-        state="active",
+        state="inactive_not_wired",
+        execution_wired=False,
         evidence=Evidence(
             measured_at="2026-04-14",
             window="2024-01 → 2026-04",
@@ -102,7 +152,9 @@ _REGISTRY: dict[str, StrategyEntry] = {
             oos_holdout_result="untested",
             dsr_p=0.0,
         ),
-        notes="Lowest-risk WF candidate. Matches EW return with comparable DD.",
+        notes="Lowest-risk WF candidate. Matches EW return with comparable DD. "
+              "2026-04-25: execution_wired=False — config.yaml / daily_run not "
+              "iterating this profile; gate-passed in isolation but not live.",
     ),
 
     # ── amihud: aggressive real strategy, regime-sensitive ──────────
@@ -112,7 +164,8 @@ _REGISTRY: dict[str, StrategyEntry] = {
         signal_module="alpha_factor_score",
         params={"factors": ["alpha_amihud_20"], "top_k": 20, "min_adv": 100_000_000},
         capital_cap_jpy=100_000,
-        state="active",
+        state="inactive_not_wired",
+        execution_wired=False,
         evidence=Evidence(
             measured_at="2026-04-14",
             window="2024-01 → 2026-04",
@@ -124,7 +177,9 @@ _REGISTRY: dict[str, StrategyEntry] = {
             oos_holdout_result="negative_2023",  # ← important caveat
             dsr_p=0.0,
         ),
-        notes="High IS edge but REGIME-DEPENDENT: 2023 OOS cum -3.1%. Kill-switch if 3m real PnL < -5%.",
+        notes="High IS edge but REGIME-DEPENDENT: 2023 OOS cum -3.1%. "
+              "Kill-switch if 3m real PnL < -5%. "
+              "2026-04-25: execution_wired=False — not yet in daily_run.",
     ),
 
     # ── Paper shadows of each real strategy ──────────────────────────
@@ -189,6 +244,30 @@ _REGISTRY: dict[str, StrategyEntry] = {
         params={"factors": ["mom_consist", "high52w"], "top_k": 5},
         state="active",
         notes="2-factor composite — is averaging better than high52w alone?",
+    ),
+
+    # ── Adaptive sprint (paper-only shadow for A-1/A-2/A-3/A-4) ──────
+    # Registered under governance doc 2026-04-21.  NEVER writes to the
+    # real `sprint` ledger until G1–G5 promotion gates are green.
+    "adaptive_sprint_paper": StrategyEntry(
+        strategy_id="adaptive_sprint_paper",
+        tier="paper",
+        signal_module="candidate_ranker",
+        params={
+            "ranker": "cross_sectional_percentile",
+            "threshold": "dynamic_quantile",
+            "waterfall": "opportunity_waterfall",
+            "drift_monitor": "drift_monitor",
+            "calibration_updater": "calibration_updater",
+        },
+        state="active",
+        notes=(
+            "Shadow lane for adaptive opportunity-capture roadmap "
+            "(A-1 ranker + A-2 dynamic threshold + A-3 waterfall + "
+            "B-1 drift_monitor + B-2 calibration_updater). "
+            "Fail-closed, paper-only; real promotion blocked until "
+            "GOVERNANCE_2026-04-21 G1–G5 are all green."
+        ),
     ),
 }
 

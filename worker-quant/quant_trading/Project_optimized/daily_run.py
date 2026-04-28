@@ -1174,6 +1174,36 @@ def main():
         latest_available_ts=fundamentals_status.get("latest_available_ts"),
     )
 
+    # ──────────────────────────────────────────────────────────────────
+    # 2026-04-28 Path A short-circuit:
+    # Passive buy-and-hold strategies (etf_buyhold) have no signal/model/
+    # decision pipeline. Skip screener/model/make_decision and exit cleanly
+    # after position MTM refresh and fundamentals status. Drift/rebalance is
+    # handled by etf_monthly_check.py on a separate Task Scheduler trigger.
+    # ──────────────────────────────────────────────────────────────────
+    _signal_mode_str = str(strategy_profile.get("signal_mode", "")).lower()
+    if (
+        strategy_id == "etf_buyhold"
+        or _signal_mode_str == "passive_buyhold"
+        or strategy_profile.get("holdings")  # presence of static holdings list = passive
+    ):
+        print(f">> [passive_buyhold] strategy={strategy_id} — skipping screener/signal/decision pipeline")
+        emit_runtime_event(
+            reports_dir, "passive_buyhold_skip",
+            strategy_id=strategy_id,
+            reason="No signal pipeline for buy-and-hold strategy. Drift handled monthly.",
+        )
+        emit_runtime_event(reports_dir, "daily_run_completed", asof=asof, strategy_id=strategy_id)
+        # Refresh capital_gate audit so dashboards stay current
+        try:
+            from capital_gate import evaluate_all, write_audit
+            write_audit(evaluate_all())
+            print(">> [capital_gate] audit refreshed")
+        except Exception as _cge:
+            print(f"⚠️  capital_gate write_audit (non-fatal): {_cge}")
+        emit_runtime_event(reports_dir, "heartbeat_ok")
+        return
+
     # 2) Screener
     scr = cfg.get("screener", {})
     top_k = int(strategy_profile.get("top_k", scr.get("top_k", 50)))

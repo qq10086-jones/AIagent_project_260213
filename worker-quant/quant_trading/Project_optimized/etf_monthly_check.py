@@ -93,15 +93,19 @@ def get_etf_nav(conn: sqlite3.Connection, asof: str) -> dict | None:
 
 
 def compute_rebalance_drift(positions: list[dict], targets: list[dict]) -> dict:
-    """Return {symbol: {current_weight, target_weight, drift_pct}}."""
+    """Return {symbol: {current_weight, target_weight, drift_pct}}.
+
+    Codex 2026-04-28 review fix: include target symbols that are NOT yet in
+    positions table (pre-bootstrap state) so user sees the gap explicitly.
+    """
     total_value = sum(p["market_value"] for p in positions)
-    if total_value <= 0:
-        return {}
     target_map = {t["symbol"]: float(t["weight"]) for t in targets}
+    pos_map = {p["symbol"]: p for p in positions}
     out = {}
-    for p in positions:
-        sym = p["symbol"]
-        cur_w = p["market_value"] / total_value
+    all_symbols = set(target_map.keys()) | set(pos_map.keys())
+    for sym in sorted(all_symbols):
+        p = pos_map.get(sym)
+        cur_w = (p["market_value"] / total_value) if (p and total_value > 0) else 0.0
         tgt_w = target_map.get(sym, 0.0)
         drift = cur_w - tgt_w
         out[sym] = {
@@ -109,6 +113,7 @@ def compute_rebalance_drift(positions: list[dict], targets: list[dict]) -> dict:
             "target_weight": tgt_w,
             "drift_pct": drift,
             "abs_drift_pct": abs(drift),
+            "in_positions": p is not None,
         }
     return out
 
@@ -292,15 +297,21 @@ def main() -> int:
         out_path.write_text(report_md, encoding="utf-8")
         print(f"[etf_monthly_check] Report written: {out_path}")
 
+        email_sent = True
         if not args.no_email:
             tag = "⚠️ REBALANCE" if rebalance_needed else "monthly"
-            send_email(
+            email_sent = send_email(
                 subject=f"[ETF buy-hold] {tag} report {asof}",
                 body_md=report_md,
                 to_addr=to_email,
             )
     finally:
         conn.close()
+    # Codex 2026-04-28 review: surface email failure to scheduler so monitoring
+    # is not blind. Exit 2 if email was attempted but failed (report still on disk).
+    if not args.no_email and not email_sent:
+        print("[etf_monthly_check] Exit code 2: email send failed (report file written).", file=sys.stderr)
+        return 2
     return 0
 
 

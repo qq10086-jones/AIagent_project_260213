@@ -1,0 +1,45 @@
+# HotThemeRotator strategy example config
+
+project:
+  name: HotThemeRotator
+  mode: advice_only
+  primary_market: JP
+  enabled_trade_markets:
+    - JP
+  external_temperature_markets:
+    - US
+    - CN
+
+temperature:
+  hot_threshold: 75
+  warm_threshold: 60
+  cold_threshold: 40
+  risk_off_threshold: 25
+
+themes:
+  max_themes: 5
+  max_leaders_per_theme: 3
+  lookback_days: 5
+
+signals:
+  min_entry_score: 70
+  rotate_min_score_delta: 10
+  target_profit_pct:
+    - 0.02
+    - 0.03
+    - 0.05
+  default_stop_loss_pct: 0.04
+  max_hold_days: 10
+
+risk:
+  max_position_nav_pct: 0.15
+  max_theme_nav_pct: 0.40
+  max_total_long_nav_pct: 0.80
+  block_buy_regimes:
+    - COLD
+    - RISK_OFF
+
+legacy_sources:
+  project_optimized_db: ../Project_optimized/japan_market.db
+  project_optimized_reports: ../Project_optimized/reports
+  project_v5_root: ../Project_v5

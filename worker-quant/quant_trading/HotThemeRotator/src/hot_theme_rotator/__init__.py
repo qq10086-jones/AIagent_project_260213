@@ -1,0 +1,2 @@
+"""HotThemeRotator package."""
+

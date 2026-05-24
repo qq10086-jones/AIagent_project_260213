@@ -1,0 +1,32 @@
+.pytest_cache/
+.pytest_tmp/
+pytest_cache/
+pytest_tmp/
+__pycache__/
+*.pyc
+.runtime/
+.superpowers/
+
+# Original quant.zip design package — kept locally as reference; do not version-track.
+# Frontend assets that were extracted from it (frontend/v1.jsx, v2.jsx, etc.) ARE tracked.
+quant.zip
+
+# Decision-log + outcome storage (runtime artifacts; recreated per session).
+reports/predictions/
+reports/outcomes/
+
+data/raw/*
+data/interim/*
+data/processed/*
+data/external/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+!data/external/.gitkeep
+
+reports/daily/*
+reports/backtests/*
+reports/paper/*
+!reports/daily/.gitkeep
+!reports/backtests/.gitkeep
+!reports/paper/.gitkeep

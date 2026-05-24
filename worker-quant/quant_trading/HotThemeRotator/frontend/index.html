@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>HotThemeRotator · UI 重设计提案</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;600;700&display=swap" rel="stylesheet" />
+
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #f0eee9; font-family: "IBM Plex Sans", "Noto Sans JP", system-ui, sans-serif; }
+  #root { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+  /* P8-09 boot status — shows API-vs-mock origin while design canvas mounts */
+  #boot-status {
+    position: fixed; top: 6px; right: 12px; z-index: 9999;
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10px;
+    color: #7a766c; padding: 3px 8px; background: #ffffffd0;
+    border: 1px solid #e3dfd3; border-radius: 4px; pointer-events: none;
+  }
+  #boot-status[data-state="ok"]    { color: #1f7a4d; border-color: #c9e3d1; }
+  #boot-status[data-state="error"] { color: #b23a3a; border-color: #f1c5c1; background: #fff5f3; }
+
+  /* P8-09 production app shell — top nav switches between V1/V2/V3/V4. */
+  .htr-app-nav {
+    display: flex; align-items: center; gap: 4px;
+    padding: 6px 14px; background: #ffffff;
+    border-bottom: 1px solid #e3dfd3;
+    font-family: "IBM Plex Sans", "Noto Sans JP", system-ui, sans-serif;
+    flex: 0 0 auto; z-index: 100;
+    overflow-x: auto; white-space: nowrap;
+  }
+  .htr-app-brand {
+    font-weight: 700; font-size: 13px; color: #1a1817;
+    margin-right: 6px; letter-spacing: 0.01em;
+  }
+  .htr-app-tag {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 9.5px; color: #7a766c; letter-spacing: 0.05em;
+    margin-right: 12px; padding: 1px 5px; background: #fbfaf5;
+    border: 1px solid #ede9dd; border-radius: 3px;
+  }
+  .htr-nav-btn {
+    appearance: none; background: transparent;
+    border: 1px solid transparent; padding: 5px 12px;
+    border-radius: 4px; font-size: 12px;
+    color: #4b4843; cursor: pointer;
+    font-family: inherit; transition: background 0.12s;
+  }
+  .htr-nav-btn:hover { background: #fbfaf5; }
+  .htr-nav-btn.active {
+    background: #1f3a5f; color: #ffffff;
+    border-color: #1f3a5f; font-weight: 600;
+  }
+  .htr-app-main {
+    /* Flex-fill remaining viewport so each variant's `height:100%` resolves. */
+    flex: 1 1 auto; min-height: 0; overflow: auto;
+  }
+
+  /* P8-16 Cycle 1 — §10 gates as compact nav chip + click-to-expand modal */
+  .gates-chip {
+    appearance: none; cursor: pointer;
+    margin-left: auto;  /* push to right side of nav */
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border: 1px solid #c9e3d1; border-radius: 999px;
+    background: #f0f9f3; color: #1b4332;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; font-weight: 700;
+  }
+  .gates-chip:hover { background: #e6f4eb; }
+  .gates-chip .gc-done { color: #1f7a4d; }
+  .gates-chip .gc-blocked { color: #b23a3a; }
+  .gates-chip .gc-pending { color: #7a766c; }
+
+  .gates-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(20, 19, 15, 0.45);
+    z-index: 200; display: flex; align-items: center; justify-content: center;
+  }
+  .gates-modal {
+    background: #ffffff; max-width: 920px; width: 92vw;
+    border-radius: 8px; padding: 18px 22px 22px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+    font-family: "IBM Plex Sans", "Noto Sans JP", system-ui, sans-serif;
+  }
+  .gates-modal-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    border-bottom: 1px solid #e3dfd3; padding-bottom: 10px; margin-bottom: 14px;
+  }
+  .gates-modal-head h3 {
+    margin: 0; font-size: 15px; font-weight: 700; color: #1a1817;
+  }
+  .gates-modal-head .gm-sub {
+    font-size: 11px; color: #7a766c; font-family: "IBM Plex Mono", monospace;
+  }
+  .gates-modal-close {
+    appearance: none; background: transparent; border: none; cursor: pointer;
+    font-size: 18px; color: #7a766c; padding: 0 4px;
+  }
+  .gates-modal-close:hover { color: #1a1817; }
+
+  /* P8-16 Cycle 3 — Term tooltip (rolling hover/focus jargon explainer) */
+  .htr-term {
+    border-bottom: 1px dotted #aca89c;
+    cursor: help;
+    position: relative;
+  }
+  .htr-term:focus { outline: none; }
+  .htr-term-pop {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    width: 280px;
+    padding: 9px 12px 10px;
+    background: #1a1817;
+    color: #ece9df;
+    border-radius: 5px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.22);
+    font-family: "IBM Plex Sans", "Noto Sans JP", system-ui, sans-serif;
+    font-size: 11.5px;
+    line-height: 1.5;
+    z-index: 300;
+    white-space: normal;
+    pointer-events: none;
+  }
+  .htr-term-pop::after {
+    content: "";
+    position: absolute; top: 100%; left: 12px;
+    border: 5px solid transparent;
+    border-top-color: #1a1817;
+  }
+  .htr-term-pop-title {
+    display: block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #a8d8b9;
+    margin-bottom: 3px;
+    letter-spacing: 0.02em;
+  }
+  .htr-term-pop-body {
+    display: block;
+    color: #ece9df;
+  }
+  .htr-term:hover .htr-term-pop,
+  .htr-term:focus .htr-term-pop {
+    display: block;
+  }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="data.js"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="v1.jsx"></script>
+<script type="text/babel" src="v2.jsx"></script>
+<script type="text/babel" src="v3.jsx"></script>
+<script type="text/babel" src="v4.jsx"></script>
+</head>
+<body>
+<div id="root"></div>
+<div id="boot-status" data-state="loading">loading /api/dashboard…</div>
+
+<template id="__bundler_thumbnail">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+    <rect width="200" height="200" fill="#F6F4ED"/>
+    <rect x="30" y="30" width="140" height="140" fill="none" stroke="#1F3A5F" stroke-width="2"/>
+    <rect x="30" y="30" width="140" height="18" fill="#1F3A5F"/>
+    <text x="100" y="44" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="700"
+          fill="#FFFFFF" text-anchor="middle">HTR</text>
+    <line x1="40" y1="64"  x2="160" y2="64"  stroke="#1F7A4D" stroke-width="3"/>
+    <line x1="40" y1="78"  x2="160" y2="78"  stroke="#1F7A4D" stroke-width="2"/>
+    <line x1="40" y1="92"  x2="160" y2="92"  stroke="#1F3A5F" stroke-width="3.5"/>
+    <line x1="40" y1="106" x2="160" y2="106" stroke="#355D8C" stroke-width="2"/>
+    <line x1="40" y1="120" x2="160" y2="120" stroke="#355D8C" stroke-width="3"/>
+    <line x1="40" y1="142" x2="160" y2="142" stroke="#B23A3A" stroke-width="2.5" stroke-dasharray="4 3"/>
+    <text x="100" y="166" font-family="IBM Plex Sans, sans-serif" font-size="10"
+          fill="#4B4843" text-anchor="middle">Price Ladder</text>
+  </svg>
+</template>
+
+<script type="text/babel" data-presets="env,react">
+const { useEffect } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "primary": "#1F3A5F",
+  "dark": false,
+  "density": "regular",
+  "bodyFont": "sans",
+  "numFont": "mono"
+}/*EDITMODE-END*/;
+
+function applyTokens(t) {
+  const root = document.documentElement;
+
+  // Primary accent — derive a soft tint via color-mix
+  root.style.setProperty("--htr-accent", t.primary);
+  // Compute soft background — fall back if color-mix unsupported
+  root.style.setProperty("--htr-accent-soft", `color-mix(in oklab, ${t.primary} 12%, transparent)`);
+
+  root.dataset.htrDark    = String(!!t.dark);
+  root.dataset.htrDensity = t.density;
+
+  // Font swaps
+  const bodyMap = {
+    sans:    `"IBM Plex Sans", "Noto Sans JP", system-ui, sans-serif`,
+    serif:   `"IBM Plex Serif", "Noto Serif JP", Georgia, serif`,
+  };
+  const numMap = {
+    mono:    `"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace`,
+    tabular: `"IBM Plex Sans", "Noto Sans JP", system-ui, sans-serif`,
+  };
+  root.style.setProperty("--htr-font-body", bodyMap[t.bodyFont] || bodyMap.sans);
+  root.style.setProperty("--htr-font-num",  numMap[t.numFont] || numMap.mono);
+}
+
+function App() {
+  const [variant, setVariant] = React.useState(
+    () => (typeof localStorage !== "undefined" && localStorage.getItem("htr_variant")) || "v3"
+  );
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [gatesOpen, setGatesOpen] = React.useState(false);
+  useEffect(() => { applyTokens(t); }, [t]);
+  useEffect(() => {
+    if (typeof localStorage !== "undefined") localStorage.setItem("htr_variant", variant);
+  }, [variant]);
+  // P8-16 Cycle 1 — keyboard ESC closes the gates modal
+  useEffect(() => {
+    if (!gatesOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setGatesOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [gatesOpen]);
+
+  // Compute compact §10 summary from real gate state
+  const gates = (window.HTR_DATA && window.HTR_DATA.gates) || [];
+  const gateCounts = {
+    done: gates.filter(g => g.status === "done").length,
+    blocked: gates.filter(g => g.status === "blocked").length,
+    total: gates.length,
+  };
+
+  const VARIANTS = [
+    { id: "v1", label: "V1 · 三栏专业终端",   Component: V1ProTerminal     },
+    { id: "v2", label: "V2 · 研究备忘录",     Component: V2EditorialBrief  },
+    { id: "v3", label: "V3 · 市场温度仪表盘", Component: V3MarketDashboard },
+    { id: "v4", label: "V4 · 决策日志为脊",   Component: V4WorkflowSpine   },
+  ];
+  const active = VARIANTS.find(v => v.id === variant) || VARIANTS[2];
+  const ActiveVariant = active.Component;
+
+  return (
+    <React.Fragment>
+      <nav className="htr-app-nav">
+        <span className="htr-app-brand">HotThemeRotator</span>
+        <span className="htr-app-tag">{(window.HTR_DATA && window.HTR_DATA.meta && window.HTR_DATA.meta.tradeDate) || ""}</span>
+        {VARIANTS.map(v => (
+          <button
+            key={v.id}
+            className={"htr-nav-btn" + (v.id === variant ? " active" : "")}
+            onClick={() => setVariant(v.id)}
+            aria-pressed={v.id === variant}
+          >
+            {v.label}
+          </button>
+        ))}
+        {/* P8-16 Cycle 1 — §10 gate progress as compact chip; click to expand */}
+        <button
+          className="gates-chip"
+          onClick={() => setGatesOpen(true)}
+          title="§10 八阶门槛 — 点击查看完整自动化路径"
+        >
+          <span>§10</span>
+          <span className="gc-done">{gateCounts.done}/{gateCounts.total} ✓</span>
+          {gateCounts.blocked > 0 && (
+            <span className="gc-blocked">⛔{gateCounts.blocked}</span>
+          )}
+        </button>
+      </nav>
+      <main className="htr-app-main">
+        <ActiveVariant />
+      </main>
+      {gatesOpen && (
+        <div
+          className="gates-modal-backdrop"
+          onClick={(e) => { if (e.target === e.currentTarget) setGatesOpen(false); }}
+        >
+          <div className="gates-modal" role="dialog" aria-label="§10 自动化八阶门槛">
+            <div className="gates-modal-head">
+              <div>
+                <h3>§10 自动化八阶门槛</h3>
+                <div className="gm-sub">
+                  governance pipeline · 按规则逐级解锁 · {gateCounts.done}/{gateCounts.total} done · {gateCounts.blocked} blocked
+                </div>
+              </div>
+              <button className="gates-modal-close" onClick={() => setGatesOpen(false)} aria-label="关闭">×</button>
+            </div>
+            <GateFlow gates={gates} compact={false} />
+          </div>
+        </div>
+      )}
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="主题" />
+        <TweakColor label="强调色" value={t.primary}
+          options={["#1F3A5F", "#2D6A6F", "#7A4B2D", "#3D5A3D"]}
+          onChange={(v) => setTweak("primary", v)} />
+        <TweakToggle label="深色模式" value={t.dark}
+          onChange={(v) => setTweak("dark", v)} />
+
+        <TweakSection label="字体" />
+        <TweakRadio label="正文" value={t.bodyFont}
+          options={["sans", "serif"]}
+          onChange={(v) => setTweak("bodyFont", v)} />
+        <TweakRadio label="数字" value={t.numFont}
+          options={["mono", "tabular"]}
+          onChange={(v) => setTweak("numFont", v)} />
+
+        <TweakSection label="信息密度" />
+        <TweakRadio label="密度" value={t.density}
+          options={["compact", "regular", "comfy"]}
+          onChange={(v) => setTweak("density", v)} />
+      </TweaksPanel>
+    </React.Fragment>
+  );
+}
+
+// ─── Rationale + component showcase ─────────────────────────────────────────
+
+function Rationale() {
+  const bullets = [
+    { tag: "视觉权重", text: "现在 Top 1 候选淹没在 metric 卡 + tab 之间。新版给它 60% 视觉占比, 用大字号 + 衬线/Mono 强对比、引文式判断把'今天最值得盯'凸显出来。" },
+    { tag: "纵向价格阶梯", text: "把七档阶梯从表格升级为 K 线右边的'吸附式'价格刻度 (V1/V2) 和独立纵向时间轴 (V2/V4)。激进/均衡/保守/卖出 1/2/延伸/止损全在一根价格轴上, 一眼对齐当前价。" },
+    { tag: "多市场温度", text: "A股/美股/USD/JPY/SOX 是你的差异化, 但现在 UI 里几乎看不见。V3 直接把六市场温度盘做成首屏 hero, 其它变体也把它放在常驻栏。" },
+    { tag: "新闻催化可视化", text: "你是 news-driven 系统但新闻不可见。新版用带权重圆点的时间线把新闻 -> 候选 -> 决策动作串成单一叙事 (V4)。" },
+    { tag: "§10 八阶门槛", text: "原 chip 条信息量不够。新版做成有方向的箭头流, done/in_progress/blocked 用色码区分, 一眼看清下一站。" },
+    { tag: "校准状态克制常驻", text: "'未校准研究分'必须始终可见但不打扰。橙色 chip 顶部固定 + 顶部信息条二级文字, 替代弹窗/大色块。" },
+    { tag: "字体策略", text: "IBM Plex Sans (正文) + IBM Plex Mono (所有数字, tabular-nums) + IBM Plex Serif (V2 编辑风) + Noto Sans JP (日股名). 等宽数字让阶梯/价格永远对齐。" },
+    { tag: "无 emoji 无装饰", text: "克制感来自留白和层级而不是色彩。整个调色板只有: 暖白 / 墨灰 / 一个强调色 / 两个语义色 (墨绿涨 砖红跌). 不用任何霓虹/渐变/emoji。" },
+  ];
+
+  return (
+    <div className="htr" style={{
+      width: "100%", height: "100%", background: "var(--htr-surface)",
+      padding: "22px 28px 20px", overflow: "auto", boxSizing: "border-box",
+    }}>
+      <div className="htr-eyebrow" style={{ marginBottom: 6 }}>设计提案 · 给 HotThemeRotator</div>
+      <h1 className="htr-serif" style={{
+        margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.1,
+      }}>
+        从 Streamlit 研究脚本, 到机构级研究终端
+      </h1>
+      <p style={{
+        fontSize: 13.5, lineHeight: 1.55, color: "var(--htr-ink-2)", marginTop: 10, maxWidth: 640,
+      }}>
+        现在的 UI 信息密度低 / 视觉权重错位 / 价格阶梯当表格用 / 多市场温度因子完全没体现 /
+        新闻催化看不见 / §10 治理流程只是几个 chip。下面四个方向不是 4 套不同产品, 而是
+        <strong>同一个产品的 4 种布局架构</strong>, 共享同一套设计 token、组件库、mock 数据,
+        可以混合 + 取舍。
+      </p>
+
+      <hr className="htr-divider" style={{ margin: "18px 0 16px" }} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        {bullets.map((b, i) => (
+          <div key={i} style={{ display: "grid", gridTemplateColumns: "92px 1fr", gap: 10, minWidth: 0 }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="htr-mono" style={{
+                fontSize: 9.5, fontWeight: 700, color: "var(--htr-accent)",
+                background: "var(--htr-accent-soft)", padding: "2px 5px", borderRadius: 2,
+                display: "inline-block", letterSpacing: "0.04em", whiteSpace: "nowrap",
+              }}>
+                {String(i + 1).padStart(2, "0")} · {b.tag}
+              </div>
+            </div>
+            <div style={{ fontSize: 11.5, lineHeight: 1.55, color: "var(--htr-ink-2)", minWidth: 0 }}>{b.text}</div>
+          </div>
+        ))}
+      </div>
+
+      <hr className="htr-divider" style={{ margin: "20px 0 14px" }} />
+
+      <div style={{
+        padding: "12px 14px", background: "var(--htr-warn-bg)",
+        border: "1px solid color-mix(in oklab, var(--htr-warn) 30%, transparent)",
+        borderRadius: 5, fontSize: 12, lineHeight: 1.55,
+      }}>
+        <strong style={{ color: "var(--htr-warn)" }}>关于离开 Streamlit:</strong>
+        {" "}建议把当前 Python 数据层保留, 上面替换成 FastAPI + 静态前端 (Vite + React)。Streamlit 适合 demo 不适合产品。
+        如果暂时不离开, 这套设计 token + 组件库可以原样移植成 Streamlit
+        <code style={{ background: "var(--htr-surface)", padding: "0 4px", margin: "0 2px" }}>components.html</code>
+        块, 也能让现有页面立刻好看八成。
+      </div>
+    </div>
+  );
+}
+
+function ComponentShowcase({ kind }) {
+  const d = window.HTR_DATA;
+  if (kind === "ladder") {
+    return (
+      <div className="htr" style={{
+        width: "100%", height: "100%", background: "var(--htr-surface)",
+        padding: 18, display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <VerticalLadder ladder={d.candidates[0].ladder} currentPrice={d.candidates[0].price} height={420} />
+      </div>
+    );
+  }
+  if (kind === "temp") {
+    return (
+      <div className="htr" style={{ width: "100%", height: "100%", background: "var(--htr-bg)", padding: 14 }}>
+        <MarketTempCell m={d.markets[2]} variant="tile" />
+      </div>
+    );
+  }
+  if (kind === "gates") {
+    return (
+      <div className="htr" style={{ width: "100%", height: "100%", background: "var(--htr-surface)", padding: 16 }}>
+        <GateFlow gates={d.gates} compact={false} />
+      </div>
+    );
+  }
+  if (kind === "news") {
+    return (
+      <div className="htr" style={{
+        width: "100%", height: "100%", background: "var(--htr-surface)", padding: "14px 18px", overflow: "auto",
+      }}>
+        <NewsTimeline items={d.newsTimeline} max={6} />
+      </div>
+    );
+  }
+  return null;
+}
+
+// P8-09 — merge real Python data from /api/dashboard over the mock baseline
+// in data.js BEFORE the design canvas mounts. All 4 variants (V1/V2/V3/V4)
+// then render against the merged data via window.HTR_DATA.
+(async function bootWithApi() {
+  const statusEl = document.getElementById("boot-status");
+  try {
+    const resp = await fetch("/api/dashboard", { cache: "no-store" });
+    if (!resp.ok) throw new Error(`API ${resp.status}`);
+    const apiData = await resp.json();
+    window.HTR_DATA = {
+      ...window.HTR_DATA,
+      ...apiData,
+      meta: { ...window.HTR_DATA.meta, ...apiData.meta },
+      markets:      apiData.markets?.length      ? apiData.markets      : window.HTR_DATA.markets,
+      themes:       apiData.themes?.length       ? apiData.themes       : window.HTR_DATA.themes,
+      newsTimeline: apiData.newsTimeline?.length ? apiData.newsTimeline : window.HTR_DATA.newsTimeline,
+      kline:        apiData.kline?.length        ? apiData.kline        : window.HTR_DATA.kline,
+    };
+    statusEl.dataset.state = "ok";
+    const realParts = [
+      ["gates",       apiData.gates?.length],
+      ["candidates",  apiData.candidates?.length],
+      ["decisionLog", apiData.decisionLog?.length],
+    ].filter(([_, n]) => n).map(([k, n]) => `${k}=${n}`).join(" · ");
+    statusEl.textContent = `API: ${realParts} · mock fallback for missing sections`;
+  } catch (err) {
+    statusEl.dataset.state = "error";
+    statusEl.textContent = `API failed: ${err.message} · all mock`;
+  } finally {
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  }
+})();
+</script>
+
+</body>
+</html>

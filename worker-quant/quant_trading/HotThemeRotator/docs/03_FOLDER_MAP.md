@@ -99,9 +99,10 @@ P8-09 起新增。FastAPI 只读 JSON 层，作为 Python 数据层与 frontend 
 ```text
 api/
   __init__.py
-  main.py              # FastAPI app + CORS + 生产模式 frontend/dist 静态挂载
+  main.py              # FastAPI app + CORS + 生产模式 frontend/ 静态挂载 + 挂载 dashboard / symbol router
   dashboard.py         # GET /api/dashboard — V3 完整数据形状
   serializers.py       # Python 对象 -> V3 JSON（gates / markets / themes / candidates / news / log）
+  symbol.py            # P8-18: GET /api/symbol/{ticker}/{kline,profile,ladder} 探索端点（Rule 11 + §6.11.1）
 ```
 
 不暴露任何 POST/PUT/DELETE，不触发任何执行通路（Rule 3 在 API 层锁死）。
@@ -112,9 +113,15 @@ P8-09 起新增。React 18 V3 市场温度仪表盘（ADR-0004，Phase 1 = zero-
 
 ```text
 frontend/
-  index.html           # 入口：CDN 加载 React + Babel；fetch /api/dashboard 后 mount V3
-  shared.jsx           # 设计 tokens + 共享组件（拷自 quant.zip）
-  v3.jsx               # V3 市场温度仪表盘组件（拷自 quant.zip）
+  index.html           # 入口：CDN 加载 React + Babel；fetch /api/dashboard 后 mount 选择的 variant
+  shared.jsx           # 设计 tokens + 共享组件 + GLOSSARY + P8-18 交互 hook（useSelectedSymbol /
+                       #   useSymbolKline / useSymbolProfile，localStorage user-state）
+  v1.jsx               # V1 三栏专业终端（含 V1KLineLadderPanel 实时随 selected symbol 切换）
+  v2.jsx               # V2 研究备忘录
+  v3.jsx               # V3 市场温度仪表盘（含候选清单 onClick 切换 leader card）
+  v4.jsx               # V4 决策日志为脊
+  design-canvas.jsx    # 设计师 side-by-side 画布（产品 nav 不挂载，离线参考）
+  tweaks-panel.jsx     # 颜色/字体/密度实时调节面板
   data.js              # mock 数据，仅作为 Python 层尚未供给字段的 fallback
 ```
 
@@ -131,3 +138,7 @@ Phase 1 全部为静态文本文件，无 `node_modules/` 无 `dist/`。FastAPI 
 ## tools
 
 一次性或命令行工具。工具不能绕过 `src` 中的正式模块直接写策略逻辑。
+
+- `realtime_opportunity_demo.py`: P8-03 CLI demo，渲染机会面板与七档阶梯。
+- `streamlit_opportunity_app.py`: P8-06/07/08 Streamlit fallback，端口 8501。
+- `morning_briefing.py`: P8-19 开市前 CLI，`--watchlist X,Y --source db|yfinance`，输出 §9.4 banner + 持仓 marked-to-latest + watchlist 七档阶梯。Rule 11 read-only 用户态工具，不写 decision_log。

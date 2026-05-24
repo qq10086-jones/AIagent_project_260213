@@ -702,7 +702,7 @@
 
 ### P8-18 Interactive Exploration Layer
 
-- Status: pending
+- Status: done
 - Depends on: P8-09, P8-10, P8-14, P8-15
 - Goal: 按 Rule 11 把 V1-V4 从只读看板升级成可探索研究工具。新增 3 个 GET 探索端点 + 候选清单 onClick → V1 K 线随之切换 symbol。仍全 GET，仍不破 Rule 3 / §9.4 / §10。
 - Files:
@@ -721,10 +721,12 @@
   - 不引入任何 POST / PUT / DELETE / PATCH 端点。
   - 不创建任何 `decision_log` 条目；用户的本地选择不进 `reports/predictions/`。
   - 全部测试通过；新增 ≥ 8 个 API 单测 + 1 个前端契约测试。
+  - Verified 2026-05-25 (backend): `api/symbol.py` 含 3 端点 (kline/profile/ladder)，fail-closed 404/422/500；`api/main.py` 挂 symbol_router；`tests/unit/test_api_symbol.py` 15 测试覆盖 kline 5 + profile 4 + ladder 5 + 边界 1。`python -m pytest tests/unit/test_api_symbol.py` -> `15 passed in 0.31s`。
+  - Verified 2026-05-25 (frontend): `shared.jsx` 新增 3 hook (`useSelectedSymbol` / `useSymbolKline` / `useSymbolProfile`) + `CandidateRow` 加 `active`/`onClick`/键盘可达；`v1.jsx` `V1ProTerminal` 用 selected symbol 驱动 hero+K线+ladder，`CandidateRowMini` 加 `active` + `onClick`；`v3.jsx` 同样 wire；`tests/unit/test_frontend_ui_contracts.py` 新增 5 个契约：hook exports / no-write-methods / V1 wiring / V3 wiring / localStorage key。`python -m pytest tests/` -> `338 passed in 7.74s` (318 baseline + 15 API + 5 frontend = 338)。
 
 ### P8-19 Morning Briefing CLI
 
-- Status: pending
+- Status: done
 - Depends on: P8-04 (free_web_opportunity_adapter), P8-10 (positions), P8-14 (kline)
 - Goal: `tools/morning_briefing.py` — 5/25 周一开市前实战工具。接收 watchlist（带 1306.T 持仓）→ 用 yfinance 拉最近真实 quote → 输出 1) 持仓核对（current price vs avg_cost, 当前 P&L）2) watchlist 每只七档阶梯 + 距各档百分比 3) §10 + §9.4 红线显式贴在输出顶部。advice-only。
 - Files:
@@ -738,6 +740,24 @@
   - 在没有 yfinance 网络时 fail-closed，明确告知"无网无法继续"，不退回伪造价。
   - 不写任何执行通路；不创建 decision_log 条目（这是用户态工具，不是系统态预测路径）。
   - 全部测试通过；含一个用 mock fetcher 的集成测试。
+  - Verified 2026-05-25: `tools/morning_briefing.py` (~290 LOC) 含 `QuoteFetcher` Protocol + `LegacyDbQuoteFetcher` + `YFinanceQuoteFetcher` + `render_holdings_block` / `render_watchlist_block` / `render_briefing` + argparse CLI；Windows stdout 用 `sys.stdout.reconfigure(encoding="utf-8")` 兜底 cp932 无法编码 CJK。`tests/unit/test_morning_briefing.py` 11 测试（parse_watchlist 3 + holdings 2 + watchlist 3 + briefing 3）全部用 `StubFetcher` 不依赖网络。`python -m pytest tests/unit/test_morning_briefing.py` -> `11 passed in 0.03s`；full suite -> `349 passed in 7.80s` (338 + 11)。Smoke `python tools/morning_briefing.py --watchlist 1306.T,6768.T,5074.T --source db` 输出真实 briefing：1306.T 现价 ¥412.40 P&L +¥8459.99 (+2.33%)，6768.T + 5074.T 七档完整。
+
+## Milestone P0: Project Spine (续)
+
+### P0-05 Git Snapshot Baseline
+
+- Status: done
+- Depends on: 无（基线任务）
+- Goal: 把整棵 untracked `HotThemeRotator/` 树首次 commit 进 git + 打 tag `htr-snapshot-2026-05-25-pre-interactive`，作为 P8-18 / P8-19 大改动前的可回退基线。子树精确 staging，不触动同 repo 内 `Project_optimized/` 的 200+ in-flight 修改。补救内存中长期已知的"159 文件全部 git untracked"单点风险。
+- Files:
+  - Update: `.gitignore` (新增 `pytest_tmp/` / `pytest_cache/` / `.pytest_tmp/` / `quant.zip` / `reports/predictions/` / `reports/outcomes/` 排除)
+  - Create: 159 文件首次入 git (104 .py + 22 .gitkeep + 21 .md + 7 .jsx + 1 .yaml + 1 .json + 1 .js + 1 .html + 1 .gitignore)
+- Acceptance:
+  - `git add` 精确针对 `worker-quant/quant_trading/HotThemeRotator/`，非子树 staged 计数 = 0。
+  - commit 含完整说明（包含 .gitignore 排除原因 + 318 pytest 基线 + 5 ADR 完整性）。
+  - tag `htr-snapshot-2026-05-25-pre-interactive` 创建。
+  - 任何后续 P8-18 / P8-19 改动失败时，可通过 `git checkout htr-snapshot-2026-05-25-pre-interactive -- worker-quant/quant_trading/HotThemeRotator/` 完整回退。
+  - Verified 2026-05-25: 159 files staged, 0 files outside HTR staged; commit `f1d663e` "quant/HTR: snapshot baseline" 创建；tag `htr-snapshot-2026-05-25-pre-interactive` 在 `git tag -l "htr-*"` 中可见；`.gitignore` 6 行新增 ignore 排除运行时产物 + 14M `quant.zip` 设计原始包。
 
 ## Milestone P9: Automation Gates
 

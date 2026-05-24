@@ -256,6 +256,23 @@ Alert records carry `research_only=True`, `data_ts`, reason, risk warning, deter
 - **只读**：API 不接受任何 POST/PUT/DELETE，不暴露执行通路 — Rule 3 在 API 层显式锁死。
 - 生产模式：FastAPI 同时挂载 `frontend/dist/` 静态资产作为 `/`；开发模式仅 API，前端走 Vite dev server。
 
+#### 6.11.1 Exploration Endpoints (P8-18)
+
+按 Rule 11，dashboard 在 dashboard summary 之外需要逐符号探索端点。所有端点仍是 `GET`，仍不触发执行，仍不写入 decision log。
+
+- `GET /api/symbol/{ticker}/kline?sessions=N` — 任意上市股票 N 根日 K（默认 252，cap 1000），由 `kline_adapter.fetch_kline` 提供。
+- `GET /api/symbol/{ticker}/profile` — 该股票的"现状卡片"：latest close、当前是否在用户持仓中（来自 `position_adapter`）、若在持仓则带 qty / avg_cost / unrealized_pnl、是否在 `selected_tickers.json` 的当日 top-N 内、若在则带 alpha score 与 mom20/mom60。
+- `GET /api/symbol/{ticker}/ladder?ref_price=X` — 用任意 ref_price 重算七档（默认 ref_price = latest close）。这是 Rule 11.1 "recompute ladder against a chosen reference price" 的实现。
+
+端点失败的标准：
+
+- ticker 未在 `japan_market.db.daily_prices` 出现 → `404` + `reason=symbol_not_found`。
+- `sessions` 不在 `[1, 1000]` → `422`。
+- `ref_price` ≤ 0 → `422`。
+- 任意 adapter 抛错 → `500` + JSON error body（fail-closed，不返回伪造空数据）。
+
+`positions` / `candidates` 列表仍由 `/api/dashboard` 顶层提供；这三个端点只服务"我点了某只股票之后想看什么"的下钻流程。
+
 ### 6.12 Frontend
 
 承载 V3 市场温度仪表盘（P8-09 起；ADR-0004，Phase 1 = zero-build）。

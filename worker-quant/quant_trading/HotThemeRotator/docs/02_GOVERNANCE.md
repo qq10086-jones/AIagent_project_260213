@@ -341,6 +341,46 @@ P9-04 alerts may describe that a watched level was crossed, but the alert payloa
 
 Every alert must carry `research_only=True`, a data timestamp, a reason, and a risk warning. Duplicate alerts for the same symbol, level, and trade date must be throttled before any user-facing channel consumes them.
 
+## 11. Read-Only Interactivity Rules
+
+Rule 3 forbids execution endpoints. It does not forbid all interaction. Most dashboard interactions — switching symbols, browsing K-line history, recomputing a ladder against a chosen reference price, building a personal watchlist — are purely exploratory and never touch the execution path. They must be allowed, because without them the dashboard is a static report, not a research tool.
+
+### Rule 11.1: Allowed Interactions
+
+The user-facing surface MAY:
+
+- Switch the displayed symbol (K-line, news, ladder, profile follow the active symbol).
+- Adjust the time window or session count on any read-only chart.
+- Hover, focus, or click for tooltips, drill-downs, and on-demand detail.
+- Maintain a local watchlist persisted in `localStorage`.
+- Add private notes on any candidate or holding (`localStorage` only — never written to `decision_log/`).
+- Sort, filter, or re-rank the candidate panel by any visible column.
+- Recompute the seven-tier ladder against a user-supplied reference price (the recomputation is a deterministic function of inputs; nothing is persisted).
+- Compare two or more candidates side by side.
+
+### Rule 11.2: Forbidden Interactions
+
+The user-facing surface MUST NOT:
+
+- Send any POST / PUT / DELETE / PATCH request — Rule 3 stays absolute.
+- Persist user input into `reports/predictions/`, `reports/outcomes/`, `japan_market.db`, or any other system-of-record store.
+- Override an algorithmic `score`, `score_status`, `calibration` label, or `gate` state with a user-supplied value.
+- Trigger any alert, paper trade, or broker call from a UI click.
+- Imply that the user's local view ("I am watching this") is the system's view ("this is a recommended position").
+
+### Rule 11.3: User-State vs System-State Separation
+
+Two stores, never mixed:
+
+- **User state** — preferences, watchlist, notes, last-viewed symbol, theme tweaks. Lives in `localStorage` / cookies. Disposable; clearing it never changes a system fact.
+- **System state** — predictions, outcomes, calibration reports, positions, candidates, gate status. Lives in `reports/`, `japan_market.db`, and Python data layer. Authoritative; UI reads but never writes.
+
+If a future feature needs to persist user choices server-side (e.g., a shared watchlist), it must land as a separate `user_state/` store with its own ADR and explicit non-execution scope, and it must not share schema with `decision_log/`.
+
+### Rule 11.4: Interaction Does Not Lift Calibration Status
+
+A user clicking, hovering, or starring a candidate does not change its `score_status`. An uncalibrated score remains `uncalibrated_research_score` whether the user has watched it for 1 second or 1 month. Rule 9.4 still applies; UI interactions cannot launder a research label into a hidden recommendation.
+
 一个任务只有同时满足以下条件才能标记 done：
 
 - 对应文件已创建或修改。

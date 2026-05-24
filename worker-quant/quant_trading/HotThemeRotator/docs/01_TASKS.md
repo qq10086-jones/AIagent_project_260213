@@ -700,6 +700,45 @@
   - Verified full suite: after creating writable `.runtime\pytest_tmp` and `.runtime\pytest_cache_p8_17`, `python -m pytest .\tests -q -o cache_dir=.\.runtime\pytest_cache_p8_17 --basetemp=.\.runtime\pytest_tmp\p8-17-full-<timestamp>` -> `307 passed in 7.58s`.
   - Follow-up root cause (user reported page-level background switch between Section C and D): V2 root used `display: flex` with default `align-items: stretch`, which stretched the white paper wrapper to viewport height only (`858px`); scrolled content then overflowed beyond that wrapper and exposed body/html warm-gray background. Fix: set V2 root `alignItems: "flex-start"` so the paper wrapper uses content height (`2021px` in probe). Added static contract test for this. Verification: `test_frontend_ui_contracts.py` RED -> 1 expected failure; GREEN -> `3 passed`; API+UI contracts -> `14 passed`; full suite -> `308 passed in 7.64s`; screenshot `.runtime/ui_inspection/p8-17-v2-bg-fixed_1440x900.png`.
 
+### P8-18 Interactive Exploration Layer
+
+- Status: pending
+- Depends on: P8-09, P8-10, P8-14, P8-15
+- Goal: 按 Rule 11 把 V1-V4 从只读看板升级成可探索研究工具。新增 3 个 GET 探索端点 + 候选清单 onClick → V1 K 线随之切换 symbol。仍全 GET，仍不破 Rule 3 / §9.4 / §10。
+- Files:
+  - Update: `docs/02_GOVERNANCE.md` (新增 §11 Read-Only Interactivity Rules)
+  - Update: `docs/00_DESIGN.md` (§6.11.1 探索端点设计)
+  - Create: `api/symbol.py` (3 个端点)
+  - Update: `api/main.py` (挂载 symbol router)
+  - Create: `tests/unit/test_api_symbol.py`
+  - Update: `frontend/v1.jsx` / `v3.jsx` / `v4.jsx`（候选行 onClick 切换 selected symbol；K 线 fetch /api/symbol/{ticker}/kline 替换 data.kline）
+  - Update: `frontend/index.html`（如需 selected symbol 全局状态）
+- Acceptance:
+  - `GET /api/symbol/{ticker}/kline?sessions=N` 返回该 ticker 的 N 根日 K（N ∈ [1, 1000]），ticker 不存在返回 404 + symbol_not_found，sessions 超界返回 422。
+  - `GET /api/symbol/{ticker}/profile` 返回 `{symbol, latest_close, latest_asof, in_portfolio, qty, avg_cost, unrealized_pnl, in_screener, screener_score, mom_20, mom_60}`；缺字段以 null 显式标注，不静默填零。
+  - `GET /api/symbol/{ticker}/ladder?ref_price=X` 用任意 ref_price 重算七档，ref_price ≤ 0 返回 422。
+  - 候选清单任一行被点击后，selected symbol 持久化到 `localStorage.htr_symbol`，V1 K 线读取该 symbol 的 252 sessions；持仓行也可点击切换。
+  - 不引入任何 POST / PUT / DELETE / PATCH 端点。
+  - 不创建任何 `decision_log` 条目；用户的本地选择不进 `reports/predictions/`。
+  - 全部测试通过；新增 ≥ 8 个 API 单测 + 1 个前端契约测试。
+
+### P8-19 Morning Briefing CLI
+
+- Status: pending
+- Depends on: P8-04 (free_web_opportunity_adapter), P8-10 (positions), P8-14 (kline)
+- Goal: `tools/morning_briefing.py` — 5/25 周一开市前实战工具。接收 watchlist（带 1306.T 持仓）→ 用 yfinance 拉最近真实 quote → 输出 1) 持仓核对（current price vs avg_cost, 当前 P&L）2) watchlist 每只七档阶梯 + 距各档百分比 3) §10 + §9.4 红线显式贴在输出顶部。advice-only。
+- Files:
+  - Create: `tools/morning_briefing.py`
+  - Create: `tests/unit/test_morning_briefing.py`
+  - Update: `README.md` (用法示例)
+- Acceptance:
+  - CLI 接受 `--watchlist 1306.T,6768.T,...` 或读 `watchlist.txt`。
+  - 输出包含每只 ticker 的 yfinance 最新 close + 七档阶梯 + 持仓状态。
+  - 输出顶部固定有 §9.4 警告：未校准研究分 / 不是胜率 / advice-only。
+  - 在没有 yfinance 网络时 fail-closed，明确告知"无网无法继续"，不退回伪造价。
+  - 不写任何执行通路；不创建 decision_log 条目（这是用户态工具，不是系统态预测路径）。
+  - 全部测试通过；含一个用 mock fetcher 的集成测试。
+
 ## Milestone P9: Automation Gates
 
 ### P9-01 Decision Log Infrastructure

@@ -22,6 +22,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from api.dashboard import router as dashboard_router  # noqa: E402
+from api.symbol import router as symbol_router  # noqa: E402
 
 
 def create_app() -> FastAPI:
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(dashboard_router, prefix="/api")
+    app.include_router(symbol_router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict:

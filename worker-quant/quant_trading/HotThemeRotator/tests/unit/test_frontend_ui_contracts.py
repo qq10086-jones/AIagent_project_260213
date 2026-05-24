@@ -37,3 +37,52 @@ def test_v2_page_paper_background_extends_with_scrolled_content():
     v2 = read_frontend_file("frontend/v2.jsx")
 
     assert 'alignItems: "flex-start"' in v2
+
+
+# ─── P8-18 Interactive Exploration Layer (Rule 11) ───────────────────────────
+
+
+def test_shared_jsx_exports_p8_18_hooks():
+    """Three hooks must be defined and exported on `window` for cross-file use."""
+    shared = read_frontend_file("frontend/shared.jsx")
+
+    for sym in ("useSelectedSymbol", "useSymbolKline", "useSymbolProfile"):
+        assert f"function {sym}(" in shared, f"missing hook definition: {sym}"
+        assert sym in shared.split("Object.assign(window,")[1], f"hook not exported: {sym}"
+
+
+def test_shared_jsx_hooks_are_get_only():
+    """Rule 11.2 — hooks may only GET from /api/symbol/{ticker}/* paths."""
+    shared = read_frontend_file("frontend/shared.jsx")
+
+    # No POST / PUT / DELETE / PATCH inside hooks.
+    for method in ('"POST"', '"PUT"', '"DELETE"', '"PATCH"',
+                   "method: 'POST'", "method: 'PUT'", "method: 'DELETE'", "method: 'PATCH'"):
+        assert method not in shared, f"forbidden write method appeared in shared.jsx: {method}"
+
+
+def test_v1_uses_selected_symbol_hook_and_passes_klinebars():
+    """V1 must drive K-line and hero from selectedSymbol, not data.candidates[0] only."""
+    v1 = read_frontend_file("frontend/v1.jsx")
+
+    assert "useSelectedSymbol" in v1
+    assert "useSymbolKline" in v1
+    assert "klineBars" in v1
+    # CandidateRowMini must receive onClick + active
+    assert "active={c.symbol === top.symbol}" in v1
+    assert "onClick={() => setSelectedSymbol(c.symbol)}" in v1
+
+
+def test_v3_candidate_rows_clickable_and_drive_leader_card():
+    v3 = read_frontend_file("frontend/v3.jsx")
+
+    assert "useSelectedSymbol" in v3
+    assert "active={c.symbol === top.symbol}" in v3
+    assert "onClick={() => setSelectedSymbol(c.symbol)}" in v3
+
+
+def test_v1_v3_localstorage_key_is_htr_symbol():
+    """Rule 11.3 — selection persists to localStorage user-state only."""
+    shared = read_frontend_file("frontend/shared.jsx")
+    assert 'localStorage.getItem("htr_symbol")' in shared
+    assert 'localStorage.setItem("htr_symbol"' in shared

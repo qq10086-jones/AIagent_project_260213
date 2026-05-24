@@ -4,9 +4,10 @@
 
 function V3MarketDashboard() {
   const data = window.HTR_DATA;
-  const top = data.candidates[0];
-  // Q5 fix — useTickingPrice was synthetic jitter, not a live feed. Use the
-  // real close until a real intraday_quotes adapter is wired.
+  // P8-18 — selected symbol drives the leader card; defaults to top1.
+  const defaultSymbol = data.candidates[0]?.symbol || "";
+  const [selectedSymbol, setSelectedSymbol] = useSelectedSymbol(defaultSymbol);
+  const top = data.candidates.find((c) => c.symbol === selectedSymbol) || data.candidates[0];
   const livePrice = top.price;
 
   return (
@@ -45,7 +46,7 @@ function V3MarketDashboard() {
           <V3LeaderCard candidate={top} livePrice={livePrice} />
 
           <div className="htr-card" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-            <CardHead title="候选清单" sub={`Top ${data.candidates.length} · 按研究分排序`} />
+            <CardHead title="候选清单" sub={`点击切换 · 当前 ${top.symbol}`} />
             <div style={{
               display: "grid", gridTemplateColumns: "50px 100px 1fr 90px 90px 80px 64px",
               gap: 10, padding: "6px 12px",
@@ -59,7 +60,15 @@ function V3MarketDashboard() {
               <div></div>
             </div>
             <div style={{ flex: 1, overflow: "auto" }}>
-              {data.candidates.map((c) => <CandidateRow key={c.symbol} c={c} dense />)}
+              {data.candidates.map((c) => (
+                <CandidateRow
+                  key={c.symbol}
+                  c={c}
+                  dense
+                  active={c.symbol === top.symbol}
+                  onClick={() => setSelectedSymbol(c.symbol)}
+                />
+              ))}
             </div>
           </div>
         </div>

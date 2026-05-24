@@ -4,12 +4,17 @@
 
 function V1ProTerminal() {
   const data = window.HTR_DATA;
-  const top = data.candidates[0];
-  // Q5 fix — useTickingPrice was a synthetic random-walk animation, not a
-  // real tick feed. JP market closed but the simulation kept jittering and
-  // looked like live data. Now `livePrice` is just the actual close; a real
-  // `intraday_quotes` adapter is a separate future task.
+  // P8-18 — selected symbol comes from localStorage; default to top1.
+  const defaultSymbol = data.candidates[0]?.symbol || "";
+  const [selectedSymbol, setSelectedSymbol] = useSelectedSymbol(defaultSymbol);
+  // Resolve the selected candidate; fall back to top1 if the persisted symbol
+  // isn't in today's candidate set (e.g., user previously selected a holding).
+  const selectedCandidate = data.candidates.find((c) => c.symbol === selectedSymbol) || data.candidates[0];
+  const top = selectedCandidate;
   const livePrice = top.price;
+  // Live K-line for the selected symbol; while loading or on error,
+  // `fallback` keeps the hero K-line painted with the initial dashboard load.
+  const kline = useSymbolKline(top.symbol, { sessions: 252, fallback: data.kline });
 
   return (
     <div className="htr" style={{
@@ -44,7 +49,7 @@ function V1ProTerminal() {
         <div style={{ display: "grid", gridTemplateRows: "auto 1fr auto", gap: 10, minHeight: 0 }}>
           <HeroHeader candidate={top} livePrice={livePrice} />
 
-          <V1KLineLadderPanel data={data} top={top} chartLadder={top.ladder} />
+          <V1KLineLadderPanel data={data} top={top} chartLadder={top.ladder} klineBars={kline.bars} klineLoading={kline.loading} />
 
           <ActionZone candidate={top} livePrice={livePrice} />
         </div>
@@ -56,9 +61,16 @@ function V1ProTerminal() {
               <NewsTimeline items={data.newsTimeline} max={5} compact />
             </div>
           </Panel>
-          <Panel title="候选清单" sub="Top 6">
+          <Panel title="候选清单" sub={`点击切换 · 当前 ${top.symbol}`}>
             <div style={{ background: "var(--htr-surface)", overflow: "auto" }}>
-              {data.candidates.map((c) => <CandidateRowMini key={c.symbol} c={c} />)}
+              {data.candidates.map((c) => (
+                <CandidateRowMini
+                  key={c.symbol}
+                  c={c}
+                  active={c.symbol === top.symbol}
+                  onClick={() => setSelectedSymbol(c.symbol)}
+                />
+              ))}
             </div>
           </Panel>
           <Panel title="决策日志 · §8.6" sub={data.meta.tradeDate}>
@@ -140,13 +152,15 @@ function SessionStrip() {
 
 // P8-17 — K-line panel with a dedicated ladder rail. The chart no longer
 // spends right padding on seven text labels; the rail owns ladder readability.
-function V1KLineLadderPanel({ data, top, chartLadder }) {
+// P8-18 — klineBars + klineLoading flow from the symbol-switch hook in the parent.
+function V1KLineLadderPanel({ data, top, chartLadder, klineBars, klineLoading }) {
   const [boxRef, { width, height }] = useElementSize();
   const ready = width > 240 && height > 200;
+  const bars = (klineBars && klineBars.length) ? klineBars : data.kline;
   return (
     <Panel
       title={<span>价格走势 · <Term>七档阶梯</Term></span>}
-      sub={`${data.kline.length} sessions · ${top.symbol}`}
+      sub={`${bars.length} sessions · ${top.symbol}${klineLoading ? " · 加载中" : ""}`}
       right={<span className="htr-chip">研究模式 · <Term>MA20</Term>/<Term>MA60</Term> · <Term k="52w 高">52w 高低</Term></span>}
     >
       <div style={{
@@ -160,7 +174,7 @@ function V1KLineLadderPanel({ data, top, chartLadder }) {
         }}>
           {ready && (
             <KLineChart
-              data={data.kline}
+              data={bars}
               ladder={null}
               width={width - 12}
               height={height - 12}
@@ -387,16 +401,28 @@ function ActionRow({ label, price, pct, tone }) {
   );
 }
 
-function CandidateRowMini({ c }) {
+function CandidateRowMini({ c, active = false, onClick }) {
+  // P8-18 — clickable row switches the selected symbol. Rule 11.1 allowed
+  // interaction: drill into any candidate. The click only writes localStorage
+  // (user-state); nothing hits the decision log.
+  const interactive = typeof onClick === "function";
   return (
-    <div style={{
-      display: "grid", gridTemplateColumns: "20px 64px 1fr 46px 32px",
-      gap: 8, alignItems: "center",
-      padding: "6px 10px",
-      borderBottom: "1px solid var(--htr-line-soft)",
-      background: c.rank === 1 ? "var(--htr-accent-soft)" : "transparent",
-      fontSize: 11,
-    }}>
+    <div
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={interactive ? onClick : undefined}
+      onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
+      style={{
+        display: "grid", gridTemplateColumns: "20px 64px 1fr 46px 32px",
+        gap: 8, alignItems: "center",
+        padding: "6px 10px",
+        borderBottom: "1px solid var(--htr-line-soft)",
+        borderLeft: active ? "3px solid var(--htr-accent)" : "3px solid transparent",
+        background: active ? "var(--htr-accent-soft)"
+                  : c.rank === 1 ? "var(--htr-bg)" : "transparent",
+        fontSize: 11, cursor: interactive ? "pointer" : "default",
+        userSelect: "none",
+      }}>
       <span style={{ fontFamily: "var(--htr-font-mono)", color: "var(--htr-ink-3)" }}>#{c.rank}</span>
       <span style={{ fontFamily: "var(--htr-font-mono)", fontWeight: 700 }}>{c.symbol}</span>
       <span style={{ color: "var(--htr-ink-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

@@ -803,17 +803,28 @@ function ThemeHeatBars({ themes }) {
 // CandidateRow — used in lists
 // ─────────────────────────────────────────────────────────────────────────────
 
-function CandidateRow({ c, dense = false, onClick }) {
+function CandidateRow({ c, dense = false, onClick, active = false }) {
+  // P8-18 — `active` highlights the user's currently selected symbol (drives
+  // the leader card / K-line drill). Keyboard accessible when interactive.
+  const interactive = typeof onClick === "function";
   return (
-    <div onClick={onClick} style={{
-      display: "grid",
-      gridTemplateColumns: "28px 76px 1fr 80px 70px 56px",
-      gap: 10, alignItems: "center",
-      padding: dense ? "6px 10px" : "9px 12px",
-      borderBottom: "1px solid var(--htr-line-soft)",
-      cursor: onClick ? "pointer" : "default",
-      background: c.rank === 1 ? "var(--htr-surface-2)" : "transparent",
-    }}>
+    <div
+      onClick={interactive ? onClick : undefined}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "28px 76px 1fr 80px 70px 56px",
+        gap: 10, alignItems: "center",
+        padding: dense ? "6px 10px" : "9px 12px",
+        borderBottom: "1px solid var(--htr-line-soft)",
+        borderLeft: active ? "3px solid var(--htr-accent)" : "3px solid transparent",
+        cursor: interactive ? "pointer" : "default",
+        background: active ? "var(--htr-accent-soft)"
+                  : c.rank === 1 ? "var(--htr-surface-2)" : "transparent",
+        userSelect: "none",
+      }}>
       <div style={{ fontFamily: "var(--htr-font-mono)", fontSize: 11, color: "var(--htr-ink-3)" }}>
         #{String(c.rank).padStart(2, "0")}
       </div>
@@ -1016,11 +1027,92 @@ function Term({ children, k }) {
   );
 }
 
+// ─── P8-18 Interactive Exploration Hooks (Rule 11) ──────────────────────────
+// All three hooks are pure read-only — they GET from /api/symbol/{ticker}/*
+// and never POST. Selection lives in localStorage (user-state, Rule 11.3).
+
+function useSelectedSymbol(defaultSymbol) {
+  // Read once from localStorage on mount; if absent, use the prop default
+  // (typically `candidates[0].symbol`). Never persist a falsy value.
+  const [symbol, setSymbol] = React.useState(() => {
+    try {
+      const stored = typeof localStorage !== "undefined" && localStorage.getItem("htr_symbol");
+      return stored || defaultSymbol || "";
+    } catch (_e) {
+      return defaultSymbol || "";
+    }
+  });
+  React.useEffect(() => {
+    if (!symbol) return;
+    try { localStorage.setItem("htr_symbol", symbol); } catch (_e) { /* ignore */ }
+  }, [symbol]);
+  return [symbol, setSymbol];
+}
+
+function useSymbolKline(symbol, { sessions = 252, fallback = null } = {}) {
+  // Fetches /api/symbol/{ticker}/kline?sessions=N on every `symbol` change.
+  // While loading or on error, returns `fallback` (typically the dashboard's
+  // initial kline) so the chart never goes blank during transitions.
+  const [state, setState] = React.useState({
+    bars: fallback || [], loading: !!symbol, error: null, source: "fallback",
+  });
+  React.useEffect(() => {
+    if (!symbol) {
+      setState({ bars: fallback || [], loading: false, error: null, source: "fallback" });
+      return;
+    }
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    fetch(`/api/symbol/${encodeURIComponent(symbol)}/kline?sessions=${sessions}`, { cache: "no-store" })
+      .then((r) => {
+        if (!r.ok) throw new Error(`API ${r.status}`);
+        return r.json();
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        setState({ bars: payload.bars, loading: false, error: null, source: "api" });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setState({ bars: fallback || [], loading: false, error: err.message, source: "fallback" });
+      });
+    return () => { cancelled = true; };
+  }, [symbol, sessions]);
+  return state;
+}
+
+function useSymbolProfile(symbol) {
+  const [state, setState] = React.useState({
+    profile: null, loading: !!symbol, error: null,
+  });
+  React.useEffect(() => {
+    if (!symbol) { setState({ profile: null, loading: false, error: null }); return; }
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    fetch(`/api/symbol/${encodeURIComponent(symbol)}/profile`, { cache: "no-store" })
+      .then((r) => {
+        if (!r.ok) throw new Error(`API ${r.status}`);
+        return r.json();
+      })
+      .then((profile) => {
+        if (cancelled) return;
+        setState({ profile, loading: false, error: null });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setState({ profile: null, loading: false, error: err.message });
+      });
+    return () => { cancelled = true; };
+  }, [symbol]);
+  return state;
+}
+
 // Export to window for cross-file Babel use
 Object.assign(window, {
   AnimatedPrice, Sparkline, TempGauge, MarketTempCell,
   CalibrationBadge, KLineChart, VerticalLadder, NewsTimeline,
   GateFlow, ThemeHeatBars, CandidateRow, ScoreBar, DecisionLog,
   useTickingPrice, Term, GLOSSARY, useElementSize,
+  useSelectedSymbol, useSymbolKline, useSymbolProfile,
   HTR: { fmtPrice, fmtPct, changeClass, arrow },
 });

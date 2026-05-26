@@ -44,6 +44,17 @@ class FunnelError(ValueError):
 
 @dataclass(frozen=True)
 class FunnelStage:
+    """One stage of the alert pipeline.
+
+    ``drop_reasons`` documents reasons that caused candidates to leave the
+    **upstream** stage and NOT reach this one. Convention: keys are reason
+    codes (machine-readable strings like ``"below_threshold"``), values are
+    candidate counts. When non-empty, ``sum(drop_reasons.values())`` MUST
+    equal ``upstream.count - this_stage.count`` (Patch M13 reconcile, checked
+    at ``FunnelReport.__post_init__``). Stage 0 has no upstream, so its
+    ``drop_reasons`` is ignored at the reconcile step.
+    """
+
     name: str
     count: int
     drop_reasons: Mapping[str, int] = field(default_factory=dict)
@@ -85,6 +96,21 @@ class FunnelReport:
                     f"stage {self.stages[i].name!r} count ({self.stages[i].count}) "
                     f"exceeds upstream {self.stages[i-1].name!r} count "
                     f"({self.stages[i-1].count}) — funnel must be monotonic"
+                )
+        # Patch M13: drop_reasons must reconcile to inter-stage loss when supplied.
+        # Stage 0 has no upstream, so its drop_reasons is not reconciled here.
+        for i in range(1, len(self.stages)):
+            stage = self.stages[i]
+            if not stage.drop_reasons:
+                continue
+            expected_loss = self.stages[i - 1].count - stage.count
+            total = sum(stage.drop_reasons.values())
+            if total != expected_loss:
+                raise FunnelError(
+                    f"stage {stage.name!r} drop_reasons sum ({total}) does not "
+                    f"reconcile with upstream loss "
+                    f"({self.stages[i-1].name!r}.count - {stage.name!r}.count "
+                    f"= {expected_loss})"
                 )
 
 

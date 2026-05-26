@@ -112,7 +112,14 @@ def compute_ablation(
 def rank_contributions(
     contributions: Sequence[AblationContribution],
 ) -> tuple[AblationContribution, ...]:
-    """Sort contributions by marginal_recovery descending (stable on ties)."""
+    """Sort contributions by marginal_recovery descending.
+
+    Patch L8 (Codex review #3, 2026-05-26): ties are broken lexicographically
+    by ``intervention`` name — NOT by Python-stable input order. This makes
+    the ranking deterministic across runs regardless of input order, which is
+    what the UI needs for consistent display. Callers who need input-order
+    stability should sort separately on input order before ranking.
+    """
     return tuple(sorted(
         contributions,
         key=lambda c: (-c.marginal_recovery, c.intervention),

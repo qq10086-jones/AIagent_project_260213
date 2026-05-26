@@ -15,6 +15,12 @@ endpoint integration are deferred to a later cycle.
 """
 from __future__ import annotations
 
+from hot_theme_rotator.llm.ollama_client import (
+    DEFAULT_OLLAMA_HOST,
+    OllamaClient,
+    OllamaUnreachableError,
+    compute_cache_key,
+)
 from hot_theme_rotator.llm.reflection_brief import (
     LlmClient,
     ReflectionBrief,
@@ -27,10 +33,14 @@ from hot_theme_rotator.llm.reflection_brief import (
 )
 
 __all__ = [
+    "DEFAULT_OLLAMA_HOST",
     "LlmClient",
+    "OllamaClient",
+    "OllamaUnreachableError",
     "ReflectionBrief",
     "ReflectionBriefError",
     "ReflectionBriefInput",
+    "compute_cache_key",
     "forbidden_pattern",
     "generate_reflection_brief",
     "regex_check_narrative",

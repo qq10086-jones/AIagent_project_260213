@@ -39,6 +39,11 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from hot_theme_rotator.common.schema import PriceBar  # noqa: E402
+from hot_theme_rotator.data.external.realtime_price.health import (  # noqa: E402
+    PriceSourceHealth,
+    price_health_report_path,
+    read_price_health_report,
+)
 from hot_theme_rotator.data.kline_adapter import (  # noqa: E402
     KlineAdapterError,
     default_db_path,
@@ -194,12 +199,65 @@ def render_watchlist_block(
     return lines
 
 
+def render_price_health_block(
+    rows: Sequence[PriceSourceHealth],
+    *,
+    watchlist: Sequence[str] | None = None,
+) -> list[str]:
+    """Format price-source health rows as briefing lines (P10-19 integration).
+
+    Output: one line per (symbol, source) showing ok/fail + price + freshness
+    caveat. If ``watchlist`` is provided, rows for symbols outside it are
+    omitted (keeps briefing focused on user's actual coverage).
+    """
+    if not rows:
+        return ["  (no price health data available)"]
+    wl = set(watchlist) if watchlist else None
+    lines: list[str] = []
+    # Group by symbol preserving first-appearance order.
+    by_symbol: dict[str, list[PriceSourceHealth]] = {}
+    for r in rows:
+        if wl is not None and r.symbol not in wl:
+            continue
+        by_symbol.setdefault(r.symbol, []).append(r)
+    if not by_symbol:
+        return ["  (no price health data for watchlist symbols)"]
+    for symbol, srows in by_symbol.items():
+        ok_count = sum(1 for r in srows if r.ok)
+        if ok_count == 0:
+            lines.append(f"  {symbol}:  ALL SOURCES FAILED ({len(srows)} probed)")
+            for r in srows:
+                reason = r.fail_reason or "no reason recorded"
+                lines.append(f"    - {r.source}: {reason}")
+            continue
+        # At least one ok.
+        for r in srows:
+            if r.ok:
+                price_txt = (
+                    f"¥{r.price:.2f}" if r.price is not None else "no price"
+                )
+                caveats: list[str] = []
+                if r.data_ts_inferred:
+                    caveats.append("ts inferred")
+                if r.price_uncertain:
+                    caveats.append("price uncertain")
+                caveat_txt = f" [{', '.join(caveats)}]" if caveats else ""
+                lines.append(
+                    f"  {symbol}:  {r.source} {price_txt}{caveat_txt}"
+                )
+            else:
+                reason = r.fail_reason or "no reason recorded"
+                lines.append(f"  {symbol}:  {r.source} FAIL ({reason})")
+    return lines
+
+
 def render_briefing(
     *,
     watchlist: Sequence[str],
     portfolio,
     fetcher: QuoteFetcher,
     source_label: str,
+    price_health_rows: Sequence[PriceSourceHealth] | None = None,
 ) -> str:
     """Compose the full briefing text."""
     portfolio_symbols = {h.symbol for h in portfolio.holdings} if portfolio else set()
@@ -219,6 +277,13 @@ def render_briefing(
     out.append("")
     out.append("  WATCHLIST · 7-tier ladders")
     out.extend(render_watchlist_block(watchlist, fetcher, portfolio_symbols))
+    if price_health_rows is not None:
+        out.append("")
+        out.append("  PRICE-SOURCE HEALTH (P10-19, observability-only)")
+        out.extend(render_price_health_block(
+            price_health_rows,
+            watchlist=list(watchlist) + sorted(portfolio_symbols),
+        ))
     out.append(SECTION_DIV)
     out.append(FOOTER_REMINDER)
     out.append(SECTION_DIV)
@@ -261,6 +326,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_STRATEGY_ID,
         help="Portfolio strategy_id to load (default: etf_buyhold = your Path A live).",
     )
+    p.add_argument(
+        "--price-health-date",
+        default=None,
+        help=(
+            "If set (ISO YYYY-MM-DD), append a PRICE-SOURCE HEALTH section from "
+            "reports/observability/price_health/{date}.json (P10-19 output). "
+            "If the report doesn't exist, the section is silently skipped."
+        ),
+    )
     return p
 
 
@@ -285,11 +359,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"warning: could not load portfolio ({args.strategy}): {exc}", file=sys.stderr)
         portfolio = None
 
+    price_health_rows: Sequence[PriceSourceHealth] | None = None
+    if args.price_health_date:
+        try:
+            health_path = price_health_report_path(args.price_health_date)
+            if health_path.exists():
+                price_health_rows = read_price_health_report(args.price_health_date)
+        except (ValueError, OSError) as exc:
+            print(
+                f"warning: could not load price health report "
+                f"({args.price_health_date}): {exc}",
+                file=sys.stderr,
+            )
+
     text = render_briefing(
         watchlist=watchlist,
         portfolio=portfolio,
         fetcher=fetcher,
         source_label=source_label,
+        price_health_rows=price_health_rows,
     )
     # Windows default cp932 cannot encode CJK + middle-dot used by the
     # briefing. Force UTF-8 on stdout so a Windows shell run still prints.

@@ -108,9 +108,10 @@ src/hot_theme_rotator/
                       #   decision_gate.py (L6, P11-06 done — Rule 13.5-13.9 enforced)
                       #   meta_reflection.py (L7, P11-07 done — Rule 13.10 trigger detection)
                       #   存储 reports/{traces,reflections/{proposals,accepted,rejected,expired}}/
-  llm/                # P10-06 pending + P11-05 done (gemma4:e4b default), Rule 8.3.1 + 13.4 enforce.
-                      #   reflection_brief.py (P11-05 done — narrative + Rule 8.3 regex + conditional language)
-                      #   per_ticker_brief.py / ollama_client.py 真实集成归 P10-06 后续 cycle
+  llm/                # P11-05 done + Ollama integration done; P10-06 per-ticker brief still pending.
+                      #   reflection_brief.py (P11-05 — narrative + Rule 8.3 regex + conditional language)
+                      #   ollama_client.py (W7 — real urllib HTTP client + 24h file cache + OllamaUnreachableError)
+                      #   per_ticker_brief.py 归 P10-06 后续 cycle (复用 OllamaClient)
   alerts/notifiers/   # P10-10 done。GuardedAlert envelope + 三个 channel (desktop/email/telegram) stub。
                       #   notifications_enabled 默认 False；只接受 push_allowed=True 的 GuardedAlert (Rule 12 type-enforced)。
                       #   alerts/discipline.py holds P10-18 Rule 12.1-12.6 evaluator + cross-strategy journal writer (Rule 12.6 / 8.9).

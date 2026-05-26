@@ -10,7 +10,7 @@ Frontend renders these as "数据未就绪" placeholders until upstream lands.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -45,10 +45,16 @@ from hot_theme_rotator.data.universe_adapter import (
     default_selected_tickers_path,
     load_screener_snapshot,
 )
+from hot_theme_rotator.data.external.realtime_price.health import read_price_health_report
+from hot_theme_rotator.data.external.tdnet_storage import read_disclosures
+from hot_theme_rotator.watchlist_intelligence.silent_queue import read_silent_events
 from hot_theme_rotator.opportunity.price_ladder import build_price_ladder
 from hot_theme_rotator.decision_log.jsonl_writer import read_predictions
 from hot_theme_rotator.opportunity.opportunity_scanner import OpportunityCandidate
 from hot_theme_rotator.opportunity.price_ladder import PriceLadder
+from hot_theme_rotator.reporting.daily_advisory_cockpit import (
+    build_daily_advisory_cockpit,
+)
 from hot_theme_rotator.reporting.realtime_opportunity_panel import OpportunityPanelRow
 from hot_theme_rotator.ui.opportunity_dashboard import (
     DashboardPanel,
@@ -63,6 +69,7 @@ def build_dashboard_payload(
     *,
     base_dir: Path,
     top_n: int = 10,
+    cockpit_trade_date: str | None = None,
 ) -> dict[str, Any]:
     """Build the /api/dashboard response payload from the Python data layer.
 
@@ -72,6 +79,7 @@ def build_dashboard_payload(
     Frontend sees the same shape; only the underlying source differs.
     """
     candidates, top_symbol, trade_date, candidates_source = _real_or_sample_candidates(top_n=top_n)
+    observation_date = cockpit_trade_date or date.today().isoformat()
     markets = _serialize_markets()
     themes = _serialize_themes()
     news = _serialize_news()
@@ -92,6 +100,11 @@ def build_dashboard_payload(
         "decisionLog": _serialize_decision_log(base_dir=base_dir, trade_date=trade_date),
         "kline": _serialize_kline(symbol=top_symbol, sessions=252),  # P8-14 + P8-16 C2: 1y window for MA60 / 52w lines
         "positions": _serialize_positions(),  # P8-10
+        "dailyCockpit": _serialize_daily_cockpit(
+            base_dir=base_dir,
+            trade_date=observation_date,
+            watchlist=_watchlist_symbols(candidates, top_symbol),
+        ),
     }
 
 
@@ -153,6 +166,46 @@ def _serialize_news() -> list[dict[str, Any]]:
         }
         for r in rows
     ]
+
+
+def _serialize_daily_cockpit(
+    *,
+    base_dir: Path,
+    trade_date: str,
+    watchlist: tuple[str, ...],
+) -> dict[str, Any]:
+    try:
+        price_health = read_price_health_report(trade_date, base_dir=base_dir)
+    except Exception:
+        price_health = ()
+    try:
+        disclosures = tuple(
+            item.to_dict() for item in read_disclosures(trade_date=trade_date, base_dir=base_dir)
+        )
+    except Exception:
+        disclosures = ()
+    try:
+        silent_events = tuple(item.to_dict() for item in read_silent_events(trade_date, base_dir=base_dir))
+    except Exception:
+        silent_events = ()
+    return build_daily_advisory_cockpit(
+        trade_date=trade_date,
+        watchlist=watchlist,
+        price_health_rows=price_health,
+        tdnet_disclosures=disclosures,
+        silent_queue_rows=silent_events,
+    )
+
+
+def _watchlist_symbols(candidates: list[dict[str, Any]], top_symbol: str) -> tuple[str, ...]:
+    symbols: list[str] = []
+    if top_symbol:
+        symbols.append(top_symbol)
+    for candidate in candidates[:10]:
+        symbol = str(candidate.get("symbol", ""))
+        if symbol and symbol not in symbols:
+            symbols.append(symbol)
+    return tuple(symbols)
 
 
 def _format_ts_jst(iso_ts: str) -> str:

@@ -12,9 +12,11 @@ function V1ProTerminal() {
   const selectedCandidate = data.candidates.find((c) => c.symbol === selectedSymbol) || data.candidates[0];
   const top = selectedCandidate;
   const livePrice = top.price;
-  // Live K-line for the selected symbol; while loading or on error,
-  // `fallback` keeps the hero K-line painted with the initial dashboard load.
-  const kline = useSymbolKline(top.symbol, { sessions: 252, fallback: data.kline });
+  // Live K-line for the selected symbol. The dashboard fallback only belongs
+  // to the initial top symbol; using it for another symbol would mislabel the
+  // chart if /api/symbol/* is unavailable.
+  const fallbackKline = top.symbol === defaultSymbol ? data.kline : [];
+  const kline = useSymbolKline(top.symbol, { sessions: 252, fallback: fallbackKline });
 
   return (
     <div className="htr" style={{
@@ -49,18 +51,19 @@ function V1ProTerminal() {
         <div style={{ display: "grid", gridTemplateRows: "auto 1fr auto", gap: 10, minHeight: 0 }}>
           <HeroHeader candidate={top} livePrice={livePrice} />
 
-          <V1KLineLadderPanel data={data} top={top} chartLadder={top.ladder} klineBars={kline.bars} klineLoading={kline.loading} />
+          <V1KLineLadderPanel data={data} top={top} chartLadder={top.ladder} klineBars={kline.bars} klineLoading={kline.loading} klineError={kline.error} />
 
           <ActionZone candidate={top} livePrice={livePrice} />
         </div>
 
         {/* Right rail */}
-        <div style={{ display: "grid", gridTemplateRows: "auto 1fr auto", gap: 10, minHeight: 0 }}>
+        <div style={{ display: "grid", gridTemplateRows: "auto auto 1fr auto", gap: 10, minHeight: 0 }}>
           <Panel title="新闻催化" sub="News Catalyst · 6h">
             <div style={{ padding: "4px 12px 8px", maxHeight: 240, overflow: "auto" }}>
               <NewsTimeline items={data.newsTimeline} max={5} compact />
             </div>
           </Panel>
+          <V1DailyCockpitPanel cockpit={data.dailyCockpit} />
           <Panel title="候选清单" sub={`点击切换 · 当前 ${top.symbol}`}>
             <div style={{ background: "var(--htr-surface)", overflow: "auto" }}>
               {data.candidates.map((c) => (
@@ -127,6 +130,56 @@ function V1TopBar({ asof, refresh }) {
   );
 }
 
+function V1DailyCockpitPanel({ cockpit }) {
+  const rows = cockpit?.watchlist || [];
+  const summary = cockpit?.summary || {};
+  const stage = cockpit ? cockpit.activationStage : "stage_0_pull_only";
+  const blocked = cockpit && (cockpit.notificationsInvoked || cockpit.execution?.orders || cockpit.execution?.broker);
+  return (
+    <Panel
+      title="Daily Cockpit"
+      sub={stage}
+      right={<span className={blocked ? "htr-chip bear" : "htr-chip bull"}>{blocked ? "blocked" : "pull only"}</span>}
+    >
+      <div style={{ padding: "8px 12px", display: "grid", gap: 7 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+          <V1CockpitMetric label="watch" value={summary.watchlistCount ?? rows.length} />
+          <V1CockpitMetric label="quote" value={summary.symbolsWithQuotes ?? 0} />
+          <V1CockpitMetric label="silent" value={summary.silentQueueCount ?? 0} />
+        </div>
+        <div style={{ display: "grid", gap: 4, maxHeight: 86, overflow: "auto" }}>
+          {rows.slice(0, 4).map((row) => (
+            <div key={row.symbol} style={{
+              display: "grid", gridTemplateColumns: "58px 1fr auto", gap: 6,
+              alignItems: "center", fontSize: 10.5,
+            }}>
+              <span className="htr-mono" style={{ fontWeight: 700 }}>{row.symbol}</span>
+              <span style={{ color: "var(--htr-ink-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {row.quoteStatus || "unavailable"}
+              </span>
+              <span className={row.quoteStatus === "ok" ? "htr-chip bull" : "htr-chip warn"}>
+                TDnet {row.tdnetCount || 0}
+              </span>
+            </div>
+          ))}
+          {rows.length === 0 && (
+            <div style={{ fontSize: 10.5, color: "var(--htr-ink-3)" }}>watchlist empty</div>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function V1CockpitMetric({ label, value }) {
+  return (
+    <div style={{ background: "var(--htr-surface-2)", border: "1px solid var(--htr-line)", borderRadius: 4, padding: "5px 6px" }}>
+      <div className="htr-num" style={{ fontSize: 14, fontWeight: 800 }}>{value}</div>
+      <div style={{ fontSize: 9.5, color: "var(--htr-ink-3)", letterSpacing: "0.06em" }}>{label}</div>
+    </div>
+  );
+}
+
 function SessionStrip() {
   const sessions = [
     { label: "Tokyo", state: "OPEN",   t: "09:00–11:30 · 12:30–15:00" },
@@ -153,10 +206,11 @@ function SessionStrip() {
 // P8-17 — K-line panel with a dedicated ladder rail. The chart no longer
 // spends right padding on seven text labels; the rail owns ladder readability.
 // P8-18 — klineBars + klineLoading flow from the symbol-switch hook in the parent.
-function V1KLineLadderPanel({ data, top, chartLadder, klineBars, klineLoading }) {
+function V1KLineLadderPanel({ data, top, chartLadder, klineBars, klineLoading, klineError }) {
   const [boxRef, { width, height }] = useElementSize();
   const ready = width > 240 && height > 200;
-  const bars = (klineBars && klineBars.length) ? klineBars : data.kline;
+  const bars = (klineBars && klineBars.length) ? klineBars : [];
+  const statusText = klineLoading ? " - loading" : klineError ? ` - K-line unavailable: ${klineError}` : "";
   return (
     <Panel
       title={<span>价格走势 · <Term>七档阶梯</Term></span>}
@@ -172,8 +226,9 @@ function V1KLineLadderPanel({ data, top, chartLadder, klineBars, klineLoading })
           minWidth: 0, minHeight: 0,
           display: "flex", alignItems: "stretch", justifyContent: "stretch",
         }}>
-          {ready && (
+          {ready && bars.length > 0 && (
             <KLineChart
+              key={top.symbol}
               data={bars}
               ladder={null}
               width={width - 12}
@@ -181,6 +236,15 @@ function V1KLineLadderPanel({ data, top, chartLadder, klineBars, klineLoading })
               padding={{ top: 18, right: 28, bottom: 22, left: 12 }}
               withVolume withMA with52wLines
             />
+          )}
+          {ready && bars.length === 0 && (
+            <div style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+              border: "1px dashed var(--htr-line)", background: "var(--htr-surface-2)",
+              color: "var(--htr-ink-3)", fontSize: 12,
+            }}>
+              {top.symbol} K-line data unavailable
+            </div>
           )}
         </div>
         <V1LadderRail ladder={chartLadder} currentPrice={top.price} />

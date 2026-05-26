@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "company_code": "67790",
+      "pubdate": "2026-05-25T08:30:00+09:00",
+      "company_name": "日本電波工業株式会社",
+      "title": "業績予想の修正に関するお知らせ",
+      "url": "https://www.release.tdnet.info/inbs/140120260525000001.pdf",
+      "markets": "東P"
+    },
+    {
+      "company_code": "13060",
+      "pubdate": "2026-05-25T15:00:00+09:00",
+      "company_name": "NEXT FUNDS TOPIX連動型上場投信",
+      "title": "配当金のお知らせ",
+      "url": "https://www.release.tdnet.info/inbs/140120260525000002.pdf",
+      "markets": "東P"
+    },
+    {
+      "company_code": "67680",
+      "pubdate": "2026-05-25T10:00:00+09:00",
+      "company_name": "タムラ製作所",
+      "title": "公開買付けに関する意見表明のお知らせ",
+      "url": "https://www.release.tdnet.info/inbs/140120260525000003.pdf",
+      "markets": "東P"
+    }
+  ]
+}

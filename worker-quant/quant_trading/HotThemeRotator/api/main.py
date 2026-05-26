@@ -43,12 +43,15 @@ def create_app() -> FastAPI:
             "http://127.0.0.1:5173",
         ],
         allow_credentials=False,
-        allow_methods=["GET"],
+        allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
 
+    from api.portfolio_fill import router as portfolio_router  # noqa: E402
+
     app.include_router(dashboard_router, prefix="/api")
     app.include_router(symbol_router, prefix="/api")
+    app.include_router(portfolio_router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict:

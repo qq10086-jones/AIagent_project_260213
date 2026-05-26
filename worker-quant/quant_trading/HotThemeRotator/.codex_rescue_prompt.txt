@@ -1,0 +1,152 @@
+Senior cross-discipline review of HotThemeRotator's Phase 1 v3 design — specifically the Reflection System (P11, 6-layer feedback architecture) and Real-Time Price Scraping (P10-19). Act as four roles simultaneously: (1) senior quantitative trader (2) mathematician (3) statistician (4) automatic control theory professor. Read-only review, no code changes. Find weaknesses, propose better alternatives, cite specific papers/textbooks where relevant. Aim: substantive critique with actionable improvements, not polite validation.
+
+## Project Context
+
+HotThemeRotator is a personal (single-user) quantitative trading advisory system for Japan equities. Live trading is forbidden (Rule 3 advice-only). User holds 1306.T (TOPIX ETF) 900 shares @ avg ¥403 in a Path A `etf_buyhold` passive strategy; HotThemeRotator is a separate short-term opportunity scanner. The user has been hitting "踏空" (FOMO / missed-opportunity) events — e.g., on 2026-05-25 user saw 6779.T NDK hit limit-up but system had no way to alert or explain the catalyst due to (a) 4-6 week stale screener/factor data and (b) zero proactive notification capability.
+
+The system is ~70% built. Already in place:
+- Decision log (P9-01): `PredictionRecord` with deterministic prediction_id, JSONL append-only at `reports/predictions/{date}.jsonl`
+- Outcome join (P9-02): T+5 join with real OHLC, produces `OutcomeRecord` with realized_returns (1D/3D/5D) and ladder_touches (7-tier)
+- Calibration engine (P9-03): Brier, log loss, equal-width reliability bins; status='calibrated' requires sample_count >= 100
+- Human alerts (P9-04): generates `AlertRecord` objects (no push channel yet)
+- Opportunity scanner with 7-tier price ladder (3 entries + stop + 3 exits)
+- 4 React dashboard variants + FastAPI read-only JSON layer
+- 422 pytest passing, 6 ADRs, 12 governance sections
+
+Critical governance constraints that CANNOT be relaxed:
+- Rule 3: advice-only, no execution path
+- Rule 8.2: PIT (point-in-time) mandatory — `available_ts > decision_cutoff` rejected, with Rule 8.2.1 carve-out only for one-time backdated calibration bootstrap (ADR-0006)
+- Rule 8.3: LLMs cannot invent win probabilities; Rule 8.3.1 carve-out allows narrative synthesis only, post-generation regex rejects any `\d+%` / "胜率" / "概率" / "probability" / "likelihood"
+- Rule 8.6.1: raw sample frequency may be displayed only with n >= 10, `uncalibrated_evidence` pill, never labeled as win rate
+- Rule 8.9: cross-strategy advisory must name both strategies + log to `meta_strategy_journal.jsonl` + max once per (symbol, week)
+- Rule 9.4: calibrated win rate label requires sample >= 100 + brier + log_loss
+- Section 12 (Rule 12.1-12.6): push discipline — alert budget 10/day, stale >2h fail-closed, intraday >10% chase filter downgrade to study_only, new watchlist 24h cooling-off, single-name >20% NAV concentration warning before BUY alert, cross-strategy trigger requires meta_strategy_journal write before push
+- §10 gate progression: candidate discovery → ranked panel → decision log → feedback join → calibration → human alerts → paper trading → broker execution. Currently gates 1-5 done, 6-7 pending, 8 hard-forbidden.
+
+User prefers gemma4:e4b for local LLM (~3GB VRAM, single GPU, single user — no background batches).
+
+## Design Under Review
+
+### Feature 1: Reflection System (proposed as new milestone P11)
+
+User intuition: "this is feedback control loop in automatic control". I formalized as:
+
+| Control theory | Quant reflection |
+|---|---|
+| Sensor | realized P&L / ladder touch / hit rate / slippage |
+| Setpoint | predicted score / expected ladder hit / expected win rate |
+| Comparator | actual - expected divergence (with statistical significance) |
+| Controller | proposed parameter / threshold / model adjustment |
+| Actuator | parameter update via Rule 4 (advice-only, never auto-apply) |
+
+Six reflection granularities (each needs different evidence + statistical test + actionable output):
+- Per-trade (micro): "I bought X at ¥100, exited at ¥97, why?"
+- Per-day: "Today 12 alerts, 3 fired, 0 acted, why?"
+- Per-strategy (weekly): "sprint hit rate 55% → 42% over 4 weeks, why?"
+- Per-regime (monthly+): "low-vol regime, chase filter triggers 5x baseline, config too tight?"
+- Counterfactual: "if I had bought when system suggested, what's the realized P&L?"
+- Missed-opportunity: "why didn't system flag 6779.T before limit-up?"
+
+Six-layer architecture:
+
+```
+Layer 6: Human Decision Gate (Rule 4 + Rule 13 enforcement)
+         Reflections are PROPOSALS, never auto-applied
+Layer 5: Reflection Report Generator (LLM narrative, Rule 8.3.1)
+         Numbers come from Layer 3-4, prose from LLM
+Layer 4: Root Cause Decomposer (Shapley value attribution)
+         Decompose miss/loss to module contributions (% per module)
+Layer 3: Counterfactual Replay Engine (Pearl do-calculus)
+         Mutate config (chase_threshold, alert_budget, etc.) + replay against real OHLC
+         Output: Pareto frontier of (P&L, miss-rate, alert-spam)
+Layer 2: Event Detector (CUSUM + SPC)
+         Statistical Process Control — trigger reflection only when CUSUM crosses 2σ from baseline
+Layer 1: Decision Trace Logger (mandatory infra)
+         Every (symbol, decision_cutoff) → full decision-chain trace at reports/traces/{date}/{trace_id}.jsonl
+```
+
+Mathematical tool choices:
+
+**Layer 2 - CUSUM (Cumulative Sum Control Chart)**:
+- Formula: S_t = max(0, S_{t-1} + (x_t - μ_0 - k)) where k = 0.5σ
+- Trigger: S_t > h (h = 4σ)
+- Rationale: sensitive to small persistent drift, insensitive to single-point noise
+- Holdout window after trigger to prevent thrashing
+
+**Layer 3 - Counterfactual replay (Pearl do-calculus)**:
+- P(Y | do(X = x)) ≠ P(Y | X = x)
+- Implementation: mutate config → re-run opportunity_scanner with `LegacyDailyPriceFetcher` real OHLC → measure counterfactual P&L
+- Config grid example: chase_threshold ∈ {5%, 8%, 10%, 12%, 15%}, alert_budget ∈ {5, 10, 15, 20}, cooling_off_hours ∈ {0, 12, 24, 48}
+- Output: Pareto frontier in (P&L, miss-rate, alert-spam) 3D space
+
+**Layer 4 - Shapley value attribution**:
+- φ_i(v) = Σ_{S⊆N\{i}} |S|!(n-|S|-1)!/n! × [v(S∪{i}) - v(S)]
+- Properties: efficiency (sum to total) + symmetry + linearity + null player
+- 5 modules (data freshness / scanner / filter / alert / notifier) → 2^5 = 32 subset replays
+- Approximation: Monte Carlo Shapley (100 random permutations) to avoid 32-cell exhaustive
+
+### Proposed Rule 13 (Reflection Discipline)
+
+```
+13.1: Reflection outputs are PROPOSALS, never auto-applied. Parameter updates require Rule 4 + user explicit confirm.
+13.2: Counterfactual MUST use P9-02 LegacyDailyPriceFetcher real historical OHLC. LLM is forbidden from generating "hypothetical past prices".
+13.3: CUSUM trigger requires cumulative sample >= 30 (event, outcome) pairs. Single-event panic-trigger forbidden.
+13.4: LLM Layer 5 inherits Rule 8.3.1 — no numeric probability output. Shapley values are attribution %, NOT win rate.
+13.5: Proposal expiry: Layer 6 proposal 7 days without accept/reject auto-expires to proposals/expired/.
+```
+
+### Feature 2: Real-Time Price Orchestrator (P10-19, smaller)
+
+User constraint: "no money, must be free. Real-time tick is paid. yfinance is 15-min delayed. Other free sources have ~5-min latency."
+
+Architecture: fallback chain
+```
+get_price(ticker):
+  1. cache_lookup (60s TTL)
+  2. try yahoo_japan_scrape          # ~5 min latency
+  3. on fail → twelvedata_api        # real-time but 800/day quota
+  4. on fail → kabutan_scrape        # ~5 min, backup
+  5. on fail → stooq_csv             # ~15 min, stable
+  6. on fail → yfinance              # 15 min, current default
+  7. all fail → fail-closed (Rule 12.2 stale fail-closed compatible)
+```
+
+Each layer returns + tags `source` + `data_ts` (source-claimed) + `wall_ts` (our fetch time) — enables Rule 12.2 staleness gate.
+
+## Phase 1 v3 Timeline
+
+- W1: P10-14 Cycle 2 (TDnet network) + P10-16 J-Quants Live + P10-19 realtime orchestrator
+- W2: P10-10 Notification + P10-17 Watchlist Intelligence
+- W3: P10-18 Anti-FOMO Guard (Section 12 implementation)
+- W4: P10-13 Backdated Calibration + P11-01 Decision Trace Logger
+- W5: P11-02 Event Detector + P11-03 Counterfactual Engine
+- W6: P11-04 Shapley + P11-05 LLM Reflection + P11-06 Human Gate
+- W7+: cleanup + P11-07 meta-reflection
+
+Estimated 6-7 weeks total.
+
+## Review Questions (please answer each explicitly)
+
+1. **Mathematical tool fitness**: CUSUM for Layer 2, Pearl do-calculus for Layer 3, Shapley values for Layer 4 — are these the right tools? Cite alternatives where you'd choose differently. Particularly interested in: should I use Bayesian online change-point detection (Adams & MacKay 2007) instead of CUSUM? Should counterfactual use causal forests (Athey & Wager) instead of grid-search do-calculus? Is Shapley value computationally justified for n=5 modules or is LIME / permutation importance enough?
+
+2. **Architecture decomposition**: 6-layer separation — is this conceptually clean or over-decomposed? Should Layer 2 (Event Detector) and Layer 3 (Counterfactual) merge? Should Layer 4 (Shapley) and Layer 5 (LLM) merge?
+
+3. **Statistical rigor**: CUSUM threshold h=4σ, holdout 30 samples (Rule 13.3) — defensible? What's the typical false-positive/false-negative tradeoff at these parameters for a system that sees maybe 10-50 events per day?
+
+4. **Counterfactual fidelity risk**: Layer 3 replays past with mutated config. Without proper PIT enforcement, this could leak future information into past decisions. Is the existing `LegacyDailyPriceFetcher` + P9-02 enforcement sufficient, or do I need stronger guards? Specifically: how do I handle "what if user's watchlist had been different at T-30 days" — user's actual watchlist at that time may not be reconstructible.
+
+5. **Survivorship + selection bias**: Reflection sees only triggered events. Silent_queue from Rule 12.1 captures suppressed alerts, but events that never reached alert-generation stage (e.g., scanner never scored them) are invisible. Heckman correction or instrumental variables — overkill for a single-user system or genuinely needed?
+
+6. **Shapley value validity**: 5 modules treated as cooperative game players. But modules are SEQUENTIAL (data → scanner → filter → alert → notifier), not parallel. Shapley assumes coalition value v(S) is well-defined for any subset — but what does "scanner + alert without filter or data" mean for a sequential pipeline? Is Shapley misapplied here?
+
+7. **Rule 13 gaps**: 5 sub-rules listed. Anything missing? Particularly: should there be a Rule 13.6 about "reflection on reflection" (meta-reflection) — i.e., when proposals are repeatedly rejected, the proposal-generator itself needs scrutiny?
+
+8. **Real-time price orchestrator** (Feature 2): fallback chain is simple. Multi-source consensus (parallel fetch, median + outlier detection) was rejected as "overkill for single-user system". Agree? Or is consensus actually valuable given each source has different update lag and outlier risk?
+
+9. **Time estimate**: 6-7 weeks for P10-19 + P11 (7 tasks) + integration. Realistic for a single-developer (Claude + user pair-programming) cadence with the existing test discipline (RED → GREEN, ≥20 unit tests per task, no regression in 422-test baseline)? Or is this fantasy and reality is 12-15 weeks?
+
+10. **#1 thing I got wrong**: If you could only flag ONE design mistake, what would it be?
+
+11. **#1 thing missing**: If you could only ADD one component to this architecture, what would it be?
+
+Format response as: per-question answer, then a final "Synthesis" paragraph with your overall verdict. Cite papers / textbooks by author+year where you reference them. Be willing to disagree strongly.

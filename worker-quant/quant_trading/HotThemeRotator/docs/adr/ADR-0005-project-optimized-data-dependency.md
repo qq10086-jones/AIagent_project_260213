@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted 2026-05-24.
+Accepted 2026-05-24. **Pending supersession by ADR-0008** on cutover day T (T to be confirmed by user; see ADR-0008).
+
+After cutover, the read-only consumption pattern documented here becomes historical: this ADR describes the data flow in force from 2026-05-24 to T. Post-T, HotThemeRotator owns its portfolio journal directly (Section 14 of `02_GOVERNANCE.md`) and stops reading `Project_optimized/japan_market.db` at runtime.
 
 ## Context
 

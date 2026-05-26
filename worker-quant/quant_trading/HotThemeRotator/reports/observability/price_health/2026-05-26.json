@@ -1,0 +1,77 @@
+{
+  "trade_date": "2026-05-26",
+  "rows": [
+    {
+      "source": "yahoo_japan",
+      "symbol": "6768.T",
+      "ok": true,
+      "checked_ts": "2026-05-25T23:27:45.564832+00:00",
+      "price": 1101.0,
+      "data_ts": "2026-05-25T23:27:45.564832+00:00",
+      "wall_ts": "2026-05-25T23:27:45.564832+00:00",
+      "data_ts_inferred": true,
+      "price_uncertain": false,
+      "fail_reason": null
+    },
+    {
+      "source": "kabutan",
+      "symbol": "6768.T",
+      "ok": true,
+      "checked_ts": "2026-05-25T23:27:45.564832+00:00",
+      "price": 1101.0,
+      "data_ts": "2026-05-25T23:27:45.564832+00:00",
+      "wall_ts": "2026-05-25T23:27:45.564832+00:00",
+      "data_ts_inferred": true,
+      "price_uncertain": false,
+      "fail_reason": null
+    },
+    {
+      "source": "yahoo_japan",
+      "symbol": "5074.T",
+      "ok": true,
+      "checked_ts": "2026-05-25T23:27:45.564832+00:00",
+      "price": 1306.0,
+      "data_ts": "2026-05-25T23:27:45.564832+00:00",
+      "wall_ts": "2026-05-25T23:27:45.564832+00:00",
+      "data_ts_inferred": true,
+      "price_uncertain": false,
+      "fail_reason": null
+    },
+    {
+      "source": "kabutan",
+      "symbol": "5074.T",
+      "ok": true,
+      "checked_ts": "2026-05-25T23:27:45.564832+00:00",
+      "price": 1306.0,
+      "data_ts": "2026-05-25T23:27:45.564832+00:00",
+      "wall_ts": "2026-05-25T23:27:45.564832+00:00",
+      "data_ts_inferred": true,
+      "price_uncertain": false,
+      "fail_reason": null
+    },
+    {
+      "source": "yahoo_japan",
+      "symbol": "6962.T",
+      "ok": true,
+      "checked_ts": "2026-05-25T23:27:45.564832+00:00",
+      "price": 964.0,
+      "data_ts": "2026-05-25T23:27:45.564832+00:00",
+      "wall_ts": "2026-05-25T23:27:45.564832+00:00",
+      "data_ts_inferred": true,
+      "price_uncertain": false,
+      "fail_reason": null
+    },
+    {
+      "source": "kabutan",
+      "symbol": "6962.T",
+      "ok": true,
+      "checked_ts": "2026-05-25T23:27:45.564832+00:00",
+      "price": 964.0,
+      "data_ts": "2026-05-25T23:27:45.564832+00:00",
+      "wall_ts": "2026-05-25T23:27:45.564832+00:00",
+      "data_ts_inferred": true,
+      "price_uncertain": false,
+      "fail_reason": null
+    }
+  ]
+}

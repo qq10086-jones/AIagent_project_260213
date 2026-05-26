@@ -1,5 +1,6 @@
 """Tests for the FastAPI /api/dashboard endpoint (P8-09 / ADR-0004)."""
 import sys
+import json
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from api import serializers  # noqa: E402
 from api.main import create_app  # noqa: E402
+from hot_theme_rotator.data.external.realtime_price import (  # noqa: E402
+    PriceSourceHealth,
+    write_price_health_report,
+)
 
 
 @pytest.fixture
@@ -33,8 +39,81 @@ def test_dashboard_returns_full_v3_top_level_keys(client):
     assert resp.status_code == 200
     payload = resp.json()
     for key in ("meta", "gates", "markets", "themes", "candidates",
-                "newsTimeline", "decisionLog", "kline"):
+                "newsTimeline", "decisionLog", "kline", "dailyCockpit"):
         assert key in payload, f"missing top-level key: {key}"
+
+
+def test_dashboard_daily_cockpit_is_pull_only_and_research_only(client):
+    payload = client.get("/api/dashboard").json()
+    cockpit = payload["dailyCockpit"]
+
+    assert cockpit["activationStage"] == "stage_0_pull_only"
+    assert cockpit["researchOnly"] is True
+    assert cockpit["notificationsInvoked"] is False
+    assert cockpit["execution"]["broker"] is False
+    assert cockpit["execution"]["orders"] is False
+    assert cockpit["calibration"]["status"] == "insufficient_calibration"
+    assert isinstance(cockpit["watchlist"], list)
+
+
+def test_dashboard_daily_cockpit_contains_no_push_or_probability_language(client):
+    payload = client.get("/api/dashboard").json()
+    rendered = json.dumps(payload["dailyCockpit"], ensure_ascii=False).lower()
+
+    assert "win rate" not in rendered
+    assert "probability" not in rendered
+    assert "push_allowed\": true" not in rendered
+    assert "broker\": true" not in rendered
+    assert "orders\": true" not in rendered
+
+
+def test_dashboard_daily_cockpit_reads_observation_date_not_candidate_snapshot(
+    tmp_path, monkeypatch
+):
+    write_price_health_report(
+        [
+            PriceSourceHealth(
+                source="yahoo_japan",
+                symbol="6768.T",
+                ok=True,
+                checked_ts="2026-05-26T09:00:00+09:00",
+                price=1101.0,
+                data_ts="2026-05-26T09:00:00+09:00",
+                wall_ts="2026-05-26T09:00:00+09:00",
+                data_ts_inferred=True,
+            )
+        ],
+        trade_date="2026-05-26",
+        base_dir=tmp_path,
+    )
+    monkeypatch.setattr(
+        serializers,
+        "_real_or_sample_candidates",
+        lambda top_n: (
+            [
+                {
+                    "rank": 1,
+                    "symbol": "6768.T",
+                    "score": 50.0,
+                    "scoreStatus": "uncalibrated_research_score",
+                }
+            ],
+            "6768.T",
+            "2026-04-27",
+            "screener_v2",
+        ),
+    )
+
+    payload = serializers.build_dashboard_payload(
+        base_dir=tmp_path,
+        top_n=1,
+        cockpit_trade_date="2026-05-26",
+    )
+
+    assert payload["meta"]["tradeDate"] == "2026-04-27"
+    assert payload["dailyCockpit"]["tradeDate"] == "2026-05-26"
+    assert payload["dailyCockpit"]["watchlist"][0]["quoteStatus"] == "timestamp_inferred"
+    assert payload["dailyCockpit"]["watchlist"][0]["quotes"][0]["source"] == "yahoo_japan"
 
 
 def test_dashboard_meta_calibration_carries_uncalibrated_warning(client):

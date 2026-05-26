@@ -14,6 +14,9 @@ ALLOWED_CALIBRATION_STATUSES = frozenset(
 
 ALLOWED_CALIBRATION_SOURCES = frozenset({"opportunity", "attribution"})
 
+# evidence_origin (P10-13, ADR-0006): which sample types backed the calibration
+ALLOWED_EVIDENCE_ORIGINS = frozenset({"live", "bootstrap", "mixed"})
+
 
 class CalibrationReportValidationError(ValueError):
     """Raised when a calibration report would be unsafe to publish."""
@@ -62,7 +65,14 @@ class CalibrationBin:
 
 @dataclass(frozen=True)
 class CalibrationReport:
-    """A single calibration evaluation for one (source, horizon) pair."""
+    """A single calibration evaluation for one (source, horizon) pair.
+
+    ``evidence_origin`` (P10-13, ADR-0006): backward-compatible field defaulting
+    to ``"live"`` so existing callers stay valid. ``"bootstrap"`` means the
+    sample is entirely historical-backfilled predictions (carries higher
+    counterfactual-validity risk). ``"mixed"`` flags hybrid samples for the UI
+    to surface a distinct evidence pill.
+    """
 
     source: str
     horizon_days: int
@@ -73,11 +83,16 @@ class CalibrationReport:
     brier_score: float | None = None
     log_loss: float | None = None
     bins: tuple[CalibrationBin, ...] = ()
+    evidence_origin: str = "live"
 
     def __post_init__(self) -> None:
         if self.source not in ALLOWED_CALIBRATION_SOURCES:
             raise CalibrationReportValidationError(
                 f"source must be one of {sorted(ALLOWED_CALIBRATION_SOURCES)}"
+            )
+        if self.evidence_origin not in ALLOWED_EVIDENCE_ORIGINS:
+            raise CalibrationReportValidationError(
+                f"evidence_origin must be one of {sorted(ALLOWED_EVIDENCE_ORIGINS)}"
             )
         if self.status not in ALLOWED_CALIBRATION_STATUSES:
             raise CalibrationReportValidationError(

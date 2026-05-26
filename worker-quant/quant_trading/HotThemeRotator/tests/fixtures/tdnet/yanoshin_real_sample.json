@@ -1,0 +1,52 @@
+{
+  "total_count": 3,
+  "condition_desc": "2026-05-25 disclosure list",
+  "items": [
+    {
+      "Tdnet": {
+        "id": "1255488",
+        "pubdate": "2026-05-25 18:15:00",
+        "company_code": "67790",
+        "company_name": "日本電波工業",
+        "title": "業績予想の修正に関するお知らせ",
+        "document_url": "https://webapi.yanoshin.jp/rd.php?https://www.release.tdnet.info/inbs/140120260525547326.pdf",
+        "url_report_type_summary": null,
+        "url_report_type_earnings_forecast": null,
+        "url_xbrl": null,
+        "markets_string": "東P",
+        "update_history": null
+      }
+    },
+    {
+      "Tdnet": {
+        "id": "1255489",
+        "pubdate": "2026-05-25 18:20:00",
+        "company_code": "13060",
+        "company_name": "NEXT FUNDS TOPIX連動型上場投信",
+        "title": "配当金のお知らせ",
+        "document_url": "https://webapi.yanoshin.jp/rd.php?https://www.release.tdnet.info/inbs/140120260525547327.pdf",
+        "url_report_type_summary": null,
+        "url_report_type_earnings_forecast": null,
+        "url_xbrl": null,
+        "markets_string": "東P",
+        "update_history": null
+      }
+    },
+    {
+      "Tdnet": {
+        "id": "1255490",
+        "pubdate": "2026-05-25 10:00:00",
+        "company_code": "67680",
+        "company_name": "タムラ製作所",
+        "title": "公開買付けに関する意見表明のお知らせ",
+        "document_url": "https://webapi.yanoshin.jp/rd.php?https://www.release.tdnet.info/inbs/140120260525547328.pdf",
+        "url_report_type_summary": null,
+        "url_report_type_earnings_forecast": null,
+        "url_xbrl": null,
+        "markets_string": "東P",
+        "update_history": null
+      }
+    }
+  ],
+  "actions": ["date: 2026-05-25"]
+}

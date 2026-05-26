@@ -1,0 +1,86 @@
+Senior code review of HotThemeRotator Phase 1 v3 Week 1 implementation. Act as four roles: senior quantitative trader + mathematician + statistician + automatic control theory professor. Read-only — no code changes. Find bugs and missing pieces. Disagree freely.
+
+## Project Context
+
+HotThemeRotator is a personal advisory system at `worker-quant/quant_trading/HotThemeRotator/`. The system has 7 ADRs and 13 governance sections. Today's session built Phase 1 Week 1 (3 P0 tasks): P10-14 TDnet RSS integration, P10-19 multi-source price orchestrator, P10-16 J-Quants bridge. 22 new files, ~1500 LOC, 9 test files, 97 new mock-HTTP tests. Full pytest 524 passed.
+
+After pytest, live smoke test was run against real endpoints. Findings:
+- Yanoshin TDnet: parser bug — real response wraps items in `{"Tdnet": {...}}`, `pubdate` is `"2026-05-25 18:15:00"` (space-separated, no TZ), field is `document_url` not `url`. Fixed via `_normalize_pubdate` helper + unwrap logic; +5 new tests; full pytest now 524.
+- Yahoo Finance Japan: PASS — real 6779.T = ¥3015 via `StyledNumber__value` selector.
+- Kabutan: PASS — real 6779.T = ¥3015 via `kabuka` class.
+- Stooq: FAIL — service changed policy, CSV download now requires captcha-acquired apikey.
+- TwelveData: SKIP — user just confirmed has no account.
+- J-Quants: SKIP — user just confirmed has no account.
+
+## New Constraints (just communicated by user)
+
+User has NO accounts for TwelveData or J-Quants. Not "haven't configured yet" but "cannot use, period". Effective P10-19 fallback chain shrinks to: `cache → yahoo_japan → kabutan → yfinance`. Only 2 scrapers + 1 delayed API (yfinance is 15min delayed).
+
+## Files Under Review
+
+`src/hot_theme_rotator/data/external/`:
+- `tdnet_schema.py` (~150 LOC) — TdnetDisclosure dataclass + 8-category enum + SHA-256[:16] disclosure_id integrity check
+- `tdnet_storage.py` (~120 LOC) — JSONL writer mirror of P9-01, duplicate-id reject, malformed fail-closed
+- `tdnet_parser.py` (~200 LOC after fix) — handles both real Yanoshin wrapped shape + legacy flat fixture; 8 Japanese-keyword regex category classifiers; TOB precedes earnings ordering
+- `tdnet_rss_adapter.py` (~210 LOC) — `YanoshinTdnetAdapter` with injectable http_get/sleep/monotonic, per-instance rate limit (5s), retry-after, exponential backoff on 429/503
+- `realtime_price/schema.py` — `PriceQuote` (symbol/price/source/data_ts/wall_ts/fail_reason/price_uncertain)
+- `realtime_price/yahoo_japan_scraper.py` — BeautifulSoup multi-selector tolerance
+- `realtime_price/kabutan_scraper.py` — BeautifulSoup `kabuka` class
+- `realtime_price/twelvedata_client.py` — REST JSON, env-based API key (DEAD — no user account)
+- `realtime_price/stooq_csv_fetcher.py` — CSV parser (DEAD — service requires apikey now)
+- `realtime_price/orchestrator.py` — fallback chain + 60s cache + conditional consensus for high-salience
+- `jquants_live_bridge.py` (~250 LOC) — full v1 auth flow (auth_user → refreshToken → auth_refresh → idToken) + in-memory token cache + returns PriceBar tuple (DEAD — no user account)
+
+`tools/poll_tdnet_rss.py` — CLI with --date/--date-range/--latest
+`scripts/register_tdnet_poll_task.bat` — Windows scheduler reg
+`scripts/live_smoke_test_external.py` — live endpoint validator
+
+## 18 Review Questions
+
+### Implementation Correctness
+
+1. **Yanoshin parser unwrap robustness**: parser does `inner = raw.get("Tdnet") if "Tdnet" in raw else raw; if not isinstance(inner, Mapping): continue`. Robust against `{"Tdnet": null}` / `{"Tdnet": "string"}`? Robust against deeply nested `{"Tdnet": {"Tdnet": {...}}}`?
+
+2. **`_normalize_pubdate` ambiguity**: handles `T-separated → passthrough`, `space-separated → add T + JST`. But what about `T-separated WITHOUT TZ` like `"2026-05-25T18:15:00"`? Currently passthrough — no TZ enforced. Per Rule 8.2 PIT, should naive timestamps be rejected? Or assumed JST?
+
+3. **disclosure_id 64-bit collision risk**: SHA-256 first 16 hex chars = 64 bits. Birthday paradox: collision expected around 2^32 ≈ 4 billion records. For HTR scale (≤1000 disclosures/day, ~10 years horizon = 3.65M records) is 64-bit sufficient, or should it be 32 hex chars / 128 bits?
+
+4. **`YanoshinTdnetAdapter` rate limit bug**: rate limit state is per-instance (`self._last_request_ts`). If user runs `poll_tdnet_rss.py` from TWO Windows Task Scheduler instances concurrently, each has own adapter → each respects own 5s independently → total 2x rate. Process-wide token-bucket file would fix. Acceptable for single-user, or should fix now?
+
+5. **`PriceOrchestrator._consensus_check` failure semantics**: when high_salience=True, primary succeeds but ALL consensus sources raise — currently returns primary unflagged. Should it instead mark `fail_reason="consensus check unavailable"`?
+
+6. **`PriceOrchestrator._cache_lookup` O(N)**: iterates all entries per lookup. Fine for ≤120 entries (single user, ≤20 tickers × 6 sources). Premature optimization risk noted, but worth tracking?
+
+7. **`JquantsLiveBridge` token TTL bug**: idToken cached in-memory without TTL tracking. After 24h instance reuse, fetch returns 401, no auto-refresh. Cycle 1 acceptable or fix now?
+
+### Strategy Under New Constraints
+
+8. **Fallback chain `yahoo_japan → kabutan → yfinance` consensus quality**: only 2 scrapers + 1 delayed API. For Rule 12.3 chase filter (intraday >10% trigger), consensus check compares Yahoo JP vs Kabutan — both may reflect same upstream Japan Exchange feed. Is the "two-source agreement" signal still meaningful, or is it security theater (correlated noise vs independent confirmation)?
+
+9. **P10-16 J-Quants Bridge: keep / defer / delete?** 19 passing tests, complete auth flow, ready when credentials exist. But user has no plans. Three options: (i) keep for optionality, (ii) mark deferred-pending-credentials, (iii) delete module + tests. Recommendation?
+
+10. **P11 Reflection Policy Replay data sourcing without J-Quants**: P11-03 needs reliable historical OHLC. Without J-Quants, only `Project_optimized/japan_market.db.daily_prices` (already 4-6 weeks stale). Does this make Policy Replay too data-poor to be useful? Add a "data freshness gate" to reflection (refuse to run when stale > N days)?
+
+11. **Stooq dead — three options**: (i) delete scraper entirely, (ii) keep with "requires apikey, not configured" log warning, (iii) replace with explicit yfinance fallback. Cleanest?
+
+### Statistical / Governance
+
+12. **Rule 13.3 sample size tiers (n≥30/100/300)**: defensible by you or just signaling? For 3-day forward return on JP equities at p=0.5 with ±10% binomial margin, normal approx gives n ≈ 100. For ±5%, n ≈ 400. Should Rule 13.3 cite these calculations explicitly?
+
+13. **CUSUM ARL_0 target**: P11-02 not implemented yet. For ~10 KPIs × ~30 events/day, what's realistic ARL_0 / false-alarm rate for a single-user system? Bonferroni or Holm correction recommended?
+
+14. **Section 13 density (10 sub-rules)**: over-regulated for single-user solo system? Specifically 13.10 meta-reflection — yet another audit layer. YAGNI for solo use?
+
+### Process / Live Smoke
+
+15. **Service-tier health check pattern**: Stooq policy change is exactly the "scraping is fragile" failure you flagged. Should each scraper get a `health_check()` daily posting to dashboard? Or YAGNI for solo system?
+
+16. **Fixture provenance rule**: Yanoshin shape mismatch caught only in smoke because fixtures were invented. Should new external adapter fixtures be required to come from a one-time live capture saved to `tests/fixtures/captured/`, not invented? Codify as Rule 13.11 or §2 Change Workflow step?
+
+### Final
+
+17. **#1 hidden bug** in the 22 files — where would you look hardest if paid by the bug?
+
+18. **#1 thing the implementation got RIGHT** by your standards — credit where due.
+
+Format: per-question answer, then brief Synthesis paragraph with overall verdict. Be willing to disagree.

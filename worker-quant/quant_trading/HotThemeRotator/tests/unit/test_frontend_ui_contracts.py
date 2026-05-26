@@ -68,9 +68,32 @@ def test_v1_uses_selected_symbol_hook_and_passes_klinebars():
     assert "useSelectedSymbol" in v1
     assert "useSymbolKline" in v1
     assert "klineBars" in v1
+    assert "const fallbackKline = top.symbol === defaultSymbol ? data.kline : [];" in v1
+    assert "fallback: fallbackKline" in v1
+    assert "key={top.symbol}" in v1
+    assert "klineError={kline.error}" in v1
     # CandidateRowMini must receive onClick + active
     assert "active={c.symbol === top.symbol}" in v1
     assert "onClick={() => setSelectedSymbol(c.symbol)}" in v1
+
+
+def test_v1_renders_daily_cockpit_panel_from_dashboard_payload():
+    """P10-20: V1 should surface Stage 0 dailyCockpit without write actions."""
+    v1 = read_frontend_file("frontend/v1.jsx")
+
+    assert "function V1DailyCockpitPanel" in v1
+    assert "cockpit={data.dailyCockpit}" in v1
+    assert "cockpit.activationStage" in v1
+    assert "cockpit.notificationsInvoked" in v1
+    assert "cockpit.execution?.orders" in v1
+    assert "dailyCockpit" in v1
+
+
+def test_v1_daily_cockpit_adds_no_write_methods_or_push_copy():
+    v1 = read_frontend_file("frontend/v1.jsx")
+
+    for forbidden in ('"POST"', '"PUT"', '"DELETE"', '"PATCH"', "push_allowed"):
+        assert forbidden not in v1, f"forbidden frontend cockpit text appeared: {forbidden}"
 
 
 def test_v3_candidate_rows_clickable_and_drive_leader_card():

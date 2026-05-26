@@ -295,6 +295,8 @@ Alert records carry `research_only=True`, `data_ts`, reason, risk warning, deter
 - **P8-17 V1 价格卡片空间规则**：V1 的 `价格走势 · 七档阶梯` 卡片不再把七档文字标签嵌入 KLineChart 的 SVG 右侧 padding。卡片内部采用左侧 K 线主图 + 右侧七档侧栏布局；KLineChart 可继续渲染 OHLC、成交量、MA20/MA60、52w 线，但七档的可读标签由 V1 专用侧栏负责，避免卡片放大后信息仍挤在右侧小区域。
 - **P8-17 V2 paper-surface 规则**：V2 研究备忘录的下半区内容块必须有明确白色 paper surface、边框和空状态。`新闻催化与决策日志` 区域中，新闻时间线和 §8.6 决策日志分别放入同规格 pane；当 `decisionLog` 为空时显示研究日志尚未生成的空状态，不留出看似漏渲染的裸背景。V2 的外层 flex 容器必须 `alignItems: "flex-start"`，避免白色 paper 容器被默认 stretch 成一屏高，滚动到 Section C/D 后露出 body 背景色。
 
+**P8-18 follow-up — V1 selected-symbol K-line fallback rule**: V1 may use `/api/dashboard.kline` as a temporary fallback only for the initial top candidate loaded with the dashboard payload. After the user selects a different symbol, the K-line panel must either render bars fetched from `GET /api/symbol/{ticker}/kline` or show an explicit unavailable state. It must not reuse the initial dashboard K-line under another symbol label. `KLineChart` is keyed by the active symbol so React remounts the SVG on symbol changes.
+
 ## 7. 数据流
 
 1. 从旧项目或外部数据源拉取价格、新闻、指数和持仓。

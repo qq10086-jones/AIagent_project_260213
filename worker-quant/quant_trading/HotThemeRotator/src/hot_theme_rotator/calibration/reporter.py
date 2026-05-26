@@ -20,6 +20,30 @@ DEFAULT_MIN_SAMPLES = 100
 DEFAULT_N_BINS = 10
 
 
+def derive_evidence_origin(predictions: Sequence[PredictionRecord]) -> str:
+    """Return ``live`` / ``bootstrap`` / ``mixed`` based on predictions' extra.backdated.
+
+    A prediction is considered backdated when ``extra.backdated=True`` OR its
+    ``model_version`` ends with ``"-backdated"`` (defensive — both flags must
+    be set by the bootstrap tool but we accept either at read time).
+    """
+    if not predictions:
+        return "live"
+    backdated_count = 0
+    live_count = 0
+    for pred in predictions:
+        is_bd = bool(pred.extra.get("backdated", False)) or pred.model_version.endswith("-backdated")
+        if is_bd:
+            backdated_count += 1
+        else:
+            live_count += 1
+    if backdated_count == 0:
+        return "live"
+    if live_count == 0:
+        return "bootstrap"
+    return "mixed"
+
+
 def build_calibration_report(
     *,
     predictions: Sequence[PredictionRecord],
@@ -70,6 +94,7 @@ def build_calibration_report(
         date_range = ("", "")
 
     sample_count = len(paired)
+    evidence_origin = derive_evidence_origin(predictions)
     if sample_count < int(min_samples):
         return CalibrationReport(
             source=source,
@@ -81,6 +106,7 @@ def build_calibration_report(
             brier_score=None,
             log_loss=None,
             bins=(),
+            evidence_origin=evidence_origin,
         )
 
     predicted = [p[0] for p in paired]
@@ -95,4 +121,5 @@ def build_calibration_report(
         brier_score=compute_brier_score(predicted, actual),
         log_loss=compute_log_loss(predicted, actual),
         bins=compute_calibration_bins(predicted, actual, n_bins=int(n_bins)),
+        evidence_origin=evidence_origin,
     )

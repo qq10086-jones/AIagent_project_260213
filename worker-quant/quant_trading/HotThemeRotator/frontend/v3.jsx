@@ -41,10 +41,11 @@ function V3MarketDashboard() {
           </div>
         </div>
 
-        {/* Center: leader + AI brief + watchlist */}
-        <div style={{ display: "grid", gridTemplateRows: "auto auto 1fr", gap: 12, minHeight: 0 }}>
+        {/* Center: leader + AI brief + K-line + watchlist */}
+        <div style={{ display: "grid", gridTemplateRows: "auto auto auto 1fr", gap: 12, minHeight: 0 }}>
           <V3LeaderCard candidate={top} livePrice={livePrice} />
           <V3LlmBriefCard symbol={top.symbol} />
+          <V3KLinePanel symbol={top.symbol} ladder={top.ladder} />
 
           <div className="htr-card" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
             <CardHead title="候选清单" sub={`点击切换 · 当前 ${top.symbol}`} />
@@ -497,6 +498,71 @@ function V3LlmBriefCard({ symbol }) {
                   borderRadius: 3, cursor: "pointer", color: "var(--htr-accent)",
                 }}
               >手动生成</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// K-line panel with crosshair (d85806d). Default expanded so the broker-app
+// hover behavior is visible on page load. Collapsible to save vertical space
+// when the user wants more candidate list. Re-uses shared KLineChart, which
+// owns the crosshair state — this component is just layout + data fetch.
+function V3KLinePanel({ symbol, ladder }) {
+  const [expanded, setExpanded] = React.useState(true);
+  const { bars, loading, error } = useSymbolKline(symbol, { sessions: 90 });
+  const [boxRef, { width: boxW, height: boxH }] = useElementSize();
+
+  return (
+    <div className="htr-card" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <div
+        onClick={() => setExpanded((e) => !e)}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "7px 14px", borderBottom: "1px solid var(--htr-line)",
+          background: "var(--htr-surface-2)", cursor: "pointer", userSelect: "none",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700 }}>K 线 · {symbol}</span>
+          <span style={{ fontSize: 9.5, color: "var(--htr-ink-3)", letterSpacing: "0.06em" }}>
+            悬停看 OHLCV
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {loading && <span className="htr-chip warn">加载中</span>}
+          {error && <span className="htr-chip" style={{ borderColor: "var(--htr-bear)", color: "var(--htr-bear)" }}>无数据</span>}
+          {!loading && !error && bars && <span className="htr-chip">{bars.length}D</span>}
+          <span style={{ fontSize: 12, color: "var(--htr-ink-3)" }}>{expanded ? "▾" : "▸"}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div
+          ref={boxRef}
+          style={{ height: 260, padding: 6, minHeight: 0 }}
+        >
+          {error && (
+            <div style={{ padding: 12, fontSize: 11, color: "var(--htr-bear)" }}>
+              {error}
+            </div>
+          )}
+          {!error && boxW > 0 && bars && bars.length > 0 && (
+            <KLineChart
+              key={symbol}
+              data={bars}
+              ladder={ladder || null}
+              width={boxW - 12}
+              height={boxH - 12}
+              padding={{ top: 14, right: 110, bottom: 22, left: 8 }}
+              withVolume withMA with52wLines
+            />
+          )}
+          {!error && !loading && bars && bars.length === 0 && (
+            <div style={{ padding: 12, fontSize: 11, color: "var(--htr-ink-3)" }}>
+              该 ticker 暂无 K 线数据
             </div>
           )}
         </div>

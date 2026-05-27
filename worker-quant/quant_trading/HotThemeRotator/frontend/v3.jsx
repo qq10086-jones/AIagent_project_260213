@@ -41,9 +41,10 @@ function V3MarketDashboard() {
           </div>
         </div>
 
-        {/* Center: leader + watchlist */}
-        <div style={{ display: "grid", gridTemplateRows: "auto 1fr", gap: 12, minHeight: 0 }}>
+        {/* Center: leader + AI brief + watchlist */}
+        <div style={{ display: "grid", gridTemplateRows: "auto auto 1fr", gap: 12, minHeight: 0 }}>
           <V3LeaderCard candidate={top} livePrice={livePrice} />
+          <V3LlmBriefCard symbol={top.symbol} />
 
           <div className="htr-card" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
             <CardHead title="候选清单" sub={`点击切换 · 当前 ${top.symbol}`} />
@@ -370,6 +371,115 @@ function V3LadderMini({ ladder, currentPrice }) {
     </div>
   );
 }
+
+// P10-06 — LLM Per-Ticker Brief panel. On-demand (no auto-fetch) because
+// cold-start ~30s. After first fetch the OllamaClient 24h cache keeps subsequent
+// calls fast. Rule 8.3.1 / 13.4: never displays probability / win-rate text —
+// the API endpoint enforces this, here we just render whatever it returned.
+function V3LlmBriefCard({ symbol }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const { brief, loading, error, fetch: triggerFetch } = useLlmBrief(symbol);
+
+  // Auto-fetch on expand when no brief yet
+  const handleToggle = React.useCallback(() => {
+    setExpanded((e) => {
+      const next = !e;
+      if (next && !brief && !loading) triggerFetch();
+      return next;
+    });
+  }, [brief, loading, triggerFetch]);
+
+  return (
+    <div className="htr-card" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <div
+        onClick={handleToggle}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "7px 14px", borderBottom: "1px solid var(--htr-line)",
+          background: "var(--htr-surface-2)", cursor: "pointer", userSelect: "none",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700 }}>
+            <Term>AI 综合</Term> · {symbol}
+          </span>
+          <span style={{ fontSize: 9.5, color: "var(--htr-ink-3)", letterSpacing: "0.06em" }}>
+            LLM Per-Ticker Brief (P10-06)
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {loading && <span className="htr-chip warn">生成中…</span>}
+          {error && <span className="htr-chip" style={{ borderColor: "var(--htr-bear)", color: "var(--htr-bear)" }}>错误</span>}
+          {brief && !loading && <span className="htr-chip">{brief.model_version}</span>}
+          <span style={{ fontSize: 12, color: "var(--htr-ink-3)" }}>{expanded ? "▾" : "▸"}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div style={{ padding: "10px 14px", fontSize: 12.5, lineHeight: 1.6 }}>
+          {loading && (
+            <div style={{ color: "var(--htr-ink-3)", fontStyle: "italic" }}>
+              首次调用 Ollama gemma4:e4b 冷启动 ~30s，后续 24h 缓存秒回…
+            </div>
+          )}
+          {error && (
+            <div style={{ color: "var(--htr-bear)" }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>无法生成 brief</div>
+              <div style={{ fontFamily: "var(--htr-font-mono)", fontSize: 11 }}>{error}</div>
+              <button
+                onClick={triggerFetch}
+                style={{
+                  marginTop: 8, padding: "3px 10px", fontSize: 11,
+                  background: "var(--htr-surface)", border: "1px solid var(--htr-line)",
+                  borderRadius: 3, cursor: "pointer", color: "var(--htr-ink)",
+                }}
+              >重试</button>
+            </div>
+          )}
+          {brief && !loading && (
+            <>
+              <div style={{ color: "var(--htr-ink)", whiteSpace: "pre-wrap" }}>
+                {brief.narrative}
+              </div>
+              <details style={{ marginTop: 10 }}>
+                <summary style={{ fontSize: 10.5, color: "var(--htr-ink-3)", cursor: "pointer", letterSpacing: "0.06em" }}>
+                  事实证据 ({brief.factual_grounding.length} 条) · 生成 {brief.generation_ts.slice(0, 19)}Z
+                </summary>
+                <div style={{
+                  marginTop: 6, padding: "6px 10px", background: "var(--htr-surface)",
+                  border: "1px solid var(--htr-line)", borderRadius: 4,
+                  fontFamily: "var(--htr-font-mono)", fontSize: 10.5,
+                  color: "var(--htr-ink-2)",
+                }}>
+                  {brief.factual_grounding.map((line, i) => (
+                    <div key={i} style={{ padding: "1px 0" }}>{line}</div>
+                  ))}
+                </div>
+              </details>
+              <div style={{ marginTop: 8, fontSize: 10, color: "var(--htr-ink-3)" }}>
+                Rule 8.3.1 + 13.4 守门通过 · score_status=
+                <span className="htr-mono">{brief.score_status}</span>
+                {brief.advice_only && " · advice-only"}
+              </div>
+            </>
+          )}
+          {!brief && !loading && !error && (
+            <div style={{ color: "var(--htr-ink-3)", fontStyle: "italic" }}>
+              点击标题栏展开后自动调用 Ollama 生成。也可<button
+                onClick={triggerFetch}
+                style={{
+                  marginLeft: 4, padding: "1px 8px", fontSize: 11,
+                  background: "var(--htr-accent-soft)", border: "1px solid var(--htr-accent)",
+                  borderRadius: 3, cursor: "pointer", color: "var(--htr-accent)",
+                }}
+              >手动生成</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function CardHead({ title, sub, right }) {
   return (

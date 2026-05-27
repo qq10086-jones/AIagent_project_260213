@@ -1107,12 +1107,47 @@ function useSymbolProfile(symbol) {
   return state;
 }
 
+// P10-06 — LLM brief hook. On-demand only: caller invokes fetch() because
+// cold-start can take ~30s and we do not want to spam Ollama on every symbol
+// click. Resets to idle when symbol changes (prevents stale brief from a
+// previous ticker leaking onto a new selection).
+function useLlmBrief(symbol) {
+  const [state, setState] = React.useState({
+    brief: null, loading: false, error: null,
+  });
+  React.useEffect(() => {
+    setState({ brief: null, loading: false, error: null });
+  }, [symbol]);
+  const fetchBrief = React.useCallback(() => {
+    if (!symbol) return;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    fetch(`/api/symbol/${encodeURIComponent(symbol)}/llm_brief`, { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) {
+          let body = null;
+          try { body = await r.json(); } catch (e) {}
+          const reason = body && body.detail && body.detail.reason
+            ? body.detail.reason
+            : `HTTP ${r.status}`;
+          const msg = body && body.detail && body.detail.message
+            ? `${reason}: ${body.detail.message}`
+            : reason;
+          throw new Error(msg);
+        }
+        return r.json();
+      })
+      .then((brief) => setState({ brief, loading: false, error: null }))
+      .catch((err) => setState({ brief: null, loading: false, error: err.message }));
+  }, [symbol]);
+  return { ...state, fetch: fetchBrief };
+}
+
 // Export to window for cross-file Babel use
 Object.assign(window, {
   AnimatedPrice, Sparkline, TempGauge, MarketTempCell,
   CalibrationBadge, KLineChart, VerticalLadder, NewsTimeline,
   GateFlow, ThemeHeatBars, CandidateRow, ScoreBar, DecisionLog,
   useTickingPrice, Term, GLOSSARY, useElementSize,
-  useSelectedSymbol, useSymbolKline, useSymbolProfile,
+  useSelectedSymbol, useSymbolKline, useSymbolProfile, useLlmBrief,
   HTR: { fmtPrice, fmtPct, changeClass, arrow },
 });

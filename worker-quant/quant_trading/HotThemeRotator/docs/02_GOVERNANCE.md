@@ -20,6 +20,8 @@
 
 ### Rule 3: Advice-Only Until Gates Pass
 
+Manual portfolio recording carve-out (clarified 2026-05-27): HTTP POST endpoints may exist only to record a trade or cash event the user has ALREADY completed in an external broker, per Section 14. These endpoints MUST NOT contain broker route, account, order type, order submission, or live execution fields. They are state-recording endpoints, not execution endpoints, and they do not relax Section 10 gate 8.
+
 未通过 paper 验证前，本项目不得自动下单，不得调用真实券商下单接口。输出只能是人工可读的建议。
 
 ### Rule 4: No Silent Parameter Changes
@@ -437,7 +439,7 @@ The user-facing surface MAY:
 
 The user-facing surface MUST NOT:
 
-- Send any POST / PUT / DELETE / PATCH request — Rule 3 stays absolute.
+- Send any POST / PUT / DELETE / PATCH request, except the explicit Section 14 manual portfolio recording endpoints that record already-executed external broker activity. Rule 3 still forbids broker/order execution endpoints.
 - Persist user input into `reports/predictions/`, `reports/outcomes/`, `japan_market.db`, or any other system-of-record store.
 - Override an algorithmic `score`, `score_status`, `calibration` label, or `gate` state with a user-supplied value.
 - Trigger any alert, paper trade, or broker call from a UI click.
@@ -455,6 +457,8 @@ If a future feature needs to persist user choices server-side (e.g., a shared wa
 ### Rule 11.4: Interaction Does Not Lift Calibration Status
 
 A user clicking, hovering, or starring a candidate does not change its `score_status`. An uncalibrated score remains `uncalibrated_research_score` whether the user has watched it for 1 second or 1 month. Rule 9.4 still applies; UI interactions cannot launder a research label into a hidden recommendation.
+
+**Clarification (chart tooltips)**: read-only hover tooltips on price charts displaying realized historical OHLCV and realized change % (e.g., "+1.32%" from prev close) are **structural data display**, not LLM narrative. Rule 8.3.1 / 13.4 forbidden-pattern regex guards **LLM-generated narrative output** (reflection_brief, per_ticker_brief), not structural UI fields. A K-line crosshair tooltip showing a bar's realized percent change is a historical fact, not a probability claim, and is permitted under Rule 11.1. A tooltip MUST NOT display any forward-looking probability or win-rate text unless the recalibrator is active and the value comes from a calibrated_prob structural field — and even then, the label must remain factual ("calibrated 3D probability"), never "win rate".
 
 ## 12. Push Mode Discipline (Anti-FOMO Layer)
 
@@ -576,6 +580,59 @@ Meta-reflection (P11-07) triggers when:
 
 Meta-reflection output: "the proposal generator itself needs adjustment in area X". Proposals from misaligned generators MUST be paused until generator scrutiny passes.
 
+### Rule 13.11: Validity Class Controls Allowed Action
+
+`counterfactual_validity` is not only wording. It controls what P11-06 may intake:
+
+- `exact_replay` / `partial_replay`: investigation, RCA, and parameter-change proposals are allowed if all Rule 13.3 / 13.7 / 13.17 gates pass.
+- `universe_reconstructed`: investigation-only. No parameter / threshold / config change proposal.
+- `price_only_replay`: price-path discussion only. No alert-behavior claim and no parameter / threshold / config change proposal.
+- `data_too_stale`: freshness/data-source proposal only (`evidence_class=freshness_attribution`). No strategy or parameter proposal.
+- `invalid`: no proposal. The system may log diagnostics but MUST NOT ask the user to accept an action.
+
+### Rule 13.12: LLM Cannot Originate Proposals
+
+P11-05 LLM output is narrative synthesis only. Any `proposed_actions` visible in a reflection brief MUST be structured actions derived by deterministic L3/L4 code, stamped with `source_layer` and `generator`, and passed through unchanged. The LLM may rephrase caveats, but it MUST NOT invent action ids, parameter values, evidence classes, sample sizes, confidence intervals, validity classes, or rationale pointers.
+
+### Rule 13.13: Proposal Tiers and Blast Radius
+
+Every proposal MUST be treated as one of:
+
+- `diagnostic_only`: explains an observed issue; no config change.
+- `data_quality`: refreshes, replaces, or repairs data inputs.
+- `threshold_tuning`: changes numeric thresholds or budgets.
+- `policy_change`: changes decision logic, filters, alert semantics, or user workflow.
+
+`threshold_tuning` and `policy_change` are high-blast-radius. They require Rule 13.7 backtest evidence, Rule 13.17 reproducibility metadata, and Rule 13.14 shadow/canary before active use. Data-quality proposals may bypass market-performance backtest only when the proposal fixes stale/missing data and does not alter trading policy.
+
+### Rule 13.14: Accepted Parameter Changes Start in Shadow
+
+Accepting a reflection proposal does NOT immediately make a parameter / threshold / config change active. Accepted parameter changes default to `lifecycle_stage=shadow` with rollback required. Promotion path is:
+
+1. `shadow`: compute candidate output side-by-side, no user-facing behavioral change.
+2. `canary`: limited surface or limited time window, with explicit rollback criteria.
+3. `active`: only after post-acceptance evidence confirms the expected improvement without violating Rule 12 or Rule 3.
+
+### Rule 13.15: Anti-Oscillation Cooldown
+
+The same `intervention_target` MUST NOT receive another parameter-change proposal inside a 14-day dwell window after a pending or accepted parameter-change proposal for that target, unless the new proposal is explicitly marked as emergency rollback. This prevents repeated threshold nudging caused by short noisy windows.
+
+### Rule 13.16: Expiry and Rejection Semantics
+
+Expired proposals MUST carry an `expiration_reason`. `unreviewed_timeout` may feed Rule 13.10 expiry-pattern meta-reflection. Operator-context reasons such as `operator_unavailable` MUST NOT be treated as generator failure. Rejections MUST keep a machine-readable reason plus optional free text; meta-reflection should distinguish insufficient evidence from out-of-scope or operator-context rejection.
+
+### Rule 13.17: Reproducibility Metadata Required
+
+Every proposal accepted by P11-06 intake MUST carry reproducibility metadata:
+
+- `source_trace_ids`
+- `config_before_hash`
+- `candidate_config_hash`
+- `outcome_window`
+- `denominator_counts` (eligible universe / scored / suppressed / alerted / acted when available)
+
+Without these fields, the proposal cannot be reproduced later and MUST be rejected before human review.
+
 The five hard limits Section 13 does NOT relax: Rule 3 advice-only / Rule 8.2 PIT mandatory / Rule 8.3 LLM no probability / Rule 9.4 calibrated win rate threshold / §10 gate progression.
 
 ## 14. Portfolio Ledger Rules (post-cutover, ADR-0008)
@@ -670,6 +727,19 @@ Non-trade cash flow events (deposits, withdrawals, dividends, interest, non-trad
 Each `cash_event` carries: `ts`, `amount` (signed JPY), `reason` ∈ {`deposit`, `withdrawal`, `dividend`, `interest`, `fee_non_trade`, `fx_adjustment`, `other`}, `note`, and an optional `symbol` field when the event is associated with a held instrument (e.g., 1306.T distributions are `cash_event` with `reason='dividend'` and `symbol='1306.T'`).
 
 The seven hard limits Section 14 does NOT relax: Rule 3 advice-only / Rule 4 no silent parameter changes / Rule 8.2 PIT mandatory / Rule 8.3 LLM no probability / Rule 8.6 audit trail / Rule 9.4 calibrated win rate threshold / §10 gate progression.
+
+### Rule 14.8: Cutover Date Verification
+
+Cutover day T MUST be recorded as an absolute ISO date (`YYYY-MM-DD`) plus the verified weekday in JST. Relative wording such as "this weekend", "next Sunday", or an unchecked weekday label is not sufficient.
+
+Before a real migration run:
+
+- Verify the weekday against the local calendar.
+- Run `python tools/migrate_portfolio_from_project_optimized.py --cutover-date <T> --dry-run`.
+- Retain the dry-run evidence path and NAV components in `PROJECT_STATUS.md`.
+- Only then run the same command without `--dry-run`.
+
+If T changes, update `PROJECT_STATUS.md`, `docs/01_TASKS.md` if task acceptance changes, and ADR-0008 status text together. A migration based on a mismatched date/weekday label is not accepted as complete.
 
 一个任务只有同时满足以下条件才能标记 done：
 

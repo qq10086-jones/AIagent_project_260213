@@ -359,6 +359,16 @@ function KLineChart({
   padding = { top: 14, right: 110, bottom: 22, left: 8 },
   withVolume = true, withMA = true, with52wLines = true,
 }) {
+  // Crosshair hover state — broker-app-style: vertical line snaps to bar,
+  // horizontal line follows cursor Y, fixed OHLCV box in top-right inside
+  // chart area. Pure read-only UI (Rule 11 — no writeback, no decision_log,
+  // no calibration mutation). The realized historical change % in the tooltip
+  // is structural data display, not LLM narrative, so Rule 8.3.1 regex does
+  // NOT apply (that rule guards probability/win-rate language in narrative
+  // output only).
+  const [hover, setHover] = React.useState(null); // {idx, yPx} | null
+  const svgRef = React.useRef(null);
+
   if (!data || !data.length) return null;
   const innerW = width - padding.left - padding.right;
   const innerH_total = height - padding.top - padding.bottom;
@@ -378,6 +388,28 @@ function KLineChart({
 
   const candleW = Math.max(2, innerW / data.length * 0.7);
   const slot = innerW / data.length;
+
+  // Crosshair handlers — compute bar index by inverse-mapping mouseX through
+  // the same `slot` geometry used to lay out candles. yScale^-1 gives the
+  // price the cursor is currently pointing at (for the horizontal line label).
+  const onChartMouseMove = (e) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    // Scale coords from CSS pixels to SVG user units when sizing differs.
+    const mouseX = (e.clientX - rect.left) * (width / rect.width);
+    const mouseY = (e.clientY - rect.top) * (height / rect.height);
+    if (mouseX < padding.left || mouseX > padding.left + innerW
+        || mouseY < padding.top || mouseY > padding.top + innerH_total) {
+      setHover(null);
+      return;
+    }
+    let idx = Math.floor((mouseX - padding.left) / slot);
+    idx = Math.max(0, Math.min(data.length - 1, idx));
+    setHover({ idx, yPx: mouseY });
+  };
+  const onChartMouseLeave = () => setHover(null);
+  const yInv = (yPx) => yMax - ((yPx - padding.top) / innerH) * (yMax - yMin);
 
   // Y-axis gridlines (5) in price area
   const gridSteps = 5;
@@ -421,7 +453,13 @@ function KLineChart({
   const volScale = (v) => volTopY + volH - (v / vMax) * volH;
 
   return (
-    <svg width={width} height={height} style={{ display: "block", overflow: "visible" }}>
+    <svg
+      ref={svgRef}
+      width={width} height={height}
+      style={{ display: "block", overflow: "visible", cursor: "crosshair" }}
+      onMouseMove={onChartMouseMove}
+      onMouseLeave={onChartMouseLeave}
+    >
       {/* Grid */}
       {grid.map((g, i) => (
         <line key={i} x1={padding.left} y1={g.y} x2={padding.left + innerW} y2={g.y}
@@ -573,6 +611,65 @@ function KLineChart({
       <text x={padding.left} y={height - 6} fontSize="9" fill="var(--htr-ink-4)">D-40</text>
       <text x={padding.left + innerW / 2} y={height - 6} fontSize="9" fill="var(--htr-ink-4)" textAnchor="middle">D-20</text>
       <text x={padding.left + innerW} y={height - 6} fontSize="9" fill="var(--htr-ink-4)" textAnchor="end">今日</text>
+
+      {/* Crosshair overlay (rendered last so it sits on top) */}
+      {hover && (() => {
+        const bar = data[hover.idx];
+        const prev = hover.idx > 0 ? data[hover.idx - 1] : null;
+        const barX = padding.left + slot * hover.idx + slot / 2;
+        const cursorY = Math.max(padding.top, Math.min(padding.top + innerH, hover.yPx));
+        const cursorPrice = yInv(cursorY);
+        const chgPct = prev ? (bar.close - prev.close) / prev.close * 100 : null;
+        const volStr = bar.volume != null
+          ? bar.volume >= 1e8 ? (bar.volume / 1e8).toFixed(2) + '亿'
+            : bar.volume >= 1e4 ? (bar.volume / 1e4).toFixed(1) + '万'
+            : String(Math.round(bar.volume))
+          : '—';
+        const boxW = 102, boxH = 110;
+        const boxX = padding.left + 6;
+        const boxY = padding.top + 4;
+        const upColor = "var(--htr-bull)";
+        const dnColor = "var(--htr-bear)";
+        const chgColor = chgPct == null ? "var(--htr-ink-2)" : chgPct >= 0 ? upColor : dnColor;
+        return (
+          <g pointerEvents="none">
+            {/* Vertical crosshair line — spans price + volume areas */}
+            <line x1={barX} y1={padding.top} x2={barX} y2={height - padding.bottom}
+                  stroke="var(--htr-ink-3)" strokeWidth="0.7" strokeDasharray="3 3" opacity="0.7" />
+            {/* Horizontal crosshair line — only inside price area */}
+            <line x1={padding.left} y1={cursorY} x2={padding.left + innerW} y2={cursorY}
+                  stroke="var(--htr-ink-3)" strokeWidth="0.7" strokeDasharray="3 3" opacity="0.7" />
+            {/* Cursor-price tag on right axis edge */}
+            <rect x={padding.left + innerW - 50} y={cursorY - 8} width={48} height={16}
+                  fill="var(--htr-ink-2)" rx="2" />
+            <text x={padding.left + innerW - 4} y={cursorY + 3} fontSize="9.5" fontWeight="700"
+                  textAnchor="end" fill="#fff"
+                  style={{ fontFamily: "var(--htr-font-mono)", fontVariantNumeric: "tabular-nums" }}>
+              {fmtPrice(cursorPrice, 0)}
+            </text>
+            {/* OHLCV tooltip box — fixed top-left inside chart */}
+            <g transform={`translate(${boxX}, ${boxY})`}>
+              <rect width={boxW} height={boxH} fill="var(--htr-surface-2)"
+                    stroke="var(--htr-line)" strokeWidth="0.8" rx="3" opacity="0.95" />
+              <text x={6} y={13} fontSize="10" fontWeight="700" fill="var(--htr-ink)"
+                    style={{ fontFamily: "var(--htr-font-mono)" }}>
+                {bar.date || bar.asof || `D-${data.length - 1 - hover.idx}`}
+              </text>
+              <text x={6} y={28} fontSize="9.5" fill="var(--htr-ink-2)">开 {fmtPrice(bar.open, 0)}</text>
+              <text x={6} y={42} fontSize="9.5" fill={upColor}>高 {fmtPrice(bar.high, 0)}</text>
+              <text x={6} y={56} fontSize="9.5" fill={dnColor}>低 {fmtPrice(bar.low, 0)}</text>
+              <text x={6} y={70} fontSize="9.5" fontWeight="700" fill="var(--htr-ink)">收 {fmtPrice(bar.close, 0)}</text>
+              <text x={6} y={84} fontSize="9.5" fill="var(--htr-ink-2)">量 {volStr}</text>
+              {chgPct !== null && (
+                <text x={6} y={100} fontSize="9.5" fontWeight="700" fill={chgColor}
+                      style={{ fontFamily: "var(--htr-font-mono)" }}>
+                  涨跌 {chgPct >= 0 ? '+' : ''}{chgPct.toFixed(2)}%
+                </text>
+              )}
+            </g>
+          </g>
+        );
+      })()}
     </svg>
   );
 }

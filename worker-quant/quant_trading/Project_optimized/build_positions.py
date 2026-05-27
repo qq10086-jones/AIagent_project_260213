@@ -1,6 +1,28 @@
 import argparse
+import os
 from typing import Dict, Tuple, Optional
 from trade_schema import connect, ensure_trade_tables
+
+
+_HTR_SSOT_STRATEGIES = frozenset({"etf_buyhold"})
+
+
+def _refuse_htr_ssot_write(strategy_id: str) -> None:
+    """Per ADR-0008 (2026-05-27 HTR cutover): live portfolio state for the
+    strategies listed in _HTR_SSOT_STRATEGIES lives in
+    ``HotThemeRotator/reports/portfolio/journal/*.jsonl``, not this DB.
+    Set ``HTR_CUTOVER_OVERRIDE=1`` only for rare maintenance (e.g. re-running
+    the cutover migration itself)."""
+    if strategy_id not in _HTR_SSOT_STRATEGIES:
+        return
+    if os.environ.get("HTR_CUTOVER_OVERRIDE") == "1":
+        return
+    raise RuntimeError(
+        f"Refusing positions write for strategy_id={strategy_id!r}: "
+        f"per ADR-0008 (cutover 2026-05-27), HotThemeRotator journal is the "
+        f"single source of truth. Record fills via HTR CLI/API; set "
+        f"HTR_CUTOVER_OVERRIDE=1 only for cutover maintenance."
+    )
 
 def last_close(conn, symbol: str, asof: str) -> Optional[float]:
     row = conn.execute(
@@ -64,6 +86,7 @@ def build_positions(conn, run_id: str, asof: str, strategy_id: str = "default"):
 
     Returns: (previous_positions_asof, rows_out, missing_px_symbols)
     """
+    _refuse_htr_ssot_write(strategy_id)
     ensure_trade_tables(conn)
     prev_d, qty, avg_cost, high_since, entry_date = latest_positions(conn, asof, strategy_id=strategy_id)
 
@@ -97,7 +120,19 @@ def build_positions(conn, run_id: str, asof: str, strategy_id: str = "default"):
         elif side == "SELL":
             new_q = cur_q - q
             if new_q < -1e-9:
-                raise ValueError(f"SELL exceeds position: {sym} cur_qty={cur_q} sell_qty={q}")
+                # 2026-04-25: 跨泳道 state divergence 时（例如 real 泳道
+                # 有 400 股，但 paper 泳道 0 股），硬 raise 会让整个
+                # pipeline 崩。改为 clamp + warning：最多卖掉实际持有数。
+                # 根源须在 orders 过滤层修（paper_execute 不应把 real
+                # 订单跨泳道 apply），此处仅作防御性。
+                clamped = max(cur_q, 0.0)
+                print(
+                    f"[build_positions][WARN] SELL exceeds position: "
+                    f"{sym} cur_qty={cur_q} requested_sell={q} → "
+                    f"clamped to {clamped} (strategy_id={strategy_id}). "
+                    f"Fill record kept as-is; positions reflect clamped qty."
+                )
+                new_q = cur_q - clamped
             qty[sym] = new_q
             if new_q <= 1e-9:
                 # 全部平仓: 清理 tracking

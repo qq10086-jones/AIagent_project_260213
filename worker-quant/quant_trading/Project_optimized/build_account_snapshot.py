@@ -1,4 +1,5 @@
 import argparse
+import os
 from datetime import datetime
 
 from trade_schema import connect, ensure_trade_tables
@@ -8,6 +9,28 @@ try:
     sys.stderr.reconfigure(encoding="utf-8")
 except Exception:
     pass
+
+
+_HTR_SSOT_STRATEGIES = frozenset({"etf_buyhold"})
+
+
+def _refuse_htr_ssot_write(strategy_id: str) -> None:
+    """Per ADR-0008 (2026-05-27 HTR cutover): live portfolio state for the
+    strategies listed in _HTR_SSOT_STRATEGIES lives in
+    ``HotThemeRotator/reports/portfolio/journal/*.jsonl``, not this DB.
+    Set ``HTR_CUTOVER_OVERRIDE=1`` only for rare maintenance (e.g. re-running
+    the cutover migration itself)."""
+    if strategy_id not in _HTR_SSOT_STRATEGIES:
+        return
+    if os.environ.get("HTR_CUTOVER_OVERRIDE") == "1":
+        return
+    raise RuntimeError(
+        f"Refusing account_snapshots write for strategy_id={strategy_id!r}: "
+        f"per ADR-0008 (cutover 2026-05-27), HotThemeRotator journal is the "
+        f"single source of truth. Record cash/fills via HTR CLI/API; set "
+        f"HTR_CUTOVER_OVERRIDE=1 only for cutover maintenance."
+    )
+
 
 def now_iso():
     return datetime.now().isoformat(timespec="seconds")
@@ -71,6 +94,7 @@ def build_account_snapshot(conn, run_id: str, asof: str, initial_cash: float = 0
 
     Returns a dict ...
     """
+    _refuse_htr_ssot_write(strategy_id)
     ensure_trade_tables(conn)
     prev = get_prev_snapshot(conn, asof, strategy_id=strategy_id)
     
@@ -126,6 +150,97 @@ def build_account_snapshot(conn, run_id: str, asof: str, initial_cash: float = 0
         "sell_notional": sell_notional,
         "n_fills": nfills,
     }
+
+def _collect_candidate_asofs(conn, *, after_asof: str | None, through_asof: str, strategy_id: str) -> list[str]:
+    """Return the sorted set of dates strictly > after_asof and <= through_asof that
+    warrant a snapshot entry: any date with fills, positions, or cash_ledger activity
+    for the given strategy. Hold-only days appear via positions; deposit-only days via
+    cash_ledger. ``after_asof=None`` means "from the beginning"."""
+    lower = after_asof or "0000-00-00"
+    dates: set[str] = set()
+
+    rows = conn.execute(
+        "SELECT DISTINCT asof FROM fills WHERE asof > ? AND asof <= ? AND strategy_id=?",
+        (lower, through_asof, strategy_id),
+    ).fetchall()
+    dates.update(r[0] for r in rows)
+
+    rows = conn.execute(
+        "SELECT DISTINCT asof FROM positions WHERE asof > ? AND asof <= ? AND strategy_id=?",
+        (lower, through_asof, strategy_id),
+    ).fetchall()
+    dates.update(r[0] for r in rows)
+
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT asof FROM cash_ledger WHERE asof > ? AND asof <= ?",
+            (lower, through_asof),
+        ).fetchall()
+        dates.update(r[0] for r in rows)
+    except Exception:
+        pass
+
+    return sorted(dates)
+
+
+def rebuild_snapshot_chain(conn, *, asof: str, strategy_id: str = "default",
+                           initial_cash: float = 0.0) -> list[dict]:
+    """Advance the account_snapshots chain for ``strategy_id`` through ``asof``.
+
+    Strategy:
+      * Find the latest existing snapshot for the strategy at or before ``asof``.
+      * Collect every date strictly after that snapshot (through ``asof``) that has
+        fills, positions, or cash_ledger activity — including **hold-only days**
+        where positions were merely marked-to-market and no fills occurred.
+      * Rebuild a snapshot for each such day in chronological order so cash and
+        NAV flow correctly day-by-day. On a hold-only day the existing
+        ``build_account_snapshot`` yields ``net_trade_cashflow=0``, carrying the
+        prior cash forward and refreshing ``positions_value`` / ``nav`` from the
+        day's ``positions`` rows.
+
+    Returns the list of per-day snapshot result dicts (empty if nothing to do).
+    """
+    ensure_trade_tables(conn)
+
+    prev = get_prev_snapshot(conn, asof, strategy_id=strategy_id)
+    latest_snap_asof = prev[0] if prev else None
+
+    # Include `asof` itself only if there's no snapshot for it yet, to avoid
+    # re-writing the same day unnecessarily when caller is idempotent.
+    candidates = _collect_candidate_asofs(
+        conn,
+        after_asof=latest_snap_asof,
+        through_asof=asof,
+        strategy_id=strategy_id,
+    )
+
+    # If no snapshot existed and the target asof has no activity either, still
+    # anchor a snapshot at ``asof`` using initial_cash so the chain has a root.
+    if not prev and not candidates:
+        candidates = [asof]
+
+    results: list[dict] = []
+    for i, d in enumerate(candidates):
+        rid_row = conn.execute(
+            "SELECT run_id FROM fills WHERE asof=? AND strategy_id=? ORDER BY ts DESC LIMIT 1",
+            (d, strategy_id),
+        ).fetchone()
+        rid = rid_row[0] if rid_row else "manual-rebuild"
+        # initial_cash only applies when anchoring the very first snapshot in the
+        # chain (prev is None and we're on the first rebuilt date).
+        first_anchor = (prev is None and i == 0)
+        results.append(
+            build_account_snapshot(
+                conn,
+                rid,
+                d,
+                initial_cash=float(initial_cash) if first_anchor else 0.0,
+                strategy_id=strategy_id,
+            )
+        )
+
+    return results
+
 
 def main():
     ap = argparse.ArgumentParser()

@@ -179,7 +179,113 @@ def test_no_post_endpoints_under_symbol_router(client):
         "/api/symbol/1306.T/kline",
         "/api/symbol/1306.T/profile",
         "/api/symbol/1306.T/ladder",
+        "/api/symbol/1306.T/llm_brief",
     ):
         for method in ("post", "put", "delete", "patch"):
             resp = getattr(client, method)(path)
             assert resp.status_code in (404, 405), f"{method.upper()} {path} should be blocked, got {resp.status_code}"
+
+
+# ─── /llm_brief (P10-06) ────────────────────────────────────────────────────
+
+
+class _StubOllamaClient:
+    """Stub used to monkeypatch OllamaClient in api/symbol. Returns scripted
+    responses; never hits the network."""
+
+    instances: list["_StubOllamaClient"] = []
+
+    def __init__(self, responses=None, raise_exc=None, **_kwargs):
+        self.responses = list(responses) if responses else ["1306.T 当前价高于持仓成本，叙事描述。"]
+        self.raise_exc = raise_exc
+        self.calls: list[dict] = []
+        _StubOllamaClient.instances.append(self)
+
+    def generate(self, *, prompt: str, model: str) -> str:
+        self.calls.append({"prompt": prompt, "model": model})
+        if self.raise_exc is not None:
+            raise self.raise_exc
+        if not self.responses:
+            raise RuntimeError("no scripted responses left")
+        return self.responses.pop(0)
+
+
+def _install_stub(monkeypatch, *, responses=None, raise_exc=None):
+    """Replace api.symbol.OllamaClient with a factory that produces the stub."""
+    _StubOllamaClient.instances.clear()
+    def _factory(**kwargs):
+        return _StubOllamaClient(responses=responses, raise_exc=raise_exc, **kwargs)
+    import api.symbol as symbol_module
+    monkeypatch.setattr(symbol_module, "OllamaClient", _factory)
+
+
+def test_llm_brief_happy_path_with_mocked_ollama(client, monkeypatch):
+    _install_stub(monkeypatch, responses=["1306.T 当前价位于持仓成本之上，描述性叙事。"])
+    resp = client.get("/api/symbol/1306.T/llm_brief")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["ticker"] == "1306.T"
+    assert payload["narrative"]
+    assert payload["model_version"] == "gemma4:e4b"
+    assert payload["score_status"] == "uncalibrated_research_score"
+    assert payload["advice_only"] is True
+    # grounding must contain raw facts — verify a few
+    grounding = "\n".join(payload["factual_grounding"])
+    assert "ticker=1306.T" in grounding
+    assert "latest_close=" in grounding
+    # ladder is included
+    assert "ladder_ref_price=" in grounding
+
+
+def test_llm_brief_unknown_ticker_returns_404(client, monkeypatch):
+    _install_stub(monkeypatch)
+    resp = client.get("/api/symbol/9999XYZ/llm_brief")
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["reason"] == "symbol_not_found"
+
+
+def test_llm_brief_model_not_allowed_returns_422(client, monkeypatch):
+    _install_stub(monkeypatch)
+    resp = client.get("/api/symbol/1306.T/llm_brief?model=gpt-4")
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert detail["reason"] == "model_not_allowed"
+    assert "gemma4:e4b" in detail["allowed"]
+
+
+def test_llm_brief_ollama_unreachable_returns_503(client, monkeypatch):
+    from hot_theme_rotator.llm.ollama_client import OllamaUnreachableError
+    _install_stub(monkeypatch, raise_exc=OllamaUnreachableError("connection refused"))
+    resp = client.get("/api/symbol/1306.T/llm_brief")
+    assert resp.status_code == 503
+    detail = resp.json()["detail"]
+    assert detail["reason"] == "llm_backend_unreachable"
+    assert "connection refused" in detail["message"]
+
+
+def test_llm_brief_regex_fail_closed_returns_500(client, monkeypatch):
+    # Both attempts return forbidden tokens → PerTickerBriefError → 500
+    _install_stub(monkeypatch, responses=["胜率 70%", "概率 80%"])
+    resp = client.get("/api/symbol/1306.T/llm_brief")
+    assert resp.status_code == 500
+    detail = resp.json()["detail"]
+    assert detail["reason"] == "brief_generation_failed"
+    assert "forbidden tokens" in detail["message"]
+
+
+def test_llm_brief_alternate_model_passes_through(client, monkeypatch):
+    _install_stub(monkeypatch, responses=["更大模型的描述性叙事。"])
+    resp = client.get("/api/symbol/1306.T/llm_brief?model=gemma4:26b")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["model_version"] == "gemma4:26b"
+    # the stub captured the model param
+    assert _StubOllamaClient.instances[-1].calls[0]["model"] == "gemma4:26b"
+
+
+def test_llm_brief_response_has_no_probability_fields(client, monkeypatch):
+    """Schema invariant: output dict must NOT carry probability/win_rate/score."""
+    _install_stub(monkeypatch, responses=["纯叙事"])
+    payload = client.get("/api/symbol/1306.T/llm_brief").json()
+    forbidden_keys = {"probability", "win_rate", "score", "confidence"}
+    assert forbidden_keys.isdisjoint(payload.keys())

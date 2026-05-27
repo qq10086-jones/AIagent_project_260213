@@ -992,7 +992,7 @@ P10 在 P0-P9 基础设施之上构建个人量化咨询层。目标两个交互
 
 ### P10-06 LLM Per-Ticker Brief
 
-- Status: pending
+- Status: done (2026-05-27)
 - Priority: P1
 - Depends on: P10-03 (news), P10-04 (fundamentals), P10-05 (factors), Rule 8.3.1
 - Goal: `llm/per_ticker_brief.py` 接本地 Ollama (gemma4:e4b 默认)。输入 ticker + news + factors + fundamentals + ladder → 输出中文叙事综合 brief。**强制**不输出任何概率 / 胜率 / 百分比数字（regex post-check 拦截）。
@@ -1060,7 +1060,7 @@ P10 在 P0-P9 基础设施之上构建个人量化咨询层。目标两个交互
 
 ### P10-10 Notification Channels
 
-- Status: pending
+- Status: done (2026-05-26)
 - Priority: P0 (Phase 1 Week 3, guarded push only)
 - Activation stage: Rule 12.0 Stage 2
 - Depends on: P9-04 (human_alerts), P10-18 (Anti-FOMO Guard Layer)
@@ -1196,7 +1196,7 @@ P10 在 P0-P9 基础设施之上构建个人量化咨询层。目标两个交互
 
 ### P10-17 Watchlist Intelligence
 
-- Status: pending
+- Status: done (2026-05-26)
 - Priority: P0 (Phase 1 Week 2, silent-first)
 - Activation stage: Rule 12.0 Stage 1
 - Depends on: P10-14 (TDnet), P10-19 (delayed price orchestrator), P9-04 (human_alerts), Rule 11.3, Rule 12.0
@@ -1238,7 +1238,7 @@ P10 在 P0-P9 基础设施之上构建个人量化咨询层。目标两个交互
 
 ### P10-18 Anti-FOMO Guard Layer (Rule 12 Enforcement)
 
-- Status: pending
+- Status: done (2026-05-26)
 - Priority: P0 (Phase 1 Week 3)
 - Activation stage: Rule 12.0 Stage 2 gate
 - Depends on: P9-04 (human_alerts), P10-17 (watchlist intelligence), Section 12
@@ -1270,7 +1270,7 @@ P10 在 P0-P9 基础设施之上构建个人量化咨询层。目标两个交互
 
 ### P10-20 Daily Advisory Cockpit (Time-to-First-Value MVP)
 
-- Status: pending
+- Status: done (2026-05-26)
 - Priority: P0 (Phase 1 Week 2, before guarded push)
 - Activation stage: Rule 12.0 Stage 0
 - Depends on: P8-18 (interactive exploration), P8-19 (morning briefing), P10-14 (TDnet), P10-19 (delayed price orchestrator)
@@ -1285,7 +1285,7 @@ P10 在 P0-P9 基础设施之上构建个人量化咨询层。目标两个交互
   - Every quote or disclosure surfaced carries source + `data_ts` / freshness status; inferred quote timestamps are explicitly marked.
   - Morning briefing and dashboard both show research-only / uncalibrated status and never render win-rate language unless Rule 9.4 is satisfied.
   - Watchlist entries without fresh data show an explicit unavailable/stale state, not old fallback data.
-  - No POST / PUT / DELETE / PATCH endpoints are added; no broker / paper order path is touched.
+  - No broker / paper order path is touched. Section 14 manual portfolio recording POST endpoints are outside the cockpit surface and remain record-only, not execution endpoints.
   - Tests cover: data freshness display, no-notifier call, stale data visible state, Rule 3 method guard, and no calibrated win-rate label.
 - Verified Stage 0 payload contract slice (2026-05-26):
   - Added `reporting/daily_advisory_cockpit.py` with `build_daily_advisory_cockpit`.
@@ -1431,13 +1431,13 @@ P10 在 P0-P9 基础设施之上构建个人量化咨询层。目标两个交互
   - derive (Cycle 3, 19 tests, ~130 LOC): pure positions / cash views / Rule 14.4 skip-both / oversell fail-closed / determinism.
   - validation (Cycle 4, 15 tests, ~150 LOC): Rule 14.2 future-ts / oversell / source whitelist hard gates + BUY / withdrawal cash soft warnings.
   - Baseline 583 → final 656 (+73 portfolio tests, zero regression).
-  - Unlocks P10-22 (migration snapshot script) and P10-23 (manual entry UI / CLI) for cutover day T (2026-06-08).
+  - Unlocks P10-22 (migration snapshot script) and P10-23 (manual entry UI / CLI) for cutover day T. Per Rule 14.8, T must be an absolute date with verified weekday.
 
-- **Status changes (2026-05-26 W2/W3 sprint)**: P10-22 → done; P10-23 → done; P10-18 → done; P10-10 → done. See PROJECT_STATUS Change Log rows for each.
+- **Status changes (2026-05-26 W2/W3 sprint; synced 2026-05-27)**: P10-17 → done; P10-20 → done; P10-22 → done; P10-23 → done; P10-18 → done; P10-10 → done. See PROJECT_STATUS Change Log rows for each.
 
 ### P10-22 Project_optimized → HTR Migration Snapshot
 
-- Status: pending
+- Status: done (2026-05-26; code/tests ready, real cutover run pending user-selected T)
 - Priority: P0 (cutover day T 当天必须可用)
 - Depends on: P10-21 (journal schema), ADR-0008
 - Goal: 一次性脚本，在 T 日把 Project_optimized 的 `etf_buyhold` 持仓 snapshot 翻译成 HTR journal 的 `migration` 事件。验证 NAV 一致后 emit `migration_complete` marker 给驾驶舱解锁 manual entry。
@@ -1456,7 +1456,7 @@ P10 在 P0-P9 基础设施之上构建个人量化咨询层。目标两个交互
 
 ### P10-23 Manual Fill Entry UI
 
-- Status: pending
+- Status: done (2026-05-26; backend/API/CLI ready, frontend button integration remains follow-up if desired)
 - Priority: P0 (T+1 起取代 CSV / SQL 路径)
 - Activation stage: Rule 12.0 Stage 0 (Pull-only advisory entry)
 - Depends on: P10-21 (journal), P10-22 (migration), P10-20 (cockpit)
@@ -1625,6 +1625,7 @@ P11 是反馈控制环：把已 realized outcomes 转化为 system improvement p
 - Priority: P0 (Week 6)
 - Depends on: P11-05
 - Goal: Proposal review pipeline。Rule 13.1 (proposals only) + 13.5 (7d expiry) + 13.6 (metadata required) + 13.7 (backtest required for parameter changes) + 13.9 (log rejections)。
+- R2 hardening (2026-05-27): also enforces Rule 13.11 validity-to-action matrix, Rule 13.14 shadow default for accepted parameter changes, Rule 13.15 same-target cooldown, Rule 13.16 typed expiry semantics, and Rule 13.17 reproducibility metadata.
 - Files:
   - Create: `src/hot_theme_rotator/reflection/decision_gate.py`
   - 存储: `reports/reflections/{proposals,accepted,rejected,expired}/`

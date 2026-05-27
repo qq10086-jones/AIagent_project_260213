@@ -1,21 +1,24 @@
 """GET /api/symbol/{ticker}/* — exploration endpoints (Rule 11 / §6.11.1).
 
-Three read-only endpoints that let the UI drill into any ticker:
+Four read-only endpoints that let the UI drill into any ticker:
 
 - `GET /api/symbol/{ticker}/kline?sessions=N` — last N daily bars
 - `GET /api/symbol/{ticker}/profile` — latest close + portfolio + screener crossref
 - `GET /api/symbol/{ticker}/ladder?ref_price=X` — recompute seven-tier ladder
+- `GET /api/symbol/{ticker}/llm_brief?model=M` — Chinese narrative brief (P10-06)
 
 Rule 11 boundaries:
 
 - GET only — no POST/PUT/DELETE/PATCH.
 - Read-only — no writes to `decision_log/`, `reports/predictions/`, or `japan_market.db`.
-- Fail-closed — unknown ticker -> 404, invalid params -> 422, adapter error -> 500.
-  No silent fallback to mock data.
+- Fail-closed — unknown ticker -> 404, invalid params -> 422, adapter error -> 500,
+  LLM backend unreachable -> 503. No silent fallback to mock data or fabricated brief.
 - `score_status` is never lifted — these endpoints do not produce scores.
+- LLM brief obeys Rule 8.3.1 + 13.4: no probability / win-rate / percentage anywhere.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -36,6 +39,13 @@ from hot_theme_rotator.data.universe_adapter import (
     UniverseAdapterError,
     default_selected_tickers_path,
     load_screener_snapshot,
+)
+from hot_theme_rotator.llm.ollama_client import OllamaClient, OllamaUnreachableError
+from hot_theme_rotator.llm.per_ticker_brief import (
+    DEFAULT_MODEL as DEFAULT_LLM_MODEL,
+    PerTickerBriefError,
+    PerTickerBriefInput,
+    generate_per_ticker_brief,
 )
 from hot_theme_rotator.opportunity.price_ladder import build_price_ladder
 
@@ -213,7 +223,122 @@ def get_symbol_ladder(
     }
 
 
+_LLM_CACHE_DIR = Path("reports/llm/per_ticker_brief_cache")
+_ALLOWED_LLM_MODELS = frozenset({"gemma4:e4b", "gemma4:26b", "gemma3:e4b"})
+
+
+@router.get("/symbol/{ticker}/llm_brief")
+def get_symbol_llm_brief(
+    ticker: str,
+    model: str = Query(DEFAULT_LLM_MODEL),
+) -> dict[str, Any]:
+    """Generate a Chinese narrative brief for `ticker` via local Ollama.
+
+    Loads the same factual context as `/profile` + `/ladder` and asks the
+    local LLM to weave it into descriptive prose. Numerical claims live in
+    `factual_grounding` verbatim; the LLM does not invent or restate numbers.
+
+    Errors:
+    - Unknown ticker -> 404 `symbol_not_found`
+    - Model not in allow-list -> 422 `model_not_allowed`
+    - Ollama unreachable / timeout -> 503 `llm_backend_unreachable`
+    - Rule 8.3.1 fail-closed (regex catches forbidden tokens twice) -> 500
+      `brief_generation_failed`
+    """
+    _validate_ticker(ticker)
+    if model not in _ALLOWED_LLM_MODELS:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "reason": "model_not_allowed",
+                "model": model,
+                "allowed": sorted(_ALLOWED_LLM_MODELS),
+            },
+        )
+
+    try:
+        latest = fetch_latest_close(default_db_path(), symbol=ticker)
+    except KlineAdapterError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    if latest is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"reason": "symbol_not_found", "ticker": ticker},
+        )
+
+    portfolio_row = _portfolio_row_for(ticker)
+    screener_row = _screener_row_for(ticker)
+    ladder_payload = _ladder_payload_for(latest)
+
+    payload = PerTickerBriefInput(
+        ticker=ticker,
+        latest_close=float(latest.close),
+        latest_asof=latest.asof,
+        portfolio=portfolio_row,
+        screener=screener_row,
+        ladder=ladder_payload,
+    )
+
+    client = OllamaClient(cache_dir=_LLM_CACHE_DIR)
+
+    try:
+        brief = generate_per_ticker_brief(payload, llm=client, model=model)
+    except PerTickerBriefError as exc:
+        # per_ticker_brief wraps every backend exception in PerTickerBriefError.
+        # Inspect __cause__ to distinguish "Ollama unreachable" (503) from
+        # "regex fail-closed / input invalid" (500).
+        cause = exc.__cause__
+        if isinstance(cause, OllamaUnreachableError):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "reason": "llm_backend_unreachable",
+                    "message": str(cause),
+                },
+            )
+        raise HTTPException(
+            status_code=500,
+            detail={"reason": "brief_generation_failed", "message": str(exc)},
+        )
+
+    out = brief.to_dict()
+    out["score_status"] = "uncalibrated_research_score"
+    out["advice_only"] = True
+    return out
+
+
 # ─── helpers ────────────────────────────────────────────────────────────────
+
+
+def _ladder_payload_for(latest) -> dict[str, Any]:
+    """Build a ladder dict shape compatible with PerTickerBriefInput.ladder.
+
+    Uses the latest close as ref_price (no user override here — that's the
+    `/ladder` endpoint's contract, not this brief's)."""
+    ref = float(latest.close)
+    spoof_bar = PriceBar.from_dict({
+        "symbol": latest.symbol,
+        "asof": latest.asof,
+        "open": ref,
+        "high": max(float(latest.high), ref),
+        "low": min(float(latest.low), ref),
+        "close": ref,
+        "volume": float(latest.volume),
+        "turnover_jpy": float(latest.volume) * ref,
+    })
+    ladder = build_price_ladder(spoof_bar)
+    return {
+        "ref_price": ref,
+        "tiers": [
+            {"kind": "exit_stretch", "price": float(ladder.stretch_exit)},
+            {"kind": "exit_2", "price": float(ladder.second_exit)},
+            {"kind": "exit_1", "price": float(ladder.first_exit)},
+            {"kind": "entry_aggressive", "price": float(ladder.aggressive_entry)},
+            {"kind": "entry_balanced", "price": float(ladder.balanced_entry)},
+            {"kind": "entry_conservative", "price": float(ladder.conservative_entry)},
+            {"kind": "stop", "price": float(ladder.stop_price)},
+        ],
+    }
 
 
 def _validate_ticker(ticker: str) -> None:

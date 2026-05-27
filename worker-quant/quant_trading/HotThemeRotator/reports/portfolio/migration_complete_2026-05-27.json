@@ -1,0 +1,20 @@
+{
+  "adr": "ADR-0008",
+  "cash_event_count": 1,
+  "completed_at": "2026-05-27T06:55:20.478338+00:00",
+  "cutover_date": "2026-05-27",
+  "derived_components": {
+    "cash": 193685.0,
+    "positions_value": 208699.9969482422
+  },
+  "derived_nav": 402384.9969482422,
+  "expected_nav": 402384.9969,
+  "fill_count": 1,
+  "journal_path": "reports\\portfolio\\journal\\2026-05-27.jsonl",
+  "nav_diff_yen": 4.8242160119116306e-05,
+  "nav_tolerance_yen": 40.238499690000005,
+  "source_components": {
+    "cash": 193685.0,
+    "positions_value": 208699.9969
+  }
+}

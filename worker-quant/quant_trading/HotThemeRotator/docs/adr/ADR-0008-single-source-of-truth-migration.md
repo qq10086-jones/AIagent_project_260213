@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed 2026-05-26. Cutover day T to be confirmed by user (recommended end of W2, 2026-06-08, after P10-21 implementation lands). On T this ADR becomes Accepted and ADR-0005 is marked Superseded by ADR-0008.
+**Accepted 2026-05-27** (cutover day T = Wednesday JST; user picked same-day cutover at 08:43 JST after Phase A.1 dry-run rehearsal; real migration executed 15:55 JST after Project_optimized account_snapshot refresh for 2026-05-26 resolved a stale-snapshot NAV mismatch). NAV: source ¥402,384.9969 vs derived ¥402,384.99694, diff 4.8e-5 yen (tolerance ¥40.24). Single 1306.T BUY 500 @ ¥403 + opening deposit ¥395,185. Marker: `reports/portfolio/migration_complete_2026-05-27.json`. ADR-0005 marked Superseded by ADR-0008.
 
 ## Context
 

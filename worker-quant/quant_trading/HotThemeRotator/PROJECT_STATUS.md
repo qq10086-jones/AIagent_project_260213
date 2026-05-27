@@ -3,12 +3,12 @@
 > `PROJECT_STATUS.md` 是唯一项目更新文件。所有进度、阻塞、风险、下一步、验收结果只写入本文件。其他文档除非是设计或治理变更，不记录流水进度。
 ## Current State
 
-- Date: 2026-05-26
-- Phase: Phase 1 W1-W6 主体完成 → W7+ 收尾 (Ollama 真实集成 + P10 P1/P2 余项)
-- Status: **W7 收尾基本完成**. SELL 救急 + Portfolio side + Reflection L0-L7 + P10-13 + 三轮 review patches + commit 858b1d8 + **Ollama 真实集成 + M13/L8 backlog + P10-19 Cycle 2 briefing integration**。**998 pytest passing**（baseline 583 → +415 tests, 零回归）。Migration dry-run 已对真实 DB 跑通。Cutover day T 待用户拍板 (5-30 周六 / 6-08 周日)。反思系统 decision-grade ready；morning briefing 现支持 `--price-health-date` 注入 P10-19 health report。Next: cutover 实际执行 + P10 P1/P2 余项 + P10-14 Cycle 2 Task Scheduler admin run。
+- Date: 2026-05-27
+- Phase: Phase 1 W1-W7 主体完成 + **ADR-0008 cutover complete 2026-05-27 15:55 JST** → W8+ P10 P1/P2 增强
+- Status: **W7 收尾基本完成**. SELL 救急 + Portfolio side + Reflection L0-L7 + P10-13 + 三轮 review patches + commit 858b1d8 + **Ollama 真实集成 + M13/L8 backlog + P10-19 Cycle 2 briefing integration + R2 reflection hardening**。**1007 pytest passing**（baseline 583 → +424 tests, 零回归）。**ADR-0008 cutover COMPLETE 2026-05-27 15:55 JST**（用户 08:43 JST 拍板今日 cutover；A.1 dry-run rehearsal 08:45 JST 过；B.1 canonical dry-run 15:47 JST 发现 Project_optimized 内部 ¥300 NAV 漂移 — account_snapshots.asof=5-25 vs positions.asof=5-26，5-25 算 ¥418.00 vs 5-26 实际 ¥417.40；用 `build_account_snapshot.py --asof 2026-05-26 --run_id htr_cutover_2026-05-27` 在 Project_optimized 端补 5-26 快照后再 dry-run + 真跑过；marker `reports/portfolio/migration_complete_2026-05-27.json` 落地，NAV ¥402,384.9969 derived vs expected, diff 4.8e-5 yen ≪ 容差 ¥40.24；journal `reports/portfolio/journal/2026-05-27.jsonl` = 1 cash_event 开 ¥395,185 + 1 fill 1306.T BUY 500 @ ¥403）。**HTR 自此为 live positions / cash / realized P&L 唯一真相源**；Project_optimized portfolio 数据冻结为历史归档。反思系统 decision-grade ready；morning briefing 现支持 `--price-health-date` 注入 P10-19 health report。Next: cutover 实际执行 + P10 P1/P2 余项 + P10-14 Cycle 2 Task Scheduler admin run。
 - Milestone progress: P0-P5 done / P6-P9 mostly done (P9-05 pending) / P10 23 tasks (**P10-10/13/18/20/21/22/23 done all 2026-05-26**; 余 P10-03/04/05/06/07/08/09/11/12/15/16 P1/P2 非阻塞 + P10-14/19 Cycle 2 closure pending) / **P11 8 tasks 全部 done (L0-L7)**
-- ADRs: 8 (ADR-0001..0008; ADR-0008 Proposed pending cutover day T)
-- Governance sections: 1-14 (含 §2.1 Fixture Provenance, Rule 8.2.1 / 8.3.1 / 8.6.1 / 8.9 / 10.1 / 11.1-4 / 12.0-6 / 13.1-13.10 / 14.0-14.7)
+- ADRs: 8 (ADR-0001..0008; **ADR-0008 Accepted 2026-05-27**; **ADR-0005 Superseded by ADR-0008 on 2026-05-27**)
+- Governance sections: 1-14 (含 §2.1 Fixture Provenance, Rule 8.2.1 / 8.3.1 / 8.6.1 / 8.9 / 10.1 / 11.1-4 / 12.0-6 / 13.1-13.17 / 14.0-14.8)
 - Live trading: disabled (Rule 3 advice-only forever)
 - Execution mode: advice-only
 - Primary market: Japan equities
@@ -17,24 +17,22 @@
 
 ## Current Objective
 
-Phase 1 W1-W6 主体已完成。当前重心从"建系统"转到"用系统 + 收尾增强"。
+Phase 1 W1-W7 主体已完成。当前重心从"建系统"转到"cutover 执行 + 用系统 + W8+ 增强"。
 
-**已落地 (W1-W6)**:
+**已落地 (W1-W7)**:
 
 1. **数据新鲜度层** (W1, P10-14/16/19)：TDnet RSS + 多源延迟价格 orchestrator + J-Quants 接口 (deferred 待凭据)。Cycle 2 网络层余 briefing integration pending。
 2. **Time-to-first-value 可用层** (W2, P10-20/17)：Daily Advisory Cockpit Stage 0 + Silent Watchlist Intelligence (event detector + monitor + silent queue)。
-3. **HTR 自有持仓** (W2, P10-21/22/23 + ADR-0008 + Section 14)：append-only journal + Rule 14.2 fail-closed validation + atomic transitions + migration script with NAV diff verify + manual entry CLI/API/service。Cutover T = 2026-06-08 干跑/真跑就绪。
+3. **HTR 自有持仓** (W2, P10-21/22/23 + ADR-0008 + Section 14)：append-only journal + Rule 14.2 fail-closed validation + atomic transitions + migration script with NAV diff verify + manual entry CLI/API/service。**Cutover T = 2026-05-27 Wednesday JST, real run scheduled ≥15:00 JST close** (用户 2026-05-27 08:43 JST 拍板)。Rule 14.8 canonical dry-run 将在 ≥15:00 JST 收盘后紧贴真跑前执行并留证。
 4. **Push 模式骨架** (W3, P10-18/10)：Rule 12.1-12.6 全部 (alert budget / stale fail-closed / chase filter / cooling-off / concentration / cross-strategy journal) + 三个 guarded notifier channels (desktop/email/telegram) 默认 disabled + GuardedAlert type-enforced。
-5. **反思系统全 8 layers** (W4-W6, P11-00..07 + ADR-0007)：PIT Ledger / Trace Logger / Event Detector (CUSUM+ARL bootstrap+Holm) / Policy Replay (NOT Pearl + Data Freshness Gate) / RCA (NOT Shapley + marginal_recovery) / LLM Reflection (Rule 8.3.1+13.4 双重 regex) / Human Decision Gate (Rule 13.5-13.9) / Meta-Reflection (Rule 13.10)。
+5. **反思系统全 8 layers** (W4-W6, P11-00..07 + ADR-0007)：PIT Ledger / Trace Logger / Event Detector (CUSUM+ARL bootstrap+Holm) / Policy Replay (NOT Pearl + Data Freshness Gate) / RCA (NOT Shapley + marginal_recovery) / LLM Reflection (Rule 8.3.1+13.4 双重 regex + Rule 13.12 action boundary) / Human Decision Gate (Rule 13.5-13.17) / Meta-Reflection (Rule 13.10/13.16)。
 6. **Calibration bootstrap** (W4, P10-13 + ADR-0006)：历史回填工具 + evidence_origin 字段 + scanner_config_hash 校验。
 
-**W7+ 收尾 (剩余非阻塞)**:
+**W8+ 增强 (剩余非阻塞)**:
 
-- P11-05 真实 Ollama 客户端集成 (目前 stub)
 - P10-14 Cycle 2 Windows Task Scheduler 注册脚本真实执行
-- P10-19 Cycle 2 briefing integration
 - P10 P1/P2 余项 (per-ticker news / 基本面 / 因子分解 / LLM brief 真集成 / V5 深度页 / catalysts / 收益日历 / scheduled scan / server watchlist / Yahoo JP scraper)
-- M13 funnel drop_reasons reconcile + L8 ablation tie-break doc/code 对齐
+- 文档卫生：README / TASKS / FOLDER_MAP / frontend 文案仍有编码乱码，需单独清理
 ## Active Decision
 
 1. **Project_optimized + Project_v5 只读消费** (ADR-0005)：HTR 不写回 sibling project；任何外部数据源（TDnet / Yahoo JP / Kabutan / J-Quants）落 HTR-native `reports/{tdnet,observability,traces,reflections}/`。
@@ -45,46 +43,67 @@ Phase 1 W1-W6 主体已完成。当前重心从"建系统"转到"用系统 + 收
 6. **Anti-FOMO 治理优先于 calibration purity** (Phase 1 v2 重排)：fresh data + push + 反追涨纪律 → 然后才做 backdated calibration。Codex 验证 "calibration 给样本但样本不防 FOMO"。
 7. **Time-to-first-value > academic prestige**：Pearl/Shapley 标签放弃；时间表诚实从 6-7 周改为 10-12 周（Codex realistic）。
 8. **Activation staging** (Rule 12.0, 2026-05-26)：为了尽快可用，允许 Stage 0 Pull-only cockpit 与 Stage 1 silent alerts 先上线；真实 desktop/email/telegram push 必须等 Stage 2 guarded push，即 P10-18 discipline filter 通过后才启用。
-9. **HTR Single Source of Truth Migration** (ADR-0008 Proposed, Section 14 binding-on-T, 2026-05-26)：HTR 自建 append-only portfolio journal 取代 `position_adapter.py` 只读 Project_optimized；cutover day T 待用户确认（建议 W2 末 2026-06-08，P10-21 落地后）。T 后 Project_optimized portfolios 冻结为历史归档，HTR 是 live positions / cash / realized P&L 唯一真相源。Rule 3 / Rule 8.2 / Rule 9.4 / §10 gate 8 全保留——manual fill 是用户报告已通过外部券商成交，不是 HTR 下单。Rule 14.6：calibration sample 排除 `paper/migration/correction` source 防双计数。
+9. **HTR Single Source of Truth Migration** (ADR-0008 Proposed, Section 14 binding-on-T, 2026-05-26)：HTR 自建 append-only portfolio journal 取代 `position_adapter.py` 只读 Project_optimized；cutover day T 待用户确认（当前候选：2026-05-30 周六 / 2026-06-07 周日）。T 后 Project_optimized portfolios 冻结为历史归档，HTR 是 live positions / cash / realized P&L 唯一真相源。Rule 3 / Rule 8.2 / Rule 9.4 / §10 gate 8 全保留——manual fill 是用户报告已通过外部券商成交，不是 HTR 下单。Rule 14.6：calibration sample 排除 `paper/migration/correction` source 防双计数。Rule 14.8：T 必须写绝对日期 + 已校验星期；真跑前必须重新 dry-run 并留证。
 ## Next Actions
 
-Authoritative as of 2026-05-26 EOD — W1-W6 主体完成；下一步聚焦 cutover + 真实 Ollama + P1/P2 增强。
+Authoritative as of 2026-05-27 15:55 JST — **W1-W7 主体 + ADR-0008 cutover 全部完成**；下一步聚焦 W8+ P10 P1/P2 增强 + 停 Project_optimized 端 portfolio 写入 job。
 
-**Immediate (cutover prep, 2026-05-27 to 2026-06-08)**:
+**Cutover completed (2026-05-27)**:
 
-1. **干跑 migration** — `python tools/migrate_portfolio_from_project_optimized.py --cutover-date 2026-06-08 --dry-run` 提前验 dry-run preview + entries shape。
-2. **Cutover day T = 2026-06-08 (周日)** — 真跑 migration without `--dry-run`，验证 NAV diff < tolerance + `migration_complete_2026-06-08.json` marker。之后所有持仓录入只走 HTR (CLI / API / 驾驶舱 button)，停掉 Project_optimized 端 portfolio 写入 job。
-3. **ADR-0005 → "Superseded by ADR-0008 on 2026-06-08"** 标注；ADR-0008 Status 改 "Accepted 2026-06-08"。
+- ✅ Phase A.1 dry-run rehearsal (08:45 JST)
+- ✅ Phase A.2 PROJECT_STATUS.md T 锁定
+- ✅ Phase A.3 ADR-0005/0008 status diffs staged
+- ✅ Phase B.1 canonical dry-run (15:47 JST，初版基于 stale 5-25 snapshot)
+- ⚠️ Phase B.2 第一次真跑失败 (15:50 JST，NAV diff ¥300 — Project_optimized account_snapshot.asof=5-25 vs positions.asof=5-26 price drift ¥0.60 × 500 = ¥300)
+- ✅ Phase B.2a fix：删 partial journal + `python build_account_snapshot.py --asof 2026-05-26 --strategy_id etf_buyhold --run_id htr_cutover_2026-05-27` 补 5-26 快照
+- ✅ Phase B.1 重做 canonical dry-run (15:53 JST)：expected_nav=¥402,384.9969
+- ✅ Phase B.2 真跑成功 (15:55 JST)：derived ¥402,384.99694 vs expected ¥402,384.9969, diff 4.8e-5 yen, nav_consistent=true
+- ✅ Phase B.3 ADR-0005 → Superseded by ADR-0008 on 2026-05-27；ADR-0008 → Accepted 2026-05-27
 
-**W7 (收尾增强，非阻塞)**:
+**Immediate follow-up**:
 
-4. **P11-05 真实 Ollama 集成** — 当前 LlmClient 是 Protocol stub；wire 真实 `ollama_client.py` + `generate()` HTTP 调用 + 错误处理 + 24h cache。Rule 8.3.1+13.4 regex 已 in place。
-5. **P10-14 Cycle 2 closure** — Windows Task Scheduler 注册 `/F /Z` 防重叠真实执行 (script ready)；Yanoshin endpoint live smoke 已 single-pass 过。
-6. **P10-19 Cycle 2 briefing integration** — 把 price health report 接入 morning briefing 输出。
-7. **M13 + L8 backlog polish** — funnel drop_reasons reconciliation check + ablation tie-break doc/code 对齐。
+1. **停掉 Project_optimized 端 portfolio 写入 job** — `build_positions.py` / `build_account_snapshot.py` / 任何向 `japan_market.db` 的 `positions` / `account_snapshots` 写入的 cron / scheduled task，因为 HTR 不再读它们做 live positions。Project_optimized 仍是 backtest / scanner 平台，但 portfolio 状态已迁到 HTR journal。
+2. **新增持仓 / cash event 只走 HTR**：`tools/portfolio_manual_entry.py` CLI 或 driver API `/portfolio/fill` / `/portfolio/cash` 端点。**绝不再手改 Project_optimized 的 portfolio 表**。
 
-**W8+ (P10 P1/P2 余项, 增强用户体验)**:
+**User-action items (需 admin / 凭据)**:
 
-8. **P10-03/04/05** — per-ticker news filter + fundamentals adapter + factor decomposition (V5 depth-page 输入层)。
-9. **P10-06 LLM Per-Ticker Brief** — gemma4:e4b 真集成；P11-05 已经把 Rule 8.3.1 regex 落实，可直接复用 forbidden_pattern。
-10. **P10-07 V5 Single-Ticker Deep-Dive Page** — 复用 V3 dashboard infra + per-ticker 数据。
-11. **P10-08/09** — bidirectional/tier-conditional ground truth + earnings/catalyst calendar。
-12. **P10-11/12** — scheduled multi-window scan + server-side watchlist (Rule 11.3 + ADR-0008 user_state)。
-13. **P10-15 Yahoo JP scraper (news layer)** — 当前 price scraper 已稳，扩 news 抓取。
+3. **P10-14 Cycle 2 Task Scheduler 注册** — 以管理员身份跑 `scripts/register_tdnet_poll_task.bat` + `scripts/register_price_health_task.bat`（script ready + tested，但需 Windows admin shell 真实执行）。
+
+**W8+ (P10 P1/P2 增强，全部非阻塞)**:
+
+4. **P10-06 LLM Per-Ticker Brief** — gemma4:e4b 真集成；复用 W7 落地的 `OllamaClient` + `forbidden_pattern` regex（Rule 8.3.1 + 13.4 已 in place）。
+5. **P10-03/04/05** — per-ticker news filter + fundamentals adapter + factor decomposition (V5 depth-page 输入层)。
+6. **P10-07 V5 Single-Ticker Deep-Dive Page** — 复用 V3 dashboard infra + per-ticker 数据。
+7. **P10-08/09** — bidirectional/tier-conditional ground truth + earnings/catalyst calendar。
+8. **P10-11/12** — scheduled multi-window scan + server-side watchlist (Rule 11.3 + ADR-0008 user_state)。
+9. **P10-15 Yahoo JP scraper (news layer)** — 当前 price scraper 已稳，扩 news 抓取。
 
 **Deferred-permanent (不计划做)**:
 
-14. **P10-16 J-Quants Live Bridge** — 用户无 J-Quants 账户；19 测试 + 完整 auth flow 代码保留为 optionality。
-15. **P9-05 Paper Trading** — §10 gate 7；不阻塞 P10/P11，按需启动。
+10. **P10-16 J-Quants Live Bridge** — 用户无 J-Quants 账户；19 测试 + 完整 auth flow 代码保留为 optionality。
+11. **P9-05 Paper Trading** — §10 gate 7；不阻塞 P10/P11，按需启动。
 
-**红线 (从未放宽)**: Rule 3 advice-only / Rule 8.2 PIT mandatory / Rule 8.3 LLM no probability / Rule 9.4 win rate threshold / §10 gate 8 broker hard-block。
+**已完成 (本 session)**:
+- W1: P10-14 / P10-19 / P10-16 数据新鲜度
+- W2: P10-20 cockpit + P10-17 watchlist + P10-21/22/23 portfolio ledger
+- W3: P10-18 anti-FOMO + P10-10 guarded notifier
+- W4: P11-00 PIT ledger + P10-13 backdated calibration + P11-01 trace logger
+- W5: P11-02 event detector + P11-03 policy replay
+- W6: P11-04 RCA + P11-05 LLM brief + P11-06 decision gate + P11-07 meta
+- W7: Ollama real integration + M13 funnel reconcile + L8 ablation doc + P10-19 briefing integration
+- 三轮独立 review: 11 HIGH/BLOCKER + 5 MEDIUM 全 patched
+- **W8 cutover (2026-05-27)**: ADR-0008 cutover 完成；Project_optimized 端补跑 5-26 account_snapshot 解决 ¥300 stale-snapshot NAV 漂移；HTR journal `reports/portfolio/journal/2026-05-27.jsonl` + marker 落地
 
-Phase 1 时间表更新：原 10-12 周计划已压缩到 1 日完成 W1-W6 主体；剩余 W7-W8 估 2-3 周完成真实 Ollama + P1/P2 增强 + cutover 实际执行。
+**红线 (从未放宽)**: Rule 3 advice-only / Rule 8.2 PIT mandatory / Rule 8.3 LLM no probability / Rule 9.4 win rate threshold / §10 gate 8 broker hard-block / **§14 HTR-as-SSoT 自 2026-05-27 起强制**。
+
+Phase 1 时间表更新：原 10-12 周计划压缩到 1 日完成 W1-W7 主体 + 同日 cutover。剩余 = W8+ P10 P1/P2 增强（全部非阻塞）+ 停 Project_optimized portfolio 写入 job。
 
 ## Change Log
 
 | Date | Change | Owner | Evidence |
 |---|---|---|---|
+| 2026-05-27 | **R2 reflection hardening — Rule 13.11-13.17 + contract enforcement**. 用户确认 R2。治理更新：`docs/02_GOVERNANCE.md` Section 13 从 13.1-13.10 扩到 13.17，新增 validity-to-action matrix、LLM cannot originate proposals、proposal tier/blast radius、accepted parameter changes start in shadow、same-target cooldown、expiry/rejection semantics、reproducibility metadata。ADR-0007 同步记录 R2 hardening。实现更新：`decision_gate.intake_proposal()` 现在强制 Rule 13.11 / 13.15 / 13.17；`accept_proposal()` 接受 parameter_change 时默认 `lifecycle_stage=shadow` + `rollback_required=true`；expiry 写 `expiration_reason=unreviewed_timeout`；`meta_reflection` 忽略 `operator_unavailable` expiry；`reflection_brief` 的 structured action 标记 `source_layer=L4_RCA` / `generator=structured_rca_v1`，并在 `data_too_stale` / `invalid` 时不生成 action。 | Codex | Updated `docs/02_GOVERNANCE.md`, `docs/adr/ADR-0007-reflection-architecture.md`, `docs/01_TASKS.md`, `PROJECT_STATUS.md`; updated `src/hot_theme_rotator/reflection/{decision_gate.py,meta_reflection.py}` and `src/hot_theme_rotator/llm/reflection_brief.py`; updated `tests/unit/{test_decision_gate.py,test_reflection_brief.py,test_meta_reflection.py,test_patch_b1_h7_h10.py}`. TDD RED targeted reflection suite -> 10 expected failures; GREEN targeted `61 passed`; broader reflection regression `83 passed`; full regression `python -m pytest tests/ -q -o cache_dir=.runtime\pytest_cache_r2_full --basetemp=.runtime\pytest_tmp_r2_full` -> **1007 passed in 9.10s**. Only warning: existing requests dependency warning. |
+| 2026-05-27 | **Rule update A — cutover date verification + manual portfolio POST carve-out + task status sync**. 用户同意方案 A。治理更新：`docs/02_GOVERNANCE.md` Rule 3 增加 manual portfolio recording carve-out，明确 `POST /api/portfolio/fill` / cash event 只记录用户已在外部券商完成的交易或现金事件，不含 broker route / account / order submit / live execution 字段，不放宽 Section 10 gate 8；Rule 11.2 从绝对禁止 POST 修正为仅允许 Section 14 record-only endpoints；新增 Rule 14.8 要求 cutover day T 必须写绝对日期 + JST 星期，真跑前重新 dry-run 并把产物路径与 NAV 组件写回状态文件。状态同步：`PROJECT_STATUS.md` 日期改 2026-05-27，修正 cutover 候选为 2026-05-30 周六 / 2026-06-07 周日，并明确 2026-06-08 是周一；记录此前 dry-run 产物当前未保留，选定 T 后需重跑留证。任务同步：`docs/01_TASKS.md` 将 P10-10 / P10-17 / P10-18 / P10-20 / P10-22 / P10-23 状态改为 done，与 `PROJECT_STATUS.md` 一致。API 文案：`api/main.py` OpenAPI description 改为 "manual portfolio record endpoints" + "no broker/order execution endpoints"，不再声称全 API 无 POST。新增 1 条契约测试锁定该口径。 | Codex | Updated `docs/02_GOVERNANCE.md`, `PROJECT_STATUS.md`, `docs/01_TASKS.md`, `api/main.py`; updated `tests/unit/test_api_portfolio_fill.py` (+OpenAPI description contract). TDD: RED `test_openapi_description_allows_manual_recording_but_not_execution` failed on old "no post/put/delete" wording; GREEN targeted `1 passed`; final full regression `python -m pytest tests/ -q -o cache_dir=.runtime\pytest_cache_rule_a_final --basetemp=.runtime\pytest_tmp_rule_a_final` -> **999 passed in 9.17s**. Only warning: existing requests dependency warning. |
 | 2026-05-26 | **W7 收尾 — M13 funnel reconcile + L8 ablation doc + P10-19 Cycle 2 briefing integration**. 三个 backlog 一并清掉。**M13**: `funnel.py` `FunnelReport.__post_init__` 加 drop_reasons reconcile：当 stage 携带 `drop_reasons` 非空时，`sum(reasons.values())` 必须 = upstream.count − this.count，否则 raise FunnelError。Stage 0 无 upstream 跳过；空 drop_reasons 跳过（支持部分计费）。docstring 明确 "drop_reasons documents reasons that caused candidates to leave the UPSTREAM stage and NOT reach this one"。**L8**: `ablation.py` `rank_contributions` docstring 改 "stable on ties" → 明确 "lexicographic tie-break by intervention name", 加 caller 提示 (input-order stability 用户自己 pre-sort)。**P10-19 Cycle 2 briefing integration**: `tools/morning_briefing.py` 加 `render_price_health_block(rows, watchlist=None)` 函数 + `render_briefing` optional `price_health_rows` 参数 + CLI `--price-health-date YYYY-MM-DD` flag 自动读 `reports/observability/price_health/{date}.json` 注入新章节。Format: per-symbol 分组，ok 源显示价格 + caveat（ts inferred / price uncertain），全部失败的 symbol 显示 "ALL SOURCES FAILED" + reason；watchlist filter 默认只 keep 用户关注的 symbol。**20 new tests** 跨 3 patch (M13: 6 tests covering match/under/over/empty/stage0/zero-loss; L8: 3 tests covering lex tie / recovery dominance / input-order independence; P10-19: 11 tests covering empty / single ok / fail+reason / all-failed summary / ts inferred caveat / price uncertain caveat / watchlist filter / none filter / no-overlap / render_briefing 段落注入 + omission 向后兼容)。**Bugs**: (1) AblationContribution 测试用合成 intervention name 触发 enum reject，改用 ALLOWED_INTERVENTIONS 真名；(2) QuoteFetcher stub 用错方法名 `fetch_latest_close` 而非 Protocol 的 `fetch`，修正一行后过。Full pytest `998 passed in 9.82s` (978 baseline + 20 new, 零回归). 无 broker / order / paper 触及. Rule 3 / Rule 8.3 / §10 全保留. W7 三个 backlog 完成；Codex 三轮审查全部清零。 | Claude | Updated `src/hot_theme_rotator/reflection/funnel.py` (M13 reconcile + docstring); `src/hot_theme_rotator/reflection/ablation.py` (L8 docstring); `tools/morning_briefing.py` (+render_price_health_block + render_briefing param + CLI flag); new `tests/unit/test_patch_m13_l8.py` (9 tests); new `tests/unit/test_morning_briefing_price_health.py` (11 tests); PROJECT_STATUS.md Current State + Change Log. TDD: M13/L8 GREEN one-shot (one enum-name fix mid-cycle); briefing GREEN one-shot (one Protocol method-name fix). Full regression 998 passed. |
 | 2026-05-26 | **W7 — Ollama 真实客户端集成 (P11-05 stub → 真 HTTP) + commit 858b1d8 + migration dry-run 对真实 DB 跑通**. 用户选 A 方案 (干跑 + commit + 等周末再 cutover)。**Migration dry-run** `python tools/migrate_portfolio_from_project_optimized.py --cutover-date 2026-06-08 --dry-run --base-dir .runtime/dryrun` 输出 1 cash_event + 1 fill：opening_deposit=¥395,185 (=cash ¥193,685 + 500×¥403 cost basis) / migration BUY 1306.T 500 @ ¥403 avg_cost / ts=2026-06-08T09:00:00+09:00 JST 开市 / source=migration / deterministic SHA256 entry_ids。expected_nav=¥402,685 与 DB 当前 NAV 精确对齐。**Git commit 858b1d8** "quant/HTR: Phase 1 W1-W6 complete + ADR-0008 + Section 14 + reflection L0-L7": 132 files / +19,886 / -30 lines。Recovery point 建立。**Ollama HTTP client (W7 follow-up to P11-05 stub)**: 新 `src/hot_theme_rotator/llm/ollama_client.py` (~180 LOC)。`OllamaClient` dataclass 实现 `LlmClient` Protocol，HTTP via `urllib.request` (zero new dependency) POST 到 `{host}/api/generate` (default `localhost:11434`)；`http_post_fn` / `now_fn` 双 callable injection 让单测完全 mock 不需真服务。**Rule 8.3.1 enforcement**: `OllamaUnreachableError` 在 timeout / connection refused / HTTPError / empty response / 非 JSON 全部 raise，upstream `generate_reflection_brief` 已经 catch `Exception` 后包成 ReflectionBriefError——never fabricate。**24h 文件缓存**: `cache_key = sha256(model|prompt)`；存 `{cache_dir}/{key[:16]}.json` 含 response + cached_at ISO ts + model + key_prefix；TTL 配置（默认 24h）；malformed cache file silently re-fetch；`cache_dir=None` 完全禁缓存（用于 volatile context）。**19 unit tests** 覆盖 deterministic key + 不同 model 不同 key + 不同 prompt 不同 key / OK HTTP path + URL 拼接 + body shape (stream=False) / 空 response raise + missing response field raise + post 异常包成 unreachable + 已有 unreachable 透传 + 空 prompt/model 拒绝 / cache hit 跳 HTTP + TTL 过期 re-fetch + cache_dir=None 完全禁 + malformed cache JSON re-fetch + cache file 写入 (model/cached_at/response) + 不同 model 双 entry / 自定义 host URL 拼接。一次性 18/19 GREEN (一个 operator-precedence bug `tmp_path / "x" * 16` Windows Path 不支持 `*`，修一行后 19/19)。Full pytest 978 passed in 9.82s (959 baseline + 19 new, 零回归). 无 broker / order / paper 触及. Rule 3 / Rule 8.3 / §10 全保留. **P11-05 真实 Ollama 集成完成**——下游 generate_reflection_brief 现可直接 `OllamaClient(host="http://localhost:11434", cache_dir=Path("reports/llm_cache"))` 替换 stub。 | Claude | New `src/hot_theme_rotator/llm/ollama_client.py` (~180 LOC); updated `src/hot_theme_rotator/llm/__init__.py` (+OllamaClient/OllamaUnreachableError/compute_cache_key exports); new `tests/unit/test_ollama_client.py` (19 tests); updated `docs/03_FOLDER_MAP.md` (llm/ subpackage P11-05 done + Ollama integration done); PROJECT_STATUS.md Current State + Change Log. TDD: GREEN one-shot 18/19 → test typo fix → 19/19. Full regression 978 passed. |
 | 2026-05-26 | **第三轮 Codex 独立审查 + B1/H7/H8/H9/H10 + M10/M11/M12 patch 全部完成**. Codex 评 P11-03..07 找出 1 BLOCKER + 4 HIGH + 4 MEDIUM + 1 LOW (verdict "do not ship as decision-grade until fixed")。全部 9 个发现今晚修完。**B1 (BLOCKER) decision_gate 原子转换**: `_atomic_terminal_transition` helper 用 `_decision_gate_lock` (跨进程 sentinel lockfile) wrap 整个 read→augment→write-tmp→`os.replace`→unlink-src 流程；cross-state guard 拒绝同一 proposal 已在其他 terminal 时的转换；idempotent recovery 在 dst exists + src exists 时清 src。`intake_proposal` 也加 cross-terminal 检查。**H7 regex 扩展**: 新 pattern 覆盖 `75%` / `75％` (全角) / `75 percent` / `75 pct` / `0.75%` 小数 / `胜 率` (空格分隔 CJK) / `概 率` / `winrate` 无空格变体。**H8 brief 全字段 scan**: 新 `scan_brief_for_forbidden_tokens(brief)` 检查 narrative + factual_grounding + proposed_actions string values + confidence_caveats 全部；construct 后调用，违规 raise (笨重 laundering 路径全堵)。**H9 Rule 13.3 sample-tier**: `intake_proposal` 加 parameter_change tier 检查 — `parameter_change is not None` 且 `extra.bootstrap_ci_established != True` 且 `sample_size < 300` → raise (PARAMETER_CHANGE_MIN_SAMPLE_SIZE=300 constant per Rule 13.3 governance text)。**H10 meta-reflection chronological**: `_detect_consecutive_rejection_chronological` 替换旧版，merge rejected+accepted+expired sort by created_ts，run 只在 consecutive same-class rejection 时延续，任何非 rejection 或 different class 立即 reset run (Codex 严格 interpretation)。**M10 expiry boundary**: `created <= cutoff` 含等号 (Rule 13.5 "after 7 days" 含边界)。**M11 future-dated freshness**: `data_max_asof > now_date` 直接 raise (negative stale_days 不再 silently 通过)。**M12 base_validity_class enum check**: 验入参在 VALIDITY_CLASSES 内。**22 新 patch tests** 覆盖 H7 5 个 bypass 场景 + H8 final_reason laundering + H8 scan helper + H9 parameter_change 3 场景 (under-300 reject / at-300 pass / bootstrap_ci override) + B1 4 场景 (accept→reject cross-state reject / reject→accept reject / intake-after-terminal reject / idempotent recovery) + H10 4 场景 (3-run trigger / accept-breaks / different-class-breaks / leading-other-events-then-3-run trigger) + M11 future-date reject + M12 invalid enum reject + M10 exact-7d expire。**1 个旧测试 updated** (test_expiry_threshold_at_exact_boundary M10 语义变更)。Final pytest 959 passed in 9.32s (937 baseline + 22 new, 零回归)。三轮审查累计 7 BLOCKER+HIGH + 3 MEDIUM patched, **反思系统 decision-grade ready**。Codex verdict 从 "do not ship" → ship-ready。剩 1 MEDIUM (funnel drop_reasons reconcile) + 1 LOW (ablation tie-break doc) 不阻塞，列入后续 patch backlog。 | Claude (review via Codex rescue subagent, third independent audit) | Updated `src/hot_theme_rotator/llm/reflection_brief.py` (H7+H8); `src/hot_theme_rotator/llm/__init__.py` (+scan helper export); `src/hot_theme_rotator/reflection/decision_gate.py` (B1 atomic transition + M10 + H9 + cross-state guards); `src/hot_theme_rotator/reflection/meta_reflection.py` (H10 chronological); `src/hot_theme_rotator/reflection/policy_replay.py` (M11 + M12); new `tests/unit/test_patch_b1_h7_h10.py` (22 tests); updated `tests/unit/test_decision_gate.py` (test_expiry_threshold_at_exact_boundary M10 semantic). Full regression 959 passed in 9.32s (937 baseline + 22 new, 零回归). |

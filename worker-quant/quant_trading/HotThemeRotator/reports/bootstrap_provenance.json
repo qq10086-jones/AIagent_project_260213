@@ -2,6 +2,22 @@
   "excluded": [
     {
       "reason": "no_archived_snapshot",
+      "trade_date": "2026-03-28"
+    },
+    {
+      "reason": "no_archived_snapshot",
+      "trade_date": "2026-03-29"
+    },
+    {
+      "reason": "no_archived_snapshot",
+      "trade_date": "2026-04-04"
+    },
+    {
+      "reason": "no_archived_snapshot",
+      "trade_date": "2026-04-05"
+    },
+    {
+      "reason": "no_archived_snapshot",
       "trade_date": "2026-04-11"
     },
     {
@@ -9,12 +25,12 @@
       "trade_date": "2026-04-12"
     }
   ],
-  "generated_at": "2026-05-27T14:35:50.482128+00:00",
+  "generated_at": "2026-05-27T15:02:45.341495+00:00",
   "generator": "backdated_calibration_bootstrap_v1",
   "model_version": "htr_screener_v2-backdated",
   "scanner_config_hash": "SKIPPED",
-  "snapshots_loaded": 6,
-  "total_trading_days_attempted": 8,
+  "snapshots_loaded": 16,
+  "total_trading_days_attempted": 22,
   "window_end": "2026-04-13",
-  "window_start": "2026-04-06"
+  "window_start": "2026-03-23"
 }

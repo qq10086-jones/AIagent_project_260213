@@ -1,22 +1,27 @@
-"""Read-only adapter for Project_optimized's live position state.
+"""Position adapter — strategy-aware loader for live portfolio state.
 
-Source of truth (ADR-0005): `Project_optimized/japan_market.db`, specifically:
-- `positions` table — per (strategy_id, symbol, asof) snapshot rows. We take the
-  latest `asof` per symbol within the configured `strategy_id`, dropping
-  `__FLAT__` sentinel rows and zero-qty rows.
-- `account_snapshots` table — per (strategy_id, asof) NAV/cash snapshot. We take
-  the latest row for the configured strategy.
+ADR-0008 (cutover 2026-05-27): for ``strategy_id == "etf_buyhold"``, the
+HotThemeRotator append-only journal is the single source of truth (§14).
+This adapter loads it via ``hot_theme_rotator.portfolio.derive`` + marks
+positions to market using the latest close from ``daily_prices``.
 
-The user's Path A live position lives under `strategy_id="etf_buyhold"`. The
-older `paper_trading_account.json` snapshots a different (decommissioned)
-`sprint` strategy and is intentionally not consumed here.
+For all other strategies (paper / sprint / experimental), the legacy
+ADR-0005 path reads ``Project_optimized/japan_market.db``:
+- ``positions`` table — per (strategy_id, symbol, asof) snapshot rows.
+- ``account_snapshots`` table — per (strategy_id, asof) NAV/cash snapshot.
 
 Strictly read-only. Never executes UPDATE / INSERT against Project_optimized.
+
+Test ergonomics: pass an explicit ``journal_base_dir`` (e.g., ``tmp_path``)
+to opt into "no journal" mode and exercise the DB fallback. When the
+parameter is omitted, the default HTR project root is used, which means
+real ``reports/portfolio/journal/*.jsonl`` will be read in production.
 """
 from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 
@@ -75,14 +80,53 @@ def load_portfolio_state(
     db_path: str | Path,
     *,
     strategy_id: str = DEFAULT_STRATEGY_ID,
+    journal_base_dir: str | Path | None = None,
 ) -> PortfolioState:
-    """Load latest positions + account snapshot for `strategy_id` from the DB.
+    """Load latest portfolio state for ``strategy_id``.
 
-    Fail-closed (Rule 3 / ADR-0005): missing DB file, missing required tables,
-    missing required columns, or absent strategy data all raise
-    `PositionAdapterError` so the dashboard renders an explicit "数据未就绪"
-    rather than silently fabricating a zero portfolio.
+    Per ADR-0008 (§14, cutover 2026-05-27), ``etf_buyhold`` reads from the
+    HTR append-only journal when one exists at
+    ``{journal_base_dir}/reports/portfolio/journal/*.jsonl``. When the
+    journal directory is missing or empty, the loader falls back to the
+    legacy ADR-0005 DB path so existing tests and pre-cutover environments
+    keep working.
+
+    For all other strategies (and for ``etf_buyhold`` with no journal),
+    state comes from ``Project_optimized/japan_market.db``.
+
+    Fail-closed (Rule 3): a missing source, missing schema, or absent
+    strategy data raise ``PositionAdapterError`` so the dashboard renders
+    "数据未就绪" rather than silently fabricating a zero portfolio.
+
+    ``journal_base_dir=None`` resolves to ``default_journal_base_dir()``
+    (the HTR project root). Pass ``tmp_path`` from a test to skip the
+    journal path explicitly.
     """
+    if strategy_id == DEFAULT_STRATEGY_ID:
+        base = (
+            Path(journal_base_dir)
+            if journal_base_dir is not None
+            else default_journal_base_dir()
+        )
+        journal_root = base / "reports" / "portfolio" / "journal"
+        if journal_root.exists() and any(
+            p.suffix == ".jsonl" for p in journal_root.iterdir() if p.is_file()
+        ):
+            return _load_from_htr_journal(
+                db_path=db_path,
+                strategy_id=strategy_id,
+                base_dir=base,
+            )
+
+    return _load_from_project_optimized_db(db_path, strategy_id=strategy_id)
+
+
+def _load_from_project_optimized_db(
+    db_path: str | Path,
+    *,
+    strategy_id: str,
+) -> PortfolioState:
+    """Legacy ADR-0005 DB-backed loader. Unchanged from pre-cutover behavior."""
     src = Path(db_path)
     if not src.exists():
         raise PositionAdapterError(f"japan_market.db not found: {src}")
@@ -167,6 +211,106 @@ def default_db_path(project_optimized_root: str | Path | None = None) -> Path:
     # here = .../quant_trading/HotThemeRotator/src/hot_theme_rotator/data/position_adapter.py
     # parents[4] = .../quant_trading/
     return here.parents[4] / "Project_optimized" / "japan_market.db"
+
+
+def default_journal_base_dir() -> Path:
+    """HTR project root containing ``reports/portfolio/journal/*.jsonl``."""
+    here = Path(__file__).resolve()
+    # parents[3] = .../quant_trading/HotThemeRotator/
+    return here.parents[3]
+
+
+def _load_from_htr_journal(
+    *,
+    db_path: str | Path,
+    strategy_id: str,
+    base_dir: Path,
+) -> PortfolioState:
+    """Build a PortfolioState from the append-only HTR journal (§14 / ADR-0008).
+
+    Positions/cash come from journal replay. Market prices for mark-to-market
+    are fetched from Project_optimized's ``daily_prices`` table via
+    ``kline_adapter`` — this is still read-only per ADR-0005-historical and
+    is the canonical price source. Fail-closed if any held symbol lacks a
+    kline row.
+    """
+    # Imported inline to avoid a module-load cycle: portfolio.derive and
+    # journal_writer depend on schema, none of which need to load when the
+    # adapter is imported for DB-only callers.
+    from hot_theme_rotator.data.kline_adapter import (
+        KlineAdapterError,
+        fetch_latest_close,
+    )
+    from hot_theme_rotator.portfolio.derive import (
+        PortfolioDeriveError,
+        derive_cash_balance,
+        derive_positions,
+    )
+    from hot_theme_rotator.portfolio.journal_writer import (
+        PortfolioJournalError,
+        read_all_journal,
+    )
+
+    try:
+        journal = read_all_journal(base_dir=base_dir)
+    except PortfolioJournalError as exc:
+        raise PositionAdapterError(f"HTR journal read failed: {exc}") from exc
+
+    try:
+        positions_view = derive_positions(journal)
+        cash = derive_cash_balance(journal)
+    except PortfolioDeriveError as exc:
+        raise PositionAdapterError(f"HTR journal derive failed: {exc}") from exc
+
+    src = Path(db_path)
+    holdings: list[PositionRow] = []
+    positions_value = 0.0
+    latest_position_asof = ""
+
+    for symbol, view in positions_view.items():
+        if view.qty == 0:
+            continue
+        try:
+            latest = fetch_latest_close(src, symbol=symbol)
+        except KlineAdapterError as exc:
+            raise PositionAdapterError(
+                f"cannot mark-to-market {symbol} (journal-derived holding): {exc}"
+            ) from exc
+        if latest is None:
+            raise PositionAdapterError(
+                f"no kline row for journal-derived holding {symbol!r}: "
+                f"mark-to-market impossible"
+            )
+        mp = float(latest.close)
+        mv = view.qty * mp
+        upnl = view.qty * (mp - view.avg_cost)
+        holdings.append(
+            PositionRow(
+                asof=latest.asof,
+                symbol=symbol,
+                qty=float(view.qty),
+                avg_cost=view.avg_cost,
+                market_price=mp,
+                market_value=mv,
+                unrealized_pnl=upnl,
+            )
+        )
+        positions_value += mv
+        if latest.asof > latest_position_asof:
+            latest_position_asof = latest.asof
+
+    nav = cash + positions_value
+    today = date.today().isoformat()
+    return PortfolioState(
+        asof=today,
+        cash=float(cash),
+        positions_value=float(positions_value),
+        nav=float(nav),
+        strategy_id=strategy_id,
+        holdings=tuple(holdings),
+        source_path=str(base_dir / "reports" / "portfolio" / "journal"),
+        positions_asof=latest_position_asof,
+    )
 
 
 # ─── internals ──────────────────────────────────────────────────────────────

@@ -103,13 +103,29 @@ def test_profile_for_screener_top_marks_in_screener(client):
     assert payload["screener_score"] is not None
 
 
-def test_profile_carries_score_status_uncalibrated_and_advice_only(client):
-    """Rule 11.4 — interaction never lifts score_status."""
+def test_profile_carries_score_status_and_advice_only(client):
+    """Rule 11.4 — interaction never lifts score_status arbitrarily.
+    Score status reflects the recalibrator state: uncalibrated when no
+    fitted artifact exists; calibrated_<model_version> when one does.
+    Both are valid; UI must surface either truthfully."""
     resp = client.get("/api/symbol/1306.T/profile")
     assert resp.status_code == 200
     payload = resp.json()
-    assert payload["score_status"] == "uncalibrated_research_score"
+    assert payload["score_status"] in {
+        "uncalibrated_research_score",
+        "calibrated_isotonic_v1",
+    }
     assert payload["advice_only"] is True
+    # When a recalibrator fit is on disk, the calibrated_prob field is populated
+    # (Rule 8.2.1 + ADR-0006). When absent, it's None.
+    if payload["score_status"].startswith("calibrated_"):
+        assert payload["calibrated_prob"] is not None
+        assert 0.0 <= payload["calibrated_prob"] <= 1.0
+        assert payload["calibrated_horizon_days"] in {1, 3, 5}
+        assert payload["calibrated_evidence_origin"] in {"bootstrap", "live", "mixed"}
+        assert payload["calibrated_sample_count"] >= 100
+    else:
+        assert payload["calibrated_prob"] is None
 
 
 def test_profile_unknown_ticker_returns_404(client):

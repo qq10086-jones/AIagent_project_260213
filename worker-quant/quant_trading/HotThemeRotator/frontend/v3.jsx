@@ -257,6 +257,14 @@ function ThemeBubbleMap({ themes }) {
 }
 
 function V3LeaderCard({ candidate, livePrice }) {
+  // ADR-0006 — pull the calibrated probability from /profile when the
+  // recalibrator artifact is on disk. The hook lazily caches per symbol.
+  const { profile } = useSymbolProfile(candidate.symbol);
+  const calibratedProb = profile && profile.calibrated_prob;
+  const calibratedHorizon = profile && profile.calibrated_horizon_days;
+  const calibratedSamples = profile && profile.calibrated_sample_count;
+  const calibratedOrigin = profile && profile.calibrated_evidence_origin;
+
   return (
     <div className="htr-card" style={{
       padding: "14px 18px",
@@ -266,6 +274,15 @@ function V3LeaderCard({ candidate, livePrice }) {
         <span className="htr-eyebrow" style={{ color: "var(--htr-accent)" }}>主题领涨 → 候选 LEADER</span>
         <span className="htr-chip accent">{candidate.theme}</span>
         <span className="htr-chip warn">{candidate.priority}</span>
+        {calibratedProb !== null && calibratedProb !== undefined && (
+          <span
+            className="htr-chip"
+            title={`isotonic_v1 fit on ${calibratedSamples} ${calibratedOrigin} samples · horizon ${calibratedHorizon}D`}
+            style={{ borderColor: "var(--htr-bull)", color: "var(--htr-bull)" }}
+          >
+            校准 {calibratedHorizon}D
+          </span>
+        )}
         <span style={{ flex: 1 }} />
         <CalibrationBadge inline />
       </div>
@@ -290,7 +307,15 @@ function V3LeaderCard({ candidate, livePrice }) {
             {candidate.one_liner}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6 }}>
-            <MiniStat label="研究分" value={candidate.score} accent />
+            {calibratedProb !== null && calibratedProb !== undefined ? (
+              <MiniStat
+                label={`校准 ${calibratedHorizon}D 概率`}
+                value={`${(calibratedProb * 100).toFixed(1)}%`}
+                accent
+              />
+            ) : (
+              <MiniStat label="研究分(未校准)" value={candidate.score} accent />
+            )}
             <MiniStat label="买入·均衡" value={fmtPrice(candidate.ladder.find(r=>r.kind==="entry_balanced").price, 0)} />
             <MiniStat label="首止盈" value={fmtPrice(candidate.ladder.find(r=>r.kind==="exit_1").price, 0)} />
             <MiniStat label="止损" value={fmtPrice(candidate.ladder.find(r=>r.kind==="stop").price, 0)} danger />

@@ -40,6 +40,11 @@ from hot_theme_rotator.data.universe_adapter import (
     default_selected_tickers_path,
     load_screener_snapshot,
 )
+from hot_theme_rotator.calibration.isotonic_recalibrator import (
+    IsotonicRecalibrator,
+    IsotonicRecalibratorError,
+    load_default as load_default_recalibrator,
+)
 from hot_theme_rotator.llm.ollama_client import OllamaClient, OllamaUnreachableError
 from hot_theme_rotator.llm.per_ticker_brief import (
     DEFAULT_MODEL as DEFAULT_LLM_MODEL,
@@ -120,6 +125,33 @@ def get_symbol_profile(ticker: str) -> dict[str, Any]:
     portfolio_row = _portfolio_row_for(ticker)
     screener_row = _screener_row_for(ticker)
 
+    # Optional recalibration (ADR-0006 + Rule 8.2.1). When the fitted
+    # isotonic artifact is on disk AND the ticker is in the screener,
+    # surface calibrated_prob + calibrated_horizon_days + lift score_status.
+    # When the artifact is missing, score_status stays uncalibrated.
+    calibrated_prob = None
+    calibrated_horizon_days = None
+    calibrated_evidence_origin = None
+    calibrated_sample_count = None
+    score_status = "uncalibrated_research_score"
+    try:
+        recalibrator = load_default_recalibrator()
+    except IsotonicRecalibratorError:
+        # Malformed artifact: stay uncalibrated rather than crash the dashboard.
+        recalibrator = None
+    if recalibrator is not None and screener_row is not None:
+        raw_score = float(screener_row["score"])
+        # Clamp into [0,1] defensively — the screener should already produce
+        # values in this range but the recalibrator validates anyway.
+        clamped = max(0.0, min(1.0, raw_score))
+        calibrated_prob = round(float(recalibrator.transform(clamped)), 4)
+        calibrated_horizon_days = recalibrator.horizon_days
+        calibrated_evidence_origin = recalibrator.evidence_origin
+        calibrated_sample_count = recalibrator.sample_count
+        # Lift only when sample count >= the fit's own min_samples (the fit
+        # already enforced this; we restate here for the consumer).
+        score_status = f"calibrated_{recalibrator.model_version}"
+
     return {
         "ticker": ticker,
         "latest_close": round(float(latest.close), 4),
@@ -138,8 +170,14 @@ def get_symbol_profile(ticker: str) -> dict[str, Any]:
         "mom_60": screener_row["mom_60"] if screener_row else None,
         "sharpe_20": screener_row["sharpe_20"] if screener_row else None,
         "adv": screener_row["adv"] if screener_row else None,
-        # §9.4 — interaction never lifts calibration status; remind UI.
-        "score_status": "uncalibrated_research_score",
+        # ADR-0006: calibrated_prob is the recalibrator's probability output.
+        # When None, the system is still operating on uncalibrated ranking signal.
+        "calibrated_prob": calibrated_prob,
+        "calibrated_horizon_days": calibrated_horizon_days,
+        "calibrated_evidence_origin": calibrated_evidence_origin,
+        "calibrated_sample_count": calibrated_sample_count,
+        # §9.4 — score_status reflects calibration state.
+        "score_status": score_status,
         "advice_only": True,
     }
 

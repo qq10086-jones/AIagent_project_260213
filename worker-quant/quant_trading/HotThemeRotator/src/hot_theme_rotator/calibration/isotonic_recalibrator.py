@@ -33,10 +33,44 @@ __all__ = [
     "IsotonicRecalibrator",
     "IsotonicRecalibratorError",
     "MODEL_VERSION",
+    "default_artifact_path",
+    "load_default",
 ]
 
 
 MODEL_VERSION = "isotonic_v1"
+DEFAULT_ARTIFACT_NAME = "recalibrator_isotonic_v1.json"
+
+
+def default_artifact_path(base_dir: "str | Path | None" = None) -> Path:
+    """Default location of the fitted recalibrator JSON artifact."""
+    if base_dir is None:
+        here = Path(__file__).resolve()
+        # parents: [calibration, hot_theme_rotator, src, HTR_root]
+        base = here.parents[3]
+    else:
+        base = Path(base_dir)
+    return base / "reports" / DEFAULT_ARTIFACT_NAME
+
+
+def load_default(base_dir: "str | Path | None" = None) -> "IsotonicRecalibrator | None":
+    """Load the fitted recalibrator from disk, or return None if not present.
+
+    Returns None (not raise) when the artifact is missing so callers can
+    fall back to the uncalibrated path cleanly. Malformed artifact still
+    raises IsotonicRecalibratorError — silently swallowing JSON errors
+    would let bad calibration state masquerade as "not yet calibrated".
+    """
+    path = default_artifact_path(base_dir)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise IsotonicRecalibratorError(
+            f"recalibrator artifact at {path} is not valid JSON: {exc}"
+        ) from exc
+    return IsotonicRecalibrator.from_dict(payload)
 
 
 class IsotonicRecalibratorError(RuntimeError):

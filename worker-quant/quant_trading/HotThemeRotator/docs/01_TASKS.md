@@ -2310,3 +2310,21 @@ Asset audit (2026-07-03): `EDINET_API_KEY` was ALREADY in the User environment (
 
 ### P23-D Owner's personal calibration (free; starts with next trade)
 - Log every trade idea pre-trade through the existing predictions/journal path; at n ≥ 50 compute per-setup win rate with CI. Current honest record: disciplined scale-outs 2/2, discretionary dip-buy 0/1.
+
+## Milestone P24: UI Design Remediation (from the 2026-07-06 read-only review)
+
+Source: the read-only design review (Artifact `2bb5068a-…`, overall B-/3.1). Trust layer scored 4.5 (keep); space/hierarchy scored 2.0-2.5 (fix). Owner-selected batch = F1 + F2 first. All work TDD (frontend contract tests) + headless re-verify; content red-lines (Rule 3/8.3/9.4/11.5/11.6/11.16/11.17 disclosures) MUST survive every layout change. Governed by Rule 11.7 (+ new 11.7.7 mobile priority / vertical balance).
+
+### P24-01 Mobile priority order (F1) — the daily-use fix
+- On mobile widths the stack order MUST lead with what the operator acts on: market temperature → Position Exit Board → Daily Action Board → the rest. Demote the V1–V4 variant switcher off prime mobile real estate. Contract test asserts the mobile source order; headless mobile screenshot verifies.
+
+### P24-02 Default-variant vertical balance (F2) — kill the void
+- V3 (shipping default) MUST NOT leave the centre column empty while the right rail runs multiples longer. Rebalance without violating Rule 11.7.3 (no primary-content scroll-trap): redistribute long cards, not an internal-scroll cap. Headless desktop+tablet verify the columns end within a bounded delta.
+
+### P24-03 S株 card occlusion (F4) — compliance fix (Rule 11.7.2)
+- The floating S株 card currently overlaps the right rail (a standing violation of the app's own no-occlusion invariant). Dock it into document flow or make it a dismissible drawer. Contract test asserts no fixed-overlay occluding live content.
+
+### P24-04 Empty-gauge honest state (F3) — deferred, honesty-adjacent
+- An empty temperature sparkline reads as a real reading. Add an explicit "no data" gauge state (Rule 11.9.4 degraded labelling). Deferred behind P24-01..03.
+
+### P24-05+ Deferred (owner decision): F5 default-variant choice, F6 dark instrument palette, F7 progressive disclosure, F8-F10 nav/tablet/anchors.

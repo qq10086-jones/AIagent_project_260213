@@ -79,6 +79,8 @@ LOG_PATH = ROOT / "reports" / "observability" / "daily_routine_log.jsonl"
 EMIT = HERE / "emit_daily_predictions.py"
 SWEEP = HERE / "sweep_pending_outcomes.py"
 FORWARD_EVAL = HERE / "forward_signal_report.py"  # §16/ADR-0010 shadow-eval (non-fatal, research-only)
+FUNDAMENTAL_COHORT = HERE / "fundamental_cohort.py"  # P19-02b: monthly value/quality forward cohort
+COHORT_DIR = ROOT / "reports" / "research_cohorts" / "fundamental" / "predictions"
 
 # JPX trading calendar (Rule 15.4 fail-closed) lives in the src layer so it is
 # reusable + unit-tested; add src to path the same way emit/sweep do.
@@ -269,6 +271,33 @@ def run_preopen(today: date, *, runner: Runner = _run) -> dict[str, Any]:
     return record
 
 
+def _cohort_exists_this_month(asof: date) -> bool:
+    ym = asof.strftime("%Y-%m")
+    return COHORT_DIR.exists() and any(
+        p.stem.startswith(ym) for p in COHORT_DIR.glob("*.jsonl"))
+
+
+def _maybe_monthly_cohort(asof: date, *, runner: Runner = _run) -> dict[str, Any]:
+    """Emit a fundamental cohort at most once per calendar month, then sweep.
+
+    Emit is skipped (not re-run) once a cohort for the month exists, so the
+    monthly cadence is guarded by the on-disk record — no separate scheduler.
+    Sweep runs every afterclose to mature 21D/63D returns as windows close."""
+    out: dict[str, Any] = {}
+    if not _cohort_exists_this_month(asof):
+        rc_e, _oe, _ee = runner(
+            [sys.executable, str(FUNDAMENTAL_COHORT), "emit", "--asof", asof.isoformat()],
+            cwd=str(ROOT), env_extra={"PYTHONIOENCODING": "utf-8"}, timeout=900)
+        out["emit_rc"] = rc_e
+    else:
+        out["emit_rc"] = "skipped_month_exists"
+    rc_s, _os, _es = runner(
+        [sys.executable, str(FUNDAMENTAL_COHORT), "sweep", "--asof", asof.isoformat()],
+        cwd=str(ROOT), env_extra={"PYTHONIOENCODING": "utf-8"}, timeout=1200)
+    out["sweep_rc"] = rc_s
+    return out
+
+
 def run_afterclose(today: date, *, asof: date | None = None, db_path: Path | None = None,
                    dry_run: bool = False, runner: Runner = _run) -> dict[str, Any]:
     asof = asof or latest_trading_day(today)
@@ -312,6 +341,14 @@ def run_afterclose(today: date, *, asof: date | None = None, db_path: Path | Non
         record["forward_eval"] = {"rc": rc_f, "tail": (out_f or err_f or "")[-400:]}
     except Exception as exc:  # a diagnostic must never block collection
         record["forward_eval"] = {"rc": None, "error": str(exc)[:200]}
+    # P19-02b: monthly fundamental cohort (the 63D forward track for the
+    # gate-passing value/quality family). Emit at most once per calendar month
+    # (network-heavy), then sweep to mature 21D/63D returns. Non-fatal,
+    # research-only — this is the accumulation engine the forward verdict needs.
+    try:
+        record["cohort"] = _maybe_monthly_cohort(asof, runner=runner)
+    except Exception as exc:  # never block collection
+        record["cohort"] = {"rc": None, "error": str(exc)[:200]}
     new, dropped, skipped = coll.get("new_predictions"), coll.get("dropped_no_close"), coll.get("skipped_on_disk")
     procs_ok = (coll["emit_rc"] == 0 and coll["sweep_rc"] == 0)
     # Rule 11.9 honesty: a green return code with ZERO new samples is NOT a

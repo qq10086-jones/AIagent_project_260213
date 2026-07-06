@@ -66,6 +66,8 @@ def _fake_runner_factory(snapshot_payload=None, screener_rc=0, calls=None,
 
 def test_afterclose_happy_path_calls_screener_then_emit_then_sweep(tmp_path, monkeypatch):
     monkeypatch.setattr(dr, "SNAP_DIR", tmp_path / "screener")
+    # no cohort for the month → the monthly guard runs emit + sweep at the tail
+    monkeypatch.setattr(dr, "COHORT_DIR", tmp_path / "cohort_none")
     runner, calls = _fake_runner_factory(snapshot_payload={"asof": "2026-05-29",
                                                             "symbols": ["6966.T", "6768.T"]})
     rec = dr.run_afterclose(date(2026, 5, 30), runner=runner)
@@ -84,13 +86,16 @@ def test_afterclose_happy_path_calls_screener_then_emit_then_sweep(tmp_path, mon
              "skabu" if any("build_s_kabu_overlay" in str(c) for c in cmd) else
              "emit" if any("emit_daily" in str(c) for c in cmd) else
              "sweep" if any("sweep_pending" in str(c) for c in cmd) else
-             "forward_eval" if any("forward_signal_report" in str(c) for c in cmd) else "?"
+             "forward_eval" if any("forward_signal_report" in str(c) for c in cmd) else
+             "cohort" if any("fundamental_cohort" in str(c) for c in cmd) else "?"
              for cmd in calls]
     # price DB → news → macro → adr → TDnet corpus (ADR-0010/P17-4) → revision
     # docs (P23-A, perishable) → screener → meta → S株 overlay → emit → sweep →
-    # forward shadow-eval (Rule 16, non-fatal).
+    # forward shadow-eval (Rule 16) → monthly fundamental cohort emit+sweep
+    # (P19-02b) — all tail steps non-fatal, research-only.
     assert order == ["refresh", "news", "macro", "adr", "tdnet", "revisions",
-                     "screener", "meta", "skabu", "emit", "sweep", "forward_eval"]
+                     "screener", "meta", "skabu", "emit", "sweep", "forward_eval",
+                     "cohort", "cohort"]
 
 
 def test_afterclose_fail_closed_aborts_emit_when_screener_fails(tmp_path, monkeypatch):
@@ -213,3 +218,32 @@ def test_smoke_command_uses_workspace_basetemp():
     joined = " ".join(cmd)
     assert "--basetemp" in cmd
     assert ".pytest_tmp" in joined
+
+
+def test_monthly_cohort_guard_emits_once_per_month(tmp_path, monkeypatch):
+    # P19-02b: emit is guarded by an existing cohort for the month; sweep always runs.
+    import tools.daily_routine as dr
+
+    cohort_dir = tmp_path / "reports" / "research_cohorts" / "fundamental" / "predictions"
+    cohort_dir.mkdir(parents=True)
+    monkeypatch.setattr(dr, "COHORT_DIR", cohort_dir)
+
+    calls = []
+    def fake_runner(cmd, **kw):
+        calls.append(cmd)
+        return (0, "", "")
+
+    from datetime import date
+    # no cohort yet → emit + sweep
+    out1 = dr._maybe_monthly_cohort(date(2026, 8, 3), runner=fake_runner)
+    assert out1["emit_rc"] == 0 and out1["sweep_rc"] == 0
+    verbs = [c[2] for c in calls if "fundamental_cohort.py" in str(c[1])]
+    assert verbs == ["emit", "sweep"]
+
+    # simulate the emitted cohort landing on disk
+    (cohort_dir / "2026-08-03.jsonl").write_text("{}", encoding="utf-8")
+    calls.clear()
+    out2 = dr._maybe_monthly_cohort(date(2026, 8, 20), runner=fake_runner)
+    assert out2["emit_rc"] == "skipped_month_exists"
+    verbs2 = [c[2] for c in calls if "fundamental_cohort.py" in str(c[1])]
+    assert verbs2 == ["sweep"]  # emit skipped, sweep still runs

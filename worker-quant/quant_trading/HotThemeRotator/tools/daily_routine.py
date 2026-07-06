@@ -73,6 +73,7 @@ REFRESH_META = HERE / "refresh_ticker_metadata.py"
 BUILD_SKABU = HERE / "build_s_kabu_overlay.py"   # task#7 / Rule 5.2 S株 overlay producer
 REFRESH_ADR = HERE / "refresh_skhy_adr_watch.py" # P20-03 / Rule 11.15 external ADR watch
 POLL_TDNET = HERE / "poll_tdnet_rss.py"  # ADR-0010 / P17-4: accumulate disclosure corpus
+CAPTURE_REVISIONS = HERE / "capture_tdnet_revisions.py"  # P23-A: download PERISHABLE revision PDFs (TDnet 31-day window) + parse magnitudes
 SNAP_DIR = ROOT / "reports" / "screener"
 LOG_PATH = ROOT / "reports" / "observability" / "daily_routine_log.jsonl"
 EMIT = HERE / "emit_daily_predictions.py"
@@ -159,6 +160,13 @@ def refresh_candidates(asof: date, db_path: Path, *, runner: Runner = _run) -> d
     rc_tdnet, _tp, _te2 = runner(
         [sys.executable, str(POLL_TDNET), "--date", asof.isoformat()],
         cwd=str(ROOT), env_extra={"PYTHONIOENCODING": "utf-8"}, timeout=180)
+    # P23-A: the RSS poll above stores only metadata (title/url). The revision
+    # DOCUMENTS are perishable — TDnet's public site serves them for only ~31
+    # days, so the magnitudes must be captured daily or they are lost forever.
+    # Non-fatal, research-only; runs after the poll (consumes its corpus rows).
+    rc_rev, _rv, _re2 = runner(
+        [sys.executable, str(CAPTURE_REVISIONS), "--days", "35"],
+        cwd=str(ROOT), env_extra={"PYTHONIOENCODING": "utf-8"}, timeout=600)
     cmd = [sys.executable, str(SCREENER), "--db", str(db_path),
            "--asof", asof.isoformat(), "--out", str(out), "--no_db_write"]
     try:
@@ -193,7 +201,7 @@ def refresh_candidates(asof: date, db_path: Path, *, runner: Runner = _run) -> d
             "htr_db_refresh_rc": rc_refresh, "news_refresh_rc": rc_news,
             "macro_refresh_rc": rc_macro, "meta_refresh_rc": rc_meta,
             "s_kabu_overlay_rc": rc_skabu, "adr_refresh_rc": rc_adr,
-            "tdnet_poll_rc": rc_tdnet}
+            "tdnet_poll_rc": rc_tdnet, "revision_capture_rc": rc_rev}
 
 
 def _parse_emit_counts(text: str) -> dict[str, "int | None"]:

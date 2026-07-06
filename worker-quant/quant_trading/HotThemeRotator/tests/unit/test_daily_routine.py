@@ -78,6 +78,7 @@ def test_afterclose_happy_path_calls_screener_then_emit_then_sweep(tmp_path, mon
              "news" if any("refresh_htr_news" in str(c) for c in cmd) else
              "adr" if any("refresh_skhy_adr_watch" in str(c) for c in cmd) else
              "tdnet" if any("poll_tdnet_rss" in str(c) for c in cmd) else
+             "revisions" if any("capture_tdnet_revisions" in str(c) for c in cmd) else
              "screener" if any("screener.py" in str(c) for c in cmd) else
              "meta" if any("refresh_ticker_metadata" in str(c) for c in cmd) else
              "skabu" if any("build_s_kabu_overlay" in str(c) for c in cmd) else
@@ -85,10 +86,11 @@ def test_afterclose_happy_path_calls_screener_then_emit_then_sweep(tmp_path, mon
              "sweep" if any("sweep_pending" in str(c) for c in cmd) else
              "forward_eval" if any("forward_signal_report" in str(c) for c in cmd) else "?"
              for cmd in calls]
-    # price DB → news → macro → adr → TDnet corpus (ADR-0010/P17-4) → screener → meta
-    # → S株 overlay → emit → sweep → forward shadow-eval (Rule 16, non-fatal).
-    assert order == ["refresh", "news", "macro", "adr", "tdnet", "screener", "meta",
-                     "skabu", "emit", "sweep", "forward_eval"]
+    # price DB → news → macro → adr → TDnet corpus (ADR-0010/P17-4) → revision
+    # docs (P23-A, perishable) → screener → meta → S株 overlay → emit → sweep →
+    # forward shadow-eval (Rule 16, non-fatal).
+    assert order == ["refresh", "news", "macro", "adr", "tdnet", "revisions",
+                     "screener", "meta", "skabu", "emit", "sweep", "forward_eval"]
 
 
 def test_afterclose_fail_closed_aborts_emit_when_screener_fails(tmp_path, monkeypatch):

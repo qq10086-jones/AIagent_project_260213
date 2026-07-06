@@ -55,7 +55,7 @@ function V3MarketDashboard({ layout = "tabs" }) {
 
       <div className="v3-grid">
         {/* LEFT RAIL — pick what to look at */}
-        <div className="v3-rail" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="v3-rail v3-rail-left" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <V3CandidatePicker candidates={data.candidates} selected={top.symbol} onSelect={setSelected} />
           <V3ThemeCard themes={data.themes} />
           <V3MacroNewsCard macro={data.macroNews} />
@@ -71,19 +71,34 @@ function V3MarketDashboard({ layout = "tabs" }) {
             : <V3DetailStack candidate={top} />}
         </div>
 
-        {/* RIGHT RAIL — context + governance feeds (P4-F: the two governance feeds
-            are tabbed into one card to cut the 4-always-open density) */}
-        <div className="v3-rail" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* RIGHT RAIL — the decision surfaces the operator acts on. Kept short
+            (portfolio + the two boards) so it no longer towers over its siblings
+            (Rule 11.7.8); on mobile it is ordered FIRST after temperature
+            (Rule 11.7.7) via the .v3-rail-right order rule. */}
+        <div className="v3-rail v3-rail-right" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <V3PortfolioCard positions={data.positions} defaultSymbol={top.symbol} />
           {/* Rule 11.17 — Position Exit Discipline Board (shared governed card, four-variant parity). */}
           <ExitBoardCard />
-          {/* Rule 11.16 — Daily Action Board (shared governed card, four-variant parity). */}
-          <ActionBoardCard />
-          <V3CandidateHistoryCard />
-          <EventDeskCard />
-          <V3NewsCard items={data.newsTimeline} />
-          <V3FeedsTabs cockpit={data.dailyCockpit} entries={data.decisionLog} tradeDate={data.meta.tradeDate} />
         </div>
+      </div>
+
+      {/* PLAN ROW — the Daily Action Board (Rule 11.16) is wide (candidate × plan
+          columns) and long; kept full-width below the grid so the right rail stays
+          short and no column towers (Rule 11.7.8). On mobile it is ordered up
+          near the top with the other decision surfaces (Rule 11.7.7). */}
+      <div className="v3-plan-row">
+        {/* Rule 11.16 — Daily Action Board (shared governed card, four-variant parity). */}
+        <ActionBoardCard />
+      </div>
+
+      {/* FEEDS ROW — review / context, full-width below so no rail towers over its
+          siblings and leaves a dead void (Rule 11.7.8). On mobile these land last,
+          after the decision surfaces + picker + deep-dive. */}
+      <div className="v3-feeds-row">
+        <V3CandidateHistoryCard />
+        <EventDeskCard />
+        <V3NewsCard items={data.newsTimeline} />
+        <V3FeedsTabs cockpit={data.dailyCockpit} entries={data.decisionLog} tradeDate={data.meta.tradeDate} />
       </div>
     </div>
   );

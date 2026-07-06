@@ -690,3 +690,47 @@ def test_exit_board_is_operator_params_not_prediction():
     # Rule 11.17.3 — no imperative sell vocabulary; rotate x-ref is a fact count.
     assert "建议卖出" not in shared
     assert "非换仓指令" in shared
+
+
+# ---------------------------------------------------------------------------
+# P24 / Rule 11.7.7-8 — design-review remediation (mobile priority, no void,
+# no S株 occlusion). Structure asserted on source since this is zero-build.
+# ---------------------------------------------------------------------------
+
+
+def test_v3_no_tower_redistributes_long_surfaces():
+    """Rule 11.7.8 — the wide Action Board and the four feed cards live full-width
+    below the grid, NOT stacked in the right rail (which keeps only the short
+    positions surfaces), so no column towers and leaves a void."""
+    v3 = read_frontend_file("src/htr-v3.jsx")
+    assert 'className="v3-plan-row"' in v3 and 'className="v3-feeds-row"' in v3
+    plan_row = v3.split('v3-plan-row"')[1].split("v3-feeds-row")[0]
+    assert "ActionBoardCard" in plan_row, "Action Board must be in the full-width plan row"
+    feeds_row = v3.split('className="v3-feeds-row"')[1]
+    for card in ("V3CandidateHistoryCard", "EventDeskCard", "V3NewsCard", "V3FeedsTabs"):
+        assert card in feeds_row, f"{card} must be in the feeds row"
+    # the right rail keeps only the positions surfaces (anchor on the className)
+    right_rail = v3.split('v3-rail-right"')[1].split("v3-plan-row")[0]
+    for card in ("V3PortfolioCard", "ExitBoardCard"):
+        assert card in right_rail, f"{card} must stay in the positions rail"
+    assert "ActionBoardCard" not in right_rail  # action board hoisted out
+    assert "V3NewsCard" not in right_rail
+
+
+def test_v3_mobile_priority_order_css():
+    """Rule 11.7.7 — on mobile the decision surfaces (action board + positions
+    rail) are ordered before the picker and the deep-dive centre."""
+    css = read_frontend_file("index.html")
+    for rule in (".v3-plan-row   { order:1; }", ".v3-grid       { order:2; }",
+                 ".v3-feeds-row  { order:3; }", ".v3-rail-right { order:1; }",
+                 ".v3-rail-left  { order:2; }", ".v3-center     { order:3; }"):
+        assert rule in css, f"missing mobile-order rule: {rule}"
+
+
+def test_skabu_card_not_fixed_overlay():
+    """Rule 11.7.2 — the S株 card is docked in flow, no longer a fixed overlay
+    occluding the right rail."""
+    html = read_frontend_file("index.html")
+    root_line = [l for l in html.splitlines() if 'id="skabu-root"' in l][0]
+    assert "position:fixed" not in root_line
+    assert "z-index:9999" not in root_line

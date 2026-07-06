@@ -26,6 +26,10 @@
 
   /* ── V3 grids ── */
   .v3-grid { display:grid; grid-template-columns:320px minmax(440px,1fr) 372px; gap:14px; align-items:start; }
+  /* P24-02 / Rule 11.7.8 — the wide Action Board and the feeds live full-width
+     below the decision grid so no rail towers over its siblings. */
+  .v3-plan-row { align-items:start; }
+  .v3-feeds-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; align-items:start; }
   .v3-temp-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
   .v3-leader-grid { display:grid; grid-template-columns:minmax(200px,auto) minmax(0,1fr); gap:32px; align-items:center; }
   .v3-ministat-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
@@ -51,7 +55,8 @@
 
   @media (max-width:1320px) {
     .v3-grid { grid-template-columns:300px minmax(0,1fr); }
-    .v3-grid > .v3-rail:last-child { grid-column:1 / -1; display:grid !important; grid-template-columns:repeat(2,1fr); gap:14px; }
+    /* right rail (3 decision cards) drops full-width below the two columns as a row */
+    .v3-grid > .v3-rail-right { grid-column:1 / -1; display:grid !important; grid-template-columns:repeat(3,1fr); gap:14px; }
     .v1-grid { grid-template-columns:260px minmax(0,1fr); }
     .v1-grid > div:last-child { grid-column:1 / -1; display:grid !important; grid-template-columns:repeat(3,1fr); gap:12px; }
     .v4-grid { grid-template-columns:240px minmax(0,1fr); }
@@ -59,7 +64,18 @@
   }
   @media (max-width:1080px) {
     .v3-grid, .v1-grid, .v4-grid { grid-template-columns:1fr; }
-    .v3-grid > .v3-rail:last-child, .v1-grid > div:last-child { grid-template-columns:1fr 1fr; }
+    .v3-grid > .v3-rail-right, .v1-grid > div:last-child { grid-template-columns:1fr 1fr; }
+    /* P24-01 / Rule 11.7.7 — mobile priority. Among the shell's children the
+       Action Board comes right after temperature, then the grid, then feeds; and
+       inside the grid the positions rail (portfolio + exit) leads, then picker,
+       then the deep-dive centre. Net order: temp → action → positions → picker
+       → deep-dive → feeds. */
+    .v3-plan-row   { order:1; }
+    .v3-grid       { order:2; }
+    .v3-feeds-row  { order:3; }
+    .v3-rail-right { order:1; }
+    .v3-rail-left  { order:2; }
+    .v3-center     { order:3; }
     .v3-temp-grid, .v2-market-strip { grid-template-columns:repeat(3,1fr); }
     .v3-leader-grid, .v1-hero-grid, .v2-hero-grid, .v4-leader-grid { grid-template-columns:1fr; gap:16px; }
     .v3-debate-grid, .v2-body-grid, .v2-prose-grid, .v2-dual-grid, .v1-chart-row { grid-template-columns:1fr; }
@@ -70,7 +86,7 @@
     .v2-page { padding:24px 28px !important; }
   }
   @media (max-width:680px) {
-    .v3-grid > .v3-rail:last-child, .v1-grid > div:last-child { grid-template-columns:1fr; }
+    .v3-grid > .v3-rail-right, .v1-grid > div:last-child { grid-template-columns:1fr; }
     .v3-temp-grid, .v2-market-strip { grid-template-columns:repeat(2,1fr); }
     .v3-ministat-grid { grid-template-columns:1fr 1fr; }
   }
@@ -95,7 +111,10 @@
 <body>
 <div id="root"></div>
 <!-- task#7: S株 overlay card — separate ReactDOM root + plain JS, cannot break the main App -->
-<div id="skabu-root" style="position:fixed;right:14px;bottom:14px;max-width:340px;z-index:9999"></div>
+<!-- P24-03 / Rule 11.7.2 — docked in document flow (was a fixed bottom-right
+     overlay that occluded the right rail). Renders as a normal centred card
+     below the app. -->
+<div id="skabu-root" style="max-width:420px;margin:8px auto 20px;padding:0 20px"></div>
 <script src="src/htr-skabu-card.js"></script>
 
 <template id="__bundler_thumbnail">

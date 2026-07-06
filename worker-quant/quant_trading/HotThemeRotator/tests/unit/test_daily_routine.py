@@ -1,0 +1,213 @@
+"""Tests for the Local Beta v0 daily routine orchestrator (Rule 15.5).
+
+The orchestrator must be deterministic, fail-closed, advice-only, and never
+invoke an execution or LLM path. All subprocess work is injected so these tests
+stay in the fast daily smoke lane.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date
+from pathlib import Path
+
+import tools.daily_routine as dr
+
+
+def test_latest_trading_day_steps_weekend_back_to_friday():
+    assert dr.latest_trading_day(date(2026, 5, 30)) == date(2026, 5, 29)  # Sat -> Fri
+    assert dr.latest_trading_day(date(2026, 5, 31)) == date(2026, 5, 29)  # Sun -> Fri
+    assert dr.latest_trading_day(date(2026, 5, 27)) == date(2026, 5, 27)  # Wed -> Wed
+
+
+def test_latest_trading_day_steps_over_jpx_holiday(tmp_path):
+    """P12-03(b) — the routine's trade date now steps back over JP holidays, not
+    just weekends, so emit never targets a closed session (Rule 15.4)."""
+    # Golden Week 2026: 5/6 Wed (substitute holiday) -> back through 5/4/5/5 + the
+    # 5/2-5/3 weekend to Friday 5/1.
+    assert dr.latest_trading_day(date(2026, 5, 6)) == date(2026, 5, 1)
+    assert dr.latest_trading_day(date(2026, 4, 29)) == date(2026, 4, 28)  # Showa Wed -> Tue
+
+
+def test_afterclose_record_flags_calendar_coverage(tmp_path, monkeypatch):
+    """Rule 15.4 honesty — the run record states whether the JPX holiday table
+    covers asof's year (out-of-coverage falls back to weekend-only + data guard)."""
+    monkeypatch.setattr(dr, "SNAP_DIR", tmp_path / "screener")
+    runner, _ = _fake_runner_factory(snapshot_payload={"asof": "2026-05-29", "symbols": ["6966.T"]})
+    rec = dr.run_afterclose(date(2026, 5, 30), runner=runner)
+    assert rec["calendar_covered"] is True
+
+
+def _fake_runner_factory(snapshot_payload=None, screener_rc=0, calls=None,
+                         emit_new=2, emit_dropped=0):
+    """Build a runner that records calls and (optionally) writes a snapshot.
+
+    emit returns realistic count lines so the Rule 11.9 honesty logic in
+    run_afterclose (new>0 => ok) can be exercised.
+    """
+    calls = calls if calls is not None else []
+
+    def runner(cmd, *, cwd=None, env_extra=None, timeout=None):
+        calls.append(cmd)
+        is_screener = any("screener.py" in str(c) for c in cmd)
+        if is_screener:
+            if screener_rc == 0 and snapshot_payload is not None:
+                out_path = Path(cmd[cmd.index("--out") + 1])
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(json.dumps(snapshot_payload), encoding="utf-8")
+            return screener_rc, "screener output", ""
+        if any("emit_daily" in str(c) for c in cmd):
+            return 0, (f"  new predictions:        {emit_new}\n"
+                       f"  dropped (no close):     {emit_dropped}\n"
+                       f"  skipped (already on disk): 0\n"), ""
+        return 0, "swept", ""
+
+    return runner, calls
+
+
+def test_afterclose_happy_path_calls_screener_then_emit_then_sweep(tmp_path, monkeypatch):
+    monkeypatch.setattr(dr, "SNAP_DIR", tmp_path / "screener")
+    runner, calls = _fake_runner_factory(snapshot_payload={"asof": "2026-05-29",
+                                                            "symbols": ["6966.T", "6768.T"]})
+    rec = dr.run_afterclose(date(2026, 5, 30), runner=runner)
+
+    assert rec["ok"] is True
+    assert rec["candidates"]["ok"] is True
+    assert rec["candidates"]["ticker_count"] == 2
+    order = ["refresh" if any("refresh_htr_price_db" in str(c) for c in cmd) else
+             "macro" if any("refresh_htr_macro_news" in str(c) for c in cmd) else
+             "news" if any("refresh_htr_news" in str(c) for c in cmd) else
+             "adr" if any("refresh_skhy_adr_watch" in str(c) for c in cmd) else
+             "tdnet" if any("poll_tdnet_rss" in str(c) for c in cmd) else
+             "screener" if any("screener.py" in str(c) for c in cmd) else
+             "meta" if any("refresh_ticker_metadata" in str(c) for c in cmd) else
+             "skabu" if any("build_s_kabu_overlay" in str(c) for c in cmd) else
+             "emit" if any("emit_daily" in str(c) for c in cmd) else
+             "sweep" if any("sweep_pending" in str(c) for c in cmd) else
+             "forward_eval" if any("forward_signal_report" in str(c) for c in cmd) else "?"
+             for cmd in calls]
+    # price DB → news → macro → adr → TDnet corpus (ADR-0010/P17-4) → screener → meta
+    # → S株 overlay → emit → sweep → forward shadow-eval (Rule 16, non-fatal).
+    assert order == ["refresh", "news", "macro", "adr", "tdnet", "screener", "meta",
+                     "skabu", "emit", "sweep", "forward_eval"]
+
+
+def test_afterclose_fail_closed_aborts_emit_when_screener_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr(dr, "SNAP_DIR", tmp_path / "screener")
+    runner, calls = _fake_runner_factory(screener_rc=1)
+    rec = dr.run_afterclose(date(2026, 5, 30), runner=runner)
+
+    assert rec["ok"] is False
+    assert rec["candidates"]["ok"] is False
+    # emit / sweep MUST NOT run after a failed refresh.
+    assert not any("emit_daily" in str(c) for cmd in calls for c in cmd)
+    assert not any("sweep_pending" in str(c) for cmd in calls for c in cmd)
+
+
+def test_afterclose_rejects_zero_candidate_snapshot(tmp_path, monkeypatch):
+    monkeypatch.setattr(dr, "SNAP_DIR", tmp_path / "screener")
+    runner, calls = _fake_runner_factory(snapshot_payload={"asof": "2026-05-29", "symbols": []})
+    rec = dr.run_afterclose(date(2026, 5, 30), runner=runner)
+
+    assert rec["ok"] is False
+    assert "0 candidates" in rec["candidates"]["reason"]
+    assert not any("emit_daily" in str(c) for cmd in calls for c in cmd)
+
+
+def test_dry_run_executes_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(dr, "SNAP_DIR", tmp_path / "screener")
+    called = []
+
+    def runner(cmd, **kw):
+        called.append(cmd)
+        return 0, "", ""
+
+    rec = dr.run_afterclose(date(2026, 5, 30), dry_run=True, runner=runner)
+    assert rec["ok"] is True
+    assert called == []
+    assert "plan" in rec
+
+
+def test_record_carries_no_execution_or_broker_fields(tmp_path, monkeypatch):
+    monkeypatch.setattr(dr, "SNAP_DIR", tmp_path / "screener")
+    runner, _ = _fake_runner_factory(snapshot_payload={"asof": "2026-05-29", "symbols": ["6966.T"]})
+    rec = dr.run_afterclose(date(2026, 5, 30), runner=runner)
+    blob = json.dumps(rec).lower()
+    for forbidden in ("broker", "order_id", "account", "submit", "route", "execute"):
+        assert forbidden not in blob
+
+
+def test_preopen_reports_smoke_and_freshness(tmp_path, monkeypatch):
+    monkeypatch.setattr(dr, "SNAP_DIR", tmp_path / "screener")
+
+    def runner(cmd, **kw):
+        return 0, "1266 passed, 5 deselected", ""
+
+    rec = dr.run_preopen(date(2026, 5, 30), runner=runner)
+    assert rec["mode"] == "preopen"
+    assert rec["smoke"]["passed"] is True
+    assert "passed" in rec["smoke"]["summary"]
+    assert rec["candidate_snapshot_present"] is False  # none in tmp snap dir
+
+
+def test_afterclose_zero_new_with_drops_is_honest_fail(tmp_path, monkeypatch):
+    """Rule 11.9 — a green return code that collected 0 new samples (all dropped
+    for missing close) MUST be ok=False and MUST NOT log 'emitted'. This is the
+    2026-06-01 silent-no-op-with-success-log bug (Codex review)."""
+    monkeypatch.setattr(dr, "SNAP_DIR", tmp_path / "screener")
+    runner, _ = _fake_runner_factory(
+        snapshot_payload={"asof": "2026-06-01", "symbols": ["6768.T", "6966.T"]},
+        emit_new=0, emit_dropped=2)
+    rec = dr.run_afterclose(date(2026, 6, 1), runner=runner)
+    assert rec["ok"] is False
+    assert rec["collection"]["new_predictions"] == 0
+    assert rec["collection"]["dropped_no_close"] == 2
+    assert not any("emitted" in n for n in rec["notes"])
+    assert any("0 new forward samples" in n for n in rec["notes"])
+
+
+def test_afterclose_idempotent_rerun_is_ok(tmp_path, monkeypatch):
+    """All-skipped (already-on-disk) re-run is a legitimate ok (idempotent)."""
+    monkeypatch.setattr(dr, "SNAP_DIR", tmp_path / "screener")
+    runner, _ = _fake_runner_factory(
+        snapshot_payload={"asof": "2026-05-29", "symbols": ["6768.T"]},
+        emit_new=0, emit_dropped=0)
+    # override emit to report all-skipped
+    def runner2(cmd, *, cwd=None, env_extra=None, timeout=None):
+        if any("screener.py" in str(c) for c in cmd):
+            out_path = Path(cmd[cmd.index("--out") + 1]); out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps({"asof": "2026-05-29", "symbols": ["6768.T"]}), encoding="utf-8")
+            return 0, "screener output", ""
+        if any("emit_daily" in str(c) for c in cmd):
+            return 0, "  new predictions:        0\n  dropped (no close):     0\n  skipped (already on disk): 1\n", ""
+        return 0, "swept", ""
+    rec = dr.run_afterclose(date(2026, 5, 30), runner=runner2)
+    assert rec["ok"] is True
+    assert any("idempotent" in n for n in rec["notes"])
+
+
+def test_smoke_captures_error_tail_on_failure():
+    """A failed pre-open smoke must record WHY (error tail), not just '275 errors'
+    with no cause — the 2026-06-02 un-diagnosable failure."""
+    def runner(cmd, **kw):
+        return 1, "E   ImportError: boom\n1017 passed, 5 deselected, 275 errors in 33.99s\n", "traceback detail"
+    res = dr.smoke(runner=runner)
+    assert res["passed"] is False
+    assert "275 errors" in res["summary"]
+    assert "error_tail" in res and "ImportError" in res["error_tail"]
+
+
+def test_smoke_pass_has_no_error_tail():
+    def runner(cmd, **kw):
+        return 0, "1292 passed, 5 deselected in 9s", ""
+    res = dr.smoke(runner=runner)
+    assert res["passed"] is True
+    assert "error_tail" not in res
+
+
+def test_smoke_command_uses_workspace_basetemp():
+    """Windows scheduled runs must not depend on the user Temp pytest root, which
+    can be locked or permission-denied. Keep temp files inside the HTR workspace."""
+    cmd = [str(part) for part in dr.SMOKE_CMD]
+    joined = " ".join(cmd)
+    assert "--basetemp" in cmd
+    assert ".pytest_tmp" in joined

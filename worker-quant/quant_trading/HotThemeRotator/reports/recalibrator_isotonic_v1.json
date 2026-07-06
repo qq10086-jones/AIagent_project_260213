@@ -50,12 +50,12 @@
     }
   ],
   "evidence_origin": "bootstrap",
-  "fitted_at": "2026-05-27T15:11:20.931694+00:00",
+  "fitted_at": "2026-05-27T23:37:12.607314+00:00",
   "horizon_days": 3,
   "model_version": "isotonic_v1",
   "sample_count": 762,
   "trade_date_range": [
     "2026-03-23",
-    "2026-04-13"
+    "2026-05-27"
   ]
 }

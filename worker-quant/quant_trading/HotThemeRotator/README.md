@@ -1,21 +1,79 @@
 # HotThemeRotator
 
-## Local User Interface
+## Local Beta v0 Runbook (localhost only — Rule 15)
 
-Run the local dashboard:
+Single-user, single-machine research cockpit. **localhost only — never LAN / cloud / multi-user** (Rule 15.0). Output is research-only; calibration is K-fold **downgraded** to `uncalibrated_research_score` until Rule 8.2.2 / 9.4.1 are honestly met (Rule 15.1).
+
+### Start the dashboard
 
 ```powershell
 cd E:\AIagent_project_260213\worker-quant\quant_trading\HotThemeRotator
-streamlit run .\tools\streamlit_opportunity_app.py --server.port 8501
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
 ```
 
-Open:
+Open: `http://127.0.0.1:8000/`
 
-```text
-http://localhost:8501
+Pull-only surface: theme heat, candidate panel, K-line, per-symbol profile / factors / outcomes / strategy card / LLM brief, manual portfolio recording, watchlist, proposal inbox, reflection observability.
+
+### Remote personal access (optional — Rule 15.9)
+
+Single-operator remote access to your own cockpit, ONLY over a private overlay network you control (Tailscale / WireGuard / SSH tunnel). Public internet exposure stays forbidden.
+
+```powershell
+# 1) install Tailscale on this machine + your phone/laptop (same tailnet)
+# 2) start with the guarded runner (fail-closed: refuses non-loopback without token)
+$env:HTR_BIND_HOST = "<your-tailscale-ip>"      # e.g. 100.x.y.z — NEVER a public IP
+$env:HTR_ACCESS_TOKEN = "<random string, >=16 chars>"
+python tools\serve_remote.py
+# 3) on your device: open  http://<your-tailscale-ip>:8000/login?token=<token>
+#    (sets a session cookie; API calls also accept X-HTR-Token / Bearer header)
 ```
 
-The first screen is `今日机会中心`: it shows the top candidate, staged buy zone, stop price, staged sell zone, plain-language reasons, and visible risk warnings. It uses sample data by default. Switch to `免费行情 yfinance` in the sidebar to try quote-only free web data. All output is research-only and uncalibrated until feedback calibration is implemented.
+Loopback without a token = Local Beta v0, unchanged. The token gates every request (pages + API, reads + the Rule 11.5 manual-record writes); rotate it by restarting with a new value.
+
+### Daily smoke gate (pre-open — Rule 15.2 / 15.6)
+
+```powershell
+python -m pytest tests\ -m "not slow" -q
+```
+
+Fast and deterministic; excludes the vectorbt / numba research lane. A green smoke lane is **not** proof of model edge.
+
+### Research regression lane (not a daily readiness signal)
+
+```powershell
+python -m pytest tests\ -m slow -q
+```
+
+### After close — forward sample collection (Rule 15.5 step 4)
+
+```powershell
+python tools\emit_daily_predictions.py
+python tools\sweep_pending_outcomes.py
+```
+
+`emit` writes live `PredictionRecord` rows from the day's selected tickers; `sweep` joins realized 1D/3D/5D outcomes as forward bars arrive. These accumulate toward the Rule 8.2.1 sunset / Rule 9.4 validation — they do **not** promote any label to a win rate.
+
+### Automated daily routine (P10-28) — hands-off
+
+The deterministic half of the rhythm runs unattended via two Windows scheduled tasks (Mon-Fri, JST):
+
+- `HTR_Daily_Preopen` 08:30 → daily smoke gate + candidate freshness check
+- `HTR_Daily_AfterClose` 16:00 → refresh candidates (deterministic screener, read-only) → `emit` → `sweep`
+
+```powershell
+scripts\register_daily_routine_tasks.bat      REM (re)register the tasks
+schtasks /Run /TN "HTR_Daily_AfterClose"      REM run once on demand
+python tools\daily_routine.py --mode afterclose --dry-run   REM preview without writing
+```
+
+Runs are logged to `reports\observability\daily_routine_log.jsonl`. It is deterministic, fail-closed, idempotent, and never touches a broker / order / LLM path. Two steps stay manual by design: recording a fill (only when you actually trade) and pulling LLM narrative briefs.
+
+### Rollback
+
+Beta baseline snapshot 2026-06-02 (readiness + automation + write-path wiring + calibration validation + forward-collection honesty + dashboard freshness decouple + market-session derivation, smoke 1294 green): `git stash apply f14da50` (also `git stash list` → stash@{0}). Designer-redesign fallback: restore `frontend_zerobuild_backup_2026-05-30/`. Committed baseline: HEAD `2ce7504`.
+
+> Legacy P8 Streamlit panel (`streamlit run .\tools\streamlit_opportunity_app.py --server.port 8501`) is superseded by the FastAPI dashboard above and is no longer the primary UI.
 
 日股为主、A股和美股为外部温度因子的热点龙头轮动工具。
 
@@ -37,6 +95,7 @@ The first screen is `今日机会中心`: it shows the top candidate, staged buy
 - `docs/02_GOVERNANCE.md`：治理规则和修改规则。
 - `docs/03_FOLDER_MAP.md`：目录职责。
 - `docs/04_DATA_AND_OPEN_SOURCE.md`：数据源和开源项目选型。
+- `docs/05_USER_GUIDE.md`：使用说明书 — 每天怎么操作、每张卡片显示什么/怎么读/有什么功能。
 
 ## 唯一推进规则
 

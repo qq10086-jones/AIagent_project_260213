@@ -75,3 +75,11 @@ def test_portfolio_endpoints_registered(client):
     routes = {r.path for r in client.app.routes}
     assert "/api/portfolio/fill" in routes
     assert "/api/portfolio/cash_event" in routes
+
+
+def test_openapi_description_allows_manual_recording_but_not_execution(client):
+    description = client.app.openapi()["info"]["description"].lower()
+
+    assert "no broker/order execution endpoints" in description
+    assert "manual portfolio record" in description
+    assert "no post/put/delete" not in description

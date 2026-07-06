@@ -7,9 +7,10 @@ __pycache__/
 .runtime/
 .superpowers/
 
-# Original quant.zip design package — kept locally as reference; do not version-track.
-# Frontend assets that were extracted from it (frontend/v1.jsx, v2.jsx, etc.) ARE tracked.
+# Original design packages (quant.zip, quant0530.zip, …) — kept locally as
+# reference; do not version-track. Frontend assets extracted from them ARE tracked.
 quant.zip
+*.zip
 
 # Decision-log + outcome storage (runtime artifacts; recreated per session).
 reports/predictions/
@@ -30,3 +31,16 @@ reports/paper/*
 !reports/daily/.gitkeep
 !reports/backtests/.gitkeep
 !reports/paper/.gitkeep
+
+# All reports/ SUBDIRECTORIES are runtime artifacts (predictions, outcomes,
+# tdnet/tdnet_docs PDFs, adr, news, macro, observability traces, research
+# cohorts, the personal portfolio journal, calibration snapshots) — recreated
+# by the collection tools and backed up separately; never version-tracked.
+# Root-level tracked files (e.g. reports/recalibrator_isotonic_v1.json) are a
+# file, not a subdir, so this rule leaves them tracked.
+reports/*/
+!reports/*/.gitkeep
+
+# Local backup archives + backend backup snapshots.
+_htr_backups/
+frontend_zerobuild_backup_*/

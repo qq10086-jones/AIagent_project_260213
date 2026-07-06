@@ -213,6 +213,15 @@ def test_generate_brief_proposes_action_when_root_cause_exists():
     action = brief.proposed_actions[0]
     assert action["intervention"] in ("lower_threshold", "fresh_data")
     assert action["evidence_class"] == "ablation"
+    assert action["source_layer"] == "L4_RCA"
+    assert action["generator"] == "structured_rca_v1"
+
+
+def test_generate_brief_no_action_when_validity_is_not_actionable():
+    payload = _build_payload(validity="data_too_stale")
+    llm = _StubLlm(["数据陈旧，应先刷新数据源。"])
+    brief = generate_reflection_brief(payload, llm=llm)
+    assert brief.proposed_actions == ()
 
 
 def test_generate_brief_no_action_when_no_recovery():

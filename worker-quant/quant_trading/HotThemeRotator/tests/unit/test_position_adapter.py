@@ -175,10 +175,17 @@ def test_default_strategy_is_etf_buyhold():
     assert DEFAULT_STRATEGY_ID == "etf_buyhold"
 
 
-def test_default_db_path_resolves_to_sibling_project_optimized():
+def test_default_db_path_prefers_htr_native_else_sibling():
+    # Delegates to the canonical kline resolver (P12-03d): HTR-owned price DB when
+    # present, else the sibling fallback. Explicit root override still → sibling.
+    from pathlib import Path
+    assert "Project_optimized" in str(default_db_path("/x/Project_optimized"))
     path = default_db_path()
-    assert path.name == "japan_market.db"
-    assert "Project_optimized" in str(path)
+    htr = Path(__file__).resolve().parents[2] / "data" / "raw" / "htr_market.db"
+    if htr.exists():
+        assert path == htr
+    else:
+        assert path.name == "japan_market.db" and "Project_optimized" in str(path)
 
 
 # ─── ADR-0008 journal-first path for etf_buyhold ─────────────────────────────

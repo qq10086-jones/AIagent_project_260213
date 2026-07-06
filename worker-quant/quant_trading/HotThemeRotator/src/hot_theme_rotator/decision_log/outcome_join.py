@@ -21,6 +21,7 @@ from datetime import date, timedelta
 from typing import Any, Iterable, Protocol
 
 from hot_theme_rotator.common.schema import PriceBar
+from hot_theme_rotator.data.kline_adapter import detect_split_factor
 from hot_theme_rotator.decision_log.schema import (
     OutcomeRecord,
     OutcomeRecordValidationError,
@@ -161,6 +162,20 @@ def compute_outcome(
             evaluated_as_of=evaluated_as_of,
             status="malformed_data",
             reason="prediction.extra['reference_price'] missing or non-positive",
+        )
+
+    # Rule 11.9.6 — a corporate action (split) between the reference close and any
+    # outcome bar makes a RAW realized return a fake cliff (1306.T's 2026-03-30
+    # 10:1 split shows a phantom -90%). The reference is the emit-time raw close on
+    # a different basis than these fetched bars, so it cannot be safely re-adjusted
+    # here — fail closed rather than poison calibration with a fabricated return.
+    split_reason = _detect_split_in_window(reference_price, sorted_bars)
+    if split_reason is not None:
+        return _build_failure(
+            prediction=prediction,
+            evaluated_as_of=evaluated_as_of,
+            status="malformed_data",
+            reason=split_reason,
         )
 
     realized_returns: dict[str, float] = {}
@@ -308,6 +323,29 @@ def _validate_bar_sequence(
             )
         seen.add(bar_date)
         last_date = bar_date
+    return None
+
+
+def _detect_split_in_window(
+    reference_price: float,
+    bars: tuple[PriceBar, ...],
+) -> str | None:
+    """Return a reason if a clean split ratio appears between the reference close
+    and any outcome bar, or between consecutive bars; else None (Rule 11.9.6).
+
+    Reuses `kline_adapter.detect_split_factor` (single source of the split
+    heuristic). A legitimate one-day move near a split ratio is impossible under
+    JP daily price limits, so this is safe against false positives.
+    """
+    closes = [float(reference_price)] + [float(b.close) for b in bars]
+    for prev, cur in zip(closes, closes[1:]):
+        if detect_split_factor(prev, cur) is not None:
+            return (
+                f"corporate-action (split) detected in outcome window "
+                f"({prev:g} -> {cur:g}); reference is the emit-time raw close on a "
+                f"different basis — fail closed per Rule 11.9.6 rather than emit a "
+                f"fake unadjusted return"
+            )
     return None
 
 

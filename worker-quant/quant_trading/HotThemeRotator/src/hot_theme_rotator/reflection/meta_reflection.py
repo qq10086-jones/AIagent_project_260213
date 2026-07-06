@@ -208,6 +208,8 @@ def _detect_expiry_pattern(
     findings: list[MetaReflectionFinding] = []
     by_class: dict[str, list[str]] = {}
     for p in expired:
+        if str(p.get("expiration_reason", "unreviewed_timeout")) != "unreviewed_timeout":
+            continue
         ec = str(p.get("evidence_class", ""))
         pid = str(p.get("proposal_id", ""))
         by_class.setdefault(ec, []).append(pid)

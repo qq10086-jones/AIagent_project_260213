@@ -43,6 +43,13 @@ def _build_proposal(**overrides):
         confidence_interval=(0.1, 0.4),
         counterfactual_validity="exact_replay",
         rationale_pointer="rca:fresh_data marginal_recovery=5",
+        extra={
+            "source_trace_ids": ["trace-xyz"],
+            "config_before_hash": "cfg-before-123",
+            "candidate_config_hash": "cfg-after-456",
+            "outcome_window": {"start": "2026-05-01", "end": "2026-05-26"},
+            "denominator_counts": {"eligible": 100, "scored": 20, "alerted": 5},
+        },
     )
     base.update(overrides)
     base["proposal_id"] = compute_proposal_id(
@@ -147,6 +154,7 @@ def test_intake_rule_13_7_parameter_change_requires_backtest(tmp_path):
         counterfactual_validity=p.counterfactual_validity,
         rationale_pointer=p.rationale_pointer,
         parameter_change={"alert_budget_per_day": {"from": 10, "to": 12}},
+        extra=p.extra,
         # backtest_evidence intentionally omitted
     )
     base["proposal_id"] = compute_proposal_id(
@@ -175,6 +183,67 @@ def test_intake_rejects_duplicate(tmp_path):
         intake_proposal(p, base_dir=tmp_path)
 
 
+def test_intake_requires_reproducibility_metadata(tmp_path):
+    p = _build_proposal(extra={})
+    with pytest.raises(DecisionGateError, match="Rule 13.17"):
+        intake_proposal(p, base_dir=tmp_path)
+
+
+def test_intake_rejects_invalid_validity(tmp_path):
+    p = _build_proposal(counterfactual_validity="invalid")
+    with pytest.raises(DecisionGateError, match="Rule 13.11"):
+        intake_proposal(p, base_dir=tmp_path)
+
+
+def test_intake_data_too_stale_allows_only_freshness_attribution(tmp_path):
+    p = _build_proposal(counterfactual_validity="data_too_stale")
+    with pytest.raises(DecisionGateError, match="Rule 13.11"):
+        intake_proposal(p, base_dir=tmp_path)
+
+    ok = _build_proposal(
+        created_ts="2026-05-26T10:01:00+09:00",
+        evidence_class="freshness_attribution",
+        intervention_target="refresh_ohlc_dataset",
+        counterfactual_validity="data_too_stale",
+    )
+    intake_proposal(ok, base_dir=tmp_path)
+
+
+def test_intake_price_only_replay_cannot_change_parameter(tmp_path):
+    p = _build_proposal(
+        sample_size=300,
+        counterfactual_validity="price_only_replay",
+        parameter_change={"scanner_threshold": {"from": 50, "to": 55}},
+        backtest_evidence={"window": "rolling-origin", "pre": 1, "post": 2},
+    )
+    with pytest.raises(DecisionGateError, match="Rule 13.11"):
+        intake_proposal(p, base_dir=tmp_path)
+
+
+def test_intake_parameter_change_cooldown_blocks_same_target(tmp_path):
+    old = _build_proposal(
+        sample_size=300,
+        parameter_change={"scanner_threshold": {"from": 50, "to": 55}},
+        backtest_evidence={"window": "rolling-origin", "pre": 1, "post": 2},
+    )
+    intake_proposal(old, base_dir=tmp_path)
+    accept_proposal(
+        old.proposal_id,
+        base_dir=tmp_path,
+        accepted_ts="2026-05-26T11:00:00+09:00",
+    )
+
+    new = _build_proposal(
+        created_ts="2026-05-27T10:00:00+09:00",
+        snapshot_id="snap-new",
+        sample_size=300,
+        parameter_change={"scanner_threshold": {"from": 55, "to": 52}},
+        backtest_evidence={"window": "rolling-origin", "pre": 1, "post": 2},
+    )
+    with pytest.raises(DecisionGateError, match="Rule 13.15"):
+        intake_proposal(new, base_dir=tmp_path)
+
+
 # ─── accept ────────────────────────────────────────────────────────────────
 
 
@@ -190,6 +259,19 @@ def test_accept_moves_to_accepted_directory(tmp_path):
     payload = json.loads(dst.read_text(encoding="utf-8"))
     assert payload["accepted_ts"] == "2026-05-27T10:00:00+09:00"
     assert payload["accepted_by"] == "user"
+
+
+def test_accept_parameter_change_defaults_to_shadow_stage(tmp_path):
+    p = _build_proposal(
+        sample_size=300,
+        parameter_change={"scanner_threshold": {"from": 50, "to": 55}},
+        backtest_evidence={"window": "rolling-origin", "pre": 1, "post": 2},
+    )
+    intake_proposal(p, base_dir=tmp_path)
+    accepted = accept_proposal(p.proposal_id, base_dir=tmp_path)
+    payload = json.loads(accepted.read_text(encoding="utf-8"))
+    assert payload["lifecycle_stage"] == "shadow"
+    assert payload["rollback_required"] is True
 
 
 def test_accept_missing_raises(tmp_path):
@@ -264,6 +346,9 @@ def test_expiry_threshold_at_exact_boundary(tmp_path):
         base_dir=tmp_path,
     )
     assert moved == (exact.proposal_id,)
+    expired_path = proposal_dir("expired", base_dir=tmp_path) / f"{exact.proposal_id}.json"
+    payload = json.loads(expired_path.read_text(encoding="utf-8"))
+    assert payload["expiration_reason"] == "unreviewed_timeout"
 
 
 # ─── path safety ──────────────────────────────────────────────────────────

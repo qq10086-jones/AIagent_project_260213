@@ -107,6 +107,58 @@ def append_disclosures(
     return tuple(written)
 
 
+def read_disclosures_for_symbol(
+    *,
+    symbol: str,
+    base_dir: Path | str,
+    max_days_back: int = 7,
+    asof_date: str | None = None,
+) -> tuple[TdnetDisclosure, ...]:
+    """P2 — Read recent disclosures filtered by symbol.
+
+    Scans the past ``max_days_back`` daily TDnet files (or all of them if
+    ``asof_date`` is None and the directory has fewer days). Returns matching
+    records sorted by ``published_ts`` descending.
+
+    This is a STRUCTURAL UI helper (Rule 11.4 chart-tooltip clarification
+    territory) — disclosure text is shown as factual data in the UI, NOT
+    concatenated into LLM prompts. LLM brief input is unchanged.
+    """
+    import os
+    from datetime import datetime as _dt, timedelta as _td
+
+    base = Path(base_dir)
+    storage_dir = base / DEFAULT_TDNET_SUBDIR
+    if not storage_dir.exists():
+        return ()
+
+    if asof_date is not None:
+        try:
+            cutoff = _dt.fromisoformat(asof_date) - _td(days=max_days_back)
+        except ValueError:
+            cutoff = None
+    else:
+        cutoff = None
+
+    results: list[TdnetDisclosure] = []
+    for path in sorted(storage_dir.glob("*.jsonl"), reverse=True):
+        try:
+            file_date = _dt.fromisoformat(path.stem)
+        except ValueError:
+            continue
+        if cutoff and file_date < cutoff:
+            break
+        try:
+            for rec in read_disclosures(trade_date=path.stem, base_dir=base):
+                if rec.ticker == symbol:
+                    results.append(rec)
+        except TdnetStorageError:
+            continue
+    # Sort by published_ts desc
+    results.sort(key=lambda r: r.published_ts, reverse=True)
+    return tuple(results)
+
+
 def read_disclosures(
     *,
     trade_date: str,

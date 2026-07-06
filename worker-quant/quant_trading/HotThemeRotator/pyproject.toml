@@ -1,0 +1,18 @@
+[project]
+name = "hot-theme-rotator"
+version = "0.1.0"
+# L4 fix — codebase uses PEP 604 / PEP 585 generic syntax (e.g. tuple[float, float],
+# str | Path), requiring Python 3.10+. CI / deployment must enforce this.
+requires-python = ">=3.10"
+description = "Japan equity advice-only research dashboard (HotThemeRotator)"
+readme = "README.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# Local Beta v0 test-lane split (Rule 15.6). Daily smoke lane (pre-open) runs
+# `pytest -m "not slow"`; the research regression lane runs `pytest -m slow`
+# (vectorbt/numba backtests — important, but not a daily readiness signal).
+markers = [
+    "slow: research-regression lane — vectorbt/numba backtests with JIT cold-start. Excluded from the Local Beta v0 daily smoke lane (Rule 15.6).",
+]

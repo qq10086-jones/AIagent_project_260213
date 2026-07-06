@@ -53,6 +53,14 @@ EXPIRY_DAYS = 7
 MIN_SAMPLE_SIZE = 30
 PARAMETER_CHANGE_MIN_SAMPLE_SIZE = 300  # Rule 13.3 — parameter-change tier
 DEFAULT_GENERATOR = "reflection_brief_v1"
+PARAMETER_CHANGE_COOLDOWN_DAYS = 14
+REQUIRED_REPRODUCIBILITY_FIELDS = frozenset({
+    "source_trace_ids",
+    "config_before_hash",
+    "candidate_config_hash",
+    "outcome_window",
+    "denominator_counts",
+})
 
 ALLOWED_EVIDENCE_CLASSES = frozenset({
     "funnel_loss",
@@ -254,6 +262,8 @@ def intake_proposal(
 
     On success: writes ``proposals/{proposal_id}.json`` and returns the path.
     """
+    _enforce_reproducibility_metadata(proposal)
+    _enforce_validity_action_matrix(proposal)
     if proposal.parameter_change is not None and proposal.backtest_evidence is None:
         raise DecisionGateError(
             "Rule 13.7: parameter_change proposals require backtest_evidence"
@@ -272,6 +282,7 @@ def intake_proposal(
                 f"extra.bootstrap_ci_established=True (current "
                 f"sample_size={proposal.sample_size})"
             )
+        _enforce_parameter_change_cooldown(proposal, base_dir=base_dir)
     # Refuse duplicate intake (idempotency).
     existing = _proposal_file(proposal.proposal_id, state="proposals", base_dir=base_dir)
     if existing.exists():
@@ -407,6 +418,9 @@ def _atomic_terminal_transition(
 
         payload = json.loads(src.read_text(encoding="utf-8"))
         payload.update(payload_augment)
+        if target_state == "accepted" and payload.get("parameter_change"):
+            payload.setdefault("lifecycle_stage", "shadow")
+            payload.setdefault("rollback_required", True)
 
         dst.parent.mkdir(parents=True, exist_ok=True)
         tmp = dst.parent / f".tmp.{dst.name}"
@@ -457,13 +471,82 @@ def expire_old_proposals(
                 proposal_id=str(payload["proposal_id"]),
                 target_state="expired",
                 base_dir=base_dir,
-                payload_augment={"expired_ts": now_iso},
+                payload_augment={
+                    "expired_ts": now_iso,
+                    "expiration_reason": "unreviewed_timeout",
+                },
             )
             moved.append(payload["proposal_id"])
     return tuple(moved)
 
 
 # ─── internals ──────────────────────────────────────────────────────────────
+
+
+def _enforce_reproducibility_metadata(proposal: Proposal) -> None:
+    missing = sorted(k for k in REQUIRED_REPRODUCIBILITY_FIELDS if k not in proposal.extra)
+    if missing:
+        raise DecisionGateError(
+            "Rule 13.17: proposal missing reproducibility metadata "
+            f"{missing!r}"
+        )
+
+
+def _enforce_validity_action_matrix(proposal: Proposal) -> None:
+    validity = proposal.counterfactual_validity
+    if validity == "invalid":
+        raise DecisionGateError(
+            "Rule 13.11: invalid replay cannot generate a proposal"
+        )
+    if validity == "data_too_stale":
+        if proposal.evidence_class != "freshness_attribution":
+            raise DecisionGateError(
+                "Rule 13.11: data_too_stale may only propose freshness_attribution"
+            )
+        if proposal.parameter_change is not None:
+            raise DecisionGateError(
+                "Rule 13.11: data_too_stale cannot propose parameter changes"
+            )
+    if validity in {"price_only_replay", "universe_reconstructed"}:
+        if proposal.parameter_change is not None:
+            raise DecisionGateError(
+                f"Rule 13.11: {validity} cannot propose parameter changes"
+            )
+
+
+def _enforce_parameter_change_cooldown(
+    proposal: Proposal,
+    *,
+    base_dir: str | Path,
+) -> None:
+    target = proposal.intervention_target
+    created = _parse_iso_tz(proposal.created_ts, "created_ts")
+    cutoff = created - timedelta(days=PARAMETER_CHANGE_COOLDOWN_DAYS)
+    for state in ("proposals", "accepted"):
+        state_dir = proposal_dir(state, base_dir=base_dir)
+        if not state_dir.exists():
+            continue
+        for path in sorted(state_dir.iterdir()):
+            if not path.is_file() or path.suffix != ".json" or path.name.startswith("."):
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                continue
+            if payload.get("intervention_target") != target:
+                continue
+            if not payload.get("parameter_change"):
+                continue
+            prior_ts = str(payload.get("accepted_ts") or payload.get("created_ts") or "")
+            try:
+                prior = _parse_iso_tz(prior_ts, "prior_parameter_change_ts")
+            except DecisionGateError:
+                continue
+            if cutoff <= prior <= created:
+                raise DecisionGateError(
+                    f"Rule 13.15: parameter_change for {target!r} is inside "
+                    f"{PARAMETER_CHANGE_COOLDOWN_DAYS}-day cooldown"
+                )
 
 
 def _parse_iso_tz(value: Any, name: str) -> datetime:

@@ -86,6 +86,49 @@ class _StubFetcher:
 
 
 # ----------------------------------------------------------------------------
+# Rule 11.9.6 — corporate-action (split) fail-closed guard
+# ----------------------------------------------------------------------------
+
+
+def test_compute_outcome_fails_closed_on_split_in_window():
+    """A 10:1 split between the reference close (100) and the outcome bars (~10)
+    would make a RAW return a phantom -90%. The reference is the emit-time raw
+    close on a different basis, so compute_outcome fails closed (Rule 11.9.6)."""
+    fetcher = _StubFetcher(
+        bars_by_symbol={
+            "1306.T": [
+                _bar("1306.T", "2026-05-24", close=10.0),   # 100 -> 10 == clean 10:1
+                _bar("1306.T", "2026-05-25", close=10.1),
+                _bar("1306.T", "2026-05-26", close=10.2),
+            ]
+        }
+    )
+    outcome = compute_outcome(_prediction(), fetcher=fetcher, evaluated_as_of="2026-05-30")
+    assert outcome.status == "malformed_data"
+    assert outcome.realized_returns == {}
+    assert "split" in outcome.failure_reason and "11.9.6" in outcome.failure_reason
+
+
+def test_compute_outcome_large_non_split_move_is_not_flagged():
+    """A big but non-clean-ratio move (100 -> 130, +30%) must NOT false-trigger the
+    split guard — it computes a normal complete outcome."""
+    fetcher = _StubFetcher(
+        bars_by_symbol={
+            "1306.T": [
+                _bar("1306.T", "2026-05-24", close=130.0, high=131.0),
+                _bar("1306.T", "2026-05-25", close=131.0, high=132.0),
+                _bar("1306.T", "2026-05-26", close=132.0, high=133.0),
+                _bar("1306.T", "2026-05-27", close=133.0, high=134.0),
+                _bar("1306.T", "2026-05-28", close=134.0, high=135.0),
+            ]
+        }
+    )
+    outcome = compute_outcome(_prediction(), fetcher=fetcher, evaluated_as_of="2026-05-30")
+    assert outcome.status == "complete"
+    assert outcome.realized_returns["1D"] == pytest.approx(0.3, abs=1e-6)
+
+
+# ----------------------------------------------------------------------------
 # Status branches
 # ----------------------------------------------------------------------------
 

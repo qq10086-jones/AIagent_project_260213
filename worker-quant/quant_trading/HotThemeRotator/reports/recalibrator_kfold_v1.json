@@ -1,0 +1,107 @@
+{
+  "args": {
+    "end": "2026-04-13",
+    "horizon_days": 3,
+    "in_sample_brier": 0.2427,
+    "include_live": false,
+    "k": 5,
+    "min_samples_per_fold": 100,
+    "overfit_ratio": 1.2,
+    "random_baseline": 0.25,
+    "start": null
+  },
+  "report": {
+    "folds": [
+      {
+        "calibrated_brier": 0.24228612652111683,
+        "fold_idx": 0,
+        "n_blocks": 5,
+        "raw_brier": 0.3423665780026354,
+        "test_groups": [
+          "2026-03-23",
+          "2026-03-24",
+          "2026-03-25",
+          "2026-03-26"
+        ],
+        "test_n": 199,
+        "train_n": 563
+      },
+      {
+        "calibrated_brier": 0.2477525049791739,
+        "fold_idx": 1,
+        "n_blocks": 9,
+        "raw_brier": 0.25787752330472313,
+        "test_groups": [
+          "2026-03-27",
+          "2026-03-30",
+          "2026-03-31"
+        ],
+        "test_n": 150,
+        "train_n": 612
+      },
+      {
+        "calibrated_brier": 0.2429068061498662,
+        "fold_idx": 2,
+        "n_blocks": 10,
+        "raw_brier": 0.2711237873314643,
+        "test_groups": [
+          "2026-04-01",
+          "2026-04-02",
+          "2026-04-03"
+        ],
+        "test_n": 145,
+        "train_n": 617
+      },
+      {
+        "calibrated_brier": 0.265441940665155,
+        "fold_idx": 3,
+        "n_blocks": 6,
+        "raw_brier": 0.4466885494246134,
+        "test_groups": [
+          "2026-04-06",
+          "2026-04-07",
+          "2026-04-08"
+        ],
+        "test_n": 128,
+        "train_n": 634
+      },
+      {
+        "calibrated_brier": 0.41323440515025106,
+        "fold_idx": 4,
+        "n_blocks": 11,
+        "raw_brier": 0.4103259902496665,
+        "test_groups": [
+          "2026-04-09",
+          "2026-04-10",
+          "2026-04-13"
+        ],
+        "test_n": 140,
+        "train_n": 622
+      }
+    ],
+    "horizon_days": 3,
+    "improvement_mean": 0.06335212896950798,
+    "k": 5,
+    "method": "block_temporal",
+    "n_folds_below_random": 3,
+    "oos_brier_max": 0.41323440515025106,
+    "oos_brier_mean": 0.28232435669311257,
+    "oos_brier_min": 0.24228612652111683,
+    "oos_brier_std": 0.06599162500659768,
+    "random_baseline": 0.25,
+    "raw_brier_mean": 0.34567648566262055,
+    "total_samples": 762
+  },
+  "trade_date_range": [
+    "2026-03-23",
+    "2026-04-13"
+  ],
+  "verdict": {
+    "in_sample_brier": 0.2427,
+    "oos_brier_mean": 0.28232435669311257,
+    "overfit_ratio_observed": 1.1632647576972088,
+    "random_baseline": 0.25,
+    "reason": "OOS Brier 0.2823 >= random baseline 0.2500; calibrator informationless OOS; Rule 9.4 mandates UI downgrade to uncalibrated_research_score",
+    "verdict": "downgrade"
+  }
+}

@@ -204,13 +204,16 @@ def list_available_strategies(db_path: str | Path) -> tuple[str, ...]:
 
 
 def default_db_path(project_optimized_root: str | Path | None = None) -> Path:
-    """Default location of `japan_market.db` next to HotThemeRotator."""
-    if project_optimized_root is not None:
-        return Path(project_optimized_root) / "japan_market.db"
-    here = Path(__file__).resolve()
-    # here = .../quant_trading/HotThemeRotator/src/hot_theme_rotator/data/position_adapter.py
-    # parents[4] = .../quant_trading/
-    return here.parents[4] / "Project_optimized" / "japan_market.db"
+    """Default price / portfolio DB — delegates to the ONE canonical resolver in
+    ``kline_adapter`` so the path can never drift again.
+
+    Returns the HTR-owned ``data/raw/htr_market.db`` (fresh; sibling snapshot +
+    yfinance-appended days, P12-03d) when it exists, else the sibling
+    ``Project_optimized/japan_market.db`` (ADR-0005). This used to be a duplicated
+    copy that still pointed at the sibling — so the dashboard read frozen prices
+    while only the kline resolver had been migrated (2026-06-09 fix)."""
+    from hot_theme_rotator.data.kline_adapter import default_db_path as _canonical
+    return _canonical(project_optimized_root)
 
 
 def default_journal_base_dir() -> Path:

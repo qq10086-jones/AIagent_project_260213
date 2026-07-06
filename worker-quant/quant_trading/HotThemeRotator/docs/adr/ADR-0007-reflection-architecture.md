@@ -65,7 +65,7 @@ Method: **structured ablation + funnel loss decomposition + stale-data attributi
 
 Block bootstrap on historical system days targeting desired `ARL_0` (default 100 days false-alarm-free), not generic σ multiples. Multi-KPI correction via Bonferroni or Holm.
 
-### 5. Rule 13 expanded to 10 sub-rules
+### 5. Rule 13 expanded to 17 sub-rules
 
 Original 13.1-13.5 retained. Added per Codex review:
 
@@ -74,6 +74,16 @@ Original 13.1-13.5 retained. Added per Codex review:
 - 13.8: No single-event proposals (NDK panic-trigger forbidden)
 - 13.9: Rejected proposals logged with rejection reason
 - 13.10: Meta-reflection triggers when proposals repeatedly rejected / expire / post-acceptance failed
+
+Added per R2 hardening review on 2026-05-27:
+
+- 13.11: `counterfactual_validity` controls allowed action, not just wording
+- 13.12: LLM cannot originate proposals; actions must come from deterministic L3/L4 layers
+- 13.13: Proposal tiering by blast radius
+- 13.14: Accepted parameter changes start in shadow / canary before active use
+- 13.15: Same-target parameter changes have a 14-day anti-oscillation cooldown
+- 13.16: Expiry/rejection reasons are machine-readable and meta-reflection distinguishes operator context
+- 13.17: Reproducibility metadata (`source_trace_ids`, config hashes, outcome window, denominators) required at intake
 
 ### 6. Statistical methods reorder
 
@@ -108,6 +118,10 @@ Original 13.1-13.5 retained. Added per Codex review:
   - **Mitigation**: P11-06 Human Decision Gate enforces sample-size tier at intake; UI shows tier badge prominently next to proposal.
 - **Risk**: LLM (L5) regex-misses a hedged probability phrase.
   - **Mitigation**: Rule 13.4 inherits Rule 8.3.1 regex enforcement; expand keyword list iteratively as new evasions discovered.
+- **Risk**: Reflection starts tuning parameters against noisy windows and oscillates.
+  - **Mitigation**: Rule 13.11 limits action by validity class; Rule 13.14 forces shadow/canary; Rule 13.15 enforces same-target cooldown.
+- **Risk**: Expired proposals are mistaken for generator failure when the user was simply unavailable.
+  - **Mitigation**: Rule 13.16 adds `expiration_reason`; meta-reflection ignores operator-context expiry.
 
 ## Alternatives Considered
 

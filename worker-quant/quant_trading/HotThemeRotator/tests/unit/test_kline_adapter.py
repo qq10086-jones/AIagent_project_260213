@@ -15,7 +15,9 @@ from hot_theme_rotator.common.schema import PriceBar  # noqa: E402
 from hot_theme_rotator.data.kline_adapter import (  # noqa: E402
     KlineAdapterError,
     LegacyDailyPriceFetcher,
+    SplitAdjustedDailyPriceFetcher,
     default_db_path,
+    detect_split_factor,
     fetch_kline,
     fetch_latest_close,
 )
@@ -192,7 +194,85 @@ def test_legacy_fetcher_satisfies_outcome_join_price_fetcher_protocol(tmp_path):
     assert "5D" in outcome.realized_returns
 
 
-def test_default_db_path_resolves_to_sibling_project_optimized():
+def test_default_db_path_prefers_htr_native_else_sibling():
+    # Explicit override is unchanged (ADR-0005): appends japan_market.db to the root.
+    sib = default_db_path("/some/Project_optimized")
+    assert sib.name == "japan_market.db" and "Project_optimized" in str(sib)
+    # Default: prefer the HTR-owned price DB when present, else fall back to sibling.
     p = default_db_path()
-    assert p.name == "japan_market.db"
-    assert "Project_optimized" in str(p)
+    htr = Path(__file__).resolve().parents[2] / "data" / "raw" / "htr_market.db"
+    if htr.exists():
+        assert p == htr  # P12-03d — fresh HTR-native price source
+    else:
+        assert p.name == "japan_market.db" and "Project_optimized" in str(p)
+
+
+# ─── split adjustment (data-continuity rule) ──────────────────────────────
+
+
+def _bar(d, c):
+    return PriceBar.from_dict({
+        "symbol": "1306.T", "asof": d, "open": c, "high": c, "low": c,
+        "close": c, "volume": 1000.0, "turnover_jpy": c * 1000.0,
+    })
+
+
+def test_split_adjust_removes_fake_cliff_on_10_for_1_split():
+    """A 10:1 split (1306.T, 2026-03-30: ¥3817 -> ¥376) must be back-adjusted so
+    the K-line is continuous, not a fake 10x cliff (the bug the user caught)."""
+    from hot_theme_rotator.data.kline_adapter import _split_adjust, _detect_split_factor
+
+    assert _detect_split_factor(3817.0, 376.4) is not None  # clean 10:1 detected
+    assert _detect_split_factor(100.0, 92.0) is None         # ordinary -8% move: not a split
+
+    raw = (
+        _bar("2026-03-26", 3826.0), _bar("2026-03-27", 3817.0),
+        _bar("2026-03-30", 376.4), _bar("2026-03-31", 371.4),
+        _bar("2026-05-29", 417.9),
+    )
+    adj = _split_adjust(raw)
+    closes = [b.close for b in adj]
+    assert closes[-1] == pytest.approx(417.9)               # newest bar unchanged
+    assert 360.0 < closes[0] < 400.0                        # 3826 back-adjusted into the post-split range
+    ratios = [closes[i] / closes[i - 1] for i in range(1, len(closes))]
+    assert max(ratios) < 1.3 and min(ratios) > 0.77         # no residual ~10x jump
+    assert adj[0].turnover_jpy == pytest.approx(raw[0].turnover_jpy)  # turnover split-invariant
+
+
+def test_split_adjust_noop_when_no_split():
+    from hot_theme_rotator.data.kline_adapter import _split_adjust
+
+    raw = (_bar("2026-05-27", 410.0), _bar("2026-05-28", 415.0), _bar("2026-05-29", 417.9))
+    adj = _split_adjust(raw)
+    assert [b.close for b in adj] == [410.0, 415.0, 417.9]
+
+
+# ─── public split detector + split-adjusted range fetcher (Rule 11.9.6) ───────
+
+_SPLIT_1306T = [
+    ("1306.T", "2026-03-27", 3800.0, 3850.0, 3790.0, 3817.0, 1_000_000),
+    ("1306.T", "2026-03-30", 380.0, 386.0, 379.0, 382.0, 10_000_000),   # 10:1 split
+    ("1306.T", "2026-03-31", 383.0, 388.0, 382.0, 385.0, 9_000_000),
+]
+
+
+def test_detect_split_factor_public_wrapper():
+    assert detect_split_factor(100.0, 10.0) is not None    # clean 10:1
+    assert detect_split_factor(10.0, 100.0) is not None    # 1:10 reverse
+    assert detect_split_factor(100.0, 50.0) is not None    # 2:1
+    assert detect_split_factor(100.0, 130.0) is None       # ordinary +30% move
+    assert detect_split_factor(0.0, 10.0) is None          # non-positive guarded
+
+
+def test_split_adjusted_fetcher_returns_continuous_series(tmp_path):
+    db = _create_db(tmp_path, _SPLIT_1306T)
+    raw = list(LegacyDailyPriceFetcher(db).fetch(
+        symbol="1306.T", start_date="2026-03-27", end_date="2026-03-31"))
+    assert raw[0].close / raw[1].close > 5                  # raw shows the ~10x cliff
+
+    adj = list(SplitAdjustedDailyPriceFetcher(db).fetch(
+        symbol="1306.T", start_date="2026-03-27", end_date="2026-03-31"))
+    assert len(adj) == 3
+    closes = [b.close for b in adj]
+    assert max(closes) / min(closes) < 1.5                  # continuous — cliff removed
+    assert adj[-1].close == pytest.approx(385.0)            # newest bar unchanged

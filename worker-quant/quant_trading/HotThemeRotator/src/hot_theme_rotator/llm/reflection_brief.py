@@ -281,6 +281,8 @@ def _extract_factual_grounding(
 
 def _propose_actions(rca: RcaReport) -> tuple[Mapping[str, object], ...]:
     """Map the primary root cause to a structured proposal stub (Rule 13.6)."""
+    if rca.counterfactual_validity in {"data_too_stale", "invalid"}:
+        return ()
     primary = rca.primary_root_cause
     if not primary:
         return ()
@@ -290,6 +292,8 @@ def _propose_actions(rca: RcaReport) -> tuple[Mapping[str, object], ...]:
             "intervention": primary,
             "marginal_recovery": rca.ranked_contributions[0].marginal_recovery,
             "counterfactual_validity": rca.counterfactual_validity,
+            "source_layer": "L4_RCA",
+            "generator": "structured_rca_v1",
             "rationale_pointer": f"see ablation contribution for {primary}",
         },
     )

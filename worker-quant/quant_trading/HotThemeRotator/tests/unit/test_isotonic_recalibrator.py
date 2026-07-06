@@ -13,7 +13,10 @@ from hot_theme_rotator.calibration.isotonic_recalibrator import (
     MODEL_VERSION,
     IsotonicRecalibrator,
     IsotonicRecalibratorError,
+    is_live_prediction,
+    pair_for_calibration,
 )
+from hot_theme_rotator.decision_log.schema import OutcomeRecord, PredictionRecord
 
 
 # ─── PAV correctness ────────────────────────────────────────────────────────
@@ -209,6 +212,189 @@ def test_matches_sklearn_isotonic_on_synthetic_data():
 
 
 # ─── brier improvement check ───────────────────────────────────────────────
+
+
+# ─── sunset / pair_for_calibration ──────────────────────────────────────────
+
+
+def _make_pred(*, symbol, trade_date, buy, live, idx=0):
+    """Build a real PredictionRecord with the right backdated/live flags."""
+    model_version = "htr_screener_v2" if live else "htr_screener_v2-backdated"
+    return PredictionRecord.build(
+        symbol=symbol,
+        trade_date=trade_date,
+        decision_cutoff=f"{trade_date}T15:00:00+09:00",
+        # Disambiguate by idx so prediction_ids don't collide.
+        input_snapshot_id=f"snap{idx:04d}",
+        model_version=model_version,
+        score_status="uncalibrated_research_score",
+        horizon_days=3,
+        buy=buy, sell=0.0, hold=1.0 - buy,
+        extra={
+            "live": live, "backdated": not live,
+            "generator": "test", "reference_price": 100.0,
+        },
+    )
+
+
+def _make_outcome(pred, *, realized_1d=0.01, realized_3d=0.02, realized_5d=0.03):
+    """Build a complete OutcomeRecord paired with `pred`."""
+    return OutcomeRecord.build(
+        prediction_id=pred.prediction_id,
+        symbol=pred.symbol,
+        trade_date=pred.trade_date,
+        decision_cutoff=pred.decision_cutoff,
+        evaluated_as_of="2026-05-20",
+        status="complete",
+        realized_returns={"1D": realized_1d, "3D": realized_3d, "5D": realized_5d},
+        ladder_touches={},
+    )
+
+
+def test_is_live_prediction_via_extra_flag():
+    pred = _make_pred(symbol="X.T", trade_date="2026-04-13", buy=0.8, live=True, idx=1)
+    assert is_live_prediction(pred) is True
+
+
+def test_is_live_prediction_false_when_backdated_extra():
+    pred = _make_pred(symbol="X.T", trade_date="2026-04-13", buy=0.8, live=False, idx=2)
+    assert is_live_prediction(pred) is False
+
+
+def test_is_live_prediction_false_when_model_version_suffix():
+    # backdated=False in extra but model_version says -backdated → still bootstrap
+    bd = PredictionRecord.build(
+        symbol="Y.T", trade_date="2026-04-13",
+        decision_cutoff="2026-04-13T15:00:00+09:00",
+        input_snapshot_id="snap-edge",
+        model_version="htr_screener_v2-backdated",
+        score_status="uncalibrated_research_score",
+        horizon_days=3, buy=0.5, sell=0.0, hold=0.5,
+        extra={"live": True, "backdated": False, "reference_price": 100.0},
+    )
+    assert is_live_prediction(bd) is False
+
+
+def test_pair_for_calibration_pure_live_returns_live_origin():
+    preds = [_make_pred(symbol=f"L{i:03}.T", trade_date="2026-05-27",
+                         buy=0.7, live=True, idx=i) for i in range(20)]
+    outs = [_make_outcome(p, realized_3d=0.01 if i % 2 else -0.01)
+            for i, p in enumerate(preds)]
+    pairs, origin, stats = pair_for_calibration(
+        preds, outs, horizon_days=3, live_min_samples=100,
+    )
+    assert len(pairs) == 20
+    assert origin == "live"
+    assert stats["live_paired"] == 20
+    assert stats["bootstrap_paired"] == 0
+    assert stats["sunset_fired"] is False  # under threshold but still all-live
+
+
+def test_pair_for_calibration_pure_bootstrap_returns_bootstrap_origin():
+    preds = [_make_pred(symbol=f"B{i:03}.T", trade_date="2026-04-01",
+                         buy=0.8, live=False, idx=100 + i) for i in range(15)]
+    outs = [_make_outcome(p, realized_3d=0.01 if i % 3 else -0.01)
+            for i, p in enumerate(preds)]
+    pairs, origin, stats = pair_for_calibration(
+        preds, outs, horizon_days=3, live_min_samples=100,
+    )
+    assert len(pairs) == 15
+    assert origin == "bootstrap"
+    assert stats["live_paired"] == 0
+    assert stats["bootstrap_paired"] == 15
+    assert stats["sunset_fired"] is False
+
+
+def test_pair_for_calibration_mixed_below_threshold_uses_all():
+    """50 live + 50 bootstrap, threshold=100 → no sunset, all 100 included, mixed origin."""
+    live = [_make_pred(symbol=f"L{i:03}.T", trade_date="2026-05-27",
+                       buy=0.75, live=True, idx=200 + i) for i in range(50)]
+    boot = [_make_pred(symbol=f"B{i:03}.T", trade_date="2026-04-13",
+                       buy=0.85, live=False, idx=300 + i) for i in range(50)]
+    all_preds = live + boot
+    all_outs = [_make_outcome(p, realized_3d=0.01) for p in all_preds]
+    pairs, origin, stats = pair_for_calibration(
+        all_preds, all_outs, horizon_days=3, live_min_samples=100,
+    )
+    assert len(pairs) == 100
+    assert origin == "mixed"
+    assert stats["live_paired"] == 50
+    assert stats["bootstrap_paired"] == 50
+    assert stats["sunset_fired"] is False
+
+
+def test_sunset_fires_when_live_reaches_threshold():
+    """100 live + 200 bootstrap, threshold=100 → sunset fires, only 100 live used."""
+    live = [_make_pred(symbol=f"L{i:03}.T", trade_date="2026-05-27",
+                       buy=0.75, live=True, idx=400 + i) for i in range(100)]
+    boot = [_make_pred(symbol=f"B{i:03}.T", trade_date="2026-04-13",
+                       buy=0.85, live=False, idx=600 + i) for i in range(200)]
+    all_preds = live + boot
+    all_outs = [_make_outcome(p, realized_3d=0.01) for p in all_preds]
+    pairs, origin, stats = pair_for_calibration(
+        all_preds, all_outs, horizon_days=3, live_min_samples=100,
+    )
+    assert len(pairs) == 100, "sunset must drop bootstrap entirely"
+    assert origin == "live"
+    assert stats["live_paired"] == 100
+    assert stats["bootstrap_paired"] == 200
+    assert stats["sunset_fired"] is True
+
+
+def test_sunset_disabled_keeps_mixed_even_when_live_sufficient():
+    """If sunset is explicitly disabled, even with enough live we still mix."""
+    live = [_make_pred(symbol=f"L{i:03}.T", trade_date="2026-05-27",
+                       buy=0.75, live=True, idx=800 + i) for i in range(150)]
+    boot = [_make_pred(symbol=f"B{i:03}.T", trade_date="2026-04-13",
+                       buy=0.85, live=False, idx=1000 + i) for i in range(100)]
+    all_preds = live + boot
+    all_outs = [_make_outcome(p, realized_3d=0.01) for p in all_preds]
+    pairs, origin, stats = pair_for_calibration(
+        all_preds, all_outs,
+        horizon_days=3, live_min_samples=100,
+        prefer_live_when_sufficient=False,
+    )
+    assert len(pairs) == 250
+    assert origin == "mixed"
+    assert stats["sunset_fired"] is False
+
+
+def test_pair_for_calibration_drops_predictions_without_outcomes():
+    preds = [_make_pred(symbol=f"X{i}.T", trade_date="2026-05-27",
+                         buy=0.7, live=True, idx=1500 + i) for i in range(10)]
+    # Only outcomes for the first 5
+    outs = [_make_outcome(p) for p in preds[:5]]
+    pairs, origin, stats = pair_for_calibration(
+        preds, outs, horizon_days=3, live_min_samples=100,
+    )
+    assert len(pairs) == 5
+    assert stats["live_paired"] == 5
+
+
+def test_pair_for_calibration_drops_insufficient_outcomes():
+    """Outcomes with insufficient status (no horizon return) yield None ground truth."""
+    preds = [_make_pred(symbol=f"X{i}.T", trade_date="2026-05-27",
+                         buy=0.7, live=True, idx=1600 + i) for i in range(10)]
+    outs = []
+    for p in preds:
+        outs.append(OutcomeRecord.build(
+            prediction_id=p.prediction_id,
+            symbol=p.symbol, trade_date=p.trade_date,
+            decision_cutoff=p.decision_cutoff,
+            evaluated_as_of="2026-05-28",
+            status="insufficient_data",
+            realized_returns={"1D": 0.01},  # only 1D, missing 3D
+            ladder_touches={},
+            failure_reason="not enough bars yet",
+        ))
+    pairs, origin, stats = pair_for_calibration(
+        preds, outs, horizon_days=3, live_min_samples=100,
+    )
+    # insufficient_data + missing 3D in realized_returns → derive_opportunity_ground_truth returns None
+    assert len(pairs) == 0
+
+
+# ─── end sunset tests ───────────────────────────────────────────────────────
 
 
 def test_calibrated_brier_beats_raw_on_overconfident_data():

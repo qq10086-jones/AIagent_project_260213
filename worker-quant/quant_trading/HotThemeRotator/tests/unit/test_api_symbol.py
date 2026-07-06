@@ -20,7 +20,11 @@ if str(PROJECT_ROOT) not in sys.path:
 from fastapi.testclient import TestClient  # noqa: E402
 
 from api.main import create_app  # noqa: E402
-from hot_theme_rotator.data.kline_adapter import default_db_path  # noqa: E402
+from hot_theme_rotator.data.kline_adapter import default_db_path, fetch_latest_close  # noqa: E402
+from hot_theme_rotator.data.universe_adapter import (  # noqa: E402
+    freshest_selected_tickers_path,
+    load_screener_snapshot,
+)
 
 
 @pytest.fixture
@@ -92,11 +96,21 @@ def test_profile_for_user_holding_marks_in_portfolio(client):
 
 
 def test_profile_for_screener_top_marks_in_screener(client):
-    """6768.T = #1 in selected_tickers.json → in_screener=True with score."""
-    resp = client.get("/api/symbol/6768.T/profile")
-    # Symbol may have no daily_prices row in some checkouts; tolerate 404.
-    if resp.status_code == 404:
-        pytest.skip("6768.T not in local daily_prices")
+    """A ticker in the freshest screener snapshot is marked in_screener=True."""
+    snapshot = load_screener_snapshot(
+        freshest_selected_tickers_path(base_dir=PROJECT_ROOT)
+    )
+    ticker = next(
+        (
+            t.symbol
+            for t in snapshot.tickers
+            if fetch_latest_close(default_db_path(), symbol=t.symbol) is not None
+        ),
+        None,
+    )
+    if ticker is None:
+        pytest.skip("No current screener ticker has local daily_prices")
+    resp = client.get(f"/api/symbol/{ticker}/profile")
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["in_screener"] is True
@@ -184,6 +198,118 @@ def test_ladder_advice_only_flag_present(client):
     """Rule 3 — every ladder response must restate advice-only."""
     payload = client.get("/api/symbol/1306.T/ladder").json()
     assert payload["advice_only"] is True
+
+
+# ─── /strategy (P0.3, Rule 11.6 contract) ───────────────────────────────────
+
+
+def test_strategy_returns_card_for_real_ticker(client):
+    resp = client.get("/api/symbol/1306.T/strategy")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["ticker"] == "1306.T"
+    assert payload["advice_only"] is True
+
+
+def test_strategy_card_carries_rule_3_disclaimer(client):
+    """Rule 11.6.3 — literal disclaimer string required."""
+    payload = client.get("/api/symbol/1306.T/strategy").json()
+    assert payload["rule_3_disclaimer"] == "Rule 3 — manual execution outside HTR"
+
+
+def test_strategy_card_banner_marks_advice_only_and_rule_3(client):
+    """Rule 11.6.1 — banner contains advice-only + Rule 3."""
+    payload = client.get("/api/symbol/1306.T/strategy").json()
+    banner = payload["banner"]
+    assert "advice-only" in banner
+    assert "Rule 3" in banner
+
+
+def test_strategy_card_risk_warnings_section_present(client):
+    """Rule 11.6.4 — risk_warnings always present (may be no_active_warnings)."""
+    payload = client.get("/api/symbol/1306.T/strategy").json()
+    assert isinstance(payload["risk_warnings"], list)
+    assert len(payload["risk_warnings"]) >= 1
+
+
+def test_strategy_card_ladder_labels_use_approved_prefixes(client):
+    """Rule 11.6.6 — labels use 建议价位 / 目标参考 / 止损参考."""
+    payload = client.get("/api/symbol/1306.T/strategy").json()
+    approved = ("目标参考", "建议价位", "止损参考")
+    for tier in payload["ladder_tiers"]:
+        assert any(tier["label"].startswith(p) for p in approved)
+
+
+def test_strategy_card_catalyst_disclaimer_literal(client):
+    """Rule 11.6.7 — catalyst block carries disclaimer."""
+    payload = client.get("/api/symbol/1306.T/strategy").json()
+    assert payload["catalyst_disclaimer"] == "结构化日历数据，非建议持有至该日"
+
+
+def test_strategy_card_no_broker_fields_in_response(client):
+    """Rule 11.6 hard limit — no broker / order / submit fields."""
+    payload = client.get("/api/symbol/1306.T/strategy").json()
+    forbidden = {"account", "order_id", "submit_endpoint", "broker", "venue"}
+    assert set(payload.keys()).isdisjoint(forbidden)
+
+
+def test_strategy_unknown_ticker_404(client):
+    resp = client.get("/api/symbol/9999XYZ/strategy")
+    assert resp.status_code == 404
+
+
+def test_strategy_endpoint_is_get_only(client):
+    """Rule 11.5 — only the whitelisted POST paths exist on the symbol router."""
+    resp = client.post("/api/symbol/1306.T/strategy")
+    assert resp.status_code == 405
+
+
+# ─── /outcomes (P3.4) ────────────────────────────────────────────────────
+
+
+def test_outcomes_returns_200_even_for_never_predicted(client):
+    """Unknown / never-predicted ticker returns 200 with empty items (not 404)."""
+    resp = client.get("/api/symbol/8888.T/outcomes")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["items"] == []
+    assert payload["count"] == 0
+
+
+def test_outcomes_invalid_horizon_returns_422(client):
+    resp = client.get("/api/symbol/1306.T/outcomes?horizon=2D")
+    assert resp.status_code == 422
+
+
+def test_llm_brief_user_context_with_forbidden_token_returns_422(client):
+    """P3.2 + Rule 8.3.1 bidirectional gate — user_context with '胜率' → 422."""
+    resp = client.get("/api/symbol/1306.T/llm_brief?user_context=" + "胜率多少%3F")
+    assert resp.status_code == 422
+    body = resp.json()
+    assert body["detail"]["reason"] == "invalid_user_context"
+
+
+def test_llm_brief_user_context_with_percentage_returns_422(client):
+    """user_context with '50%' is also forbidden."""
+    resp = client.get("/api/symbol/1306.T/llm_brief?user_context=" + "目标价50%25")
+    assert resp.status_code == 422
+
+
+def test_llm_brief_user_context_too_long_returns_422(client):
+    """user_context > 200 chars is rejected as prompt-injection surface."""
+    long_text = "a" * 201
+    resp = client.get(f"/api/symbol/1306.T/llm_brief?user_context={long_text}")
+    assert resp.status_code == 422
+
+
+def test_outcomes_carries_rule_9_4_disclaimer(client):
+    """Rule 9.4 — even with hit_rate, payload must caveat against win-rate semantics."""
+    resp = client.get("/api/symbol/1306.T/outcomes")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert "rule_9_4_note" in payload
+    assert "raw_frequency only" in payload["rule_9_4_note"]
+    assert "NOT a calibrated win rate" in payload["rule_9_4_note"]
 
 
 # ─── Rule 11 boundary tests ──────────────────────────────────────────────────

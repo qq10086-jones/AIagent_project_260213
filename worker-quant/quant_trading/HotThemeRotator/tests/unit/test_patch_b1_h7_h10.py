@@ -174,6 +174,13 @@ def _proposal(**overrides):
         sample_size=42, confidence_interval=(0.1, 0.4),
         counterfactual_validity="exact_replay",
         rationale_pointer="x",
+        extra={
+            "source_trace_ids": ["trace-xyz"],
+            "config_before_hash": "cfg-before-123",
+            "candidate_config_hash": "cfg-after-456",
+            "outcome_window": {"start": "2026-05-01", "end": "2026-05-26"},
+            "denominator_counts": {"eligible": 100, "scored": 20, "alerted": 5},
+        },
     )
     base.update(overrides)
     base["proposal_id"] = compute_proposal_id(
@@ -216,7 +223,14 @@ def test_h9_bootstrap_ci_overrides_sample_size():
         rationale_pointer="x",
         parameter_change={"chase_threshold_pct": {"from": 10, "to": 8}},
         backtest_evidence={"pre": {"sharpe": 0.5}, "post": {"sharpe": 0.7}},
-        extra={"bootstrap_ci_established": True},
+        extra={
+            "bootstrap_ci_established": True,
+            "source_trace_ids": ["trace-bs"],
+            "config_before_hash": "cfg-before-123",
+            "candidate_config_hash": "cfg-after-456",
+            "outcome_window": {"start": "2026-05-01", "end": "2026-05-26"},
+            "denominator_counts": {"eligible": 100, "scored": 20, "alerted": 5},
+        },
     )
     base["proposal_id"] = compute_proposal_id(
         evidence_class=base["evidence_class"],

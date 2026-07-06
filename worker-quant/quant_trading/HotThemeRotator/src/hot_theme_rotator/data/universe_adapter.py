@@ -123,3 +123,31 @@ def default_selected_tickers_path(project_optimized_root: str | Path | None = No
         return Path(project_optimized_root) / "selected_tickers.json"
     here = Path(__file__).resolve()
     return here.parents[4] / "Project_optimized" / "selected_tickers.json"
+
+
+def _snapshot_asof(path: Path) -> str:
+    try:
+        return str(json.loads(path.read_text(encoding="utf-8")).get("asof", ""))
+    except (OSError, ValueError):
+        return ""
+
+
+def freshest_selected_tickers_path(
+    *,
+    base_dir: str | Path | None = None,
+    sibling_path: str | Path | None = None,
+    htr_screener_dir: str | Path | None = None,
+) -> Path:
+    """Prefer the freshest HTR-native daily screener snapshot over the sibling file."""
+    root = Path(base_dir) if base_dir is not None else Path(__file__).resolve().parents[3]
+    sibling = Path(sibling_path) if sibling_path is not None else default_selected_tickers_path()
+    screener_dir = Path(htr_screener_dir) if htr_screener_dir is not None else root / "reports" / "screener"
+    snaps = sorted(screener_dir.glob("selected_tickers_*.json")) if screener_dir.exists() else []
+    if not snaps:
+        return sibling
+    latest = snaps[-1]
+    htr_date = latest.stem.rsplit("_", 1)[-1]
+    sib_date = _snapshot_asof(sibling)
+    if not sib_date:
+        return latest
+    return latest if htr_date >= sib_date else sibling

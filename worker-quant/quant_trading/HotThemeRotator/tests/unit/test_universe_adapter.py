@@ -16,6 +16,7 @@ from hot_theme_rotator.data.universe_adapter import (  # noqa: E402
     ScreenerSnapshot,
     UniverseAdapterError,
     default_selected_tickers_path,
+    freshest_selected_tickers_path,
     load_screener_snapshot,
 )
 
@@ -135,3 +136,14 @@ def test_default_path_resolves_to_sibling_project_optimized():
     p = default_selected_tickers_path()
     assert p.name == "selected_tickers.json"
     assert "Project_optimized" in str(p)
+
+
+def test_freshest_path_prefers_htr_snapshot_when_newer(tmp_path):
+    sibling = tmp_path / "selected_tickers.json"
+    _write(sibling, {**_REAL_PAYLOAD, "asof": "2026-05-27"})
+    htr_dir = tmp_path / "reports" / "screener"
+    _write(htr_dir / "selected_tickers_2026-06-18.json", {**_REAL_PAYLOAD, "asof": "2026-06-18"})
+
+    chosen = freshest_selected_tickers_path(base_dir=tmp_path, sibling_path=sibling)
+
+    assert chosen == htr_dir / "selected_tickers_2026-06-18.json"

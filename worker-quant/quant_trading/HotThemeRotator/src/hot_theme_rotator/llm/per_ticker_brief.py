@@ -37,9 +37,12 @@ from hot_theme_rotator.llm.reflection_brief import (
 
 __all__ = [
     "DEFAULT_MODEL",
+    "DebateBrief",
+    "DebateLeg",
     "PerTickerBrief",
     "PerTickerBriefError",
     "PerTickerBriefInput",
+    "generate_debate_brief",
     "generate_per_ticker_brief",
 ]
 
@@ -73,6 +76,10 @@ class PerTickerBriefInput:
     news: tuple[Mapping[str, Any], ...] = ()
     factors: Optional[Mapping[str, Any]] = None
     fundamentals: Optional[Mapping[str, Any]] = None
+    # P3.2 — optional user-supplied context (50 chars max). Must pass the
+    # SAME forbidden_pattern regex as the LLM output before concatenation.
+    # Rule 8.3.1 bidirectional gate.
+    user_context: str = ""
 
 
 @dataclass(frozen=True)
@@ -122,6 +129,23 @@ def generate_per_ticker_brief(
             f"latest_close must be a positive number, got {payload.latest_close!r}"
         )
 
+    # P3.2 + Rule 8.3.1 bidirectional gate — user-supplied context must
+    # itself pass the forbidden_pattern regex. Otherwise a user prompt
+    # like "胜率多少?" would launder a probability claim through the model.
+    if payload.user_context:
+        if len(payload.user_context) > 200:
+            raise PerTickerBriefError(
+                f"user_context too long ({len(payload.user_context)} chars, "
+                "max 200); reject to avoid prompt-injection surface"
+            )
+        violations = regex_check_narrative(payload.user_context)
+        if violations:
+            raise PerTickerBriefError(
+                f"user_context contains forbidden tokens {violations!r}; "
+                "Rule 8.3.1 bidirectional gate — user input MUST pass the same "
+                "regex as LLM output. Rephrase without probability/win-rate language."
+            )
+
     grounding = _build_factual_grounding(payload)
     prompt = _build_prompt(payload=payload, model=model, grounding=grounding)
 
@@ -160,6 +184,160 @@ def generate_per_ticker_brief(
             f"Rule 8.3.1 + Rule 13.4 fail-closed"
         )
     return brief
+
+
+@dataclass(frozen=True)
+class DebateLeg:
+    """One leg of a Bull/Bear/Judge debate brief.
+
+    Rule 8.3.1 multi-leg carve-out — each leg is scanned by forbidden_pattern
+    INDEPENDENTLY. No leg may be marked speculative_bypass. Per-leg fail-closed.
+    """
+    role: str             # "bull" | "bear" | "judge"
+    narrative: str
+    factual_grounding: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DebateBrief:
+    """Multi-leg debate brief (TradingAgents-inspired)."""
+    ticker: str
+    bull: DebateLeg
+    bear: DebateLeg
+    judge: DebateLeg
+    model_version: str
+    generation_ts: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ticker": self.ticker,
+            "bull": {
+                "role": self.bull.role,
+                "narrative": self.bull.narrative,
+                "factual_grounding": list(self.bull.factual_grounding),
+            },
+            "bear": {
+                "role": self.bear.role,
+                "narrative": self.bear.narrative,
+                "factual_grounding": list(self.bear.factual_grounding),
+            },
+            "judge": {
+                "role": self.judge.role,
+                "narrative": self.judge.narrative,
+                "factual_grounding": list(self.judge.factual_grounding),
+            },
+            "model_version": self.model_version,
+            "generation_ts": self.generation_ts,
+        }
+
+
+def generate_debate_brief(
+    payload: PerTickerBriefInput,
+    *,
+    llm: LlmClient,
+    model: str = DEFAULT_MODEL,
+) -> DebateBrief:
+    """Produce Bull / Bear / Judge legs for ``payload``.
+
+    Rule 8.3.1 multi-leg carve-out:
+    - Each leg is scanned by forbidden_pattern independently
+    - No leg may be marked speculative_bypass
+    - Per-leg fail-closed: leg violating regex twice raises PerTickerBriefError
+    """
+    if not isinstance(payload, PerTickerBriefInput):
+        raise PerTickerBriefError("payload must be a PerTickerBriefInput")
+    if payload.user_context:
+        if len(payload.user_context) > 200:
+            raise PerTickerBriefError(
+                f"user_context too long ({len(payload.user_context)} chars, max 200)"
+            )
+        violations = regex_check_narrative(payload.user_context)
+        if violations:
+            raise PerTickerBriefError(
+                f"user_context contains forbidden tokens {violations!r}; "
+                "Rule 8.3.1 bidirectional gate (multi-leg variant)"
+            )
+
+    grounding = _build_factual_grounding(payload)
+
+    bull = _generate_leg(
+        llm=llm, model=model, role="bull",
+        directive=(
+            "你是 Bull leg — 用事实证据论证当前 ticker 的看多论点（流动性/动量/估值/催化）。"
+            "禁止使用胜率/概率/%/likelihood 等 Rule 8.3.1 禁止 token。"
+        ),
+        payload=payload, grounding=grounding,
+    )
+    bear = _generate_leg(
+        llm=llm, model=model, role="bear",
+        directive=(
+            "你是 Bear leg — 用事实证据论证当前 ticker 的看空论点（动量衰减/估值过热/风险点）。"
+            "禁止使用胜率/概率/%/likelihood 等 Rule 8.3.1 禁止 token。"
+        ),
+        payload=payload, grounding=grounding,
+    )
+    judge = _generate_leg(
+        llm=llm, model=model, role="judge",
+        directive=(
+            "你是 Judge — 综合 Bull / Bear 双方观点，给出当前状态的描述性结论。"
+            "禁止给出买卖建议、禁止使用胜率/概率/%/likelihood 等 Rule 8.3.1 禁止 token。"
+            "你的判断必须 conditional：'under reconstructed evidence' 而非 'is'。"
+        ),
+        payload=payload, grounding=grounding,
+        extra_context=f"\nBull leg said: {bull.narrative}\nBear leg said: {bear.narrative}",
+    )
+
+    return DebateBrief(
+        ticker=payload.ticker,
+        bull=bull, bear=bear, judge=judge,
+        model_version=model,
+        generation_ts=datetime.now(tz=timezone.utc).isoformat(),
+    )
+
+
+def _generate_leg(
+    *,
+    llm: LlmClient,
+    model: str,
+    role: str,
+    directive: str,
+    payload: PerTickerBriefInput,
+    grounding: tuple[str, ...],
+    extra_context: str = "",
+) -> DebateLeg:
+    """Per-leg generation with Rule 8.3.1 fail-closed regex check."""
+    grounding_block = "\n".join(f"- {g}" for g in grounding)
+    user_block = (
+        f"\n用户额外上下文 (已通过 Rule 8.3.1 反向 regex):\n{payload.user_context}\n"
+        if payload.user_context else ""
+    )
+    base_prompt = (
+        f"任务：为 ticker {payload.ticker} 写一段 {role} leg 的中文叙事综合。\n"
+        f"{directive}\n"
+        f"硬性规则：字数上限 {MAX_NARRATIVE_CHARS} 字 · 不发明 grounding 外的数字 · "
+        "用 markdown 段落 · 不要标题。\n"
+        f"事实证据：\n{grounding_block}\n"
+        + user_block + extra_context
+        + f"\n模型: {model}\n"
+    )
+    narrative = _attempt_generation(llm, prompt=base_prompt, model=model)
+    violations = regex_check_narrative(narrative)
+    if violations:
+        narrative = _attempt_generation(
+            llm,
+            prompt=(
+                base_prompt + "\n\n重新生成：上一版包含禁止 token "
+                + repr(violations) + "。严格删除概率/胜率/%/likelihood 表达。"
+            ),
+            model=model,
+        )
+        new_violations = regex_check_narrative(narrative)
+        if new_violations:
+            raise PerTickerBriefError(
+                f"{role} leg contains forbidden tokens after one regenerate: "
+                f"{new_violations!r}; Rule 8.3.1 multi-leg per-leg fail-closed"
+            )
+    return DebateLeg(role=role, narrative=narrative, factual_grounding=grounding)
 
 
 # ─── internals ──────────────────────────────────────────────────────────────
@@ -239,6 +417,10 @@ def _build_prompt(
     grounding: tuple[str, ...],
 ) -> str:
     grounding_block = "\n".join(f"- {g}" for g in grounding)
+    user_block = (
+        f"\n用户额外上下文 (已通过 Rule 8.3.1 反向 regex 检查):\n{payload.user_context}\n"
+        if payload.user_context else ""
+    )
     return (
         "你是单用户量化系统的中文研究助手。任务：把下列事实编成一段简短的中文叙事综合。\n"
         "硬性输出规则：\n"
@@ -251,7 +433,8 @@ def _build_prompt(
         "- 用 markdown 段落，不需要标题。\n"
         "事实证据：\n"
         f"{grounding_block}\n"
-        f"模型: {model}\n"
+        + user_block
+        + f"模型: {model}\n"
     )
 
 

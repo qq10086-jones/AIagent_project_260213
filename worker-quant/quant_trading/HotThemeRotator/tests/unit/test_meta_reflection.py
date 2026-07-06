@@ -106,7 +106,10 @@ def test_consecutive_rejection_resets_on_different_evidence_class(tmp_path):
 
 def test_expiry_pattern_fires_at_three(tmp_path):
     for i in range(3):
-        _write_proposal(tmp_path, "expired", f"e{i:016x}", "freshness_attribution")
+        _write_proposal(
+            tmp_path, "expired", f"e{i:016x}", "freshness_attribution",
+            extra={"expiration_reason": "unreviewed_timeout"},
+        )
     report = run_meta_reflection(base_dir=tmp_path)
     assert report.has_findings
     finding = next(f for f in report.findings if f.trigger == "expiry_pattern")
@@ -115,7 +118,20 @@ def test_expiry_pattern_fires_at_three(tmp_path):
 
 def test_expiry_pattern_does_not_fire_at_two(tmp_path):
     for i in range(2):
-        _write_proposal(tmp_path, "expired", f"e{i:016x}", "freshness_attribution")
+        _write_proposal(
+            tmp_path, "expired", f"e{i:016x}", "freshness_attribution",
+            extra={"expiration_reason": "unreviewed_timeout"},
+        )
+    report = run_meta_reflection(base_dir=tmp_path)
+    assert not report.has_findings
+
+
+def test_expiry_pattern_ignores_operator_unavailable(tmp_path):
+    for i in range(3):
+        _write_proposal(
+            tmp_path, "expired", f"e{i:016x}", "freshness_attribution",
+            extra={"expiration_reason": "operator_unavailable"},
+        )
     report = run_meta_reflection(base_dir=tmp_path)
     assert not report.has_findings
 

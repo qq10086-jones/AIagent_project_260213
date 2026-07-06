@@ -1479,6 +1479,141 @@ P10 在 P0-P9 基础设施之上构建个人量化咨询层。目标两个交互
   - Rule 14.4：UI 不提供"删除"按钮，只提供"录入纠正"流程（生成 source=correction entry）。
   - Frontend 不出现"概率"/"胜率"/"win rate" 字样；不增加任何 broker / paperOrder 路径。
 
+### P10-24 V3 Layout & Expansion Fix (Rule 11.7 enforcement)
+
+- Status: done (2026-05-29; headless 截图验证折叠+展开态无裁切/无叠印；1262 pytest passing)
+- Priority: P1 (可用性缺陷；不阻塞 calibration 关键路径，但影响日常使用)
+- Activation stage: Rule 12.0 Stage 0 (Pull-only cockpit — 纯呈现层修复)
+- Depends on: Rule 11.7 (added 2026-05-29), 现有 V3 变体
+- Goal: 修复 V3 三个用户报告的呈现缺陷，**保持当前主线美学**（字体 / 配色 / 卡片样式 / 三列布局不变）：(1) 页面被 `height:100vh` + 嵌套 `overflow` 锁死，滚轮无法下滑；(2) 中列 6 卡 + 候选表硬挤进一个 `1fr`，卡片压成细缝、边框贴死；(3) 折叠卡展开时内容被挤进高度受限的行，多行文字叠印。根因单一：视口锁死的 app-shell 布局，不给内容生长空间。
+- Files:
+  - Update: `frontend/v3.jsx` — V3 根 grid 第三行 `1fr`→`auto` + `height:100%`→`minHeight:100%`；中列 `gridTemplateRows` 全 `auto`；左 / 右列 `1fr`→`auto`；候选 / 新闻 / 决策日志保留有界 `maxHeight` 内部滚动（Rule 11.7.3 允许的无界 feed）。导航栏保持钉顶，`.htr-app-main`（已 `overflow:auto`）作唯一滚动容器。
+  - Update: `tests/unit/test_frontend_ui_contracts.py` — 加 Rule 11.7 静态契约断言（V3 根不出现裸 `height:"100%"` 锁死 + 主内容卡不在 `overflow:hidden` 祖先内被裁）。
+  - 不改: `frontend/{v1,v2,v4}.jsx`（保留为对照变体）、`shared.jsx`（不动全局字号 / 卡片样式）。
+- Acceptance:
+  - 内容超出一屏时滚轮可下滑（document-flow scroll，Rule 11.7.1）。
+  - 中列每张卡按内容取自然高度，不再压成细缝；展开任一折叠卡时内容向下推、不遮挡邻卡、不裁切、不叠印（Rule 11.7.2）。
+  - headless 截图验证：折叠态 + 至少一个展开态，确认无裁切 / 无重叠，证据记入 `PROJECT_STATUS.md`（Rule 11.7.6）。
+  - 美学不变：字体 / 配色 / 卡片边框 / 三列结构与改动前一致；不触碰任何 broker / 概率 / 胜率字样（Rule 3 / 8.3 / 9.4 不受影响）。
+  - 1260 pytest 全绿（+ 新增 Rule 11.7 契约测试）。
+
+### P10-25 Designer Redesign Integration (quant0530) + Rule 11.8
+
+- Status: done (2026-05-30; 4 变体接真实后端，0 pageerror，1258 pytest passing)
+- Priority: P1（前端体验大改；非阻塞 calibration 关键路径）
+- Activation stage: Rule 12.0 Stage 0（Pull-only，纯呈现层）
+- Depends on: 设计师交付 `quant0530.zip`、现有 /api/* 端点、shared hooks
+- Goal: 把前端/交互设计师交回的 zero-build 重设计集成进项目，接真实后端（数据以我方为主），核对后端字段对应，必要时更新规则。
+- Files:
+  - Backup: `frontend/` → `frontend_zerobuild_backup_2026-05-30/`（可回滚）
+  - New: `frontend/index.html` + `frontend/src/htr-{data,shared,shared2,v1,v2,v3,v3-modals,v4,cards,tweaks-panel}.jsx`（设计师交付）+ `frontend/src/htr-api.jsx`（我方新增：真实后端富集 hook）
+  - Update: `frontend/src/htr-data.js`（enrich → `window.HTR_enrich`）、`frontend/src/htr-v3.jsx`（`top` 用 `useEnrichedCandidate` + FactorBody null/缺失安全）、`frontend/index.html`（bootWithApi）
+  - Governance: `docs/02_GOVERNANCE.md` (+Rule 11.8 仓位与风险测算器)
+  - Tests: `tests/unit/test_frontend_ui_contracts.py`（→10 条设计无关治理契约）
+- Acceptance:
+  - 4 变体接真实后端渲染（候选 6768.T… / 持仓 1306.T / NAV ¥402,635 / K-fold 降级 / advice-only banner），headless 验证 0 pageerror。
+  - per-symbol 详情卡走真实端点（/strategy /profile /outcomes /kline /llm_brief /debate_brief），不伪造；后端缺字段（navHistory/sortino_60/vol_z）优雅降级记 backlog。
+  - 治理红线全保留；新增 V1 仓位测算器受 Rule 11.8 约束。
+  - 1258 pytest passing 零回归。
+- Backlog（后端字段缺口，非阻塞）：navHistory（journal NAV 序列）/ sortino_60 / vol_z（profile 计算）。
+
+### P10-26 News Entity-Layer Classifier + Theme Overlay (+ macro ingestion gap)
+
+- Status: slice 1 done (2026-05-30; 确定性关键词分类器 + theme/macro overlay + 实证宏观采集缺口)
+- Priority: P1（核心：让"news-driven 主题轮动"真的吃到上游宏观/板块催化）
+- Activation stage: Rule 12.0 Stage 0（只读消费 + HTR-native 落盘）
+- Depends on: Project_optimized news_feed（只读, ADR-0005）
+- 起因: 用户问"新闻是不是只抓个股,宏观/政策不在范围"。**实证调查结果**：新闻源唯一 = Google News JP,且**按 ticker 逐个查** → feed 几乎全是个股财报/分红/适时开示;**宏观/政策/跨市场新闻压根不在采集范围**（97 条 7 天窗口仅 6% 命中板块词、宏观 0 条）。这架空了系统"外部温度 + 主题轮动"的核心差异点。
+- Goal: 4 层新闻架构（① 宽口径多源采集 ② 实体分层分类 macro/theme/sector/ticker ③ 路由到主题热力 vs 单票 overlay ④ 治理嵌入 PIT/无概率/反FOMO/可溯源）。
+- Files (slice 1 done):
+  - New: `src/hot_theme_rotator/data/news_theme_classifier.py`（THEME_TAXONOMY 6 主题 + MACRO_TAXONOMY 5 类 + `classify_news` 确定性关键词 + `read_recent_news` 只读 PIT 窗口 + `build_theme_news_overlay` → HTR-native `reports/news_themes/{date}.json`）。**无 LLM 无 GPU**（feedback_no_bg_llm_batch + 透明可审计优于黑箱分数）。
+  - New: `tests/unit/test_news_theme_classifier.py`（4 tests：分类正确 / PIT 窗口 / overlay 路由 / fail-closed）。
+- Slice 1 验证: spotcheck METI→{semi,fiscal}、日銀→{monetary,fx}、FOMC→{overseas} 全过;真实 feed 跑通但**证明上游无宏观新闻可分** → 确认瓶颈在采集端。
+- 剩余 slice（按优先级）:
+  - **slice 2（关键）**: 宏观采集 —— HTR-native 按【宏观主题 query】(日銀/経産省/円安/FOMC/SOX)抓 Google News JP / 官方源,落 HTR-native（ADR-0005:HTR 自己加宏观源,不碰 Project_optimized 的 per-ticker 查询）。
+  - slice 3: 把 theme overlay 接进 dashboard theme heat（宏观/板块新闻 → 主题升温,可溯源到原始新闻）。
+  - slice 4（可选, 用户手动触发）: LLM 精炼分类层（Rule 8.3 只分类不出概率,24h 缓存,非 background）。
+- Acceptance（slice 1）: 分类器对宏观+板块例子正确;只读 + PIT;HTR-native 落盘;4 tests green;实证记录采集缺口。
+
+### P10-27 Local Beta v0 Readiness Gate (Monday 2026-06-01)
+
+- Status: done (2026-05-30; Rule 15.2 checklist PASS recorded in PROJECT_STATUS; daily smoke 1266 passed / 5 deselected; localhost API smoke all 200; 7 POST routes ⊆ Rule 11.5; calibration verdict=downgrade visible)
+- Priority: P0 (blocks using HTR as the Monday local operating cockpit)
+- Activation stage: Rule 15 Local Beta v0 (single-user localhost only)
+- Depends on: Rule 3, Rule 8.2.2, Rule 9.4.1, Rule 11.9, Rule 12.0, Rule 14, Rule 15
+- Goal: Convert the current "feature-complete enough" state into a disciplined Monday local beta. This task does not add trading features. It freezes scope, separates daily smoke from slow research regression, verifies the localhost dashboard, records rollback instructions, and starts honest forward sample collection.
+- Files:
+  - Update: `PROJECT_STATUS.md` Local Beta v0 next actions / evidence / known gaps
+  - Optional update: `README.md` or local runbook if startup commands are missing or stale
+  - Optional update: `pyproject.toml` / test markers if vectorbt-numba tests need explicit slow segregation
+  - No broker/order/paper/live execution code
+- Required pre-Monday implementation / cleanup:
+  - Working tree reviewed; unrelated sibling-project changes excluded from the beta scope.
+  - A rollback point exists (commit, tagged stash, or documented backup directory).
+  - Localhost dashboard starts and loads without page errors.
+  - API smoke confirms `/api/health`, `/api/dashboard`, `/api/symbol/{T}/profile`, `/api/calibration/reliability`, watchlist, proposals, and manual-recording routes behave within Rule 3 / Rule 11.5.
+  - Daily smoke command excludes or marks the vectorbt / numba slow lane so pre-open readiness is fast and deterministic.
+  - Research regression command remains available for vectorbt / backtest checks but is not confused with daily readiness.
+  - Dashboard visibly shows data freshness / market-session labels and calibration downgrade / insufficient state.
+  - Forward sample collection command (`emit_daily_predictions.py` then `sweep_pending_outcomes.py`) is documented for after-close use.
+- Acceptance:
+  - Rule 15.2 readiness checklist is explicitly recorded as pass / fail in `PROJECT_STATUS.md`.
+  - Daily smoke lane passes on the local machine.
+  - Slow research lane status is recorded separately; a known vectorbt / numba cache stall does not block dashboard beta when isolated.
+  - No UI or API surface displays "win rate", "probability", or equivalent validated-edge wording while K-fold verdict is downgraded.
+  - No new POST / PUT / DELETE / PATCH route appears outside Rule 11.5.
+  - Local Beta v0 is documented as `127.0.0.1` / `localhost` only, not LAN / cloud / multi-user.
+  - If any readiness item fails, the beta is classified as debugging-only until fixed.
+
+### P10-28 Daily Routine Automation (forward-sample self-collection)
+
+- Status: done (2026-05-30; orchestrator + 7 tests green; end-to-end real run + scheduled-task run both verified; 2 Windows tasks registered, next run Mon 2026-06-01)
+- Priority: P1 (operationalizes Rule 8.2.1 sunset / Rule 9.4 forward-sample accumulation without daily manual steps)
+- Activation stage: Rule 12.0 Stage 0 / Rule 15 Local Beta v0 (deterministic, no push, no execution)
+- Depends on: P10-27, Rule 15.5, Rule 8.2 / 12.2 (staleness fail-closed), ADR-0005 (sibling read-only)
+- Goal: Make the deterministic, LLM-free half of the daily rhythm self-running so the operator only watches the dashboard. The two genuinely-manual steps stay manual by design: recording a fill (only when the operator trades) and pulling LLM narrative briefs (no-background-LLM preference).
+- Files:
+  - New: `tools/daily_routine.py` — orchestrator. `--mode preopen` (smoke gate + candidate freshness) / `--mode afterclose` (refresh candidates → emit → sweep). Injectable subprocess runner; fail-closed; idempotent; `--dry-run`.
+  - New: `tests/unit/test_daily_routine.py` — 7 tests (trading-day calc, happy-path order, fail-closed abort, zero-candidate reject, dry-run no-op, no broker/exec fields in log record, preopen reporting).
+  - New: `scripts/run_daily_routine.bat` (launcher) + `scripts/register_daily_routine_tasks.bat` (schtasks registration).
+  - Candidate source: sibling deterministic `screener.py` invoked with `--no_db_write` (ADR-0005 read-only) + `PYTHONIOENCODING=utf-8`, output written HTR-native to `reports/screener/selected_tickers_{asof}.json`; emit reads it via `--snapshot`.
+  - Log: `reports/observability/daily_routine_log.jsonl` (one structured line per run).
+- Governance guards:
+  - No broker / order / paper / live / LLM / GPU path — shells out only to screener, emit, sweep, pytest.
+  - Fail-closed: failed or zero-ticker candidate refresh aborts emit (no stale/fabricated predictions).
+  - Rule 15.4: emits only for a genuine just-closed session (idempotent on prediction_id), never accelerated replay.
+- Acceptance:
+  - Orchestrator unit tests green in the daily smoke lane.
+  - Real end-to-end run produces forward predictions + sweeps outcomes for a true trading day.
+  - Scheduled-task run (via launcher .bat) reproduces the same result and is idempotent on re-run.
+  - Two current-user Windows tasks registered (preopen 08:30, afterclose 16:00, Mon-Fri JST).
+  - Verified 2026-05-30: `pytest tests/unit/test_daily_routine.py` → 7 passed. Real run `--asof 2026-05-29` → 50 candidates → 50 new live predictions emitted → swept (insufficient, outcomes immature). `schtasks /Run HTR_Daily_AfterClose` → same chain, emit "50 skipped (already on disk)" (idempotent). Tasks `HTR_Daily_Preopen` / `HTR_Daily_AfterClose` Next Run 2026-06-01.
+
+### P10-29 Frontend Write-Path Wiring Integrity (Rule 11.10 remediation)
+
+- Status: done (2026-05-31; P0 fill + P2 notifier WIRED to real POST + 2 contract tests; P1 watchlist + P3 reflection defer-tracked per Rule 11.10.2/.5; smoke 1275 passed / 5 deselected; live preview HTTP 200 both portfolio endpoints)
+- Priority: P0 (manual fill) — blocks the Local Beta v0 manual-recording activity (Rule 15.5 step 3)
+- Activation stage: Rule 12.0 Stage 0 / Rule 15 Local Beta v0
+- Depends on: Rule 11.5, Rule 11.9.4, Rule 11.10 (added 2026-05-31), Rule 12.7, §14.2/§14.9
+- 起因: 2026-05-31 前端↔后端对应审计发现 designer 集成把 proposals 写路径完整接了当样板,其余三条交互写路径留成本地/演示桩——后端做好+测过+白名单,UI 够不到。
+- Goal: 把审计发现的后端做好、前端死的交互写路径,按 Rule 11.10 处理(接线 or 明示并 defer-track),并补"按钮真 POST"的契约测试防回退。
+- Findings & disposition:
+  - **P0 — 录入成交/现金 (ManualEntryModal)**: 提交按钮永远只 `setPreview(true)`,从不 POST。**DO: 接线** —— 预览点 → `POST /api/portfolio/{fill,cash_event}` `commit:false`(显示真实 before/after + warnings);确认点 → `commit:true`(显示 committed + journal_path,或 409 重校验错)。后端契约已支持 preview/commit(Rule 11.10.3)。
+  - **P2 — notifier toggle (NotifierChip)**: 双确认 UI 全在但只改本地 state,不 POST、不写 Rule 12.7 审计日志,dry-run 按钮无 onClick。**DO: 接线** —— 开 modal 时 `GET /api/notifier/state`;确认启用/禁用 → `POST /api/notifier/toggle`(后端按 stage-2 gate 拒绝/写审计日志);dry-run 按钮 → `dry_run:true`(Rule 12.7.5)。
+  - **P1 — server watchlist**: 前端 ☆ 走 localStorage(`useWatchlist`),`/api/watchlist` 三端点零调用。**DECISION: 接服务端 vs 认 localStorage**。Local Beta v0 推送 Stage-2 禁用 → 服务端 watchlist 驱动的 Rule 12.4 冷静期/静默情报现无运营效果。**默认处置: defer 接线到 Stage-2 push,显式 defer-track(Rule 11.10.2);localStorage 已诚实标注不影响 portfolio/calibration**。用户可推翻要求现在接。
+  - **P3 — reflection observability (snapshots/traces/funnels)**: 前端无消费。**DISPOSITION: 数据/观测类,frontend-optional(Rule 11.10.5),defer-track**;反思样本不足,产不出 proposal,延后做 debug 面板。
+  - **冗余(非缺口)**: `/symbol/{T}/ladder` 未单独抓(数据已含在 `/strategy`),无碍。
+- Files:
+  - Update: `frontend/src/htr-v3-modals.jsx` (ManualEntryModal 真 POST preview/commit;NotifierChip 接 state/toggle/dry-run)
+  - Update: `tests/unit/test_frontend_ui_contracts.py` (Rule 11.10.4 断言 fill/cash/notifier 控件真发 POST 到对应路径 + dry-run)
+  - Update: `docs/02_GOVERNANCE.md` (Rule 11.10 — done), `PROJECT_STATUS.md`(defer-track watchlist/reflection orphan)
+- Acceptance:
+  - fill/cash modal 真 POST,预览映射 `commit:false`、确认映射 `commit:true`,展示真实 before/after / journal_path / 409。
+  - notifier toggle 真 POST `/api/notifier/toggle` 并经后端 stage-2 gate(写审计日志);dry-run 走 `dry_run:true`。
+  - Rule 11.10.4 契约测试断言三个控件真发 POST(非仅渲染),全绿且无回归。
+  - watchlist(server)+ reflection observability 作为 defer-track 写入 `PROJECT_STATUS.md`(Rule 11.10.2/.5),非 merge-blocking。
+  - 无新增 POST 路由越出 Rule 11.5;Rule 3 advice-only 不变。
+
 ## Milestone P11: Reflection & Self-Improvement
 
 P11 是反馈控制环：把已 realized outcomes 转化为 system improvement proposals。**Per ADR-0007 (post Codex review)**：这是 policy replay + root cause analysis + LLM 叙事 proposals，**NOT** causal identification (Pearl do-calculus) 或 Shapley attribution。Rule 13 (子规则 13.1-13.10) 治理纪律。
@@ -1649,3 +1784,529 @@ P11 是反馈控制环：把已 realized outcomes 转化为 system improvement p
   - Trigger 条件 (3 选 1): 3+ 连续同 `evidence_class` proposal 被 reject / 3+ proposals expire 未 review / post-acceptance change 失败 predicted improvement。
   - 输出: "generator X 需要 adjustment" + 暂停同 evidence proposals 直到人工 review pass。
   - 至少 8 单测。
+
+## Milestone P12: Calibration Validation Hardening
+
+Per the 2026-05-30/31 governance thrust (Rule 8.2.2 validation-gate integrity, Rule 9.4.1 leak-resistant methodology, Rule 9.4.2 leakage-audit verdict). This milestone is the not-time-blocked half of the calibration path: while forward samples accumulate (P10-28 automation), make the validation pipeline honest and leak-resistant so that when samples mature there is a credible protocol to run — rather than scrambling a protocol that happens to pass. The honest expectation (Rule 8.2.2.5): this may conclude "no demonstrated edge" and the score stays an uncalibrated ranking signal.
+
+### P12-01 PIT Leakage Audit of Backdated Calibration
+
+- Status: done (2026-05-31; verdict=contaminated — V1 corporate-action PASS + V3 available_ts PASS + V2 survivorship INCONCLUSIVE + V4 model-selection FAIL; backdated evidence quarantined per Rule 9.4.2.3; `tools/audit_calibration_leakage.py` + 6 tests; smoke 1281 passed; artifact reports/calibration/leakage_audit_2026-05-31.json)
+- Priority: P0 of the calibration track (precondition per Rule 8.2.2.3 — must run BEFORE extending the backdated window or trusting any backdated skill)
+- Activation stage: Rule 12.0 Stage 3 (reflection/calibration; does not relax Rule 3/8.2/8.3/9.4)
+- Depends on: Rule 8.2, Rule 8.2.1, Rule 8.2.2, Rule 9.4.1, Rule 9.4.2 (added 2026-05-31), Rule 11.9.6
+- Goal: Answer one binary question with recorded evidence — are the existing backdated/bootstrap calibration samples (762 on disk) contaminated by look-ahead (confirmed `yfinance auto_adjust` split adjustment on labels/features/volume/universe; survivorship; post-cutoff `available_ts`; future-data model selection)? Emit the Rule 9.4.2 verdict artifact and apply its consequence.
+- Locked audit checklist (fixed before running, Rule 9.4.2.4):
+  - V1 corporate-action: does any price feeding a backdated label OR a momentum/MA/vol feature OR volume OR a universe filter come from a retroactively split/dividend-adjusted series? (trace the bootstrap price source vs the kline_adapter back-adjustment, Rule 11.9.6)
+  - V2 survivorship: is the candidate universe at backdated date D reconstructed PIT, or does it include only names that exist/survive as of today?
+  - V3 available_ts: does every ex-ante feature for cutoff D have `available_ts < D` (Rule 8.2), and does the outcome window use only bars with `asof > D + >=1 trading day` (Rule 8.2.1)?
+  - V4 model selection: were isotonic/threshold choices made using any data from the test/outcome window?
+- Files:
+  - Create: `tools/audit_calibration_leakage.py` (read-only audit; emits verdict artifact)
+  - Create: `reports/calibration/leakage_audit_{date}.json` (Rule 9.4.2.1 deliverable)
+  - Create: `tests/unit/test_audit_calibration_leakage.py`
+  - Update: `PROJECT_STATUS.md` (verdict + consequence)
+- Acceptance:
+  - Verdict ∈ {clean, contaminated, inconclusive}; inconclusive treated as contaminated (Rule 9.4.2.2).
+  - Each of V1-V4 reported with pass/fail + evidence.
+  - If non-clean: backdated evidence quarantined per Rule 9.4.2.3 (stops counting toward sunset/validation; UI stays downgraded), recorded in PROJECT_STATUS.
+  - Read-only; no broker/execution; no relaxation of Rule 9.4 labeling.
+
+### P12-02 Purged + Embargoed Walk-Forward Protocol
+
+- Status: done (2026-05-31; `purged_walk_forward.py` + 6 tests signal→pass/noise→downgrade; runner `validate_calibration_walk_forward.py`; backdated diagnostic = downgrade, model Brier 0.311 worse than random/stratified, n_eff=11 date-clusters → honest no-edge per Rule 8.2.2.5; smoke 1287 passed. Scope note: locked-holdout harness deferred until tuning is introduced — isotonic PAV has no hyperparameters and the walk-forward final fold is already out-of-time)
+- Hardening update (2026-06-15): review found implementation did not yet enforce all locked Rule 8.2.3 ship predicates in code. Fixed: verdict now requires ≥20 independent date clusters, model Brier strictly beating random + climatology/date-cluster CI + stratified baseline, and `leakage_verdict == clean`; otherwise `insufficient_data` / `downgrade`. Added 3 regression tests. `tools/validate_calibration_walk_forward.py` accepts `--leakage-verdict`. Live run on 2026-06-15 with 7 clusters returns `insufficient_data`.
+- Depends on: P12-01 (a clean leakage verdict on the inputs used), Rule 9.4.1
+- Goal: Replace/augment the rule-flagged-suspect `kfold_validate_isotonic` (Rule 9.4.1) with a leak-resistant validation: purge training samples whose 3D/5D outcome window overlaps the test window, embargo a gap after each test fold, prefer time-ordered walk-forward over random folds; report against climatology/event-rate + stratified baselines (not just random 0.25); compute date-block/cluster-robust effective sample size + CIs; reserve one locked out-of-time holdout run once.
+- Acceptance:
+  - Purge + embargo implemented and unit-tested on synthetic overlapping-label data.
+  - Baselines (random, climatology, stratified) reported alongside the model.
+  - Effective-sample-size / CI uses date-cluster method, not raw row count.
+  - The locked holdout is run at most once; protocol changes after seeing it void it (Rule 8.2.2.1 / 9.4.2.4).
+  - Until this passes leak-free, UI calibration stays downgraded (Rule 9.4).
+
+### P12-03 Forward-Collection Hardening (Codex 2026-06-01 review)
+
+- Status: pending (enhancement; the immediate 2026-06-01 silent-no-op bug is fixed below)
+- Depends on: P10-28, P12-01 findings, Rule 8.2 / 11.9 / 11.9.6 / 15.4
+- 起因: 2026-06-01 afterclose 16:00 跑了但采 0(dropped 50,候选当日 close 未进 sibling daily_prices)且 daily_routine 谎报 "emitted"+ok。Codex 全面只读审查纠正根因(sibling evening_batch 19:00 确有跑;真因=计时 16:00 早于 EOD 定稿 19:04 + 部分候选不在 sibling universe)并挖出 daily_routine 诚实性漏洞。
+- **已修(本会话 2026-06-01)**:
+  - daily_routine `collect()` 解析 emit 计数 + `run_afterclose` 诚实状态:0 new + dropped>0 → ok=false,绝不记 "emitted"(Rule 11.9);幂等 all-skipped → ok=true(+2 测试)。
+  - 计划任务 16:00 → **19:30**(晚于 sibling 19:04 EOD 定稿);register .bat 同步。
+  - emit cutoff 15:00 → **15:30**(JPX 实际收盘)。
+  - **dashboard 候选源解耦**(2026-06-01 用户报"前端不更新"):`api/serializers._freshest_selected_tickers_path()` 优先读最新 HTR-native `reports/screener/selected_tickers_{date}.json`,仅当无 HTR 快照才回退 sibling——dashboard 不再卡在 sibling 那个不刷新的 05-27 文件。验证:重启后 `meta.tradeDate` 05-27 → **2026-06-01**,#1 候选 6768.T(旧)→ 6584.T(今日);+3 选源单测。
+  - **市场温度计 session 修复(Rule 11.9.3,用户报夜里显 OPEN)**:`_market_session_state` 原仅周末 reconcile、工作日返回硬编码值(N225 永远 OPEN / US 永远 CLOSED)。改为按 **region + 真实时钟 + 交易时段**推导(JP 09:00-11:30/12:30-15:30 JST;US 09:30-16:00 ET via zoneinfo;FX 工作日 LIVE;UNKNOWN 保留)。live 验证 JST 周二 00:00:JP CLOSED / US OPEN / FX LIVE / SSE UNKNOWN,全对。节假日日历仍留 P12-03(b)。测试改写为 region-aware。
+  - 验证:补跑 `--asof 2026-06-01` → 50 new / 0 dropped / ok=true(20:50 时 DB 已补齐 50/50),forward 样本 2→3 天(150 条);smoke **1292 passed**。
+- **剩余加固(本任务,pending)**:
+  - (a) **HTR-native 取价解耦 — emit 端 done (2026-06-08)**:`emit_daily_predictions.py` 加 **yfinance reference-price 兜底**(`_yf_close_one`/`_yf_close_batch`,`auto_adjust=False` 原始收盘,与 sibling 同基准/Rule 11.9.6)。取价顺序:sibling `daily_prices` 优先 → 缺则 yfinance 兜底 → 都无才 drop;`extra.reference_price_source ∈ {sibling_daily_prices, yfinance_raw}` 标注来源(PIT provenance)。`--no-fallback` 可关。网络/yfinance 缺失时兜底返回 `{}` 优雅降级(绝不崩调度)。`daily_routine.collect()` 不带 `--no-fallback` → **自动路径默认即用兜底,反复"0 采集"失败根除**。+3 测试(`test_emit_fallback.py`:兜底填补 / `--no-fallback` 关闭 / 无网络降级)。**起因**:2026-06-08 sibling DB 停在 06-05(0 行 06-08),旧 emit 50 候选全 drop;修后手动补采 `--snapshot selected_tickers_2026-06-08.json` → **50 new / 50 from yfinance / 0 dropped**,`predictions/2026-06-08.jsonl` 落盘(实价 6584.T 1043)。
+    - **(a-sweep) done (2026-06-09)**:`sweep_pending_outcomes.py` 加 `_CompositeFetcher`(sibling daily_prices 优先 → 窗口空则 `_yf_bars_range` yfinance RAW 区间 bars 兜底,`auto_adjust=False` 同基准)+ `_safe_float`(NaN 防护)+ `--no-fallback`。sibling 冻结时 outcome 仍能从 yfinance 成熟。+4 测试(`test_sweep_fallback.py`)。验证:`_yf_bars_range('6584.T','2026-06-08','2026-06-08')` → 1 bar @1043(实价)。**教训**:sweep 不可在交易日**收盘前**跑——eval_date=未收盘日会写 premature symbol_not_found,因 outcome_id=hash(pred,eval_date) 去重,挡住当晚真实 outcome(本次盘前误跑已清理 06-08 outcomes 文件)。调度的 afterclose 19:39 在收盘后,无此问题。
+  - (b) **JPX 节假日日历 done (2026-06-07)**:新增 `src/hot_theme_rotator/data/jpx_calendar.py`(stdlib-only、确定性、离线)——`is_jpx_holiday`/`is_trading_day`/`latest_trading_day`/`calendar_covers` + 2026 手工核验节假日表(按 weekday 逐个校对:元旦/成人/建国/天皇诞生/春分/昭和/GW 5-4~5-6/海/山/敬老+国民+秋分/体育/文化/勤劳 + JPX 年末 1-2 与 12-31)。`daily_routine.latest_trading_day` 改为 import 它 → **现在跨节假日回退,不只是周末**,emit 永不落在休市日(Rule 15.4 显式 fail-closed)。afterclose 记录加 `calendar_covered`,超出覆盖年(仅 2026)显式标注降级为"仅周末 + 数据守卫兜底",不静默过度信任。+8 测试(6 jpx_calendar + 2 daily_routine)。**未硬编码我不确定的 2025/2027 年份**——错误节假日会跳过真实交易日(fail-closed 错方向),宁可只覆盖已核验的 2026 + 显式标注,由现有 screener-空输出数据守卫兜底其余年份。新年前需扩表并核验。
+  - (c) **拆股复权 done (2026-06-07)**:Rule 11.9.6 在 **outcome 路径**和 **benchmark 路径**用不同正确策略落地:
+    - **outcome 路径(sweep / bootstrap / 所有 compute_outcome 调用方)= fail-closed 闸门**。`compute_outcome` 加 `_detect_split_in_window`:reference→bars 或相邻 bar 出现 clean split 比率即返回 `malformed_data`(复用 `kline_adapter.detect_split_factor` 单一启发式)。**理由**:reference_price 是 emit 时存的原始收盘,与抓取 bars 不同基准,无法在此安全重对齐 → 宁可丢弃极少数跨拆股样本,也绝不吐 -90% 假收益毒害校准(与项目 fail-closed DNA 一致)。sweep 自动受保护(闸门在计算层),无需改 sweep fetcher。
+    - **benchmark 路径(cohort 卡)= 真复权**。新增 `kline_adapter.SplitAdjustedDailyPriceFetcher`(复用 `_split_adjust`),`api/candidate_history._benchmark_fetcher` 切换之。**理由**:benchmark 的 reference 自抓取序列内派生,同序列复权 → 跨拆股也得连续真实收益(优于 fail-closed)。live 无拆股窗口 `_split_adjust` 为 no-op,数值不变。
+    - 测试:`test_outcome_join`(+2:split→malformed / 大幅非拆股不误触)、`test_kline_adapter`(+2:`detect_split_factor` 公开 wrapper / `SplitAdjustedDailyPriceFetcher` 去 cliff)。smoke **1349 passed / 5 deselected**,零回归。
+    - 未做(留 backlog):outcome 路径"计算复权后正确收益以保留跨拆股样本"——需重对齐 stored reference 基准,改动 F2 reference 契约,风险高、增益低(样本极少),fail-closed 是诚实接口。
+- (a) emit 端 done(2026-06-08)+ (a-sweep) outcome 兜底 done(2026-06-09);(b)(c) done。emit/sweep 不再硬依赖 sibling 写库,sibling 冻结时双双经 yfinance 兜底继续工作。
+  - **(d) screener 数据迁 HTR / 候选新鲜化 done (2026-06-09)**:`tools/refresh_htr_price_db.py` —— 一次性快照 sibling 884MB → HTR 自有 `data/raw/htr_market.db`(全表+历史+基本面,screener 依赖完整;sibling 只读)+ yfinance 按 JPX 交易日补 daily_prices(idempotent、离线降级、`auto_adjust=False` 同基准)。`daily_routine.DB_DEFAULT=HTR_DB`,screener 前先 refresh(非致命,失败则用上次 HTR DB)。算法零改、纯数据迁移。+4 测试(`test_refresh_htr_price_db.py`:跨节假日缺日 / 快照+追加 / 幂等 / 离线降级)+ daily_routine order 测试更新。实跑:快照+补 06-08/09(1892 行)→ fresh screener #1 6584.T→8604.T、2334.T 跌出前八(候选见到近日跌)。今日已采 06-09 snapshot 不覆盖(保 PIT)。**遗留**:HTR DB 基本面/历史冻在快照时点(可接受);sibling 复活时重新快照策略待定。
+- Acceptance: (a)(b)(c) 实现 + 单测;emit/sweep 不再隐性依赖 sibling 写库;smoke 全绿;不引入 broker/LLM 路径。**(b)(c) 已满足(日历/复权 + 单测 + smoke 1357 + 无 broker/LLM);(a) 取价解耦待做**。
+
+### P12-04 Frontend Display-Honesty Remediation (Rule 11.9 backlog, all variants)
+
+- Status: in progress (2026-06-05;后端冻结期,纯前端;无 broker/LLM/POST 路径变更)
+- Depends on: Rule 11.9(尤其 11.9.1 无捏造数据 / 11.9.3 session state 必派生)、Rule 11.7 Scope(已澄清 11.9/11.10 绑定所有变体,本任务先做的规则更新)
+- 起因: 2026-06-05 跑起 app 对 V1–V4 做 headless 截图 + 静态审计,抓出若干**在真实数据下仍渲染的写死 mock**(界面"撒谎"),违反 Rule 11.9.1/11.9.3。证据:`.runtime/audit_shots/{v1..v4}.png` + `{v1..v4}_top.png`(2x)。
+- **本批修复(P0,4 项,均经真实数据核对)**:
+  - (1) **K线 x 轴写死"今日"** (`htr-shared.jsx`,共享组件→全 4 变体):改用 bar 真实 `date`(首/中/末 MM-DD 标签)。当数据非当日(休市/stale)时不再谎称"今日"(Rule 11.9.2)。bar.date 已由 `/api/symbol/{T}/kline` 提供(末根 2026-06-05 实证)。
+  - (2) **V1 市场时段条全写死** `Tokyo OPEN / HK OPEN / London PRE / NY CLOSED` (`htr-v1.jsx` V1SessionStrip):改从真实 `markets[].state`(后端 `_market_session_state` 日历正确,P12-03 已修)派生 JP/US/CN/FX session。删除映射不到真实信号的虚构 HK/London(Rule 11.9.3 hardcoded session forbidden)。
+  - (3) **V4 时间轴假 leader 事件** "8035.T 研究分 66→78 跨过 75 阈值进入首位" (`htr-v4.jsx:193`):该票非真实龙头(真实 #1 = 6584.T)且"66→78 跨阈"为捏造日内信号(双违 11.9.1 + 8.3/9.4)。改为从真实 `candidates[0]` 派生(真实 symbol + 真实研究分 + 未校准排序信号标注,无捏造日内 motion)。
+  - (4) **V2 lead 叙事写死** `sub="news-catalysed semiconductor day"` (`htr-v2.jsx:16`):真实龙头 theme 占位为 `screener_v2` 非半导体。改用真实 `one_liner`(alpha/ADV/mom 因子摘要)。
+- Acceptance: 4 项均以真实 `/api/dashboard` + `/api/symbol/{T}/*` 数据派生,无写死字面量;headless 截图复验无回归(Rule 11.7.6);smoke `pytest -m "not slow"` 全绿;前端契约测试不破。
+- Deferred(本批不做,记入 Rule 11.9 backlog):V4 新闻去重 + 跨日新鲜度标(新闻 06-03 是真实日期非写死,P1);V1/V2 顶栏补新鲜度标注(P2);死分支清理(V4 `session_open` 文案、V1 `useTickingPrice` 直通残留)。**后续系统化推进见 P13 里程碑(本任务是 P13-01 honesty sweep 的前哨)。**
+
+### P12-05 Forward-Calibration Readiness — Sunset Trigger + Locked Criteria (2026-06-11)
+
+- Status: **协议已锁 / 等数据 (in progress, 2026-06-11)**。起因:2026-06-11 forward 样本 paired-complete 达 **229 ≥ 100**,Rule 8.2.1 sunset 计数门触发;但完整性审计发现真正独立观测仅 **5 个 date-cluster**(05-27/29、06-01/02/03)——raw-count 门过、effective-sample 门未过。
+- 已做(本会话):
+  - **forward 样本完整性/泄漏审计**(直接核查,非工具):基差/拆股 V1 clean(0 malformed、1D 收益无 >25% 异常,yfinance 兜底没造假拆股价);PIT V3 clean(cutoff 全 == trade_date、无未来函数);229 个 complete **全部来自改造前原管线**(我这周的 emit/sweep 兜底+DB 迁移未污染已成熟样本)。结论:样本干净,但 cluster 太薄不能下判决。
+  - **Rule 8.2.3 锁定 ship 标准**(治理,owner 2026-06-11 拍板,blind 时锁):effective-sample 下限 **≥20 date-cluster**;协议=P12-02 purged/embargoed walk-forward;pass 须同时满足(a)跑赢 random/climatology/stratified 全部基准(b)cluster 自助 CI 排除零(c)泄漏审计 clean;CI 条款自动挡住运气薄样本;20-29 cluster 的 pass 建议 ≥30 复confirm。
+  - **退役 backdated 补样**:Rule 8.2.1 sunset 计数已达;补样早被 P12-01 判 contaminated/quarantine,forward 取得 primacy(Rule 8.2.2.2),记 PROJECT_STATUS。
+- 待做(时间瓶颈,自动推进):管线每天自动攒 ~1 cluster;到 **≥20 cluster(约 4 周,~7 月上旬)** 跑一次锁定的 `validate_calibration_walk_forward` + forward 泄漏审计,接受判决(大概率 "no demonstrated edge")。当前 **5/20**。
+- 活动阶段保持 Stage 0;分数维持 uncalibrated_research_score。不引入 broker/LLM 路径。
+
+## P13 — Frontend / Interaction Design Optimization (四变体均质, backend frozen)
+
+> 设计意图: `docs/superpowers/specs/2026-06-06-frontend-interaction-design.md`;实施计划(含 TDD 步骤): `docs/superpowers/plans/2026-06-06-frontend-interaction-design.md`。来源: 15-agent / 7 维 / 71 条 adversarially-verified 设计审计 + Codex(codex:rescue)复审。后端冻结(只读 `/api/dashboard`+`/api/symbol/{T}/*` + 已有 7 条 Rule 11.5 白名单 POST)。**已锁决策(2026-06-06)**:端点范围=可用已有白名单 POST;变体优先级=四变体均质(全部拉到 Rule 11.7 不变量同线,V3 仍为名义默认);节奏=先 spec/plan 后执行。严重度 rubric:P0=任意变体捏造决策相关数量/轨迹(或默认 V3 上用户会据以行动的内容违规);P1=其他内容红线违规(静态假标签/死按钮/mock 当真,任意变体);P2=布局/易读/IA/视觉/色彩/a11y/DRY(四变体均质下亦为承诺工作,非可选)。
+
+### P13-01 Phase 1 — Content-honesty + dead-interaction sweep
+- Status: **done (2026-06-06)** — 8 项写死 mock 全部 → 真实派生/移除;TDD 8 新契约测试先红后绿;smoke `-m "not slow"`(干净 basetemp)**1302 passed**;四变体 headless 截图复验(`.runtime/audit_shots/`,Rule 11.7.6);零回归。实现要点:V4 假分数 sparkline+`(+12)` 删除(LeaderCard 改真实价格 spark 标"价格·120d")、V2ChartCard 改用 `candidate.kline` 真实 overlay(120 sessions 实证)、V4 header chips 从 `v4BuildEvents` 按 kind 派生(实测"新闻4·候选浮现1",假类目消失)、V4 死按钮→静态图例(去 button affordance + 去"写入决策日志"假文案)、V3 `2 high`→按 weight 派生、V1 caveat→真实 `strategy.risk_warnings[0].message`(注:risk_warnings 是对象数组,首次直渲对象致 V1 白屏,已修)、V1/V2 `screener_v2` 裸渲染 guard、V2 假刊期删。
+- 范围(详见 plan Task P13-01):**P0** V4 假分数 sparkline `[42..78]`+`研究分(+12)`(捏造分数轨迹,9.4-adjacent)删除;**P0** V2 价格图渲染 mock kline(`V2ChartCard` 用 `kline` prop=boot mock 而非 enriched `candidate.kline` 真实 overlay)→ 改用真实 overlay;**P1** V4 header 事件计数 chips `[7,6,8,3,0]` 写死 → 从 `v4BuildEvents` 按 kind 派生;**P1** V4 右栏 4 按钮死按钮+假"写入决策日志"文案 → 删成静态图例(decision-log 非 Rule 11.5 白名单路径,defer-track);**P1** V3 新闻 `2 high` 写死 → 按 weight 派生;**P1** V1 action zone 每票都显写死 `USD/JPY 跌破 156` caveat(来自 8035.T mock)→ 用 `candidate.risk`/`strategy.risk_warnings` 或撤;**P2** `theme='screener_v2'` 裸渲染(V1/V2)+ 空 nameJa/nameCn 分隔符;**P2** V2 masthead `vol.4 issue 113` 假刊期。
+- Acceptance: 新增契约测试逐项锁死(无写死字面量 / 真实派生);smoke `-m "not slow"`(干净 basetemp)1294+ 绿;headless 复验四变体渲染无回归(Rule 11.7.6);PROJECT_STATUS 记录证据。
+- Depends on: Rule 11.9/11.10/8.3/9.4(已绑定所有变体,无需新规则)。
+
+### P13-02 Phase 2 — Async-state honesty + write-path reachability
+- Status: **done (2026-06-06)** — 4 子项全做完;新增 3 契约测试先红后绿;smoke(干净 basetemp)**1305 passed**;四变体 console 全干净 + headless 截图复验;watchlist POST live round-trip 实测(add→size1 有 9999.T / remove→size0)。
+  - **P2-A 异步态(P1)**:`useEnrichedCandidate` 加 `_status` per-endpoint 态(pending/ok/failed,覆盖 strategy/profile/outcomes/kline/aiBrief/debate 全部——Codex 拓宽,不止 LLM)+ 共享 `AsyncBodyState`(htr-shared.jsx);FactorBody/OutcomesBody/AiBody/DebateBody 改 status 驱动:pending→"⏳生成中…"、failed→"⚠真实数据未就绪·示例占位 (11.9.4)" banner、ok→真实。mock 保留作崩溃安全但 failed 时被明确标注。`/llm_brief` 实测 200 缓存(0.0s)→ ok 无误报。
+  - **P2-B 写路径可达(P2,Codex 修正为 UX 一致性非 11.10 违规)**:ProposalInboxChip/CalibrationChip/NotifierChip 从 V3TopBar 提到全局 `app-nav`(index.html)→ 四变体可达(实测 V1 nav 显"🧠提案/📐校准/📢推送")。search+watchlist 仍 V3 本地(需 per-variant symbol 选择,待 Phase 6 共享 picker)。
+  - **P2-C degraded 覆盖(P2)**:bootWithApi 加 `degraded.positions`(`!api.positions || available===false`)+`degraded.dailyCockpit`;V3 banner SEC map 加"持仓/Daily Cockpit"。macroNews 不追踪(无 mock,absent 即 null,Codex)。per-symbol 失败由 P2-A 的 AsyncBodyState 覆盖。
+  - **P2-D watchlist 写入(P2,用户允许已有 POST)**:`useWatchlist` 接 `GET /api/watchlist`(mount 载入服务端真相)+ add/remove 乐观更新后 `POST /api/watchlist/{add,remove}` reconcile;localStorage 降级为缓存/离线回退;WatchlistChip modal 旧"仅存 localStorage"标改"服务端持久+localStorage 缓存";+契约测试断言真 POST(注:test_no_write_methods 启发式在 `method:"POST"` ±400 搜首个 `/api/`,原 GET `/api/watchlist`(无尾斜杠)在前致误判,把 post() 排到 GET 前修)。Depends on: 端点范围决策(已允许)。
+
+### P13-03 Phase 3 — Shared-component unification(contract-test-gated)
+- Status: **partial done (2026-06-06)** — 治理关键的"措辞/色彩单一源"已做完(Codex 标的 honesty-sensitive 部分);纯 DRY 的组件抽取(阶梯/tile/cockpit/视觉 score-stat)作 **P13-03b DRY 尾巴 deferred**。本批 +2 契约测试;smoke(干净 basetemp)**1307 passed**;V3/V4 console 干净 + 截图复验;既有不变量测试(七档阶梯 9.6 / uncalibrated 8.3/9.4 / 9.4 降级)全程绿。
+  - ✅ **P3-C 校准/分数措辞单一源**:新增 `HTR.LABELS = {scoreUncalibrated:"研究分·未校准", uncalibrated:"未校准", rule94Note:"Rule 9.4 — …不可视作概率"}`(htr-shared.jsx);V3 顶栏内联校准 pill(曾是 htr-v1 CalibPill 的重复)→ 改用共享 `<CalibPill>`;V3 MiniStat `研究分(未校准)`、V4 leader/spine 分数标签、FactorBody 9.4 note 全部改引用 `HTR.LABELS`。措辞不再 5 处分歧。
+  - ✅ **P3-F 独立 heat 色阶**:新增 `--htr-heat-hot`(light #D2451E 暖朱红 / dark #E8794A)+ `-bg`,light+dark 双主题;`heatColor/heatBg` 的 t≥70 分支由 `--htr-bear` 改指 `--htr-heat-hot`——过热瓦片不再与亏损/止损共用红(单一函数,V3MarketTile + 共享 MarketTempCell 同时生效)。注:当前 6 市场温度全 <70,色阶逻辑由契约测试锁,待有市场过热才视觉可见。
+  - ✅ **P3-B 措辞部分**:分数 stat 的 canonical wording 由 `HTR.LABELS.scoreUncalibrated` 锁(防 "(+12)" 那类漂移复发)。**视觉组件 `<ResearchScoreStat>`/`<LeaderIdentity>` 抽取 deferred**——跨 V1/V2/V3/V4 四个不同尺寸 header,属纯 DRY、风险高价值低,归入 P13-03b。
+- **P13-03b（DRY 尾巴）**：
+  - ✅ **V3LadderMini dead code 清理 done (2026-06-06)**(P4-E 后无引用,删函数;七档仍在 K线 overlay + StrategyCard 表)；✅ V3 K线 panel 加"滚轮缩放"可发现性提示(P6-E 一项)。smoke 1316 绿、console 干净。
+  - **仍 deferred(纯 design-only DRY，非 honesty 红线，L 工作量/低增量价值——honesty 已被契约测试锁)**：`<LadderMini>`/`<LadderTable>`+`labelShort`（并剩余 ~5 份阶梯渲染，须逐变体截图验七档不丢）；`MarketTempCell variant='hero'` 退役 `V3MarketTile`；`<CockpitCard>`/`<CandidateRow>`/V2 共享 `<DecisionLog>` + 修 htr-v2.jsx 价格小数 ternary；`<ResearchScoreStat>` 视觉组件。
+
+### P13-04 Phase 4 — Legibility-floor + IA/visual polish(V3 先,后 parity)
+- Status: **partial done (2026-06-06)** — 强制/低风险子项做完;3 新契约测试;smoke(干净 basetemp)**1309 passed**;V3 console 干净 + 截图复验(hero 层级 + 无溢出,Rule 11.7.6)。
+  - ✅ **P4-A 易读下限(P1,Rule 11.7.4)**:8 处功能性 sub-floor 标签提到 floor(MiniStat 标签 9.5→11、主题 leaders 10→11、持仓配比图例 10→11、持仓列头 9.5→11、持仓 qty@cost 10→11、Cockpit Metric 标签 9.5→11、TDnet chip 9→10.5、outcomes 来源 10→10.5)。装饰 eyebrow(TEMPERATURE/masthead 大写/state badge)豁免。
+  - ✅ **P4-C 去 scroll-trap(Rule 11.7.3)**:V3 outcomes 表 `maxHeight:180`→600(有界主证据不再卡小窗,保留高 cap 防病态行数)。
+  - ✅ **P4-D hero 层级**:温度瓦片数字 32→23、leader 价格 32→40——真实 #1 龙头清晰压过宏观温度条,单一焦点(实测截图)。
+  - ✅ **P5-A 焦点环(WCAG 2.4.7,并入本批)**:TOKEN_STYLE 加 `:focus-visible` accent ring 覆盖 `[role=button]`/`[tabindex=0]`/.nav-btn/.htr-chip/button(键盘聚焦可见,鼠标点击不脏);去 blanket outline 抑制。
+  - ✅ **P5-B 对比度(WCAG AA,并入本批)**:K线日期轴 + detail-tabs hint 的真实文本 `--htr-ink-4`(~2.3:1)→ `--htr-ink-3`(过 AA)。
+- **P13-04b**：
+  - ✅ **P4-E 默认折叠 StrategyCard — GATE 已过 + 实现 done (2026-06-06)**：**先澄清 Rule 11.6**（新增 11.6.9：detail body 可默认折叠以降密度，但"安全三件套"banner+Rule 3 disclaimer+risk_warnings 须折叠态常显于折叠 guard 之外；折叠须 in-flow expansion；契约测试须断言 risk_warnings 在 guard 前）→ 再实现：risk_warnings 块移出 `{expanded &&}`（与 banner/disclaimer 同列常显）+ `useState(false)` 默认折叠 + 严重度 mono 标签 9.5→10.5 floor；另**去掉 LeaderCard 的 V3LadderMini**（阶梯第 3 次重复）leader-grid 3 列→2 列。DOM 实测:折叠态 banner+risk 常显·ladder 隐 / 展开后 ladder 现·risk 仍在。+1 契约测试（risk 非折叠 + 默认折叠）;smoke **1310 passed**;截图复验。注:V3LadderMini 现为 dead code,P13-03b 阶梯统一时清。
+  - ✅ **P4-G 响应式健壮性 done (2026-06-06)**：KLineChart 引入响应式 `padRight = max(40, min(118, width-left-80))` + `innerW = max(40, …)` floor——窄屏不再出负/NaN 绘图宽度(实测 W=1000/760 0 severe error、SVG 无负属性);ladder label box/x 同步用 padRight;1320 断点 rail `repeat(3,1fr)`→`repeat(2,1fr)`(4 卡 2×2 无孤儿);leader-grid 经 P4-E 已 2 列,<1080 仍堆叠。
+  - ✅ **P6-D 变体切换器 默认标 done (2026-06-06)**：V3 nav 按钮加"· 默认"标 + title(对照/shipping 区分);实测窄屏 nav 显"V3 · 市场温度仪表盘 · 默认"。GatesChip 固定出滚动区(纳 nav 重构)留 minor-deferred。
+  - ✅ **P5-C/D a11y done (2026-06-06, P13-05b)**:ModalShell 改无障碍 dialog——`role=dialog`/`aria-modal`/`aria-labelledby`(useId 关联标题)+ mount 聚焦关闭键·unmount 恢复焦点 + Tab trap + Escape + ×`aria-label=关闭`(DOM 实测全绿);Term tooltip 加 `role=tooltip`+`aria-describedby`+Escape;`--htr-ink-3` #827D71→#71695C(muted 文本过 AA);5 处 `#fff`/`white` SVG/badge fill → `--htr-accent-ink`/`--htr-bg`(dark-mode/自定义 accent 安全)。+2 契约测试;smoke 1316 绿。
+  - ✅ **P4-F 右栏 IA tab done (2026-06-06)**：V3 右栏 Cockpit + 决策日志 → 合成 `V3FeedsTabs`（chip tab 切换，复用现卡），4 always-open → 3 逻辑卡降密度；Portfolio+News 保持常显。DOM 实测两 tab 并存;截图右栏更紧凑。
+  - ✅ **P6-E manual-fill 预填 done (2026-06-06)**：`ManualEntryModal` 接 `defaultSymbol`，V3 "+ 成交" 用当前 leader symbol 预填（DOM 实测开弹层 symbol=6584.T）。
+  - ✅ **P6-E notifier dry-run cue + P6-F V2 §E 上移 done (2026-06-06)**：notifier dry-run 按钮加 title(预览 discipline filter·不真启用·不写日志·Rule 12.7.5);V2 因子/校准证据区从 §E 上移到 §B(声明→证据→外部因子→候选→催化→治理),DOM 实测证据区现于外部因子之前。
+  - **仍 deferred(纯维护/低增量)**：P4-B type-scale 收 6-7 档 `--htr-fs-*`（L，~17 内联字号迁移，V3 floor 已达标故仅一致性）；P6-D GatesChip pin（nav 重构，narrow 才显效）；ProposalInbox override-logged（需后端 `AcceptRequest.override_expiry` 字段，后端冻结）。
+
+### P13-05 Phase 5 — Accessibility hardening
+- Status: planned。范围: `:focus-visible` 焦点环(去 blanket `outline:none`)、`--htr-ink-4` AA 失败修(真实文本:K线日期轴/hint)、Modal `role=dialog`/`aria-modal`/focus trap、icon-only 命名、tooltip `role=tooltip`+Escape、ink-3 加深 + `#fff` SVG fill → `--htr-accent-ink`。operability 不在 11.7 layout carve-out 内。
+
+### P13-06 Phase 6 — All-variant layout/IA parity(四变体均质,committed)
+- Status: **partial done (2026-06-06)** — P6-A/B/C/D 做完;smoke **1310 passed**;四变体 console 干净 + DOM/截图实测。
+  - ✅ **P6-A V4 leader 置顶**:去掉 v4BuildEvents 里 15:30 的 leader 事件(会被晚钟新闻压下),改在 V4Spine **顶部 pin V4LeaderCard**(非事件 hero,驱动自选中候选);V4LeaderCard 去 `ev` 依赖改派生标签;V4SpineRow 简化去 leader 分支。实测截图:leader 卡在新闻流之上。
+  - ✅ **P6-B V2/V4 symbol picker**:V2 加 sel 状态(共享 `htr_symbol`)+ V2WatchlistTable 行可点切主线(DOM 实测点行 lead→8604.T);V4 加 sel + `V4CandidateStrip` 横向 chip 选择器(#rank symbol)。两者解除 candidates[0] 锁死。
+  - ✅ **P6-C V1 披露 parity(Rule 9.6/11.6)**:V1 center 末尾加 governed `V3StrategyCard`(折叠·risk 常显)+ `FactorCard` + `OutcomesCard`(复用共享卡,带 P2-A 异步态)。DOM 实测:策略卡片/因子构成/历史命中/风险标记 全在。
+  - ✅ **P6-D 变体默认标**(见 P13-04b 批,2026-06-06)。
+  - **仍 deferred**:P6-E 杂项 affordance grab-bag(V1 risk-budget degraded toggle、V4 spine meta 字号、K线 zoom hint、manual-fill 预填 symbol、notifier dry-run cue）；P6-F V2 §E 证据上移;P6-D GatesChip pin;V1/V2/V4 全量易读下限 parity（V3 已做，余三变体按需）。
+- Acceptance(全 P13): 各 phase 收尾契约+smoke 全绿 + Rule 11.7.6 截图证据入 PROJECT_STATUS;backend 依赖项保持 deferred 不桩假。
+
+### P13-07 Codex 审查整改 (2026-06-06)
+
+Codex(codex:rescue)审视当日 P12-04 + P13-01..06 全部前端更新。**已修(今天相关)**:
+- ✅ **kline 诚实性缺口(Codex blocker #1)**:`_status.kline` 原被追踪但图表不消费,空/失败 kline 仍静默显 mock。修:`load()` kline 验证器 `bars.length>0`(空→failed),V3/V1 图表 header 加"示例K线"标、V2 标题加" · 示例K线"、V4 leader 价格 sparkline 改 `_status.kline==="ok"` 才显(标"真实")。+1 契约测试。
+- ✅ **空 payload 崩溃风险(Codex #3)**:`load()` 加按端点 schema 验证器(strategy 需 risk_warnings+ladder_tiers;outcomes 需 items;aiBrief 需 narrative+factual_grounding;debate 需 bull/bear/judge;profile 需 ticker)——无效/空 payload 不覆盖 mock、标 failed,body 显示完整 mock + 示例占位 banner 而非崩 `o.items.map`。
+- smoke **1311 passed**;四变体 console 干净。
+- **预存问题(非当日引入,记录追踪,待排期)**:
+  - ✅ **ProposalInbox Rule 13.18 修复 done (2026-06-06)**(Codex blocker #2):**13.18.1** 完整 Rule 13.6 元数据由折叠"技术细节"改为**始终可见**(同屏于按钮上方,11 字段网格);**13.18.2** 去 `window.confirm`,parameter_change 改**独立"I understand"勾选框**(shadowAck)门控接受按钮(发 `user_confirm_shadow`,后端已强制 422);**13.18.4** 过期(`is_expired_by_age`)显 expiry banner + **accept 默认禁用**,需勾"override expiry"(overrideExp)才启用;**13.18.5** 无批量(+"逐条审阅·无批量"标注);**13.18.6** 顶部加待批/已接受/已拒绝/已过期 counts 条。+1 契约测试;DOM 实测 modal 开·counts 条·0 错;smoke 1312 绿。**诚实缺口**:13.18.4 "override 须 logged" 子项需后端 `AcceptRequest.override_expiry` 字段(后端冻结)——override gate 前端已强制,但 flag 不单独落后端日志(accept 本身经 decision_gate append-only 已 logged)。`htr-v3-modals.jsx`。
+  - ✅ **V4 决策事件映射 done (2026-06-06,Codex #4)**:`v4BuildEvents` 加 `candidate_persisted` **聚合**事件(N 支候选写入决策日志·模型，kind=candidate→header"候选浮现"计数反映)+ `news_overlay_hit` 分支(kind=decision)；并修既有 session/macro/scan 分支的时间切片 bug(`slice(0,8)` 取到日期片段 → 改 `hhmm()` 取 HH:MM)。DOM 实测 V4 显"写入决策日志"。+1 契约测试。
+  - ✅ **watchlist 跨实例同步 done (2026-06-06,Codex #5)**:`useWatchlist` 改 **module-level 共享 store `HTR_WL`**(subscribe/setLocal/listeners)+ 单次 hydrate(`_wlHydrated` 守卫);任一实例 add/remove 经 store 通知全部重渲。DOM 实测:点 leader ☆ → nav chip 计数 0→1 即时同步(无需 remount)。+1 契约测试。POST 接线(Rule 11.10)保持。
+  - ⏳ V3LadderMini dead code(P13-03b 阶梯统一时清);out-of-pool 搜索仅 V3 重置(V1/V2/V4 回退 candidate0)。
+
+## Milestone P14: Candidate Cohort Review (Rule 11.11)
+
+> 起因 (2026-06-07): 用户注意到候选股每天刷新,想要一张"看历史候选"的卡片。关键洞察——历史候选其实**已经在每天 append-only 落盘**(`emit_daily_predictions.py` → `reports/predictions/{date}.jsonl`,`sweep_pending_outcomes.py` → `reports/outcomes/{date}.jsonl`)。所以这不是又一层 UI 装修,而是把"前瞻样本积累"变成用户看得见的**验证 edge 的那块仪表盘**:某日整批候选 vs 同期大盘后来实际怎么走。设计两分叉用户已拍板:**整批聚合优先** + **回测补样默认隐藏(墙内标注)**。
+
+### P14-01 Cohort Review Backend + Rule 11.11 + V3 Card
+
+- Status: **done (2026-06-07)** — 后端数据层 + 只读端点 + Rule 11.11 + V3 卡片;TDD 先红后绿;smoke `-m "not slow"`(干净 basetemp)**1335 passed / 5 deselected**(baseline 1316 + 19 新测试,零回归);Rule 11.7.6 headless 截图证据 `.runtime/audit_shots/v3_cohort_card.png`(三档表 + 个股明细展开,无重叠/截断,console 仅 favicon 404)。
+- Activation stage: Rule 12.0 Stage 0(pull-only 复盘;不发通知,不放松 Rule 3/8.2/8.3/9.4)
+- Depends on: ADR-0003 decision log、P9-01/02(predictions/outcomes 已落盘)、Rule 8.2/8.3/9.4/12/14.6
+- Files:
+  - Create: `src/hot_theme_rotator/reporting/candidate_cohort_review.py`(纯逻辑 + 注入式 benchmark fetcher)
+  - Create: `tests/unit/test_candidate_cohort_review.py`(11 测试)
+  - Create: `api/candidate_history.py`(`GET /api/candidates/history` + `/dates`)
+  - Create: `tests/unit/test_api_candidate_history.py`(8 测试)
+  - Update: `api/main.py`(注册 router)
+  - Update: `frontend/src/htr-v3.jsx`(`V3CandidateHistoryCard` 挂右栏)
+  - Update: `docs/02_GOVERNANCE.md`(Rule 11.11)
+- Acceptance (对齐 Rule 11.11 七条):
+  - ✅ **PIT 忠实**:roster 字段全取自存储 `PredictionRecord`,仅 outcome 是 cutoff 后数据。
+  - ✅ **整批优先**:每档先出整批等权 mean + 上涨占比,个股明细折叠在下。
+  - ✅ **成熟度诚实**:仅 `status=="complete"` 进聚合;未成熟/缺失/异常显式列出并计 immature(`maturedCount + immatureCount == cohort`),不静默丢。
+  - ✅ **对照基准**:每档并列同窗 1306.T(TOPIX)收益 + 超额,horizon 索引与 `outcome_join` 一致。
+  - ✅ **回测隔离**:`-backdated`/`extra.backdated` 默认排除并计 `excludedBackdated`;勾选才显,带"合成样本·非真实战绩"标注。
+  - ✅ **禁标胜率**:统计量为 `uncalibrated_research_score` 群体描述;常驻"样本不足以得出胜率结论"披露;payload 无 win rate/probability/calibrated_probability。
+  - ✅ **只读**:端点拒 POST(405),不在 Rule 11.5 写白名单;契约测试断言。
+- Live 验证 (2026-06-07,HTTP :8000):实盘日 7 (05-27..06-05) / 回测墙隔 16;2026-05-27 这批 50 候选 / 29 成熟 / 0 回测混入 → **1D 整批 +0.56% vs 大盘 -0.51%(超额 +1.06%);5D 整批 -0.32% vs +1.97%(超额 -2.29pp,跑输);上涨占比 41-52%**。**诚实定性照旧:仍无 demonstrated edge**——卡片如实摊开,5D 明显跑输 passive。
+- Deferred(显式记入 backlog,非阻塞):
+  - ~~v1/v2/v4 parity~~ → **done (2026-06-07,见 P14-02)**。
+  - **跨日走势带**(每日整批 vs 大盘的累积视图,样本积累后才有信息量)。
+  - **Rule 11.9.6 复权**:benchmark 用注入 fetcher 原始价(live 窗口 ≤~13 日不跨拆股,安全);跨 corporate action 需 split-adjusted,与 P12-03(c) 同轨。
+  - **前端契约测试**:本轮卡片为自取数只读组件,后端已 8 测试锁死;前端侧 honesty 断言(整批优先/披露常显/无写路径)可补一条 `test_frontend_ui_contracts` 用例。
+
+### P14-02 Cohort Review Card — Four-Variant Parity (Rule 11.7 / P13-06)
+
+- Status: **done (2026-06-07)** — `V3CandidateHistoryCard`(共享 governed 卡,全局作用域,与 V1 复用 `V3StrategyCard`/`FactorCard`/`OutcomesCard` 同模式)挂入 V1/V2/V4:
+  - **V1**(`htr-v1.jsx`):右栏"候选清单"面板之后(历史候选紧贴当日候选)。
+  - **V2**(`htr-v2.jsx`):§D Watchlist 之后,加 `§D·复盘` section label。
+  - **V4**(`htr-v4.jsx`):左栏 `V3PortfolioCard` 之后(与市场温度/主题/持仓同列)。
+- 验证(Rule 11.7.6 headless,:8000):四变体 `found=True / table rows=3 / severe_non_favicon=0`;截图 `.runtime/audit_shots/{v1,v2,v3,v4}_cohort.png`——V4 256px 窄栏(副标题按 CardHead 既有 ellipsis 截断,非 bug)与 V2 editorial 全宽两个极端均无重叠/截断。smoke `-m "not slow"` 全绿。
+- 说明:内容红线(Rule 11.11 七条)由后端 8 测试 + 端点统一保证,对所有变体生效(Rule 11.7 Scope:content red-lines bind every variant);各变体仅布局位置不同。无新增 POST/写路径。
+
+### P14-03 Cross-Day Cohort Trend (Rule 11.11.2 full-series view)
+
+- Status: **done (2026-06-07)** — 把"每天整批 vs 大盘"汇成跨日序列 + **全实盘池化底线**:至今所有前瞻样本里候选整批到底有没有跑赢指数。Rule 11.11.2 已明确许可"full live series"视图,**无需新规则**。TDD 先红后绿,**+8 测试(4 unit + 4 API)→ smoke `-m "not slow"` 1343 passed / 5 deselected,零回归**;Rule 11.7.6 headless 四变体复验(走势块入卡,crop 23→33KB,severe=0)。
+- Activation stage: Rule 12.0 Stage 0(pull-only);不放松 Rule 3/8.2/8.3/9.4。
+- Files:
+  - Update: `src/hot_theme_rotator/reporting/candidate_cohort_review.py`(`build_cohort_trend` + `CohortTrendPoint`/`PooledHorizonStat`/`CohortTrendReport`,复用已测 `build_candidate_cohort_review`)
+  - Update: `api/candidate_history.py`(`GET /api/candidates/history/trend`)
+  - Update: `frontend/src/htr-v3.jsx`(`V3CandidateHistoryCard` 底部"全实盘累计"块:池化超额 + 每日 3D 超额火花条;共享卡 → 四变体自动获得)
+  - Update: `tests/unit/test_candidate_cohort_review.py`(+4)、`tests/unit/test_api_candidate_history.py`(+4)
+- 池化数学(诚实性要点):
+  - 池化均涨 = Σ(日均涨·日成熟数)/Σ(日成熟数) ≡ 全部成熟样本等权平均(从日聚合精确重建,无需原始收益)。
+  - 池化上涨占比同理 = Σ(日上涨占比·日成熟数)/Σ(日成熟数)。
+  - **池化超额只在"同时有 cohort 和 benchmark 的日期"上比较**(单独累加器 `ret_on_bench`)——避免某档基准窗口不全时拿 N 样本 cohort 对 M 样本基准的 apples-to-oranges(测试 `test_trend_pooled_excess_uses_only_benchmarked_dates` 锁死)。
+  - 无 benchmark fetcher → excess/benchmark 为 None,但 cohort-only 统计照常算。
+- Live 验证(:8000):7 实盘日 / totalComplete=29(目前仅 05-27 批成熟,余日 outcome 未闭合)→ 池化 **1D 超额 +1.06% / 3D −0.43% / 5D −2.29%**(= 05-27 数,因它是唯一成熟批;随更多日成熟自动扩池)。**诚实定性照旧:仍无 demonstrated edge,5D 明显跑输 passive**。火花条每日 3D 超额(未成熟日淡显)。
+- Deferred(记 backlog):benchmark Rule 11.9.6 复权(与 P12-03c 同轨)。前端契约测试 → 见 P14-04 done。
+
+### P14-04 Cohort Card Frontend Contract Tests (Rule 11.11)
+
+- Status: **done (2026-06-07)** — `tests/unit/test_frontend_ui_contracts.py` 加 2 个 design-independent 契约(基于源码文本,与既有风格一致):
+  - `test_cohort_review_card_is_read_only_and_honest`:`V3CandidateHistoryCard` body 内断言——读 `/api/candidates/history`(11.11.7 只读,**无 POST**)、渲染 `honestyNote`(11.11.6 披露常驻)、**整批均涨表先于个股明细**(11.11.2 整批优先,按文本位置)、`include_backdated` 开关 + `合成样本` 标注(11.11.5 回测墙隔)、`全实盘累计` + `非胜率`(P14-03)。
+  - `test_cohort_review_card_present_in_all_four_variants`:V1-V4 源码均引用 `V3CandidateHistoryCard`(Rule 11.7 / P14-02 parity)。
+- smoke `-m "not slow"` **1345 passed / 5 deselected**,零回归。
+- 说明:这两条锁死即使将来重构 cohort 卡,只读/披露/整批优先/回测墙隔/四变体 parity 不被悄悄破坏。配合后端 12 测试(8 cohort + 4 trend)+ 端点统一,Rule 11.11 honesty 在前后端双锁。
+
+## Milestone P15: News Pipeline + Theme-Engine Wiring (诚实补缺口)
+
+> 起因 (2026-06-14): 用户发现新闻面板停在 06-07 不更新,并指出**新闻催化 + 新闻因子 feedback 是设计核心**(00_DESIGN §策略),质问为何 status 一直说"差不多了"。诚实复盘确认:之前把"校准 track 等数据"误说成"整个项目就差验证",**掩盖了最大缺口——命名核心"新闻驱动热点龙头轮动"根本没在实盘跑**:实盘候选来自 sibling 的纯价格动量 `screener.py`,HTR 自己的 theme/leader/signal 引擎(P3/P4 建了+测了)从未接进候选生成;新闻数据源(sibling Google News 抓取)在死;news-factor feedback(P7-06)从没接上。
+
+### P15-01 HTR-native 新鲜新闻管线 (done 2026-06-14)
+
+- Status: **done (2026-06-14)**。修了用户的直接抱怨——新闻不再停更。
+- 关键发现:新闻源是 **Google News JP RSS**(公开可达,本环境返回 2026 时间线新闻),且 HTR 早有 `macro_news_fetcher`(P10-26)在用它抓宏观,只是没抓股票/主题新闻、没每天跑、dashboard 没读。
+- 实现:`src/.../data/stock_news_fetcher.py`(复用 macro fetcher 的 `_http_get/_parse_rss_items` + `news_theme_classifier.classify_news` 6 主题分类)——抓 9 条主题/市场查询 → 去重 → 分类 → 写 HTR-native `reports/news/{date}.json`;`load_latest_news_timeline` 出 dashboard-ready 行(JST ts)。`api/serializers._serialize_news` 优先读它(冻结 DB 回退);`tools/refresh_htr_news.py` CLI + 接进 `daily_routine.refresh_candidates`(screener 前,非致命)。+5 测试(注入假 RSS)。
+- 验证:真跑抓到 **108 条新鲜新闻(最新 06-14,主题计数 semi24/ai24/bank23/auto12/defense12/energy10)**;dashboard newsTimeline 由停在 06-07 → **20 条全 06-14**。smoke **1373 passed**。
+- 注:这只修了**新闻显示新鲜度 + 主题分类**。它**没有**让新闻去驱动候选选股(见 P15-02),也没有 feedback(P15-03)。
+
+### P15-02 把 theme/leader/signal 引擎接进实盘候选生成 (pending — 核心缺口)
+
+- Status: **pending**。这是让"Hot Theme Rotator"名副其实的关键一步。
+- 现状:实盘候选 = sibling `screener.py`(纯价格动量+基本面,零新闻零主题);HTR 的 `theme_detector` / `leader_ranker` / `signal_engine` 建好测好但**不在候选路径**。
+- 目标:用 HTR 引擎(新鲜新闻 → detect_themes → 主题热度 → leader_ranker 选龙头)叠加价格 screener,使候选真正是"新闻催化的热点龙头"。
+- **计划 = ADR-0009**(2026-06-14):hybrid 引擎(价格 screener 给强势 universe + 新闻/主题层加催化+龙头智能,不丢弃 screener);保持 uncalibrated(不动 P12-05 校准轨)、PIT、Rule 4 显式配置。
+- **loop 迭代 1 (2026-06-14) 发现真 blocker(建之前查出)**:名匹配/行业映射都走不通——`tickers` 表对 94% 活跃 universe **无名字无行业**(候选 3/50 有),sibling related_tickers 也空。根因=HTR 库缺股票元数据。**修正**:加前置 **P15-02a′ = yfinance `.info` 抓 sector/industry → HTR-native 元数据**(6584.T 实证可得)。修订分期:02a′(元数据)→02a(催化聚合)→02b(龙头排序)→02c(hybrid 重排)→02d(接线)。
+- **loop 迭代 2 (2026-06-14) — P15-02a′ done**:`data/ticker_metadata.py`(yfinance `.info` → sector/industry/name + `theme_for` 行业→6主题映射;增量、可注入、离线降级、`data/raw/ticker_meta.json` 存储)+ 5 测试。**真跑实证:50 候选 100% 拿到元数据(vs tickers 表 6%),15/50 映射到主题**(6584→auto/8604→bank/4443·4373→ai/2162→semi)。smoke **1378 passed**,零回归。规则无需新增(ADR-0005 HTR-native + Rule 8.3 no-LLM 治理)。
+- **loop 迭代 3 (2026-06-14) — P15-02a done**:`candidate_engine/catalyst.py`(`compute_theme_heat` 归一化新闻主题计数 + `catalyst_for` 候选→催化分 + `build_catalyst_map`;纯逻辑可注入)+ 6 测试。**真跑实证:今日新闻 AI/半导体最热,50 候选 15 个被催化**——AI/半导体名(4443/2162/3089 催化 1.0)排前、银行 0.96、auto 0.5;无主题候选催化 0(不捏造)。新闻驱动信号首次真工作。smoke **1384 passed**,零回归。规则无需新增。
+- **loop 迭代 4 (2026-06-14) — P15-02c done**:`candidate_engine/hybrid_rerank.py`(`RerankConfig.news_weight=0.30` 显式配置/Rule 4;min-max 归一 screener 分 + 催化分融合,无催化不丢弃,screener 仍占 70%)+ 5 测试。**真跑实证:新闻把候选实质重排**——8604(银行)/4443·4373(AI)/2162(半导体)上推,8524 #13→#6,无催化 7419(零售) #1→#7。"新闻催化的热点龙头"首次成形。输出仍 uncalibrated(不动 P12-05)。smoke **1389 passed**,零回归。规则无需新增。**下一迭代:P15-02d 接进 dashboard 候选面板(融合排序 + 主题/催化标注可见);02b leader_ranker 细化与 02d 一并或后续。**
+- **loop 迭代 5 (2026-06-14) — P15-02d done / 核心 LIVE**:`api/serializers._serialize_real_candidates` 接入 hybrid 重排——全 universe 算融合分→重排→取 top_n→原有富化;候选加 `theme`(催化主题)/`newsCatalyzed`/`topTheme`/`catalystScore`/`blendedScore` + one_liner "🔥主题催化";`_real_or_sample_candidates` 龙头改取重排后 #1。**显示 score 仍为原始研究分(不虚高),顺序按新闻催化(诚实:分是分、序是序)**;fail-open 无新闻/元数据则退回纯 screener。**Live 实证:dashboard 龙头 7419(零售)→ 8604(银行催化),top6 全催化、7419/7513 无催化掉下**。smoke **1389 passed**,零回归。规则无需新增(ADR-0009 治理,uncalibrated 不动 P12-05)。**"Hot Theme Rotator" 命名核心首次实盘工作。** **剩余(robustness/polish):元数据 refresh 接进 daily_routine(保未来候选有元数据)、前端催化 badge、02b leader_ranker 细化。下一迭代:元数据 refresh 接 daily_routine。**
+- **loop 迭代 6 (2026-06-14) — P15-02 核心 LIVE+持久**:`tools/refresh_ticker_metadata.py`(读当日候选 → 增量抓 yfinance 元数据,limit 60/run,离线降级)接进 `daily_routine.refresh_candidates`(screener 后,非致命);顺序 refresh→news→screener→**meta**→emit→sweep,order 测试同步。CLI 实证 "0 new/50 known"(增量快)。smoke **1389 passed**,零回归。**P15-02 核心(02a′/02a/02c/02d + 持久化)全部 done**——新闻催化候选引擎实盘工作且每日自维护。**剩余仅 enhancement**:02b leader_ranker 细化(theme→leader→signal 链补全)、前端催化 badge。下一迭代:P15-02b leader_ranker 细化。
+- **loop 迭代 7 (2026-06-14) — P15-02b done / P15-02 完整完成 + 循环收尾**:`candidate_engine/theme_leaders.py`(`annotate_theme_leaders`:每个热点主题里融合排名第一的候选 = 该主题龙头,回答 00_DESIGN 核心问"每个热点里龙头是谁";无催化永不为龙头)+ 3 测试,接进 serializers。**Live 实证:dashboard 候选标 👑 8604(银行)/4443(AI)/6584(auto)/2162(半导体) 各主题龙头**。smoke **1392 passed**,零回归。**P15-02 全链完成**——news(分类)→catalyst→hybrid rerank→theme-leader 实盘工作且可见。
+- **/loop 收尾 (迭代 1-7, 2026-06-14)**:loop 目标"让命名核心新闻驱动热点龙头轮动上线"**达成**。累计 7 迭代、ADR-0009、+约 24 测试、smoke 1373→1392 零回归、命名核心 LIVE+持久+SSoT 更正。**停在干净里程碑**。剩余作**专门会话** backlog(非 loop 尾巴硬磨):**P15-02b-full** leader_ranker 全量打分(volume/overheat,需 screener 因子映射调参)、**前端催化/龙头 badge**(数据已在 candidate dict,前端可视化)、**P15-03** 新闻因子→收益反馈闭环(P7-06,Rule 4 流程,独立较大)。
+
+### P15-02e Frontend Catalyst/Leader Badge (Rule 11.12) — done (2026-06-14)
+
+- Status: **done (2026-06-14, 崩溃恢复后续会话)**。把 P15-02d/02b 已落在候选 dict 的催化/龙头信号渲染到前端——此前**数据有、UI 无**,用户看不见"新闻催化的热点龙头"(正是驱动整个 P15 的抱怨)。/loop 收尾里列为 backlog 的"前端催化/龙头 badge"。
+- 实现:`frontend/src/htr-shared.jsx` 新增共享 `CatalystBadges`(单一源,挂 window/Rule 11.7 parity)——`newsCatalyzed` 才渲染 `🔥 新闻催化`、`isThemeLeader` 加 `👑 龙头`;接进 V1(`V1HeroHeader`)/V2(`V2FeatureHero`)/V3(`V3LeaderCard` + `V3CandidatePicker` 行内 sm 徽章)/V4(`V4LeaderCard`)。
+- 诚实(**新增 Rule 11.12**:News-Catalyst / Theme-Leader Badge Honesty,5 子条):①排序信号非胜率/概率 + standing disclosure ②显示分仍 `uncalibrated_research_score`(排序≠分数),不渲染裸 catalyst/blended 0–1 数 ③仅从已送字段派生(PIT),无催化不渲染不封龙头 ④fail-open 退纯 screener、缺徽章是诚实态 ⑤四变体 parity。
+- Files:
+  - Update: `frontend/src/htr-shared.jsx`(`CatalystBadges` + `CATALYST_BADGE_NOTE` + window 导出)
+  - Update: `frontend/src/htr-v1.jsx` / `htr-v2.jsx` / `htr-v3.jsx` / `htr-v4.jsx`(注入徽章)
+  - Update: `tests/unit/test_frontend_ui_contracts.py`(+2 契约:ordering-not-winrate / 四变体 parity)
+  - Update: `docs/02_GOVERNANCE.md`(Rule 11.12)
+- 验证:TDD 先红(`CatalystBadges` 缺失)后绿;smoke `-m "not slow"` **1394 passed / 5 deselected**(1392 + 2),零回归。**Rule 11.7.6 headless(:8000)live DOM**:四变体徽章计数 v1=2/1·v2=3/1·v3=8/5·v4=1/1(catalyzed/leader);V3 leader 8604(bank,isThemeLeader)显 theme chip+👑龙头+🔥新闻催化,显示分仍 36.89「研究分·未校准」——排序受新闻、分仍诚实。截图 `.runtime/audit_shots/p15_catalyst_badge_v3.png`。
+- 剩余 P15 backlog:P15-02b-full leader_ranker 全量打分(volume/overheat,需 screener 因子映射调参)、P15-03 新闻因子→收益反馈闭环。
+
+### P15-02f Catalyst Degradation Metadata — done (2026-06-15)
+
+- Status: **done (2026-06-15)**。修 review 发现的"news/meta refresh 非致命但 dashboard 不显式暴露降级"缺口。`api/serializers._build_meta` 新增 `meta.dataQuality.newsCatalyst`，从最新 afterclose `daily_routine_log.jsonl` 读取 `news_refresh_rc` / `meta_refresh_rc`，输出 `degraded`、`newsRefreshOk`、`metadataRefreshOk`、`reasons`。当新闻或元数据刷新失败时，dashboard 可明确显示 catalyst layer degraded；候选仍 fail-open 到价格 screener，但 badge 不再无条件可信。
+- 验证:新增 `test_dashboard_meta_surfaces_news_catalyst_degradation`；full smoke **1399 passed / 5 deselected**；slow lane **5 passed / 1399 deselected**。
+
+### P15-03 新闻因子 → 收益 → 权重反馈闭环 (pending)
+
+- Status: **pending**(P7-06 attribution feedback 一直 pending)。主题/新闻因子对实际收益的归因 + 权重更新走 Rule 4 流程,不静默回写。
+
+## Milestone P16: Event Desk(事件作战台 — 事件驱动的分析支持)
+
+> 起因 (2026-06-15): owner(资深股民)明确表示用事件(伊朗停战/半导体AI/存储暴涨/日元跌破160)来判断选股,要工具**深度配合这个打法、给方案,而不是反驳**。诚实复盘:模型此前连这些事件都"看不见"(主题硬编码 6 个,无 optical/memory;宏观管线 05-30 死、无 geopolitics)。**产品转向**:把 HTR 从"被动筛选器"做成"事件作战台"——不预测事件结果(Rule 3/8.3/9.4 不造概率),而是给 owner 的判断**提供结构化弹药**:看得见→谁受影响→涨完没有→怎么打→复盘。设计原则:只给可复核的真实数据(新闻/涨幅/流动性),不给假的"上涨概率"。
+
+### P16-E1 Event Radar — 扩主题/事件分类 (done 2026-06-15)
+
+- Status: **done (2026-06-15)**。让引擎"看得见"owner 点名的事件。
+- 实现:`news_theme_classifier.THEME_TAXONOMY` 加 **optical**(光モジュール/光通信/シリコンフォトニクス/CPO/光模块/硅光/フジクラ/古河 …)+ **memory**(DRAM/NAND/HBM/メモリ半導体/キオクシア/ストレージ/存储/内存 …);`MACRO_TAXONOMY` 加 **geopolitics**(地政学/中東/イラン/停戦/制裁/ホルムズ/ceasefire …);`ticker_metadata._INDUSTRY_THEME_RULES` 加 optical/memory 行业映射(注:industry 是弱代理,这两类主要靠新闻分类)。复合词避免裸"光"/"メモリ"过匹配。
+- 验证:TDD 先红后绿;新增 `test_classify_event_desk_e1_new_buckets`(optical/memory/geopolitics + 観光 反例)+ theme_for 2 断言;full smoke **1400 passed / 5 deselected**,零回归。**实证**:owner 五事件分类 伊朗停战→geopolitics / 存储→memory / 光模块→optical / 日元→monetary+fx 全部命中;今日 108 条实盘新闻已标 optical/geopolitics/fx。optical/memory 进 `stock_news_fetcher` 每日管线即生效(已接 daily_routine)。
+- 注:macro 管线(fx/geopolitics 的**采集**端 `macro_news_fetcher`)仍停 05-30,E2 一并接回。
+
+### P16-E2 Event→Exposure 映射 (done 2026-06-15)
+- Status: **done**。`candidate_engine/event_desk.py` 的 `EXPOSURE_MAP`(8 主题 × liquid 代表票 seed map)+ `EVENT_THEMES`(事件别名→主题:停戦/ceasefire→defense+energy、円安/yen_weak→auto+semi)+ `themes_for_event`。事件/主题字符串 → 受影响日股名单。
+- 注:这是"谁受影响"的数据 join,不荐股(Rule 11.13.3)。seed map 可扩。
+
+### P16-E2b Macro feed 复活 (done 2026-06-15)
+- Status: **done**。`macro_news_fetcher`(fx/货币/地缘采集端,死于 05-30)接回 daily_routine。新增 `tools/refresh_htr_macro_news.py`(镜像 refresh_htr_news,调 `build_macro_overlay` 写 `reports/news_macro/{date}.json`),`daily_routine.refresh_candidates` 在 news 后、screener 前调用(非致命),`macro_refresh_rc` 进 record;order 测试同步(refresh→news→**macro**→screener→meta→emit→sweep)。
+- 验证:daily_routine 14 测试过;full smoke **1411 passed / 5 deselected** 零回归。**Live 实证**:`refresh_htr_macro_news --asof 2026-06-15` 抓 114 条 / 分类 98,macro 计数 monetary 28 / fiscal 22 / fx 17 / trade 16 / **geopolitics 6** / overseas 12——`reports/news_macro` 由停 05-30 → 06-15 新鲜。dashboard 宏观层 + Event Desk 地缘/汇率新闻不再冻结。
+
+### P16-E3 Priced-in read(涨完没有)— 核心 (done 2026-06-15)
+- Status: **done**。`event_desk.priced_in_read`/`build_event_desk`:每个受影响名 last + 1d/5d/20d 收益 + 对 1306.T 超额(5d) + 距20日高 + 描述性 freshness 标签(fresh/extended/rolling_over/falling)。注入式 price_fetcher(Rule 2.1,默认 yfinance best-effort 离线降级);fail-open(缺数据→null+unknown,不抛错/不造数)。**新增 Rule 11.13**(Event Desk:不预测事件结果、不给概率/胜率、exposure 非荐股、freshness 是"已涨多少"描述非信号、read-only)。
+- TDD 先红后绿 +6 测试(`test_event_desk.py`:themes 解析/收益+超额/freshness 标签/fail-open/join+honesty/未知事件)。full smoke **1406 passed / 5 deselected**,零回归。**Live 实证**:停战→防衛/能源(三菱重工/INPEX/石油資源 已 falling、战争溢价在回吐)、semi(TEL/Disco/Lasertec extended 过热在20日高)、optical(フジクラ/古河 falling −20%+)。"还能不能上车"这一问替 owner 量清楚。
+- 剩余:E4 endpoint + 前端卡(把 build_event_desk 接进 API + 四变体卡,Rule 11.13.5 parity)。
+
+### P16-E4 Event Desk endpoint + 四变体卡 (done 2026-06-15)
+- Status: **done**。`api/event_desk.py`(只读 `GET /api/event-desk?event=` + `/api/event-desk/themes`;30min TTL 缓存;yfinance best-effort 离线降级)接进 `api/main.py`。共享前端组件 `EventDeskCard`(`htr-shared`/`htr-v3` 全局,自取数:主题/事件选择器 + 受影响名 priced-in 表 + freshness chip + 常驻披露)挂入 V1/V2/V3/V4(Rule 11.13.5 / 11.7 parity)。
+- TDD +5 测试(API 3:themes/exposure+disclosure/read-only;前端契约 2:read-only+non-prediction / 四变体 parity)。full smoke **1411 passed / 5 deselected**,零回归。
+- **Rule 11.7.6 headless 实证**(:8010):卡渲染 disclosure + 4 freshness chips;截图 `.runtime/audit_shots/p16_event_desk_card.png`——semi 显 TEL +47.7%「已大涨」/ 爱德万「未过热」,披露"不预测事件结果、不给上涨概率/胜率,方向判断是你的"。live endpoint 实证 イラン停戦→防衛+能源(三菱重工/INPEX/石油資源 falling)。
+- **Event Desk 核心(E1+E2+E3+E4)LIVE**:owner 选事件/主题 → 看到谁受影响 + 各自涨完没有,只读·非预测。剩余:E2b macro 采集端复活 / E5 事件 journal。
+
+### P16-E4 Event Desk 卡 + Rule(前端) (planned)
+- 新只读卡:选事件/主题 → 受影响名 + priced-in read + 流动性 + 进场/止损阶梯(复用 build_price_ladder/Rule 11.8)。**需新增 Rule**:Event Desk 描述性、不得呈现事件结果概率、exposure 是数据 join 非荐股、advice-only、四变体 parity。
+
+### P16-E5 Event Journal — owner 自己的事件战绩 (deliberate session, not loop)
+- Status: **pending — 留专门会话(非 /loop 自驱)**。记事件论点+进场+结果,复用 P14 cohort 机制,攒出 owner 按事件类型的**实测**胜率/超额(替"感觉的胜率")。
+- **为何不在 loop 里自动做**:E5 引入**写路径**(记录用户事件交易),按 Rule 11.5 写白名单(刻意只 7 个 POST)需治理审查;且"如何 journal"(独立 thesis 存储 vs 给现有 portfolio fill 打 event 标签)是**产品设计岔路**,该有 owner 介入拍板,不宜在自驱循环里替他选。Event Desk 核心(E1-E4+E2b)已 LIVE 满足主诉求;E5 作为下一步深思扩展。
+
+## Milestone P17: Disclosure-Drift, Execution-Gated & Overfit-Guarded (ADR-0010)
+
+> 起因 (2026-06-17, /goal 自驱): owner 设目标——让模型能分析新闻/股价/市场信息、按一开始推断的方向(information-underreaction / 披露漂移)前进,保留框架同时优化 model,并调 Codex 审视,直至达标。研究+Codex 共识:唯一有日本 OOS 证据且没被套利掉的 edge = 小盘/低流动/低外资/低覆盖名的多日披露漂移(Jinushi 2023);Codex 裁决 PURSUE-WITH-CHANGES,执行/流动性是核心杀手,先证明成交可行。Phase 0:窗口窄(~¥600-1300),TDnet 采集管线已存在(`poll_tdnet_rss`)但语料未累积。
+
+### P17-1 Execution / Tradability Gate (done 2026-06-17, Codex 优先级 #1)
+- Status: **done**。ADR-0010 立项 + Rule 5.1(执行/可交易闸)+ `candidate_engine/tradability.py`(JPX tick 阶梯→往返成本估计、100股手数 affordability + 34% 分散上限、ADV 地板、net-after-cost + 2× 成本压力;纯算术 fail-closed,无预测)。接进 Event Desk `priced_in_read`(每个受影响名带 tradability 判定)。
+- TDD +9 测试(tick 阶梯/往返成本随便宜价上升/手数+分散/net-after-cost/甜区过/便宜名成本杀/贵名手数杀/2×压力/ADV 地板)。full smoke **1420 passed / 5 deselected**,零回归。
+- **实证(¥40w 账户)**:系统的热门大盘候选**几乎全不可交易**——TEL 一手=账户 1819%、爱德万 736%、Lasertec 1208%、野村¥1415=35%(超 34% 上限)、INPEX 87%;只有 ~¥900 小盘过闸。**第二条独立论据支持小盘方向:不仅 edge 在那,¥40w 也只在那能持仓分散。**
+- 下一步:P17-2 披露惊奇数据层(TDnet 语料 + surprise/novelty,日文时间戳)→ Codex 复审 → P17-3 反过拟合准入闸(DSR/PBO)→ P17-4 小盘宇宙 + 诚实验证。
+
+### P17-2 Disclosure-Surprise + Novelty Signal (done 2026-06-17, +Codex 复审整改)
+- Status: **done**。`candidate_engine/disclosure_surprise.py`:从 TDnet 标题解析 PEAD 事件代理——materiality(earnings/dividend)× direction(上方修正/増配=+1、下方修正/減配/無配=-1)× novelty(訂正=stale,Tetlock 2011 陈旧新闻反转→低 novelty 是 fade 标记)→ `surpriseScore` ∈[-1,1];`rank_disclosures` 按 |score| 排序不丢。复用 `tdnet_parser.classify_category`。**不预测漂移、不给概率**(Rule 9.4/8.3),只标"哪些披露是候选事件、什么方向";漂移是否真发生由 forward log + 闸决定。
+- **Codex 复审(P17-1+P17-2)→ 裁决 "Needs fixes",已整改**(goal "调 codex 完善"):
+  - tradability:ADV 缺失**改 fail-closed**(`require_adv`,不再静默通过;Event Desk 用 `require_adv=False` 显结构判定+`advVerified=False`)、`price<=0` 守卫、负 `spread_ticks/slippage` 抛错、**默认 `spread_ticks` 2→3**(2 太乐观)、加 `netVerified` 标。
+  - disclosure_surprise:**混合信号(上+下同现)→ direction 0+`mixed` 标**(不再让"上"无条件赢)、caller `category="other"` 不再阻止重分类、`rank` 容忍非 dict、加 **`pitOk`**(published_ts 在否——P17-4 验证须拒无时间戳事件防 look-ahead)。
+  - **deferred(Codex 提的真增强,非阻塞)**:数值惊奇幅度(vs 一致预期/SUE,标题只是粗事件 flag 非标准化 SUE)、size/外资/覆盖控制 → 归 P17-4 小盘宇宙;tick 阶梯 >¥300k 补全(对 ¥40w 无关)。
+- TDD:+7(disclosure)+9(tradability,含 4 Codex-fix 用例)→ full smoke **1435 passed / 5 deselected**,零回归。
+- 下一步:P17-3 反过拟合准入闸(trial-counter + Deflated Sharpe + PBO,扩 `purged_walk_forward`)→ P17-4 小盘宇宙 + TDnet 语料累积 + forward 验证(PIT 时间戳强制)。
+
+### P17-3 Anti-Overfit Promotion Gate (done 2026-06-17)
+- Status: **done**。`calibration/overfit_gate.py`(纯 stdlib `NormalDist`,无 scipy)——`expected_max_sharpe`(无技能下 N 次试验的 E[max SR],Euler γ,~√(2lnN))+ `deflated_sharpe_ratio`(Bailey/López de Prado DSR,含 skew/kurt 修正)+ `promote_gate`(DSR≥0.95 AND n_obs≥min AND 声明 trials AND **sr_std>0 fail-closed**)。门控自欺,不预测。
+- TDD +8 测试(E[max] 随 trials 增、DSR 随 trials 降/随样本升、强信号少试验过、噪声多试验否、小样本否、未声明 trials 否、sr_std≤0 否)。
+
+### P17-4 Disclosure-Drift Review Harness — 端到端 (done 2026-06-17)
+- Status: **done**。`reporting/disclosure_drift_review.py`:把 P17 串成一条 PIT 忠实评估——事件→惊奇信号(P17-2)→PIT 闸(无日文时间戳剔除)→可交易闸(P17-1)→按方向净成本漂移→(promotion 交 P17-3,见下)。语料空时如实 `insufficient_data`,排除项逐类计 + `nMissing` 逐 horizon 计,**不静默丢**。
+- **Codex 复审 P17-3+P17-4(第3次)→ "needs fixes",已整改**:① DSR 数学核对 KEEP(正确);② **概念修**:harness 原把 per-event Sharpe + 标量 sr_std 喂 DSR 是概念混淆(DSR 的 sr_std 须是跨试验 Sharpe 离散)→ **撤掉 harness 内自动 DSR**,只出描述统计 + promotion 延迟给真·trial-matrix(不做 theater);③ sr_std≤0 fail-closed;④ 未成熟回报 None **不再静默丢**→ `nMissing` 入账;⑤ verdict 由**最慢 horizon** 把关(非最成熟单 horizon);⑥ ADV 事件带量则强制、否则结构判定 + advVerified=False;⑦ PIT 契约(event_return_fn 须只用披露后可成交价、未成熟返 None;price 须披露后入场价)写进 loud 文档。defer:PBO/CPCV trial-matrix、数值 SUE、skew/kurt 实计(归未来真 trial 跑)。
+- TDD:overfit 8 + drift-review 5(含 nMissing/最慢-horizon/promotion-deferred 用例)。**full smoke 1449 passed / 5 deselected**,零回归。
+- **P17 主体完成**:ADR-0010 方向落地为 4 个 gated 分析模块(执行/惊奇/反过拟合/端到端 harness)+ Rule 5.1 + 3 轮 Codex 复审两轮整改。**模型现已能按"信息低反应/披露漂移"方向分析新闻/股价/市场,框架保留,闸到位,诚实定性(语料 forward 累积、edge 由 forward log 裁,当前 insufficient_data)。** 剩纯运营:TDnet 语料累积(poll 任务已存在)、真 trial-matrix DSR/PBO、小盘宇宙落地到实盘候选。
+
+## Milestone P18: Factor-Weight Review & Validated Reweight
+
+> 起因 (2026-06-17): 用户质疑 screener 因子权重是否合理,要求调 Codex 全面复审。
+
+### P18-01 Codex Weight Review + Model-Factor Reference Doc (done 2026-06-17)
+- Status: **done**。Codex 读 sibling `Project_optimized/screener.py` 全面复审 `alpha_weights`(mom_20 .25/mom_60 .15/vol_adj_mom20 .15/vol_z .15/sharpe_20 .10/adv_rank .10/high52w_rank .10)。**裁决 UNREASONABLE**:
+  - ~**0.75 集中在一个相关动量/趋势簇**(mom_20+mom_60+vol_adj_mom20+sharpe_20+high52w_rank)——五票同一注,非分散;
+  - 日本动量已知偏弱(Asness/Chui-Titman-Wei)却重押动量,**无 value/quality/low-vol/size/reversal**;
+  - `vol_z`(+0.15)实为**成交量 z-score**(`screener.py:380` 注释 成交量;`vol`=get_close_vol_multi 的成交量),非价格波动率——**更正此前误标**;
+  - `fundamental_score` 仅在 top-k **选股后**做乘子(`screener.py:511`),不影响选哪些股(与注释不符);
+  - 组合 = 截面 rank-norm(pct)后加权和(`:401/:503`)——防量纲但不解共线。
+- Codex 建议(**未验证**)reweight:动量簇 0.75→~0.45,adv_rank→0.20、fundamental→0.20(移入 ranking)。
+- 交付:新增 `docs/06_MODEL_FACTORS.md`(持久因子/数据/校准参考,防聊天历史丢失;已含本复审裁决)。
+- **关键边界**:权重在 sibling screener,HTR 只读消费(ADR-0005)→ 改权重 = 跨系统改 sibling OR HTR 侧覆盖层。
+
+### P18-02 Validated Reweight (pending — 用户拍板 B)
+- Status: **pending(未开始)**。用户选 B:**正式验证 reweight**,不手改。约束:任何 reweight 必须经 **purged walk-forward + 成本闸(复用 P17 `overfit_gate`/`tradability`)在日股历史上验证**(reweight backtest 机制需建——按各历史日用新权重重打分 universe、测前瞻净成本收益、过反过拟合闸)、跑赢现权重才允许、走 Change Log(Rule 4)。诚实前提:momentum 在日本弱 + screener 无 demonstrated edge,**reweight 大概率不产生 edge**;这更像把 screener 当诚实强度过滤器 + 修正确性(vol_z 改名 / fundamental 是否进 ranking),edge 仍走 P17 披露漂移。
+- 数据现状(2026-06-17):forward 日志 **30 天**;15 live pred 日(05-27..06-17)+16 backdated;**26 outcome 日有 ≥1 complete**。手动解锁 calibration:**不能强制覆盖**(Rule 8.2.2/9.4)。
+
+### P18-03 Forward walk-forward join hardening + current calibration gate (2026-06-18)
+- Status: **join blocker resolved / calibration still locked**。复跑 `tools/validate_calibration_walk_forward.py --origin live --asof 2026-06-18` 不再是 0 联结: report now shows **n_joined_samples=529 / n_joined_date_clusters=11**; foldable OOS slice **n_samples=300 / n_effective_date_clusters=6**。
+- Hardening: `purged_walk_forward` report now emits `n_joined_samples` and `n_joined_date_clusters` before folding, so a future zero-join regression is visible even when folds are thin. Added regression test `test_report_exposes_joined_sample_counts_before_folding`.
+- Gate result: **verdict=`insufficient_data`** under locked Rule 8.2.3 because effective OOS clusters are **6 < 20**. The model also currently underperforms baselines: Brier **0.2846** vs climatology/stratified **0.2407**, CI [-0.0666,-0.0228]. Therefore calibration **must remain downgraded** (Rule 9.4); no force-unlock.
+- Pre-unlock boundary: allowed path is **shadow/diagnostic calibration only** (explicitly labeled, not score_status promotion, not probability/win-rate UI, not used for advice). Anything that surfaces `calibrated_probability` before >=20 live clusters + all baselines beaten + CI>0 + clean leakage verdict is non-compliant.
+- Next: keep forward collection running, add a visible diagnostic/monitoring surface if useful, and prioritize P18-02/P17 improvements only through validated walk-forward + cost/tradability gates.
+
+## Milestone P19: Cross-Sectional Ranking & Multi-Signal Composite (ADR-0011)
+
+> 起因 (2026-06-23): 用户选打法1(横截面排序)+打法6(信号叠加)。ADR-0011 = ADR-0010 的方法论扩展层(复用 P17 执行门/反过拟合门,不另起方向)。Phase −1 已证:现有 buy 分数横截面 Rank-IC 全负(1D −0.032 / 3D −0.041 / 5D −0.085 t=−2.0);短周期成本门槛 0.09–0.17 不可达,仅 ≥5D(0.025–0.07)经济。规则见 Governance §16。
+
+### P19-01 Forward-test harness (Rank-IC / net-of-cost / live-only) — done (2026-06-24)
+- Status: **done**。`backtesting/forward_signal_eval.py`(纯核:spearman / rank_ic / cross_sectional_dispersion / cost_hurdle / net_ic_after_cost / clears_hurdle / top_minus_mean_spread / ic_decay)+ `backtesting/forward_eval_data.py`(live-only group_live_daily / load_live_panels + 一行 `summarize_live_signal`;c_rt 自动取自 P17 `tradability`)。**28 单测全过**;端到端复现 Phase −1(5D Rank-IC −0.085/t−2.0,auto c_rt≈0.0029,net 全负 → as-is 不过门)。规则 16.0/16.1/16.2/16.6。
+- 备注:purged/embargo 的跨日切分(用于晋级而非同日横截面 IC)复用 `calibration/purged_walk_forward.make_folds`,本闸门只做同日横截面 + 成本门槛,不重复实现。
+
+### P19-02 Seed signal library + equal-weight composite — in progress
+- **P19-02-01 (done 2026-06-24)**: `backtesting/signal_library.py` — SignalFn 契约 + `evaluate_signal`(一键过 §16 闸门,live-only,默认 S株 成本)+ `reversal_of_score` seed#1。端到端:5D 反向 IC +0.085/t+2.0,过成本门但**未过晋级门(t<3)、非独立信号→仅跟踪**。42 单测过。
+- **P19-02-02 (done 2026-06-24)**: 独立 5日反转信号(`make_price_reversal_signal` + `kline_prior_return_lookup`,PIT)过闸:**5D Rank-IC +0.128 t+3.21**(过成本门 + 过 t≥3 强度门),与 buy 正交 ρ=−0.20。coverage 993/993,8 新单测。**项目首个正向+过强度门的独立信号**,但仅 15天/单regime → 未晋级,见 P19-02-04。
+- **P19-02-04 (done 2026-06-24 — verdict: 不晋级)**: 跑了反过拟合门。lookback{2,3,5,10,20} 5D IC 全正(峰5–10d);Newey-West(lag4)t 不降(5D 3.37)。**但 Deflated Sharpe=0.64(重叠调整0.55)≪0.95**(18 trials / 15天≈3 独立块)→ **未过门**。方向稳健、至今最强候选,但样本太小。**不交易**;唯一解=累积前向 ≥~60 独立 obs(~2–3月)后重 gate(DSR/PBO + regime/lookback 稳健)。
+- **P19-03 (standing)**: 前向累积 + 周度重 gate price_reversal;到样本量后再判晋级。承接此候选。
+
+### P19-05 S株 universe overlay (done 2026-06-24, capability) — task#5
+- **done**: `candidate_engine/s_kabu_universe.py`(overlay:held∪watchlist → `s_kabu_tradability`,只纳 S株 解锁的名字)+ `tools/build_s_kabu_overlay.py` 出 `reports/screener/s_kabu_overlay_{asof}.json`。6 单测。端到端:持有 8035.T 首次作为 S株 候选浮现(1股=17.5%NAV)。**选股仍 sibling(ADR-0005 不动)**,本 overlay 是 HTR 侧补充,非选股替换。
+- **P19-05b (done 2026-06-24)**:① `daily_routine.refresh_candidates` 加非致命步骤调 `build_s_kabu_overlay.py`(每日产出 overlay snapshot);② `api/serializers` 加 `sKabuOverlay` 字段 + 前端 `htr-skabu-card.js`(独立 root 纯 JS,node-checked,fail-soft)在 dashboard 显示 S株 候选 + 集中度标记。S株 端到端接入完成(tradability→overlay→producer→daily_routine→API→卡片)。52 单测过;主页/卡片 curl 200。**未来可选**:把 overlay 并进主候选面板的统一卡片(目前是独立浮层),需 App-layout JSX 改动。
+- **P19-02-03 (corpus accumulation STARTED 2026-07-01; signal-integration still pending)**: 诊断发现 TDnet 语料一直零累积——`reports/tdnet/` 空、`poll_tdnet_rss.py` 从未接进 daily_routine。已把 TDnet poll **接进 `daily_routine.refresh_candidates`(非致命,adr 后/screener 前,`--date asof`)**,Yanoshin API 已验证可达(06-30 拉 85 条),corpus 从此每日累积(forward-only,不 backfill,保 Rule 16.2 live-only)。`test_daily_routine` 14 passed(order +tdnet/+forward_eval)。**仍 pending**:待 corpus 攒 ~2 周后,把 `disclosure_surprise`→SignalFn 接进 §16 `evaluate_signal` harness(对齐预测/小盘宇宙 + PIT published_ts),才能像 price_reversal 那样出 forward Rank-IC/DSR。
+- 组合阶段:等权秩平均 + James-Stein(16.4)、K 个位数(16.5)、horizon ≥5D(16.6)。
+
+### P19-02c Fundamental signals enter the live forward track — done (2026-07-04)
+- `make_fundamental_yield_signal` + `fundamentals_pit_lookup` (PIT: reported rows only, published strictly before decision date) in `signal_library`; `earnings_yield` + `value_bp` wired into `tools/forward_signal_report.py` (daily via afterclose). TDD +3 tests → smoke **1615 passed / 5 deselected / 0 failed**. Live first run (2026-07-04): both signals evaluated on the forward log; **orthogonality earnings_yield vs screener_buy ρ=−0.240 → |ρ|<0.5, Rule 16.3 stack-eligible**. 1-5D ICs ≈0 as expected (63D slow factor on a 50-name momentum-screened universe — not evidence either way).
+
+### P19-02b Extended-horizon forward track — done (2026-07-05, via separate research-cohort lane)
+- **Design change from the original sketch (recorded)**: instead of adding 20D/60D to `outcome_join`/sweep (touching the §10 production record contract and risking pollution of cohort review/calibration), built a fully SEPARATE lane — `backtesting/fundamental_cohort.py` + `tools/fundamental_cohort.py` — storage `reports/research_cohorts/fundamental/{predictions,outcomes}`, same separation discipline as the Rule 11.15 ADR lane. Production pipeline untouched.
+- Mechanics: monthly broad-universe cohort (every panel symbol with PIT fundamentals + price → earnings_yield/value_bp row); maturity-honest sweep at **21D/63D** (sweep truncates the price series at the sweep date — a TDD test caught and killed a look-ahead hole where 63D matured early from future closes); `report` = per-cohort cross-sectional Rank-IC. Sweep self-refreshes recent adjusted closes.
+- **First cohort emitted 2026-07-05: 2,763 symbols.** First 21D read ~2026-08; first 63D read ~2026-10. Cadence: emit first weekend of each month; sweep+report opportunistic. TDD +4 tests → smoke **1619 passed / 5 deselected / 0 failed**.
+
+### P23-E Correctness-review remediation (2026-07-06) — IN PROGRESS
+- 3-agent pre-commit adversarial review (security / research-correctness / governance). Security: 3 CONFIRMED fixed (token→access log, app-level fail-closed `LoopbackOnlyGuard`, `--gen-token` + degenerate-token guard; token rotated). Governance: 2 minor fixed (rotate-count label, negation-context vocab test). **Research-correctness: DSR-0.992 verdict RETRACTED** — as-filed EPS/BPS ÷ split-adjusted price leaked future info (NTT 9432.T E/P 214% vs 7.9%; excluding split-signature names → DSR 0.969). Done: TDnet parser 4 fixes (bank/insurer aliases, nearest-non-prose header block vs richest-window, non-forecast carryover guard 前期実績/参考, crash-path leaves parsed:false record) TDD 11 tests; cohort refresh DELETE+reinsert (finding 5, no basis-stitch). **PENDING**: raw-price store `htr_raw_prices.db` backfilling (auto_adjust=False) → rewire `backtest_value_quality_history.py` + `make_fundamental_yield_signal` to raw-price yield denominator / adjusted-price forward return → re-run honest verdict + surface survivorship exposure. Full smoke **1635 passed / 5 deselected / 0 failed**.
+
+### P19-03 Shadow-track + forward Rank-IC review — pending
+- Status: **pending**。复合分进 shadow(Rule 13.14),累积 live Rank-IC 周度复盘;晋级仍须过 ADR-0010 反过拟合门 + Rule 16.6。Rank-IC 过门是必要非充分。
+
+### P19-04 Historical edge search — 四轮回测收口(done 2026-07-02; verdict: 无 demonstrated edge)
+- 起因 (2026-07-01/02): owner 质疑"为何总在攒数据"。改用**手上的历史数据直接回测**,不等 forward。新增 3 个历史回测工具 + 因子普查:
+  - `tools/backtest_price_reversal_history.py`:price_reversal 是纯价格信号,直接跑 htr_market.db **798 天 / 1168 只流动股**。A 宽宇宙 best 2d@1D IC+0.024 t+4.17 **DSR 0.87**;B 高动量子集(≈screener 候选)best 5d@1D IC+0.015 t+1.91 **DSR 0.88**。**两者不过门,n_obs 777(样本早够)。** live 24 天的 5D IC+0.157/t+4.22 = 小样本/单 regime 运气 → **price_reversal 独立可交易 edge 判死**。
+  - `tools/backtest_disclosure_drift_history.py`:验证 Yanoshin 可拉 ≥2 年历史,backfill 1 年(251 天/21,682 条 → `.runtime/tdnet_probe`),事件研究(方向性披露→次日入场 PIT→H 日超额 vs 1306.T→按方向下注)。标题信号仅 **277 条方向性事件/年(极稀疏)**;IC 全负 −0.17~−0.33(与 PEAD 反,小盘最差);**DSR 0.50 不过门**。根因=标题正则 ≠ 真 SUE(需一致预期数据)。
+  - `tools/backtest_factor_zoo_history.py`:factor_signals 2022–2026 × 前向收益。**基本面(value_bp/quality_roe/roa_op/margin_op/cfo_assets/accruals_inv/dividend_yield/growth)覆盖太稀疏(2–3 有效横截面)→ 测不了**;技术因子 low-vol IC≈0、动量不显著、high52w best IC+0.066@60D t+5.21 但本质动量、**DSR 0.58 不过门**。
+- **裁决:screener 负技能 / price_reversal DSR 0.87 / disclosure-drift DSR 0.50 / 因子动物园 best DSR 0.58 —— 凡能在现有数据上测的信号,无一过反过拟合门。无 demonstrated 可交易 edge(非"数据不足",是信号无 edge)。**
+- **定位收口**:系统 = 决策支持/纪律/实时核查作战台(本会话实拦一笔负 EV 周末隔夜单,周一低开 5–7%),**非信号/印钞机**;诚实最优 = 被动 1306.T 打底 + 系统当工具。
+- **唯一未被否的方向(P19-05 / 数据采集,owner 待定)**:采日本财报历史数据 → 正经回测 value/quality(全球证据最强、恰是本库缺失的一类)。是"采数据"不是"等"。advice-only 未绕过;未 commit。
+
+
+## Milestone P20: SKHY ADR + Japan Semi Event Overlay
+
+> Context (2026-06-25): User clarified that the primary focus remains the Japanese market, while he may personally buy SK hynix ADR when available. SEC EDGAR shows SK hynix Inc. filed Form F-1 on 2026-06-24 for an ADS/ADR listing package. HTR must use this as an external semiconductor catalyst lane only: Japan candidates stay primary, ADR status is explicit, and no probability/win-rate/edge language is allowed. Governance anchor: Rule 11.15 plus Rule 11.14, Rule 11.13, ADR-0010, and Rule 16.
+
+### P20-00 Plan, governance, and tasklist handoff - done (2026-06-25)
+- Status: **done (docs only)**. Added Rule 11.15 External ADR Catalyst Lane Honesty and created implementation plan `docs/superpowers/plans/2026-06-25-skhy-japan-semi-overlay.md`.
+- Scope: Plan is for another engineer to execute. No runtime code changed in this task.
+- Acceptance: Handoff explicitly keeps JP equities as primary market, treats SKHY as external catalyst/manual ADR record only, requires live-only evidence before promotion, and forbids probability/win-rate/expected-return language.
+
+### P20-01 Daily routine smoke expectation sync - done (2026-06-25)
+- Status: **done**. Updated `tests/unit/test_daily_routine.py` order classifier + expected to include `skabu` (build_s_kabu_overlay) after `meta`, before `emit`. Production routine unchanged (test-only fix). **14 passed.**
+- Verification: `python -m pytest tests/unit/test_daily_routine.py -q --basetemp=.runtime/pytest-p20-daily-routine -p no:cacheprovider`.
+
+### P20-02 External ADR watch schema - done (2026-06-25)
+- Status: **done**. `src/hot_theme_rotator/data/external/adr_watch.py` — `AdrInstrumentSnapshot` (frozen) + `ALLOWED_ADR_STATUSES` {pending_listing,active,stale,unavailable} + `is_stale`(data_ts vs asof, fail-closed) + `overnight_return`; no probability/win-rate/expected-return/edge fields; JSON round-trip. **12 passed.** `test_adr_watch.py`.
+- Required work: add a deterministic `adr_watch` schema for `SKHY`, `000660.KS`, memory/AI peer proxies, SOX/semiconductor ETF proxy, and USDJPY. Status values must include `pending_listing`, `active`, `stale`, and `unavailable`.
+- Acceptance: stale/missing SKHY never creates a false catalyst; schema has no probability, win-rate, expected-return, or edge fields.
+
+### P20-03 SKHY ADR watch refresh snapshot - done (2026-06-25)
+- Status: **done**. `tools/refresh_skhy_adr_watch.py`(pure `build_adr_watch_payload` + injected fetcher + `write_adr_watch` → `reports/adr/adr_watch_{asof}.json`;fail-soft;SKHY 无报价→`pending_listing`,绝不替换它符号)。Wired non-fatal into `daily_routine.refresh_candidates`(after macro, before screener;`REFRESH_ADR`)。**21 passed**(7 refresh + 14 routine,order 现含 `adr`)。`test_refresh_skhy_adr_watch.py`.
+- Required work: create a non-fatal daily tool that writes `reports/adr/adr_watch_{asof}.json`, with injected fetcher tests. If SKHY has no active quote yet, write `pending_listing` or `unavailable`.
+- Verification: `python -m pytest tests/unit/test_refresh_skhy_adr_watch.py tests/unit/test_daily_routine.py -q --basetemp=.runtime/pytest-p20-adr-refresh -p no:cacheprovider`.
+
+### P20-04 Japan semi sympathy overlay - done (2026-06-25)
+- Status: **done**. `candidate_engine/skhy_overlay.py` — `compute_skhy_event`(off/watch/active 状态机:stale/pending→off;active+abnormal 无确认→watch;+SOX/MU/NVDA 确认→active;半衰期 freshness;**000660.KS 同公司不算独立确认**)+ `annotate_japan_semi`(≥2 facts 才正分;板块成员单独不够;Rule 11.14 extended-chase 不加分;capped [-0.05,+0.07];无概率/胜率/期望/guaranteed)。纯函数,不动 theme_rotation/hybrid_rerank(应用放序列化层)。**25 passed**(含 theme_rotation/hybrid_rerank 回归)。`test_skhy_overlay.py`.
+- Required work: create pure `skhy_overlay` logic that converts fresh ADR/peer snapshots into `skhyCatalystStatus`, `skhyCatalystActive`, `skhyOvernightMove`, `semiSympathyScore`, `semiSympathyReasons`, and `relativeStrengthVsSkhy` annotations for Japanese semi/memory candidates.
+- Constraints: run after existing rerank/Rule 11.14 overlay; cap weight impact tightly; require at least two independent facts; sector membership alone is insufficient; stale ADR status leaves ranking unchanged.
+- Verification: `python -m pytest tests/unit/test_skhy_overlay.py tests/unit/test_theme_rotation.py tests/unit/test_hybrid_rerank.py -q --basetemp=.runtime/pytest-p20-skhy-overlay -p no:cacheprovider`.
+
+### P20-05 Dashboard/API read-only surface - done (2026-06-25)
+- Status: **done**. `api/serializers._serialize_adr_watch` → payload `meta.dataQuality.adrWatch`{asof,status,stale} + `eventDesk.skhy`{status,disclosure}。**Fail-open**:无快照→status=unavailable / event=off,JP 候选排序不变。disclosure 含"no probability"诚实免责、无概率值/买入建议语。**22 passed**(3 新 ADR 测试 + 回归)。`test_api_dashboard.py`.
+- Required work: expose `meta.dataQuality.adrWatch` and optional `eventDesk.skhy` plus candidate annotations. Surface must remain read-only and must clearly label the ADR lane as external catalyst context, not a buy signal.
+- Verification: `python -m pytest tests/unit/test_api_dashboard.py -q --basetemp=.runtime/pytest-p20-api -p no:cacheprovider`.
+
+### P20-06 Manual SKHY ADR journal - SKIPPED (optional, not requested 2026-06-25)
+- Status: **skipped (not requested)**. Per plan Task 6, only implement if the operator wants HTR to record external SKHY ADR fills. Operator has not requested it. Deferred — when requested, implement a manual-only `reports/user_state/external_adr_journal/{date}.jsonl` store, fully separate from JP portfolio/NAV/calibration/outcomes/Rank-IC (Rule 11.15), no broker/order fields.
+- Required work: record already-completed external SKHY ADR fills manually in a separate store, likely `reports/user_state/external_adr_journal/{date}.jsonl`. No broker route, no order route, no auto-execution, no JP calibration mixing.
+- Verification: tests must prove ADR records are excluded from JP portfolio calibration, candidate outcomes, Rank-IC, and cohort review.
+
+### P20-07 Live evidence review before any promotion - done (2026-06-25)
+- Status: **done**. `reporting/skhy_event_review.py` — `review_skhy_events`(distinct LIVE event-date clusters,同日折叠去重,排除 backdated 不混 live,够 breadth 才算 Rank-IC via forward_signal_eval,带 Rule 16.0 cost hurdle;**默认 insufficient_data,本 harness 永不授予 promotion**——晋级走 ADR-0010/Rule 16)。无概率字段。**27 passed**(6 review + 21 forward_signal_eval 回归)。`test_skhy_event_review.py`.
+- Required work: create a forward review harness for SKHY event dates and Japan semi candidate reactions. Use live-only event clusters, 1D/3D/5D relative returns, Rank-IC when cross-sections are valid, and Rule 16.0 cost-hurdle context.
+- Acceptance: default verdict is `insufficient_data` until enough live event clusters and ADR-0010/Rule 16 gates are satisfied. Backdated or anecdotal wins cannot promote the overlay.
+
+### P20-08 Final integration verification - done (2026-06-25, MILESTONE P20 COMPLETE)
+- Status: **done**. Focused P20 suite **72 passed**; semi-regression **48 passed**; full daily smoke `-m "not slow"` **1559 passed / 5 deselected (slow vectorbt) / 0 failed**. All `.runtime` basetemp.
+- Outcome: SKHY treated as external catalyst only; JP equities remain primary; fail-open when SKHY pending/stale/unavailable; no probability/win-rate/expected-return/edge language anywhere in the lane. Overlay remains **shadow** — no edge claimed; promotion requires live-only forward evidence under ADR-0010 + Rule 16. P20-06 (manual ADR journal) skipped (optional, not requested). Not committed (local-no-commit policy).
+
+### P20-09 Review-fix pass - done (2026-06-26)
+- Status: **done**. Fixed 5 review gaps (TDD, red→green): **(1)** candidate rows now expose read-only SKHY annotations (`semiSympathyScore`/`semiSympathyReasons`/`skhyCatalystActive`/`skhyCatalystStatus`/`skhyOvernightMove`/`relativeStrengthVsSkhy`) via `annotate_japan_semi` in `build_dashboard_payload` — capped, **never reorders**, neutral when SKHY stale/pending/unavailable; also fixed `chaseRisk="none"` string being misread as extended, and added real `themes` + `recentReturn` to candidate rows; **(2)** `skhy_event_review` counts only explicit `live=True` clusters (fail-closed); **(3)** future-dated data → stale (`adr_watch.is_stale`) / freshness 0 (`skhy_overlay._freshness`); **(4)** stale peers cannot confirm an active SKHY impulse (`compute_skhy_event` requires `not stale`); **(5)** hygiene — only P20 files touched, `__pycache__`/`*.pyc` gitignored, no edge/probability/win-rate/expected-return/buy language (disclaimers only).
+- Verification: focused **79 passed**; semi-regression **50 passed**; full smoke `-m "not slow"` **1566 passed / 5 deselected / 0 failed**. Overlay remains **shadow**. Not committed.
+
+### P20-10 Future-dated ADR snapshot PIT fix - done (2026-06-26)
+- Status: **done**. `_serialize_adr_watch` previously read the lexicographically latest `adr_watch_*.json`, so a future-dated file (e.g. `adr_watch_2099-01-01.json`) could be selected and treated as active — violating Rule 11.15 PIT/fail-closed. Fix: `build_dashboard_payload` passes `asof_limit=observation_date`; the helper now keeps only snapshots whose filename date is **≤ asof_limit**, picks the latest valid one, returns unavailable/off if all are future, and has a defense-in-depth check on the payload's internal `asof`. Existing active/pending/stale behavior unchanged; candidate rows stay neutral when only future snapshots exist; no edge/probability/buy language.
+- Verification: focused **81 passed**; semi-regression **52 passed**; full smoke `-m "not slow"` **1568 passed / 5 deselected / 0 failed**. Overlay remains **shadow**. Not committed.
+
+### P20-RC Release-candidate prep + adversarial review - done (2026-06-26); release verdict = NOT a clean self-contained RC
+- Status: **done (analysis/scope/frontend/verification)**; **release decision = NOT release-ready as a self-contained P20 RC** (see verdict below). Scope chosen: **Option B (backend + frontend-visible)** — the API already emits `semiSympathyScore`/`semiSympathyReasons`/`skhyCatalystActive`/`skhyCatalystStatus`/`skhyOvernightMove`/`relativeStrengthVsSkhy`, so the dashboard should render a read-only indicator rather than leaving the fields invisible.
+- **Frontend (Option B)**: added a read-only SKHY/Semi catalyst chip to the shared `CatalystBadges` (`frontend/src/htr-shared.jsx`), mirroring the `newsCatalyzed` badge pattern. Gated on `c.skhyCatalystActive` (renders nothing when off/watch/stale/pending/unavailable — backend fail-closed); neutral research wording only (label `🌐 SKHY联动·研究`; tooltip explicitly states `非买入建议，不预测收益` / 研究用排序提示); **does not reorder candidates**. Added 2 frontend contract tests in `tests/unit/test_frontend_ui_contracts.py` (`test_skhy_catalyst_indicator_present_and_neutral`, `test_skhy_indicator_does_not_reorder_candidates`).
+- **Staging**: `git add` of exactly the 9 required new P20 files (`data/external/adr_watch.py`, `candidate_engine/skhy_overlay.py`, `reporting/skhy_event_review.py`, `tools/refresh_skhy_adr_watch.py`, `tests/unit/test_adr_watch.py`, `test_refresh_skhy_adr_watch.py`, `test_skhy_overlay.py`, `test_skhy_event_review.py`, `docs/superpowers/plans/2026-06-25-skhy-japan-semi-overlay.md`). No unrelated dirty files staged; no other-engineer changes reverted.
+- **Verification (`.runtime` basetemp)**: focused **81 passed**; semi-regression **52 passed**; full smoke `-m "not slow"` **1570 passed / 5 deselected / 0 failed**; slow lane **5 passed / 1570 deselected**; frontend-contract suite **45 passed**; `git diff --check` (staged) **clean**.
+- **Adversarial review (3-agent Workflow, independently verified)**: **frontend-governance = PASS** (chip gated, neutral rendered text — no probability/win-rate/expected-return/edge/guaranteed/buy-now, no SKHY-keyed sort; banned terms exist only in `//` comments/docstrings, not rendered strings). **Rule 11.15 end-to-end = PASS** (SKHY/000660.KS/MU/NVDA external-only — zero references in `decision_log/` or `calibration/`; overlay only appends annotation keys, never injects a JP row; fail-open; shadow / `insufficient_data` / never auto-promotes). **release-packaging = FAIL** (not self-contained — see verdict).
+- **RELEASE VERDICT — NOT a clean self-contained P20 RC.** The staged 9 are necessary but **not sufficient**, and the repo is a large uncommitted multi-milestone backlog:
+  - **Broken dependency closure**: staged `reporting/skhy_event_review.py:77` imports `from hot_theme_rotator.backtesting.forward_signal_eval import rank_ic`, and `forward_signal_eval.py` is **untracked** → shipping only the 9 would `ImportError` on the event-review path.
+  - **P20 functional changes live outside the 9 and are untracked/unstaged**: the frontend SKHY badge (`frontend/src/htr-shared.jsx`) is **untracked**; the ADR pipeline wiring (`tools/daily_routine.py`) is **untracked**; and `api/serializers.py` (the `_serialize_adr_watch` + `annotate_japan_semi` path that actually emits the SKHY fields) is **dirty but NOT staged** → the staged set alone would not even produce the fields the badge/overlay consume.
+  - **Transitive untracked deps** referenced by the P20 surface: `candidate_engine/s_kabu_universe.py`, `tools/build_s_kabu_overlay.py`, `data/stock_news_fetcher.py`, `candidate_engine/{catalyst,hybrid_rerank,theme_rotation,theme_leaders}.py`, `data/ticker_metadata.py` — all untracked; the plan doc itself names several as in-scope P20 work.
+  - **No calibrated edge / probability / win-rate claim** anywhere; overlay stays **shadow**.
+  - **Path to a real RC = a project-wide landing decision** (owner's call per local-no-commit policy): track the full P20 dependency closure (the 9 + `forward_signal_eval` + `s_kabu_universe` + `build_s_kabu_overlay` + `htr-shared.jsx` + `daily_routine.py` + stage `serializers.py` + their untracked prior-milestone deps) — effectively the project's first real commit. Not done; **not committed/tagged/released** (not authorized).
+
+## Milestone P21: Daily Action Board — which stock / what price / when (交易计划板)
+
+Owner goal (2026-07-02): "help me analysis the stocks, market and recommend the corresponding price/time to buy it which stocks". Honest framing per the 2026-07-02 edge-search close-out: the system has NO demonstrated predictive edge, so the board synthesizes **trade PLANS** (structure: entry zone / stop / take-profit / size / timing conditions) from already-gated components — it does not predict outcomes and never emits probability/win-rate/expected-return. All inputs already exist and are tested (rerank ordering, 7-tier ladder, chase-risk, tradability, Rule 12 discipline); the board is an assembler + UI surface. Governance: new Rule 11.16.
+
+### P21-01 Rotation-score double-application fix (bug, Rule 4 / Rule 11.14.5)
+- `hybrid_rerank._rotation_adjustment` seeds from the candidate's `rotation_score` already written by `annotate_rotation`, then re-applies the same `leader_extended` (−0.15) / `second_line` (+0.08) adjustments — live pipeline (serializers: annotate_rotation → rerank) applies **double** the documented Rule 11.14.5 magnitudes (−0.30 / +0.16). Fix: reason-marker idempotency guard so each adjustment applies exactly once in both standalone and pipeline paths. TDD regression test asserting pipeline-effective magnitudes.
+
+### P21-02 Rule 11.16 — Daily Action Board honesty (governance)
+- Add Rule 11.16 to `docs/02_GOVERNANCE.md`: plan-not-prediction framing, existing-ordering only (no new predictive score), mandatory tradability + chase-risk columns with fail-closed downgrades, Rule 11.6 price-noun vocabulary, Rule 11.8 deterministic sizing arithmetic (risk-budget % of NAV, concentration-capped), factual timing checklist only, standing no-edge disclosure, read-only, PIT (served fields only).
+
+### P21-03 Action board assembler (`reporting/action_board.py`)
+- Pure-logic `build_action_board(candidates, nav_jpy, cash_jpy, market_session, config)`: per candidate join of why (existing catalyst/rotation reasons) + ladder tiers (entry aggressive/balanced/conservative, stop, exits) + deterministic sizing (1% NAV risk-to-stop default; whole-lot 100株 and S株 1株 both computed; capped by 20% NAV concentration + cash) + timing checklist (market session, chase risk, catalyst evidence, leader-extended) + `planStatus` ∈ plan_ready / watch_only / s_kabu_only / not_tradable / insufficient_data (fail-closed downgrades). No probability fields by construction. TDD.
+
+### P21-04 Dashboard payload wiring
+- `build_dashboard_payload` attaches `actionBoard` (fail-open → null on any error; sizing gracefully absent when portfolio NAV unavailable). Contract tests in `test_api_dashboard`.
+
+### P21-05 Frontend ActionBoardCard (shared, all-variant parity)
+- Shared `ActionBoardCard` (`frontend/src/htr-shared.jsx`) rendering the board rows read-only with the Rule 11.16 standing disclosure + safety framing; mounted in V1/V2/V3/V4 (Rule 11.7 parity). Frontend contract tests (disclosure present, no 建议买入/胜率/概率 vocabulary, card present in all four variants).
+
+## Milestone P22: Daily Operating Loop Close-out — Exit Discipline + Remote Personal Access
+
+Owner directive (2026-07-02): "设定目标推进项目，我要一个符合我需求的系统". Gap analysis vs owner needs: (a) 00_DESIGN §2 Q4 — "当前持仓应该止盈、止损、继续持有还是换仓" — has NO dedicated surface, yet "2-5% 止盈换仓" is the owner's core strategy; the owner's live holdings (1306.T + 8035.T) get no exit-discipline view. (b) Owner wants the system online for personal use; Rule 15.0 forbids non-loopback without a new rule — needs Rule 15.8-compliant promotion path. Both are plan/discipline surfaces, no prediction claims.
+
+### P22-01 Position Exit Discipline Board (持仓纪律板, Rule 11.17)
+- New `reporting/exit_board.py`: per-holding arithmetic vs the OWNER'S declared discipline parameters (take-profit references avg_cost +2/+3/+5%, stop reference avg_cost −4% — explicit config, Rule 4): current price/P&L, distance-to-each-reference, `exitStatus` ∈ within_plan / past_first_take_profit / stop_reference_breached / insufficient_data (fail-closed). Wired into `/api/dashboard` as `exitBoard` (fail-open→null); shared `ExitBoardCard` mounted V1-V4; standing disclosure (纪律参考≠预测, Rule 3 manual execution). TDD + contract tests.
+
+### P22-02 Remote Personal Access readiness (Rule 15.9)
+- New Rule 15.9: single-operator remote access ONLY over a private overlay network (Tailscale/WireGuard/SSH tunnel); public exposure stays forbidden. Fail-closed mechanics: token middleware (`HTR_ACCESS_TOKEN` → all /api/* + pages require token header/cookie; `/login?token=` sets session cookie); `tools/serve_remote.py` runner refuses non-loopback bind without token. Loopback default behavior unchanged (Local Beta v0). README runbook section. TDD (middleware 401/200 paths, runner guard).
+- **GONE LIVE 2026-07-03**: Tailscale already installed/connected on this machine (100.118.51.81); `serve_remote.py` launched on the tailnet IP with a crypto-random token (initial all-zero-token launch caught and killed — PS5.1 `RandomNumberGenerator::Fill` pitfall); no-token → 401, with-token → 200 verified. Loopback instance unchanged. Owner holds the login URL/token from the session.
+
+## Milestone P23: Computed Win-Rate Program (owner directive 2026-07-03)
+
+Owner demand: strategies with HIGH win rate where the win rate is CALCULATED, not guessed. The calculation machinery already exists (isotonic calibrator, K-fold/walk-forward validators, DSR overfit gate, outcome join, gated UI probability display per Rule 8.2.2/9.4.1) — what is missing is a predictive INPUT. Program = four data lanes, each ending at the same acceptance test (IC > cost hurdle per Rule 16.0 + DSR ≥ 0.95 promote gate); a lane that passes flows into calibration and flips the UI to `calibrated_probability`; a lane that fails is closed permanently (kill criteria are the acceptance standard that makes a displayed win rate "based on calculation").
+
+Asset audit (2026-07-03): `EDINET_API_KEY` was ALREADY in the User environment (owner had provided it; validated live — 200, 909 docs listed for 2026-06-30). Project_v5 already contains a working `EDINETClient` (`src/data/edinet_loader.py`), a doc-metadata backfill (`scripts/edinet_full_backfill.py`, doc types 130/140/160/170/180/350/360), and a PIT-ready `fundamental_snapshots` schema (published_ts/available_ts/revenue/OP/NI/EPS/BPS/DPS) — **but the XBRL→financial-values parser was never built and the table has 0 rows**. Local TDnet corpus: 21,959 disclosures / 749 業績予想修正 / 377 配当予想修正 (title direction present in only 51/749 → magnitude must be parsed from documents).
+
+### P23-A Guidance-revision magnitude engine (free; corpus local + Yanoshin ≥2yr backfill)
+- Parse revision magnitudes (売上/営業益/純益 % vs prior guidance) from 業績予想修正 disclosure documents → event study through the existing harness (PIT next-open entry, 5D/20D excess vs 1306.T, tradability gate, DSR). Kill: IC ≤ 0 or DSR < 0.95 on ≥2yr → lane closed.
+- **REDESIGNED forward-only (2026-07-06)**: probe established (a) revision PDFs parse cleanly (pdfplumber, A/B rows), (b) **TDnet public docs live only ~31 days — a 2024 URL is 404 → the 2-year historical event study via documents is impossible; documents are PERISHABLE data**. Built: `data/external/tdnet_revision_docs.py` (pure A/B-table parser: 未定/△negatives/commas handled, pct never fabricated; TDD 4 tests) + `tools/capture_tdnet_revisions.py` (rescue window scan across both corpora + daily forward capture; PDFs stored under `reports/tdnet_docs/`). First run: 7/7 fetched, real magnitudes extracted (e.g. 6136.T OP +50.7%). Smoke **1623 passed / 5 deselected / 0 failed**. Kill-criteria timeline shifts to forward accumulation (~750 revisions/yr expected). TODO next: parse-rate tuning on unparsed layouts; daily capture wiring after the TDnet poll; event-study reader on the accumulated magnitudes.
+
+### P23-B EDINET XBRL fundamental panel (free; key in env; reuse v5 EDINETClient)
+- Build the missing XBRL financial-summary parser; fill a `fundamental_snapshots`-shaped table in an HTR-side DB (`data/raw/htr_fundamentals.db` — do NOT write into Project_v5's DB); backfill annual/quarterly reports for the active universe as deep as EDINET serves (~10yr); PIT-align on published_ts; then factor-zoo v2 (value_bp/quality) with real coverage. Kill: same DSR gate. This removes the "only 2–3 valid cross-sections" blocker that made value/quality untestable.
+- **IN PROGRESS (2026-07-03)**: module `data/external/edinet_fundamentals.py` + `tools/backfill_edinet_fundamentals.py` built (TDD, 7 tests, smoke 1612/5/0). Live-verified: docTypeCode 120 = 有報 (v5 script's 130 was the 訂正 code — historical bug found); type=5 CSV 経営指標等 block carries 5 fiscal years per annual report (incl. BPS/EPS/ROE/equity ratio). Probe: 2026-06-26 single day → 130 docs / 650 rows / 0 errors. 2026 filing season backfill (05-01..07-03) running in background; next slices walk back 2025 → 2024 → …, then factor-zoo v2 verdict.
+- **VERDICT (2026-07-03 night) — FIRST GATE-PASSING SIGNAL**: 11 seasons backfilled (129,215 rows / 3,336 symbols / 0 errors) + adjusted research price store (6.54M rows, 2016+, survivorship residual 352 delisted names = 11.3%, documented). Factor-zoo v2 on 118 monthly cross-sections: **earnings_yield@63D IC +0.113 / t +13.96 / SR 1.35 → DSR 0.992 ≥ 0.95 PASS** (max-SR selection per Bailey semantics; 14-trial family); value_bp@63D IC +0.129 / t +11.4 close behind; quality/growth dead. Stress: program-wide trial counting (40-60 trials) drops DSR to 0.89-0.94 — but **split-half OOS-in-time confirms in both independent windows** (earnings_yield t=8.9 / t=11.5; value_bp t=6.8 / t=9.8, no sign flip, no decay). Cost hurdle cleared 2-5x. **Not a trade signal yet** — next: P19-02 enter signal library as SignalFns → P19-03 shadow/forward Rank-IC (Rule 16 live-only) → long-only S株 implementability design → walk-forward → calibration lane.
+
+### P23-C Forecast/consensus revision momentum (paid — owner decision pending)
+- 四季報 online or J-Quants paid tier for forecast data → analyst-revision momentum lane. Deferred until A/B verdicts.
+
+### P23-D Owner's personal calibration (free; starts with next trade)
+- Log every trade idea pre-trade through the existing predictions/journal path; at n ≥ 50 compute per-setup win rate with CI. Current honest record: disciplined scale-outs 2/2, discretionary dip-buy 0/1.

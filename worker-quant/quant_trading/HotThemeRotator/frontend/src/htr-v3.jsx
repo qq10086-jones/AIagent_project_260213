@@ -385,6 +385,28 @@ function V3StrategyCard({ candidate }) {
             </div>
           ))}
         </div>
+        {/* Compact key levels — the three decisive price references, visible even
+            when collapsed, so the card carries real numbers instead of slack.
+            Rule 11.6.6 noun labels only; the full 7-tier ladder is the expand. */}
+        {(() => {
+          const find = (k) => (s.ladder_tiers || []).find((t) => t.kind === k);
+          const entry = find("entry_balanced"), stop = find("stop"), tp1 = find("exit_1");
+          if (!entry && !stop && !tp1) return null;
+          const cell = (lbl, t, color) => (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="htr-eyebrow" style={{ fontSize: 9, marginBottom: 2 }}>{lbl}</div>
+              <div className="htr-num" style={{ fontSize: 15, fontWeight: 700, color }}>{t ? HTR.fmtPrice(t.price, 0) : "—"}</div>
+              {t && <div className="htr-num" style={{ fontSize: 9.5, color: "var(--htr-ink-3)" }}>{t.pct_vs_ref > 0 ? "+" : ""}{t.pct_vs_ref.toFixed(1)}%</div>}
+            </div>
+          );
+          return (
+            <div style={{ display: "flex", gap: 10, marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--htr-line)" }}>
+              {cell("建议价位·均衡", entry, "var(--htr-info)")}
+              {cell("止损参考", stop, "var(--htr-bear)")}
+              {cell("目标参考·首", tp1, "var(--htr-bull)")}
+            </div>
+          );
+        })()}
       </div>
       {expanded && (
         <div style={{ padding: "0 14px 14px" }}>
@@ -473,9 +495,19 @@ function V3DetailStack({ candidate }) {
 function FactorBody({ candidate }) {
   const st = candidate._status && candidate._status.profile;
   const f = candidate.factors;
-  const Row = ({ label, value }) => (
-    <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid var(--htr-line-soft)", fontSize: 12 }}>
-      <span style={{ color: "var(--htr-ink-3)" }}>{label}</span><span className="htr-mono" style={{ color: "var(--htr-ink)" }}>{value}</span>
+  // A signed magnitude bar (centre = 0) that visualises the real factor value —
+  // NOT a probability (this tab is "排序信号 · 非概率"). bar in [-1, 1].
+  const Row = ({ label, value, bar }) => (
+    <div style={{ padding: "4px 0", borderBottom: "1px solid var(--htr-line-soft)", fontSize: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <span style={{ color: "var(--htr-ink-3)" }}>{label}</span><span className="htr-mono" style={{ color: "var(--htr-ink)" }}>{value}</span>
+      </div>
+      {bar != null && (
+        <div style={{ height: 3, marginTop: 4, background: "var(--htr-surface-3)", borderRadius: 2, position: "relative" }}>
+          <div style={{ position: "absolute", left: "50%", top: -1, width: 1, height: 5, background: "var(--htr-line-2)" }} />
+          <div style={{ position: "absolute", left: bar >= 0 ? "50%" : `${50 + bar * 50}%`, width: `${Math.abs(bar) * 50}%`, height: "100%", background: bar >= 0 ? "var(--htr-bull)" : "var(--htr-bear)", borderRadius: 2 }} />
+        </div>
+      )}
     </div>
   );
   if (st === "pending") return <AsyncBodyState status="pending" />;
@@ -485,17 +517,18 @@ function FactorBody({ candidate }) {
   // rather than crash or fabricate. (Backend gap tracked in PROJECT_STATUS.)
   const num = (x, d) => (x == null || Number.isNaN(Number(x)) ? "—" : Number(x).toFixed(d));
   const pct = (x, d) => (x == null || Number.isNaN(Number(x)) ? "—" : `${(Number(x) * 100).toFixed(d)}%`);
+  const bar = (x, scale) => (x == null || Number.isNaN(Number(x)) ? null : Math.max(-1, Math.min(1, Number(x) / scale)));
   return (
     <div>
       <AsyncBodyState status={st} />
       <div className="htr-eyebrow" style={{ marginBottom: 8 }}>分数构成 · 排序信号（非概率）</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
-        <Row label="screener_score" value={num(f.screener_score, 3)} />
-        <Row label="mom_20" value={pct(f.mom_20, 1)} />
-        <Row label="mom_60" value={pct(f.mom_60, 1)} />
-        <Row label="sharpe_20" value={num(f.sharpe_20, 2)} />
-        <Row label="sortino_60" value={num(f.sortino_60, 2)} />
-        <Row label="vol_z" value={num(f.vol_z, 2)} />
+        <Row label="screener_score" value={num(f.screener_score, 3)} bar={bar(f.screener_score, 1)} />
+        <Row label="mom_20" value={pct(f.mom_20, 1)} bar={bar(f.mom_20, 0.5)} />
+        <Row label="mom_60" value={pct(f.mom_60, 1)} bar={bar(f.mom_60, 0.5)} />
+        <Row label="sharpe_20" value={num(f.sharpe_20, 2)} bar={bar(f.sharpe_20, 3)} />
+        <Row label="sortino_60" value={num(f.sortino_60, 2)} bar={bar(f.sortino_60, 3)} />
+        <Row label="vol_z" value={num(f.vol_z, 2)} bar={bar(f.vol_z, 3)} />
         <Row label="adv (10⁶ ¥)" value={f.adv == null ? "—" : (f.adv / 1e6).toFixed(0)} />
         <Row label="in_screener" value={f.in_screener ? "✓" : "—"} />
       </div>

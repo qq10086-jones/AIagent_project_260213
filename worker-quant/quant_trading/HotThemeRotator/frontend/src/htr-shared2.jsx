@@ -9,10 +9,13 @@ function ScoreBar({ value, max = 100 }) {
   );
 }
 
+const TEMP_GRAD = "linear-gradient(90deg,var(--htr-info) 0%,var(--htr-warn) 55%,var(--htr-heat-hot) 100%)";
 function MarketTempCell({ m, variant = "row" }) {
+  const hasSpark = Array.isArray(m.spark) && m.spark.length >= 2;
+  const tempPct = Math.max(3, Math.min(100, Number(m.temp) || 0));
   if (variant === "tile") {
     return (
-      <div style={{ border: "1px solid var(--htr-line)", borderRadius: 8, padding: "12px 14px", background: "var(--htr-surface)", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ border: "1px solid var(--htr-line)", borderRadius: 10, padding: "12px 14px", background: "var(--htr-surface)", display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600 }}>{m.label}</div>
@@ -20,19 +23,21 @@ function MarketTempCell({ m, variant = "row" }) {
           </div>
           <span className="htr-chip" style={{ fontSize: 9.5 }}>{m.state}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span className="htr-num" style={{ fontSize: 16, fontWeight: 600 }}>{HTR.fmtPrice(m.price, m.id === "USDJPY" ? 2 : 0)}</span>
-          <span className={"htr-num " + HTR.changeClass(m.chg)} style={{ fontSize: 12 }}>{HTR.arrow(m.chg)} {HTR.fmtPct(m.chg)}</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Sparkline data={m.spark} width={90} height={26} />
-          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 7 }}>
-            <div style={{ flex: 1, height: 5, background: "var(--htr-line-soft)", borderRadius: 3, overflow: "hidden" }}>
-              <div style={{ width: `${m.temp}%`, height: "100%", background: HTR.heatColor(m.temp) }} />
-            </div>
-            <span className="htr-num" style={{ fontSize: 11, color: "var(--htr-ink-3)", width: 30, textAlign: "right" }}>{m.temp}°</span>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span className="htr-num" style={{ fontSize: 16, fontWeight: 600 }}>{HTR.fmtPrice(m.price, m.id === "USDJPY" ? 2 : 0)}</span>
+            <span className={"htr-num " + HTR.changeClass(m.chg)} style={{ fontSize: 12 }}>{HTR.arrow(m.chg)} {HTR.fmtPct(m.chg)}</span>
           </div>
+          <span className="htr-num" style={{ fontSize: 15, fontWeight: 700, color: HTR.heatColor(m.temp) }}>{m.temp}°</span>
         </div>
+        {/* temperature gauge — real 0-100 reading, fills the tile */}
+        <div style={{ height: 6, borderRadius: 3, background: "var(--htr-surface-3)", overflow: "hidden", position: "relative" }}>
+          <div style={{ position: "absolute", inset: 0, background: TEMP_GRAD, opacity: 0.22 }} />
+          <div style={{ width: tempPct + "%", height: "100%", background: TEMP_GRAD, borderRadius: 3 }} />
+        </div>
+        {hasSpark
+          ? <Sparkline data={m.spark} width={undefined} height={24} />
+          : <div style={{ fontSize: 9.5, color: "var(--htr-ink-4)", fontFamily: "var(--htr-font-mono)" }}>无盘中走势数据</div>}
       </div>
     );
   }
@@ -43,7 +48,13 @@ function MarketTempCell({ m, variant = "row" }) {
         <div style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.label}</div>
         <div style={{ fontSize: 9.5, color: "var(--htr-ink-4)", letterSpacing: "0.04em" }}>{m.state}</div>
       </div>
-      <div style={{ flexShrink: 0, width: 48 }}><Sparkline data={m.spark} width={48} height={20} /></div>
+      {/* sparkline when we have intraday data, else a compact temp gauge (never an empty gap) */}
+      <div style={{ flexShrink: 0, width: 48 }}>
+        {hasSpark
+          ? <Sparkline data={m.spark} width={48} height={20} />
+          : <div style={{ height: 5, borderRadius: 3, background: "var(--htr-surface-3)", overflow: "hidden" }}>
+              <div style={{ width: tempPct + "%", height: "100%", background: TEMP_GRAD, borderRadius: 3 }} /></div>}
+      </div>
       <div className="htr-num" style={{ textAlign: "right", flexShrink: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600 }}>{HTR.fmtPrice(m.price, m.id === "USDJPY" ? 2 : 0)}</div>
         <div style={{ fontSize: 10 }} className={HTR.changeClass(m.chg)}>{HTR.fmtPct(m.chg, 2)}</div>

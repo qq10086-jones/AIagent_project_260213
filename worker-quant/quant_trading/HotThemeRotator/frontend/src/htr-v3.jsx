@@ -226,10 +226,13 @@ function V3TemperatureHero({ markets }) {
   );
 }
 
+const TEMP_GAUGE_GRAD = "linear-gradient(90deg,var(--htr-info) 0%,var(--htr-warn) 55%,var(--htr-heat-hot) 100%)";
 function V3MarketTile({ m }) {
   const accent = HTR.heatColor(m.temp), bg = HTR.heatBg(m.temp);
+  const hasSpark = Array.isArray(m.spark) && m.spark.length >= 2;
+  const tempPct = Math.max(3, Math.min(100, Number(m.temp) || 0));
   return (
-    <div style={{ background: bg, border: `1px solid ${accent}33`, borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, position: "relative", overflow: "hidden" }}>
+    <div style={{ background: bg, border: `1px solid ${accent}33`, borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9, position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: 0, right: 0, padding: "3px 8px", background: accent, color: "var(--htr-accent-ink)", fontSize: 9, fontWeight: 700, borderBottomLeftRadius: 7, letterSpacing: "0.04em" }}>{m.state}</div>
       <div>
         <div style={{ fontSize: 13, fontWeight: 700 }}>{m.label}</div>
@@ -238,14 +241,23 @@ function V3MarketTile({ m }) {
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
         <div>
           <div className="htr-num" style={{ fontSize: 23, fontWeight: 800, color: accent, lineHeight: 1 }}>{m.temp}<span style={{ fontSize: 12, marginLeft: 1 }}>°</span></div>
-          <div style={{ fontSize: 9.5, color: "var(--htr-ink-3)", letterSpacing: "0.08em", marginTop: 3 }}>TEMPERATURE</div>
+          <div style={{ fontSize: 9.5, color: "var(--htr-ink-3)", letterSpacing: "0.08em", marginTop: 3 }}>温度</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div className="htr-num" style={{ fontSize: 14, fontWeight: 700 }}>{HTR.fmtPrice(m.price, m.id === "USDJPY" ? 2 : 0)}</div>
           <div className={"htr-num " + HTR.changeClass(m.chg)} style={{ fontSize: 11.5, fontWeight: 600 }}>{HTR.arrow(m.chg)} {HTR.fmtPct(m.chg)}</div>
         </div>
       </div>
-      <Sparkline data={m.spark} width={undefined} height={28} stroke={accent} fill={`color-mix(in oklab, ${accent} 16%, transparent)`} />
+      {/* Temperature gauge — visualizes the real 0-100 reading; fills the tile
+          meaningfully whether or not an intraday trend exists. */}
+      <div style={{ height: 6, borderRadius: 3, background: "var(--htr-surface-3)", overflow: "hidden", position: "relative" }}>
+        <div style={{ position: "absolute", inset: 0, background: TEMP_GAUGE_GRAD, opacity: 0.22 }} />
+        <div style={{ width: tempPct + "%", height: "100%", background: TEMP_GAUGE_GRAD, borderRadius: 3 }} />
+      </div>
+      {/* Intraday trend if we have it; otherwise an honest note, not an empty chart (Rule 11.9.4). */}
+      {hasSpark
+        ? <Sparkline data={m.spark} width={undefined} height={26} stroke={accent} fill={`color-mix(in oklab, ${accent} 16%, transparent)`} />
+        : <div style={{ fontSize: 9.5, color: "var(--htr-ink-4)", fontFamily: "var(--htr-font-mono)", letterSpacing: "0.03em" }}>无盘中走势数据</div>}
     </div>
   );
 }

@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;600;700&display=swap" rel="stylesheet" />
 <style>
-  html, body { margin:0; padding:0; height:100%; background:#F4F1EA;
+  html, body { margin:0; padding:0; height:100%; background:#0B0F14;
     font-family:"IBM Plex Sans","Noto Sans JP",system-ui,sans-serif; }
   #root { width:100vw; min-height:100vh; display:flex; flex-direction:column; }
 
@@ -21,8 +21,17 @@
     padding:6px 13px; border-radius:7px; font-size:12.5px; color:var(--htr-ink-2,#4c4842);
     cursor:pointer; font-family:inherit; }
   .nav-btn:hover { background:var(--htr-surface-2,#faf8f2); }
-  .nav-btn.active { background:var(--htr-accent,#1F3A5F); color:#fff; border-color:var(--htr-accent,#1F3A5F); font-weight:600; }
-  .app-main { flex:1 1 auto; min-height:0; overflow:auto; }
+  .nav-btn.active { background:var(--htr-accent,#CBA968); color:var(--htr-accent-ink,#17120A); border-color:var(--htr-accent,#CBA968); font-weight:600; }
+  .app-nav { backdrop-filter:blur(6px); }
+  .app-main { flex:1 1 auto; min-height:0; overflow:auto; background:var(--htr-bg); }
+  /* P24-06 "Sumi & Brass" — ambient instrument depth (dark only): a faint brass
+     glow top-right + cool indigo top-left, so the ground reads as considered. */
+  :root[data-htr-dark="true"] .app-main {
+    background:
+      radial-gradient(1100px 480px at 85% -6%, rgba(203,169,104,.055), transparent 60%),
+      radial-gradient(820px 460px at -4% -2%, rgba(111,141,255,.045), transparent 55%),
+      var(--htr-bg);
+  }
 
   /* ── V3 grids ── */
   .v3-grid { display:grid; grid-template-columns:320px minmax(440px,1fr) 372px; gap:14px; align-items:start; }
@@ -136,8 +145,8 @@
 const { useEffect } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "primary": "#1F3A5F",
-  "dark": false,
+  "primary": "#CBA968",
+  "dark": true,
   "density": "regular",
   "bodyFont": "sans",
   "numFont": "mono",
@@ -199,7 +208,7 @@ function App() {
         <TweakSection label="信息密度" />
         <TweakRadio label="密度" value={t.density} options={["compact", "regular", "comfy"]} onChange={(v) => setTweak("density", v)} />
         <TweakSection label="主题" />
-        <TweakColor label="强调色" value={t.primary} options={["#1F3A5F", "#2D6A6F", "#7A4B2D", "#3D5A3D"]} onChange={(v) => setTweak("primary", v)} />
+        <TweakColor label="强调色" value={t.primary} options={["#CBA968", "#6E8CFF", "#2D8C8F", "#C46B52"]} onChange={(v) => setTweak("primary", v)} />
         <TweakToggle label="深色模式" value={t.dark} onChange={(v) => setTweak("dark", v)} />
         <TweakSection label="字体" />
         <TweakRadio label="正文" value={t.bodyFont} options={["sans", "serif"]} onChange={(v) => setTweak("bodyFont", v)} />

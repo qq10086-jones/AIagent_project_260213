@@ -40,16 +40,27 @@ const TOKEN_STYLE = `
   --htr-shadow:0 1px 2px rgba(26,24,21,.04), 0 1px 1px rgba(26,24,21,.03);
   --htr-shadow-lg:0 8px 30px rgba(26,24,21,.12);
 }
+/* "Sumi & Brass" — premium dark instrument theme (default, 2026-07-07, P24-06).
+   Deep sumi-ink ground with a cool blue bias, layered surface steps, refined
+   semantic green/coral, and a brass accent (set via TWEAK_DEFAULTS.primary).
+   Grounded in the subject (Japanese equities · kin-leaf brass) — not the
+   generic near-black-with-acid-green dark-admin default. */
 :root[data-htr-dark="true"] {
-  --htr-bg:#13120F; --htr-surface:#1B1A16; --htr-surface-2:#201E19; --htr-surface-3:#272520;
-  --htr-line:#302D27; --htr-line-2:#3D3A32; --htr-line-soft:#211F1A;
-  --htr-ink:#ECE9DF; --htr-ink-2:#C2BEB1; --htr-ink-3:#8C887C; --htr-ink-4:#5C5950;
-  --htr-bull:#5BB57E; --htr-bull-bg:#1B2C22; --htr-bear:#DC6F6F; --htr-bear-bg:#2D1E1E;
-  --htr-warn:#D9A45E; --htr-warn-bg:#2A2218; --htr-info:#7AA8D9; --htr-info-bg:#1B232D;
-  --htr-heat-hot:#E8794A; --htr-heat-hot-bg:#2E1F16;
-  --htr-accent-soft:#1F2A38; --htr-accent-ink:#ECE9DF;
-  --htr-shadow:0 1px 2px rgba(0,0,0,.4);
-  --htr-shadow-lg:0 8px 30px rgba(0,0,0,.5);
+  --htr-bg:#0B0F14; --htr-surface:#111823; --htr-surface-2:#18212D; --htr-surface-3:#202B39;
+  --htr-line:#243040; --htr-line-2:#31404F; --htr-line-soft:#161E28;
+  --htr-ink:#E8EEF5; --htr-ink-2:#A4B0BE; --htr-ink-3:#6A7580; --htr-ink-4:#4B555F;
+  --htr-bull:#58C089; --htr-bull-bg:rgba(88,192,137,.13); --htr-bear:#E86D64; --htr-bear-bg:rgba(232,109,100,.13);
+  --htr-warn:#E3AD54; --htr-warn-bg:rgba(227,173,84,.13); --htr-info:#6F8DFF; --htr-info-bg:rgba(111,141,255,.13);
+  --htr-heat-hot:#EC6A40; --htr-heat-hot-bg:rgba(236,106,64,.15);
+  --htr-accent-soft:rgba(203,169,104,.12); --htr-accent-ink:#17120A;
+  --htr-shadow:0 1px 2px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.03);
+  --htr-shadow-lg:0 14px 44px rgba(0,0,0,.55);
+}
+/* Refined LIGHT theme kept for the toggle-off state (calmer than the old cream). */
+:root[data-htr-dark="false"] {
+  --htr-bg:#EEF1F5; --htr-surface:#FFFFFF; --htr-surface-2:#F5F7FA; --htr-surface-3:#EAEEF3;
+  --htr-line:#DDE3EB; --htr-line-2:#C9D2DD; --htr-line-soft:#EAEEF3;
+  --htr-ink:#141A22; --htr-ink-2:#43505E; --htr-ink-3:#6A7885; --htr-ink-4:#9AA6B2;
 }
 /* Compact still respects the Rule 11.7.4 legibility floor */
 :root[data-htr-density="compact"] {
@@ -74,8 +85,10 @@ const TOKEN_STYLE = `
   text-transform:uppercase; font-weight:600; }
 .htr-divider { border:0; border-top:1px solid var(--htr-line); margin:0; }
 
-.htr-card { background:var(--htr-surface); border:1px solid var(--htr-line);
-  border-radius:var(--htr-radius); box-shadow:var(--htr-shadow); }
+.htr-card { background:linear-gradient(180deg,rgba(255,255,255,.018),transparent 44%),var(--htr-surface);
+  border:1px solid var(--htr-line); border-radius:var(--htr-radius-lg);
+  box-shadow:var(--htr-shadow); }
+.htr-card:hover { border-color:var(--htr-line-2); }
 
 .htr-chip { display:inline-flex; align-items:center; gap:5px; padding:2px 8px;
   font-size:var(--htr-fs-xs); border-radius:999px; border:1px solid var(--htr-line-2);

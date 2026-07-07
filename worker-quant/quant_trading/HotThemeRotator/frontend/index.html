@@ -33,10 +33,13 @@
       var(--htr-bg);
   }
 
-  /* ── V3 grids ── */
-  .v3-grid { display:grid; grid-template-columns:320px minmax(440px,1fr) 372px; gap:14px; align-items:start; }
-  /* P24-02 / Rule 11.7.8 — the wide Action Board and the feeds live full-width
-     below the decision grid so no rail towers over its siblings. */
+  /* ── V3 bento (P24-07) ── */
+  /* Command band: deep-dive column interlocks with the positions stack. */
+  .v3-hero-bento { display:grid; grid-template-columns:minmax(0,1.85fr) minmax(330px,1fr); gap:14px; align-items:start; }
+  .v3-hero-main, .v3-hero-side, .v3-work-col { display:flex; flex-direction:column; gap:14px; min-width:0; }
+  /* Workbench band: three balanced tiles fill the width below the command area. */
+  .v3-work-bento { display:grid; grid-template-columns:330px minmax(0,1fr) 344px; gap:14px; align-items:start; }
+  /* Full-width bands (Rule 11.7.8 — nothing towers). */
   .v3-plan-row { align-items:start; }
   .v3-feeds-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; align-items:start; }
   .v3-temp-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
@@ -63,28 +66,28 @@
   .v4-leader-grid { display:grid; grid-template-columns:auto 1fr 1fr 1fr; gap:14px; align-items:center; }
 
   @media (max-width:1320px) {
-    .v3-grid { grid-template-columns:300px minmax(0,1fr); }
-    /* right rail (3 decision cards) drops full-width below the two columns as a row */
-    .v3-grid > .v3-rail-right { grid-column:1 / -1; display:grid !important; grid-template-columns:repeat(3,1fr); gap:14px; }
+    .v3-hero-bento { grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr); }
+    .v3-work-bento { grid-template-columns:300px minmax(0,1fr); }
+    .v3-work-bento > .v3-work-col:last-child { grid-column:1 / -1; }
     .v1-grid { grid-template-columns:260px minmax(0,1fr); }
     .v1-grid > div:last-child { grid-column:1 / -1; display:grid !important; grid-template-columns:repeat(3,1fr); gap:12px; }
     .v4-grid { grid-template-columns:240px minmax(0,1fr); }
     .v4-grid > div:last-child { grid-column:1 / -1; }
   }
   @media (max-width:1080px) {
-    .v3-grid, .v1-grid, .v4-grid { grid-template-columns:1fr; }
-    .v3-grid > .v3-rail-right, .v1-grid > div:last-child { grid-template-columns:1fr 1fr; }
-    /* P24-01 / Rule 11.7.7 — mobile priority. Among the shell's children the
-       Action Board comes right after temperature, then the grid, then feeds; and
-       inside the grid the positions rail (portfolio + exit) leads, then picker,
-       then the deep-dive centre. Net order: temp → action → positions → picker
-       → deep-dive → feeds. */
-    .v3-plan-row   { order:1; }
-    .v3-grid       { order:2; }
-    .v3-feeds-row  { order:3; }
-    .v3-rail-right { order:1; }
-    .v3-rail-left  { order:2; }
-    .v3-center     { order:3; }
+    .v3-hero-bento, .v3-work-bento, .v1-grid, .v4-grid { grid-template-columns:1fr; }
+    .v1-grid > div:last-child { grid-template-columns:1fr 1fr; }
+    /* P24-01/07 / Rule 11.7.7 — mobile priority. Among the shell's children the
+       Action Board comes first, then the command bento, then the workbench, then
+       feeds; and inside the command bento the positions stack leads the chart.
+       Net order: temp → action → positions → chart/strategy → picker/detail/theme
+       → feeds. */
+    .v3-plan-row    { order:1; }
+    .v3-hero-bento  { order:2; }
+    .v3-work-bento  { order:3; }
+    .v3-feeds-row   { order:4; }
+    .v3-hero-side   { order:1; }
+    .v3-hero-main   { order:2; }
     .v3-temp-grid, .v2-market-strip { grid-template-columns:repeat(3,1fr); }
     .v3-leader-grid, .v1-hero-grid, .v2-hero-grid, .v4-leader-grid { grid-template-columns:1fr; gap:16px; }
     .v3-debate-grid, .v2-body-grid, .v2-prose-grid, .v2-dual-grid, .v1-chart-row { grid-template-columns:1fr; }
@@ -95,7 +98,7 @@
     .v2-page { padding:24px 28px !important; }
   }
   @media (max-width:680px) {
-    .v3-grid > .v3-rail-right, .v1-grid > div:last-child { grid-template-columns:1fr; }
+    .v1-grid > div:last-child { grid-template-columns:1fr; }
     .v3-temp-grid, .v2-market-strip { grid-template-columns:repeat(2,1fr); }
     .v3-ministat-grid { grid-template-columns:1fr 1fr; }
   }

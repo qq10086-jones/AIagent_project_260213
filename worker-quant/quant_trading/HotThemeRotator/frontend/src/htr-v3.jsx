@@ -53,42 +53,46 @@ function V3MarketDashboard({ layout = "tabs" }) {
       })()}
       <V3TemperatureHero markets={data.markets} />
 
-      <div className="v3-grid">
-        {/* LEFT RAIL — pick what to look at */}
-        <div className="v3-rail v3-rail-left" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <V3CandidatePicker candidates={data.candidates} selected={top.symbol} onSelect={setSelected} />
-          <V3ThemeCard themes={data.themes} />
-          <V3MacroNewsCard macro={data.macroNews} />
-        </div>
-
-        {/* CENTER — deep dive on the selected leader */}
-        <div className="v3-center" style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+      {/* HERO BENTO (P24-07) — the command area. The deep-dive column (leader +
+          chart + strategy) interlocks with the positions stack (portfolio + exit)
+          at matched height, so the top band fills with no void (Rule 11.7.8).
+          On mobile the positions stack is ordered before the chart (Rule 11.7.7). */}
+      <div className="v3-hero-bento">
+        <div className="v3-hero-main">
           <V3LeaderCard candidate={top} livePrice={livePrice} />
           <V3KLinePanel candidate={top} />
           <V3StrategyCard candidate={top} />
-          {layout === "tabs"
-            ? <V3DetailTabs candidate={top} />
-            : <V3DetailStack candidate={top} />}
         </div>
-
-        {/* RIGHT RAIL — the decision surfaces the operator acts on. Kept short
-            (portfolio + the two boards) so it no longer towers over its siblings
-            (Rule 11.7.8); on mobile it is ordered FIRST after temperature
-            (Rule 11.7.7) via the .v3-rail-right order rule. */}
-        <div className="v3-rail v3-rail-right" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="v3-hero-side">
           <V3PortfolioCard positions={data.positions} defaultSymbol={top.symbol} />
           {/* Rule 11.17 — Position Exit Discipline Board (shared governed card, four-variant parity). */}
           <ExitBoardCard />
         </div>
       </div>
 
-      {/* PLAN ROW — the Daily Action Board (Rule 11.16) is wide (candidate × plan
-          columns) and long; kept full-width below the grid so the right rail stays
-          short and no column towers (Rule 11.7.8). On mobile it is ordered up
+      {/* PLAN — the Daily Action Board (Rule 11.16) full-width; mobile-ordered up
           near the top with the other decision surfaces (Rule 11.7.7). */}
       <div className="v3-plan-row">
         {/* Rule 11.16 — Daily Action Board (shared governed card, four-variant parity). */}
         <ActionBoardCard />
+      </div>
+
+      {/* WORKBENCH BENTO — navigation + research tiles below the command area:
+          the candidate picker, the per-symbol detail tabs, and the theme/macro
+          context, as three balanced tiles that fill the width. */}
+      <div className="v3-work-bento">
+        <div className="v3-work-col">
+          <V3CandidatePicker candidates={data.candidates} selected={top.symbol} onSelect={setSelected} />
+        </div>
+        <div className="v3-work-col">
+          {layout === "tabs"
+            ? <V3DetailTabs candidate={top} />
+            : <V3DetailStack candidate={top} />}
+        </div>
+        <div className="v3-work-col">
+          <V3ThemeCard themes={data.themes} />
+          <V3MacroNewsCard macro={data.macroNews} />
+        </div>
       </div>
 
       {/* FEEDS ROW — review / context, full-width below so no rail towers over its

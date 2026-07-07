@@ -698,32 +698,38 @@ def test_exit_board_is_operator_params_not_prediction():
 # ---------------------------------------------------------------------------
 
 
-def test_v3_no_tower_redistributes_long_surfaces():
-    """Rule 11.7.8 — the wide Action Board and the four feed cards live full-width
-    below the grid, NOT stacked in the right rail (which keeps only the short
-    positions surfaces), so no column towers and leaves a void."""
+def test_v3_bento_interlocks_and_redistributes(_="P24-07"):
+    """Rule 11.7.8 — the command bento interlocks the deep-dive column with the
+    positions stack (matched height, no void); the wide Action Board and the four
+    feed cards stay full-width so no column towers."""
     v3 = read_frontend_file("src/htr-v3.jsx")
-    assert 'className="v3-plan-row"' in v3 and 'className="v3-feeds-row"' in v3
-    plan_row = v3.split('v3-plan-row"')[1].split("v3-feeds-row")[0]
-    assert "ActionBoardCard" in plan_row, "Action Board must be in the full-width plan row"
+    for cls in ('className="v3-hero-bento"', 'className="v3-hero-main"',
+                'className="v3-hero-side"', 'className="v3-plan-row"',
+                'className="v3-work-bento"', 'className="v3-feeds-row"'):
+        assert cls in v3, f"missing bento container: {cls}"
+    # command bento: deep-dive column = leader/chart/strategy
+    hero_main = v3.split('v3-hero-main"')[1].split('v3-hero-side')[0]
+    for card in ("V3LeaderCard", "V3KLinePanel", "V3StrategyCard"):
+        assert card in hero_main, f"{card} must be in the hero-main column"
+    # positions stack = portfolio + exit
+    hero_side = v3.split('v3-hero-side"')[1].split("v3-plan-row")[0]
+    for card in ("V3PortfolioCard", "ExitBoardCard"):
+        assert card in hero_side, f"{card} must be in the positions stack"
+    # Action Board full-width, feeds full-width
+    plan_row = v3.split('v3-plan-row"')[1].split("v3-work-bento")[0]
+    assert "ActionBoardCard" in plan_row
     feeds_row = v3.split('className="v3-feeds-row"')[1]
     for card in ("V3CandidateHistoryCard", "EventDeskCard", "V3NewsCard", "V3FeedsTabs"):
         assert card in feeds_row, f"{card} must be in the feeds row"
-    # the right rail keeps only the positions surfaces (anchor on the className)
-    right_rail = v3.split('v3-rail-right"')[1].split("v3-plan-row")[0]
-    for card in ("V3PortfolioCard", "ExitBoardCard"):
-        assert card in right_rail, f"{card} must stay in the positions rail"
-    assert "ActionBoardCard" not in right_rail  # action board hoisted out
-    assert "V3NewsCard" not in right_rail
 
 
-def test_v3_mobile_priority_order_css():
+def test_v3_mobile_priority_order_css(_="P24-07"):
     """Rule 11.7.7 — on mobile the decision surfaces (action board + positions
-    rail) are ordered before the picker and the deep-dive centre."""
+    stack) are ordered before the chart and the workbench."""
     css = read_frontend_file("index.html")
-    for rule in (".v3-plan-row   { order:1; }", ".v3-grid       { order:2; }",
-                 ".v3-feeds-row  { order:3; }", ".v3-rail-right { order:1; }",
-                 ".v3-rail-left  { order:2; }", ".v3-center     { order:3; }"):
+    for rule in (".v3-plan-row    { order:1; }", ".v3-hero-bento  { order:2; }",
+                 ".v3-work-bento  { order:3; }", ".v3-feeds-row   { order:4; }",
+                 ".v3-hero-side   { order:1; }", ".v3-hero-main   { order:2; }"):
         assert rule in css, f"missing mobile-order rule: {rule}"
 
 

@@ -29,11 +29,6 @@ function V4WorkflowSpine() {
           <V3PortfolioCard positions={data.positions} />
           {/* Rule 11.17 — Position Exit Discipline Board (shared governed card, four-variant parity). */}
           <ExitBoardCard />
-          {/* Rule 11.16 — Daily Action Board (shared governed card, four-variant parity). */}
-          <ActionBoardCard />
-          {/* Rule 11.11 — historical-candidate cohort review (shared governed card, four-variant parity). */}
-          <V3CandidateHistoryCard />
-          <EventDeskCard />
         </div>
 
         <div className="htr-card" style={{ display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
@@ -45,6 +40,16 @@ function V4WorkflowSpine() {
         </div>
 
         <V4RightRail candidate={top} livePrice={livePrice} />
+      </div>
+      {/* P24-10 — Action Board (wide table) + review feeds move full-width below the
+          grid so the left column no longer towers over the spine while the spine
+          cuts off (the void the operator flagged 2026-07-08). */}
+      {/* Rule 11.16 — Daily Action Board (shared governed card, four-variant parity). */}
+      <ActionBoardCard />
+      <div className="v1-feeds-row">
+        {/* Rule 11.11 / 11.13 — cohort review + event desk (shared governed cards). */}
+        <V3CandidateHistoryCard />
+        <EventDeskCard />
       </div>
       <GateStripCard gates={data.gates} />
     </div>

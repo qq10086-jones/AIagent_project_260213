@@ -51,15 +51,20 @@ function V1ProTerminal() {
           </V1Panel>
           {/* Rule 11.17 — Position Exit Discipline Board (shared governed card, four-variant parity). */}
           <ExitBoardCard />
-          {/* Rule 11.16 — Daily Action Board (shared governed card, four-variant parity). */}
-          <ActionBoardCard />
-          {/* Rule 11.11 — historical-candidate cohort review (shared governed card, four-variant parity). */}
-          <V3CandidateHistoryCard />
-          <EventDeskCard />
           <V1Panel title={<span>决策日志 · <Term>§8.6</Term></span>} sub={data.meta.tradeDate}>
             <div style={{ maxHeight: 220, overflow: "auto" }}><DecisionLog entries={data.decisionLog} max={6} /></div>
           </V1Panel>
         </div>
+      </div>
+      {/* P24-10 — the wide Action Board + the review feeds move full-width below the
+          grid so the right column no longer towers over the centre while the centre
+          cuts off half-way (the void the operator flagged 2026-07-08). */}
+      {/* Rule 11.16 — Daily Action Board (shared governed card, four-variant parity). */}
+      <ActionBoardCard />
+      <div className="v1-feeds-row">
+        {/* Rule 11.11 / 11.13 — cohort review + event desk (shared governed cards). */}
+        <V3CandidateHistoryCard />
+        <EventDeskCard />
       </div>
       <GateStripCard gates={data.gates} />
     </div>

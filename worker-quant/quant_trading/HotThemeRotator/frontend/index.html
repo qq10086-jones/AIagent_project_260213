@@ -49,6 +49,9 @@
 
   /* ── V1 grids ── */
   .v1-grid { display:grid; grid-template-columns:286px minmax(0,1fr) 364px; gap:12px; align-items:start; }
+  /* P24-10 — full-width feeds band below V1/V4 grids (Action Board + review cards
+     moved out of the tall column so no column towers over the centre). */
+  .v1-feeds-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:12px; align-items:start; }
   .v1-hero-grid { display:grid; grid-template-columns:minmax(150px,auto) minmax(0,1fr) auto auto auto; gap:20px; align-items:baseline; }
   .v1-chart-row { display:grid; grid-template-columns:minmax(0,1fr) 196px; gap:8px; }
   .v1-intel-grid { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:20px; }

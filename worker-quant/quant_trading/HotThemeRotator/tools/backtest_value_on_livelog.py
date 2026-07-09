@@ -82,23 +82,41 @@ def value_livelog_read(records, price_series, eps_lookup, bps_lookup,
     return out
 
 
-def _load_adj_prices():
+def _load_adj_prices(symbols=None):
     c = sqlite3.connect(str(ADJ_DB))
     ser = defaultdict(list)
-    for s, d, cl in c.execute(
-            "select symbol,date,close from daily_prices where close>0 order by symbol,date"):
+    # Filter to the live-log symbols when the set is small enough for SQLite's
+    # bound-parameter limit; otherwise load all (correctness over speed).
+    if symbols and len(symbols) <= 900:
+        q = ",".join("?" * len(symbols))
+        cur = c.execute(f"select symbol,date,close from daily_prices where close>0 "
+                        f"and symbol in ({q}) order by symbol,date", tuple(symbols))
+    else:
+        cur = c.execute("select symbol,date,close from daily_prices where close>0 "
+                        "order by symbol,date")
+    for s, d, cl in cur:
         ser[s].append((d, float(cl)))
     return {s: ([d for d, _ in v], [cl for _, cl in v]) for s, v in ser.items()}
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    import argparse
+    import datetime as _dt
+    import json
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--asof", default=_dt.date.today().isoformat())
+    ap.add_argument("--write", action="store_true",
+                    help="persist a dated artifact + append a trace row")
+    args = ap.parse_args(argv)
+
     from hot_theme_rotator.backtesting.signal_library import (
         _load_records_and_returns, fundamentals_pit_lookup,
     )
     records, _ = _load_records_and_returns(ROOT, 5)  # horizon arg irrelevant here
     if not records:
         print("no live prediction records found"); return 1
-    prices = _load_adj_prices()
+    prices = _load_adj_prices({r.symbol for r in records})
     dates = sorted({r.trade_date for r in records})
     print("=== VALUE FACTOR on the LIVE prediction log (P23-F, research-only) ===")
     print(f"live candidate rows: {len(records)} · trade days: {len(dates)} "
@@ -122,6 +140,25 @@ def main() -> int:
     print("\nRead: positive IC = cheaper names ranked higher DID earn more forward "
           "(within the screened universe). NECESSARY-not-sufficient (Rule 16.6); "
           "broad-universe cohort remains the cleaner confirmation into Q4.")
+
+    if args.write:
+        obs = ROOT / "reports" / "observability" / "value_livelog"
+        obs.mkdir(parents=True, exist_ok=True)
+        (obs / f"{args.asof}.json").write_text(
+            json.dumps({"asof": args.asof, "n_rows": len(records),
+                        "trade_days": len(dates), "result": res},
+                       ensure_ascii=False, indent=2), encoding="utf-8")
+        row = {"asof": args.asof,
+               "ey_21d_ic": res["earnings_yield"][21].get("mean_ic"),
+               "ey_21d_t": res["earnings_yield"][21].get("t_stat"),
+               "ey_63d_ic": res["earnings_yield"][63].get("mean_ic"),
+               "ey_63d_t": res["earnings_yield"][63].get("t_stat"),
+               "ey_63d_ndates": res["earnings_yield"][63].get("n_dates"),
+               "vb_21d_ic": res["value_bp"][21].get("mean_ic"),
+               "vb_63d_ic": res["value_bp"][63].get("mean_ic")}
+        with (obs.parent / "value_livelog_trace.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        print(f"wrote {obs / (args.asof + '.json')} + trace row")
     return 0
 
 

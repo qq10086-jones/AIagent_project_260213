@@ -81,6 +81,7 @@ SWEEP = HERE / "sweep_pending_outcomes.py"
 FORWARD_EVAL = HERE / "forward_signal_report.py"  # §16/ADR-0010 shadow-eval (non-fatal, research-only)
 FUNDAMENTAL_COHORT = HERE / "fundamental_cohort.py"  # P19-02b: monthly value/quality forward cohort
 COHORT_DIR = ROOT / "reports" / "research_cohorts" / "fundamental" / "predictions"
+VALUE_LIVELOG = HERE / "backtest_value_on_livelog.py"  # P23-F: early value read on the live log (63D matures ~Aug 26)
 
 # JPX trading calendar (Rule 15.4 fail-closed) lives in the src layer so it is
 # reusable + unit-tested; add src to path the same way emit/sweep do.
@@ -349,6 +350,16 @@ def run_afterclose(today: date, *, asof: date | None = None, db_path: Path | Non
         record["cohort"] = _maybe_monthly_cohort(asof, runner=runner)
     except Exception as exc:  # never block collection
         record["cohort"] = {"rc": None, "error": str(exc)[:200]}
+    # P23-F: early value read on the live log — accumulates daily and starts
+    # emitting the 63D earnings_yield IC automatically once windows mature
+    # (~Aug 26). Non-fatal, research-only; never promotes (Rule 16.6).
+    try:
+        rc_vll, out_vll, err_vll = runner(
+            [sys.executable, str(VALUE_LIVELOG), "--asof", asof.isoformat(), "--write"],
+            cwd=str(ROOT), env_extra={"PYTHONIOENCODING": "utf-8"}, timeout=300)
+        record["value_livelog"] = {"rc": rc_vll, "tail": (out_vll or err_vll or "")[-300:]}
+    except Exception as exc:
+        record["value_livelog"] = {"rc": None, "error": str(exc)[:200]}
     new, dropped, skipped = coll.get("new_predictions"), coll.get("dropped_no_close"), coll.get("skipped_on_disk")
     procs_ok = (coll["emit_rc"] == 0 and coll["sweep_rc"] == 0)
     # Rule 11.9 honesty: a green return code with ZERO new samples is NOT a

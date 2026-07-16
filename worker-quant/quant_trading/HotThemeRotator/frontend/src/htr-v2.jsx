@@ -41,6 +41,8 @@ function V2EditorialBrief() {
         <V3CandidateHistoryCard />
         {/* Rule 11.17 — Position Exit Discipline Board (shared governed card, four-variant parity). */}
         <ExitBoardCard />
+        {/* Section 17 — Owner Risk Mandate sleeve panel (shared governed card, four-variant parity). */}
+        <RiskMandateCard />
         {/* Rule 11.16 — Daily Action Board (shared governed card, four-variant parity). */}
         <ActionBoardCard />
         <EventDeskCard />

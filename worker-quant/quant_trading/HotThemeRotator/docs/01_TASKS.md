@@ -2328,3 +2328,45 @@ Source: the read-only design review (Artifact `2bb5068a-…`, overall B-/3.1). T
 - An empty temperature sparkline reads as a real reading. Add an explicit "no data" gauge state (Rule 11.9.4 degraded labelling). Deferred behind P24-01..03.
 
 ### P24-05+ Deferred (owner decision): F5 default-variant choice, F6 dark instrument palette, F7 progressive disclosure, F8-F10 nav/tablet/anchors.
+
+## Milestone P25: Owner Risk Mandate & Sleeve Engine (2026-07-13 owner declaration)
+
+Source: owner declared (2026-07-13 session) that the ¥400k account is EXPERIMENTAL capital with a −75% drawdown tolerance (kill-switch NAV floor ¥100k) and requested a risk-accepting architecture. Derivation (recorded in ADR-0012): fractional Kelly λ≤0.75 from P(hit floor)≤10% → target β-adjusted exposure 1.4× NAV, band [1.2, 1.6]. Three sleeves: A leveraged-beta engine (only positive-expectation engine), B value/E-P live experiment (≈0 expectation, evidence purchase, verdict ~2026-08-26), C conviction bets (zero demonstrated edge, pure variance; 8035.T re-underwritten into C at ¥71,300 by owner decision). Advice-only (Rule 3) is NOT relaxed: the engine computes and displays; the owner executes externally and records via Section 14. Governed by new Section 17.
+
+### P25-01 Governance Section 17 + ADR-0012
+- Write Rules 17.0–17.6 (mandate provenance; sleeve architecture; exposure band + rebalance discipline; kill-switch; Sleeve C discipline — 20% cap, no averaging down, mandatory thesis; Sleeve B pre-commitment; honest expectation labelling). ADR-0012 records the Kelly/drawdown derivation, allocation table, alternatives, and what is NOT changed.
+
+### P25-02 Declarative mandate config (`configs/risk_mandate.json`)
+- Owner-declared parameters as data (Rule 4 explicit): capital, floor, target ratio, band, sleeve definitions/caps, sleeve_map, beta assumptions (labelled research assumptions), 8035.T re-underwrite record with thesis=null until the owner writes one (surfaced as `thesis_missing`, fail-closed).
+
+### P25-03 Sleeve engine (`src/hot_theme_rotator/risk/sleeve_engine.py`)
+- Pure read-only assembler: per-sleeve capital/β-adjusted exposure/caps/flags, total exposure ratio + band status, kill-switch buffer, C discipline flags (thesis_missing / cap_breached / review_required), unmapped holdings fail-closed into UNASSIGNED with a warning. Fail-open to None without config; never fabricates positions (Rule 11.9.4). Unit-tested.
+
+### P25-04 Dashboard + frontend surface
+- `api/serializers.py` exposes `riskMandate` (fail-open → null). Shared `RiskMandateCard` mounted on V1–V4 (Rule 11.7 parity): mandate header + standing disclosure, exposure ratio vs band, kill-switch buffer, sleeve rows with honest expectation labels and flags. No probability/win-rate/expected-return language (Rule 8 inheritance). Contract tests.
+
+### P25-05 Daily trace (`tools/daily_routine.py` afterclose)
+- Non-fatal step writing `reports/observability/risk_mandate/{asof}.json` + one summary row to `reports/observability/risk_mandate_trace.jsonl` (nav, exposure ratio, band status, kill-switch buffer, flag counts) — same pattern as value_livelog. A diagnostic must never block collection.
+
+### P25-06 Owner follow-ups (pending owner input; system surfaces, never blocks)
+- 8035.T written thesis + invalidation trigger (until then the card shows thesis_missing).
+- Sleeve A deployment is OWNER execution at the external broker (candidate 2x ETFs to be price-verified live at order time, never from stale EOD), recorded via Section 14 fill path.
+
+### P24-11 Red-numeral accessibility (owner astigmatism feedback, 2026-07-14)
+- Owner reported small red numerals on the dark theme (action/exit boards) blur under astigmatism. Two passes, all variable-level so V1-V4 inherit (Rule 11.7): dark `--htr-bear` #E86D64→#FFA69E (surface contrast 5.8→9.5:1, coral hue kept); new `.htr-bear-num` (mono tabular, 700, red-tinted chip — bright glyph carries the shape, background carries the red semantics) applied to both boards' stop refs; `.htr-down` and exit-board P&L at weight 600; statusNote 10.5px/600. Light theme untouched. Contract tests 54 green. Escalation if needed: a "high-legibility mode" toggle (near-white text everywhere, color only on chips/icons).
+
+## Milestone P26: Sleeve C Wind-Down Mechanics + Concentration Observability (2026-07-16 owner reflection)
+
+Source: owner reflection session (2026-07-16) after the 07-16 semi gap-down. Owner (a) understood the 2000 dot-com lesson (high-PE bubbles can break; a retail participant has no information edge on the timing), (b) reframed 8035.T from a conviction hold to a wind-down ("回本加零花钱"), (c) asked whether the system watches beyond semiconductors, and (d) asked for a deep reflection on the trading strategy. Findings: the research layer is NOT semi-biased (universe 2,771; 0 large-cap semis in the 49 daily candidates; 8035.T is not even in the screener universe) — semi concentration is an owner Sleeve-C choice. But three real gaps surfaced, all advice-only (Rule 3), none relaxing any prior rule.
+
+### P26-01 Bilateral exit bracket for Sleeve C (Rule 17.4.6)
+- Config: `c_theses[symbol].exit_upper_jpy` / `exit_lower_jpy`; engine evaluates on the latest CLOSE only, emits `exit_triggered` flag + advice line on breach. 8035.T bracket set to [¥64,000 / ¥74,000] (upper = 07-15 close; lower = re-underwrite ¥71,300 −10%). A written bracket IS a valid thesis → clears `thesis_missing`. Defeats the disposition effect: exit must be a declared two-sided price, never the entry cost ¥77,600. Frontend surfaces armed/triggered per holding.
+
+### P26-02 Sector look-through (Rule 17.7)
+- Engine `_sector_look_through`: direct theme tags (`theme_map`) + index-ETF embedded sector weight (`benchmark_sector_weights` × leverage_factor). Answers "how much of NAV actually moves with theme X" across sleeves. Surfaced on the risk card + printed in the daily snapshot. Reveals ~22.7% NAV semi concentration (8035 direct + TOPIX ~11% via 1306/1568, leveraged) that per-symbol views hid. Embedded weights are labelled research estimates (Rule 17.6), Rule-4-refreshable.
+
+### P26-03 Discipline-flag sunset (Rule 17.4.7)
+- `flag_sunset_sessions` (default 7): the daily snapshot reads the append-only trace, counts consecutive sessions each open `thesis_missing`/`review_required` flag has persisted, and escalates (SUNSET line + trace `sunset` field) past the threshold, demanding resolution. A rule with no deadline is deferrable forever.
+
+### P26-04 Sleeve A deployment calendar (proposal — pending owner)
+- `docs/proposals/sleeve_a_deployment_schedule.md`: three mechanical cadences (fixed weekly / value-averaging / price-grid) to replace "owner's pace" (which degraded into day-by-day timing) and close the below-band gap (~0.68× vs [1.2, 1.6]). Not active until owner adopts one via Rule 4. Advice-only; no auto-execution.

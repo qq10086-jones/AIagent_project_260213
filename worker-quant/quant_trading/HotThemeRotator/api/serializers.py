@@ -140,6 +140,12 @@ def build_dashboard_payload(
         exit_board = build_exit_board(positions, action_board_plan_ready=plan_ready)
     except Exception:
         exit_board = None
+    try:  # P25-04 / Section 17 — owner risk-mandate sleeve panel; fail-open to None
+        from hot_theme_rotator.risk.sleeve_engine import build_risk_mandate_panel
+
+        risk_mandate = build_risk_mandate_panel(positions, base_dir=base_dir)
+    except Exception:
+        risk_mandate = None
     return {
         "meta": meta,
         "gates": _serialize_gates(),
@@ -151,6 +157,7 @@ def build_dashboard_payload(
         "kline": _serialize_kline(symbol=top_symbol, sessions=252),  # P8-14 + P8-16 C2: 1y window for MA60 / 52w lines
         "actionBoard": action_board,   # P21-04 / Rule 11.16 — plans, not predictions
         "exitBoard": exit_board,       # P22-01 / Rule 11.17 — operator's own exit discipline
+        "riskMandate": risk_mandate,   # P25-04 / Section 17 — owner risk mandate sleeves (read-only)
         "positions": positions,        # P8-10
         "dailyCockpit": _serialize_daily_cockpit(
             base_dir=base_dir,

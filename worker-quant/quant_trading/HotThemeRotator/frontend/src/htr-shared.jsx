@@ -49,7 +49,11 @@ const TOKEN_STYLE = `
   --htr-bg:#0B0F14; --htr-surface:#111823; --htr-surface-2:#18212D; --htr-surface-3:#202B39;
   --htr-line:#243040; --htr-line-2:#31404F; --htr-line-soft:#161E28;
   --htr-ink:#E8EEF5; --htr-ink-2:#A4B0BE; --htr-ink-3:#6A7580; --htr-ink-4:#4B555F;
-  --htr-bull:#58C089; --htr-bull-bg:rgba(88,192,137,.13); --htr-bear:#E86D64; --htr-bear-bg:rgba(232,109,100,.13);
+  /* bear red lightened #E86D64→#FF8A80→#FFA69E (owner accessibility request
+     2026-07-14, two passes: astigmatism halation on small red text over dark
+     surfaces; contrast on --htr-surface 5.8→7.8→9.5:1. Salmon stays in the
+     coral hue family so the loss/stop semantics are unchanged). */
+  --htr-bull:#58C089; --htr-bull-bg:rgba(88,192,137,.13); --htr-bear:#FFA69E; --htr-bear-bg:rgba(255,166,158,.14);
   --htr-warn:#E3AD54; --htr-warn-bg:rgba(227,173,84,.13); --htr-info:#6F8DFF; --htr-info-bg:rgba(111,141,255,.13);
   --htr-heat-hot:#EC6A40; --htr-heat-hot-bg:rgba(236,106,64,.15);
   --htr-accent-soft:rgba(203,169,104,.12); --htr-accent-ink:#17120A;
@@ -79,7 +83,15 @@ const TOKEN_STYLE = `
 .htr-num { font-family:var(--htr-font-num); font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
 .htr-mono { font-family:var(--htr-font-mono); }
 .htr-serif { font-family:var(--htr-font-serif); }
-.htr-up { color:var(--htr-bull); } .htr-down { color:var(--htr-bear); } .htr-flat { color:var(--htr-ink-3); }
+/* .htr-down carries weight 600: thin red glyphs over dark ground are the worst
+   astigmatism-halation case (owner feedback 2026-07-14) — bolder strokes focus. */
+.htr-up { color:var(--htr-bull); } .htr-down { color:var(--htr-bear); font-weight:600; } .htr-flat { color:var(--htr-ink-3); }
+/* Critical red numerals (stop refs, breached levels): mono tabular glyphs on a
+   red-tinted chip — the EYE focuses a bright high-luminance glyph, the RED
+   semantics move to the background tint instead of the letterform. */
+.htr-bear-num { font-family:var(--htr-font-mono); font-variant-numeric:tabular-nums;
+  font-weight:700; font-size:1.06em; color:var(--htr-bear); background:var(--htr-bear-bg);
+  padding:0 4px; border-radius:4px; letter-spacing:.01em; white-space:nowrap; }
 
 .htr-eyebrow { font-size:var(--htr-fs-xs); letter-spacing:0.1em; color:var(--htr-ink-3);
   text-transform:uppercase; font-weight:600; }
@@ -803,7 +815,7 @@ function ActionBoardCard() {
                 <div style={{ fontSize: 10.5, color: "var(--htr-ink-2)", display: "flex", gap: 12, flexWrap: "wrap" }}>
                   <span>建议价位·均衡 <b>{tierTxt(entry.balanced)}</b></span>
                   <span>激进 {tierTxt(entry.aggressive)} / 保守 {tierTxt(entry.conservative)}</span>
-                  <span>止损参考 <b style={{ color: "var(--htr-bear)" }}>{tierTxt(r.stopRef)}</b></span>
+                  <span>止损参考 <b className="htr-bear-num">{tierTxt(r.stopRef)}</b></span>
                   <span>目标参考 {(r.exitRefs || []).map(tierTxt).join(" · ")}</span>
                 </div>
               )}
@@ -869,18 +881,19 @@ function ExitBoardCard() {
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--htr-ink-1)" }}>{r.symbol}</span>
                 <span style={{ fontSize: 10.5, color: "var(--htr-ink-3)" }}>{r.qty}株 · 成本 {yen(r.avgCost)}</span>
-                <span style={{ fontSize: 11, color: pnlColor }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: pnlColor }}>
                   现价 {yen(r.marketPrice)}{r.unrealizedReturnPct != null ? ` (${r.unrealizedReturnPct > 0 ? "+" : ""}${r.unrealizedReturnPct}%)` : ""}
                 </span>
                 <span className="htr-chip" style={{ fontSize: 10, color: st.color, borderColor: "var(--htr-line-2)", marginLeft: "auto" }}>{st.label}</span>
               </div>
               {r.stopRef && (
                 <div style={{ fontSize: 10.5, color: "var(--htr-ink-2)", display: "flex", gap: 12, flexWrap: "wrap" }}>
-                  <span>止损参考 <b style={{ color: "var(--htr-bear)" }}>{refTxt(r.stopRef)}</b></span>
+                  <span>止损参考 <b className="htr-bear-num">{refTxt(r.stopRef)}</b></span>
                   <span>止盈参考 {(r.takeProfitRefs || []).map(refTxt).join(" · ")}</span>
                 </div>
               )}
-              {r.statusNote && <div style={{ fontSize: 10, color: st.color }}>{r.statusNote}</div>}
+              {/* 10px regular red was the worst astigmatism-halation offender — slightly larger + semibold */}
+              {r.statusNote && <div style={{ fontSize: 10.5, fontWeight: 600, color: st.color }}>{r.statusNote}</div>}
             </div>
           );
         })}
@@ -893,9 +906,120 @@ function ExitBoardCard() {
   );
 }
 
+// ── RiskMandateCard (P25-04 / Section 17 / ADR-0012) ──
+// Owner risk-mandate sleeve panel: arithmetic between the journal-derived
+// portfolio and the OWNER-DECLARED experimental-capital mandate (sleeves,
+// exposure band, kill-switch floor). Predicts nothing, orders nothing
+// (Rule 3); expectation labels are honesty labels, not forecasts
+// (Rule 17.6). Fails open to nothing when the backend omits the panel.
+const RISK_BAND_STATUS = {
+  within_band: { label: "带内", color: "var(--htr-bull)" },
+  below_band: { label: "低于带", color: "var(--htr-warn, #b58900)" },
+  above_band: { label: "高于带", color: "var(--htr-bear)" },
+};
+const RISK_FLAG_LABELS = {
+  thesis_missing: "缺书面 thesis（Rule 17.4 fail-closed）",
+  cap_breached: "超出 sleeve 上限",
+  review_required: "达强制复盘触发线（−20%）",
+  exit_triggered: "收盘触退出括号（Rule 17.4.6）",
+  unmapped_holdings: "持仓未映射到 sleeve",
+};
+
+function RiskMandateCard() {
+  const board = (window.HTR_DATA && window.HTR_DATA.riskMandate) || null;
+  if (!board || !Array.isArray(board.sleeves) || !board.sleeves.length) return null;
+  const yen = (x) => (x == null ? "—" : "¥" + Number(x).toLocaleString("ja-JP"));
+  const band = RISK_BAND_STATUS[board.exposure.bandStatus] || RISK_BAND_STATUS.below_band;
+  const ks = board.killSwitch || {};
+  const bandArr = (board.mandate && board.mandate.exposureBand) || [];
+  return (
+    <div className="htr-card" style={{ overflow: "hidden" }}>
+      <div style={{ padding: "11px 14px 0" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--htr-ink-1)" }}>
+          风险授权板 <span style={{ fontSize: 10, fontWeight: 400, color: "var(--htr-ink-3)" }}>Section 17 · 只读 · 你声明的实验资本预算,不是预测</span>
+        </div>
+        {/* Rule 17.6 — standing disclosure, non-collapsible */}
+        <div style={{ fontSize: 10.5, lineHeight: 1.5, color: "var(--htr-ink-3)", margin: "4px 0 9px" }}>
+          {board.disclosure}
+        </div>
+      </div>
+      <div style={{ padding: "0 14px 8px", display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11, color: "var(--htr-ink-2)" }}>
+        <span>β调整敞口 <b style={{ color: "var(--htr-ink-1)" }}>{yen(board.exposure.betaAdjustedJpy)}</b> = <b style={{ color: band.color }}>{board.exposure.ratio}x</b>
+          <span className="htr-chip" style={{ fontSize: 9.5, color: band.color, borderColor: "var(--htr-line-2)", marginLeft: 6 }}>{band.label} [{bandArr.join(", ")}]</span>
+        </span>
+        <span>kill-switch 地板 {yen(ks.floorJpy)} · 缓冲 <b style={{ color: ks.breached ? "var(--htr-bear)" : "var(--htr-ink-1)" }}>{yen(ks.bufferJpy)} ({ks.bufferPct}%)</b></span>
+      </div>
+      {ks.breached && (
+        <div style={{ margin: "0 14px 8px", padding: "6px 10px", border: "1px solid var(--htr-bear)", borderRadius: 7, fontSize: 11, color: "var(--htr-bear)", fontWeight: 700 }}>
+          {ks.note}
+        </div>
+      )}
+      {board.exposure.note && !ks.breached && (
+        <div style={{ padding: "0 14px 8px", fontSize: 10, color: band.color }}>{board.exposure.note}</div>
+      )}
+      <div style={{ padding: "0 14px 10px", display: "flex", flexDirection: "column", gap: 8 }}>
+        {board.sleeves.map((s) => (
+          <div key={s.id} style={{ border: "1px solid var(--htr-line)", borderRadius: 7, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--htr-ink-1)" }}>{s.id} · {s.label || s.role}</span>
+              {s.expectationLabel && <span style={{ fontSize: 10, color: "var(--htr-ink-3)" }}>{s.expectationLabel}</span>}
+              <span style={{ fontSize: 10.5, color: "var(--htr-ink-2)", marginLeft: "auto" }}>
+                {yen(s.currentCapitalJpy)}{s.targetCapitalJpy != null ? ` / 目标 ${yen(s.targetCapitalJpy)}` : ""}{s.capJpy != null ? ` / 上限 ${yen(s.capJpy)}` : ""}{s.capFracNav != null ? ` / 上限 ${(s.capFracNav * 100).toFixed(0)}% NAV` : ""}
+              </span>
+            </div>
+            {(s.holdings || []).map((h) => (
+              <div key={h.symbol} style={{ fontSize: 10.5, color: "var(--htr-ink-2)", display: "flex", flexDirection: "column", gap: 2 }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <span>{h.symbol} · {h.qty}株 · 市值 {yen(h.marketValueJpy)} · β{h.beta}{h.leverageFactor !== 1 ? ` · 杠杆${h.leverageFactor}x` : ""}</span>
+                  {h.reunderwritePrice != null && <span>重承保 {yen(h.reunderwritePrice)}</span>}
+                </div>
+                {h.exitBracket && (
+                  <div style={{ fontSize: 10, color: h.exitBracket.status === "armed" ? "var(--htr-ink-3)" : "var(--htr-bear)" }}>
+                    退出括号 [{yen(h.exitBracket.lowerJpy)} / {yen(h.exitBracket.upperJpy)}] · 收盘 {yen(h.exitBracket.priceEvaluatedJpy)} → {h.exitBracket.status === "armed" ? "已武装" : "触边"}
+                  </div>
+                )}
+              </div>
+            ))}
+            {s.deploymentGapJpy != null && s.deploymentGapJpy > 0 && (
+              <div style={{ fontSize: 10, color: "var(--htr-ink-3)" }}>未部署额度 {yen(s.deploymentGapJpy)}（由你在外部券商执行,非指令）</div>
+            )}
+            {s.precommitment && (
+              <div style={{ fontSize: 10, color: "var(--htr-ink-3)" }}>预承诺:判决 {s.precommitment.verdict_date} · 确认→上限 {yen(s.precommitment.on_confirm_cap_jpy)} · 证伪→{s.precommitment.on_fail === "unwind_to_A" ? "清仓回 A" : s.precommitment.on_fail}</div>
+            )}
+            {(s.flags || []).length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {s.flags.map((f) => (
+                  <span key={f} className="htr-chip" style={{ fontSize: 9.5, color: "var(--htr-bear)", borderColor: "var(--htr-line-2)" }}>{RISK_FLAG_LABELS[f] || f}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {Array.isArray(board.sectorLookThrough) && board.sectorLookThrough.length > 0 && (
+        <div style={{ padding: "0 14px 9px" }}>
+          <div style={{ fontSize: 10.5, color: "var(--htr-ink-2)", marginBottom: 3 }}>
+            行业穿透敞口 <span style={{ fontSize: 9.5, color: "var(--htr-ink-3)" }}>直接持仓 + 指数 ETF 内含权重（Rule 17.7 · 只读观测）</span>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 10 }}>
+            {board.sectorLookThrough.map((t) => (
+              <span key={t.theme} className="htr-chip" style={{ fontSize: 9.5, color: t.fracNav >= 0.2 ? "var(--htr-warn, #b58900)" : "var(--htr-ink-2)", borderColor: "var(--htr-line-2)" }}>
+                {t.theme} {yen(t.totalJpy)} · {(t.fracNav * 100).toFixed(1)}% NAV
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={{ padding: "0 14px 11px", fontSize: 9.5, color: "var(--htr-ink-3)" }}>
+        授权参数（你声明的,Rule 4 显式配置,ADR-0012 记录推导）：实验资本 {yen(board.mandate.experimentalCapitalJpy)} · 目标敞口 {board.mandate.targetExposureRatio}x · 声明日 {board.mandate.declaredDate} · 分数状态 {board.scoreStatus}
+      </div>
+    </div>
+  );
+}
+
 Object.assign(window, {
   AnimatedPrice, Sparkline, KLineChart, NewsTimeline, GateFlow, ThemeHeatBars, DecisionLog, CatalystBadges,
-  ActionBoardCard, ExitBoardCard,
+  ActionBoardCard, ExitBoardCard, RiskMandateCard,
   antiCollideLabels, ladderColor, useTickingPrice, marketFreshness, useElementSize, useWatchlist, Term, GLOSSARY,
   HTR: { fmtPrice, fmtPct, changeClass, arrow, heatColor, heatBg, LABELS: HTR_LABELS },
 });

@@ -1185,3 +1185,51 @@ Signals operate at horizon ≥ 5 trading days (Phase −1: shorter horizons cann
 ### Rule 16.7: Versioning and No Silent Refit
 
 Composite membership and any weights are versioned; changes go through the Rule 13 reflection/proposal gate with reproducibility metadata (Rule 13.17). Re-fitting on the same window to chase a metric (Brier, IC) is forbidden — that is the V5–V8 and isotonic-calibration failure mode (overfit that dies out-of-sample).
+
+## 17. Owner Risk Mandate & Sleeve Discipline (ADR-0012, declared 2026-07-13)
+
+The owner declared the ¥400k account to be EXPERIMENTAL capital with an explicit −75% drawdown tolerance and requested a risk-accepting architecture. Section 17 encodes that mandate as *discipline*, not as an edge claim. It ADDS risk-budget structure on top of every existing rule and RELAXES NONE of them — in particular Rule 3 (advice-only, manual external execution), Section 8 (no fabricated probabilities), Section 12 (anti-FOMO), Section 14 (journal SSoT), and Section 16 (signal promotion gates) all continue to bind. Accepting more risk does not create edge; it widens outcome variance. The only positive-expectation engine in the mandate is compensated market beta.
+
+### Rule 17.0: Mandate Provenance and Boundary
+
+The mandate's parameters (experimental capital, kill-switch floor, target exposure, band, sleeve caps) are OWNER-DECLARED values recorded in `configs/risk_mandate.json`, not model outputs. Any change to them follows Rule 4 (field / old / new / reason / expected impact / verification) in the PROJECT_STATUS Change Log. The quantitative derivation behind the defaults (fractional-Kelly λ ≤ 0.75 from P(hit floor) ≤ 10%; target β-adjusted exposure 1.4× NAV) is recorded in ADR-0012 with its assumptions (μ ≈ 5.5%, σ ≈ 18%) labelled as RESEARCH ASSUMPTIONS with material estimation uncertainty — never as predictions.
+
+### Rule 17.1: Sleeve Architecture
+
+Every holding maps to exactly ONE sleeve via the declarative `sleeve_map` in `configs/risk_mandate.json`:
+
+- **Sleeve A — leveraged-beta engine**: broad-market beta (incl. leveraged ETFs). The only sleeve with positive expected return, sourced from the equity risk premium.
+- **Sleeve B — value/E-P live experiment**: the Rule 16 forward-track skin-in-the-game basket. Expected return ≈ 0 (evidence purchase); it exists to measure real execution cost and to bind the owner to the 63D verdict (~2026-08-26).
+- **Sleeve C — conviction bets**: owner discretionary positions. ZERO demonstrated edge, pure variance, budgeted as loss-tolerant.
+
+The Section 14 journal is NOT modified — sleeve assignment is a read-only overlay; journal schema, append-only invariants, and entry ids are untouched. A holding whose symbol is absent from `sleeve_map` is FAIL-CLOSED into an `UNASSIGNED` bucket and surfaced as a warning; it is never silently attributed to a sleeve.
+
+### Rule 17.2: Exposure Target and Rebalance Discipline
+
+Total β-adjusted exposure (Σ market_value × β × leverage_factor) targets the mandate ratio (default 1.4× NAV) inside the declared band (default [1.2, 1.6]). Outside the band, the surface MUST show a rebalance-needed state. The drawdown arithmetic that justifies the mandate (P(hit floor) ≤ 10%) is CONDITIONAL on constant-fraction rebalancing — reducing yen exposure as NAV falls. Freezing yen exposure while NAV falls (letting effective leverage rise) voids the derivation; the surface must say so when the band is breached downward. All rebalancing is owner-executed externally (Rule 3).
+
+### Rule 17.3: Kill-Switch
+
+The kill-switch is a NAV floor (default ¥100,000). The surfaces MUST always show the current buffer to the floor. If NAV < floor: the risk surface enters `kill_switch_breached`, every sleeve's status line becomes "exit + post-mortem", and no advice other than de-risking may be rendered until the owner records a post-mortem. The system cannot and does not liquidate anything (Rule 3) — the kill-switch is a binding commitment device for the owner, not an order.
+
+### Rule 17.4: Sleeve C Discipline
+
+1. **Cap**: C's mark-to-market value MUST NOT exceed 20% of NAV (aligned with Rule 12.5). Above the cap → `cap_breached` flag; no BUY advice for C names while breached.
+2. **No averaging down**: adding to a C position below its re-underwrite price is a discipline violation and MUST be flagged if recorded.
+3. **Mandatory thesis**: every C position REQUIRES a written thesis + invalidation trigger recorded in the mandate config. A C position without one carries a `thesis_missing` flag (fail-closed, prominently rendered) — re-underwriting without a thesis is "forgot to sell" wearing a new badge.
+4. **Review trigger**: a C position at or below its declared review drawdown (default −20% from re-underwrite) enters `review_required`: the surface demands an explicit owner decision (hold-with-reason / exit), logged.
+5. Re-underwriting a position INTO C (e.g. 8035.T at ¥71,300 on 2026-07-13) resets its discipline reference price but never its recorded cost basis or P&L history.
+6. **Bilateral exit bracket (P26)**: a C position MAY declare a two-sided close-price exit bracket (`exit_upper_jpy` / `exit_lower_jpy`) in its thesis. Evaluated on the latest CLOSE only (aligned with the afterclose routine, never intraday). On either side breached → `exit_triggered` flag + an advice-only line ("下 S 株市价卖单了结"; execution is the owner's, Rule 3). The bracket exists to defeat the disposition effect: a "sell only when it recovers to cost" plan is a one-sided cap on upside with unlimited downside — the exit condition MUST be a declared price on BOTH sides and MUST NEVER be the entry cost. A written bracket IS a valid thesis (Rule 17.4.3) for a position being wound down.
+7. **Discipline-flag sunset (P26)**: `thesis_missing` / `review_required` are not allowed to linger indefinitely. When a flag has been continuously open for ≥ `flag_sunset_sessions` sessions (default 7), read from the append-only risk trace, it escalates: the daily snapshot prints a SUNSET line and records it in the trace `sunset` field, demanding resolution (write thesis / re-underwrite / exit). A rule with no deadline is a rule the owner can defer forever.
+
+### Rule 17.5: Sleeve B Pre-Commitment
+
+B is sized for MEASUREMENT (execution cost, slippage vs paper IC), not for alpha allocation — default cap ¥60k. Its lifecycle is PRE-COMMITTED at declaration to defeat mid-experiment FOMO/sunk-cost resizing: (a) if the 63D E/P live forward verdict (~2026-08-26, Rule 16.6 gate) CONFIRMS, B may grow to at most ¥150k via a Rule 4 change; (b) if it FAILS, B is unwound back to Sleeve A. Resizing B before the verdict, in either direction, is a Section 12 discipline violation absent a written owner override.
+
+### Rule 17.6: Honest Expectation Labelling
+
+Every risk-mandate surface (API, frontend card, daily trace) MUST carry per-sleeve expectation labels: A = "compensated beta (期望≈2×股权溢价−损耗)"; B = "期望≈0(买证据)"; C = "零 demonstrated edge·纯方差". Doubling-time arithmetic, probability-of-floor numbers, and Kelly math may be shown ONLY as derivation provenance with assumptions attached — never as forward-looking win rates. All Section 8 prohibitions on probability/win-rate language apply unchanged.
+
+### Rule 17.7: Sector Look-Through (P26)
+
+The risk surface MUST expose PENETRATED sector concentration, not just direct holdings: a passive index ETF carries embedded sector weight that a per-symbol view hides. Look-through = Σ direct theme-tagged market value (`theme_map`) + Σ (index-ETF market value × leverage_factor × embedded sector weight `benchmark_sector_weights`). Embedded weights are RESEARCH ESTIMATES (Rule 17.6) with an `_asof`/`_source` stamp, refreshed via Rule 4 when materially stale — never predictions. This answers "how much of NAV actually moves with theme X" across sleeves; e.g. a single semi conviction name plus TOPIX's ~11% semi weight (direct + leveraged) can put >20% of NAV on one theme while each holding looks small. Observability only: it issues no advice and no target — surfacing the number is the control.

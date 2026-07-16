@@ -82,6 +82,7 @@ FORWARD_EVAL = HERE / "forward_signal_report.py"  # §16/ADR-0010 shadow-eval (n
 FUNDAMENTAL_COHORT = HERE / "fundamental_cohort.py"  # P19-02b: monthly value/quality forward cohort
 COHORT_DIR = ROOT / "reports" / "research_cohorts" / "fundamental" / "predictions"
 VALUE_LIVELOG = HERE / "backtest_value_on_livelog.py"  # P23-F: early value read on the live log (63D matures ~Aug 26)
+RISK_MANDATE = HERE / "risk_mandate_snapshot.py"  # P25-05: Section 17 sleeve/kill-switch daily trace (non-fatal)
 
 # JPX trading calendar (Rule 15.4 fail-closed) lives in the src layer so it is
 # reusable + unit-tested; add src to path the same way emit/sweep do.
@@ -360,6 +361,16 @@ def run_afterclose(today: date, *, asof: date | None = None, db_path: Path | Non
         record["value_livelog"] = {"rc": rc_vll, "tail": (out_vll or err_vll or "")[-300:]}
     except Exception as exc:
         record["value_livelog"] = {"rc": None, "error": str(exc)[:200]}
+    # P25-05: Section 17 risk-mandate daily trace (sleeves / exposure band /
+    # kill-switch buffer). Read-only bookkeeping of the owner-declared mandate;
+    # non-fatal — a diagnostic must never block collection.
+    try:
+        rc_rm, out_rm, err_rm = runner(
+            [sys.executable, str(RISK_MANDATE), "--asof", asof.isoformat()],
+            cwd=str(ROOT), env_extra={"PYTHONIOENCODING": "utf-8"}, timeout=120)
+        record["risk_mandate"] = {"rc": rc_rm, "tail": (out_rm or err_rm or "")[-300:]}
+    except Exception as exc:
+        record["risk_mandate"] = {"rc": None, "error": str(exc)[:200]}
     new, dropped, skipped = coll.get("new_predictions"), coll.get("dropped_no_close"), coll.get("skipped_on_disk")
     procs_ok = (coll["emit_rc"] == 0 and coll["sweep_rc"] == 0)
     # Rule 11.9 honesty: a green return code with ZERO new samples is NOT a

@@ -1,0 +1,91 @@
+{
+  "_doc": "Owner risk mandate (Section 17 / ADR-0012). OWNER-DECLARED parameters, not model outputs. Changes go through Rule 4 (PROJECT_STATUS Change Log). The engine reading this file is read-only/advice-only (Rule 3).",
+  "version": 1,
+  "declared_date": "2026-07-13",
+  "experimental_capital_jpy": 400000,
+  "kill_switch_nav_floor_jpy": 100000,
+  "target_exposure_ratio": 1.4,
+  "exposure_band": [1.2, 1.6],
+  "flag_sunset_sessions": 7,
+  "derivation_assumptions": {
+    "_doc": "RESEARCH ASSUMPTIONS with material estimation uncertainty (Rule 17.6) — provenance for ADR-0012's fractional-Kelly derivation, never predictions.",
+    "equity_premium_mu": 0.055,
+    "market_sigma": 0.18,
+    "kelly_fraction_lambda": 0.75,
+    "p_floor_hit_target": 0.10
+  },
+  "sleeves": {
+    "A": {
+      "role": "leveraged_beta_engine",
+      "label": "杠杆β引擎",
+      "expectation_label": "compensated beta·期望≈2×股权溢价−损耗",
+      "target_capital_jpy": 217000
+    },
+    "B": {
+      "role": "value_ep_live_experiment",
+      "label": "value/E-P 实盘实验",
+      "expectation_label": "期望≈0·买证据",
+      "target_capital_jpy": 60000,
+      "cap_jpy": 60000,
+      "precommitment": {
+        "verdict_date": "2026-08-26",
+        "on_confirm_cap_jpy": 150000,
+        "on_fail": "unwind_to_A"
+      }
+    },
+    "C": {
+      "role": "conviction_bets",
+      "label": "高信念押注",
+      "expectation_label": "零 demonstrated edge·纯方差",
+      "cap_frac_nav": 0.20,
+      "no_averaging_down": true,
+      "review_drawdown_frac": -0.20
+    }
+  },
+  "sleeve_map": {
+    "1306.T": "A",
+    "1568.T": "A",
+    "8035.T": "C",
+    "3539.T": "B",
+    "2666.T": "B",
+    "8927.T": "B",
+    "2060.T": "B",
+    "3245.T": "B",
+    "9997.T": "B",
+    "8572.T": "B",
+    "3010.T": "B"
+  },
+  "betas": {
+    "_doc": "Research assumptions (broad-market beta vs TOPIX); _default applies to unmapped symbols.",
+    "_default": 1.0,
+    "1306.T": 1.0,
+    "8035.T": 1.5
+  },
+  "leverage_factors": {
+    "_doc": "Instrument leverage (2x ETFs get 2.0 when added to sleeve_map).",
+    "_default": 1.0,
+    "1568.T": 2.0
+  },
+  "theme_map": {
+    "_doc": "Direct symbol→theme tag for sector look-through (Rule 17.7). Broad-index ETFs are NOT tagged here; their sector exposure enters via benchmark_sector_weights so it is not double-counted.",
+    "8035.T": "semi"
+  },
+  "benchmark_sector_weights": {
+    "_doc": "RESEARCH ESTIMATE (Rule 17.6), not a prediction: embedded sector weights inside broad-index ETF holdings, used for look-through concentration only. 1568.T (TOPIX 2x) shares TOPIX composition; leverage_factor is applied on top for economic exposure.",
+    "_asof": "2026-07",
+    "_source": "TOPIX sector composition, approximate; refresh via Rule 4 when materially stale",
+    "1306.T": {"semi": 0.11},
+    "1568.T": {"semi": 0.11}
+  },
+  "c_theses": {
+    "8035.T": {
+      "reunderwrite_price": 71300,
+      "reunderwrite_date": "2026-07-13",
+      "flag_opened": "2026-07-13",
+      "thesis": "清算中仓位（非信念持有）。owner 无单票信息优势、承认约 44x 前瞻 PE 的估值风险（街上 12 个月目标 ¥50-66k 均低于现价）；持有理由仅为在预写的双边括号内有序退出，不是押注涨到 8-9 万。expectation≈0·纯方差，退出即终结。",
+      "invalidation": "双边收盘括号（Rule 17.4.6）：收盘 ≥ ¥74,000（回到 07-15 收盘）或 ≤ ¥64,000（重承保价 71,300 的 -10%）→ 次一交易日下 SBI S 株市价卖单了结。退出条件是收盘价触边，永不因'回到成本 77,600'而改判；触边前不动作。",
+      "exit_upper_jpy": 74000,
+      "exit_lower_jpy": 64000
+    }
+  }
+}

@@ -88,15 +88,17 @@ def test_afterclose_happy_path_calls_screener_then_emit_then_sweep(tmp_path, mon
              "sweep" if any("sweep_pending" in str(c) for c in cmd) else
              "forward_eval" if any("forward_signal_report" in str(c) for c in cmd) else
              "cohort" if any("fundamental_cohort" in str(c) for c in cmd) else
-             "value_livelog" if any("backtest_value_on_livelog" in str(c) for c in cmd) else "?"
+             "value_livelog" if any("backtest_value_on_livelog" in str(c) for c in cmd) else
+             "risk_mandate" if any("risk_mandate_snapshot" in str(c) for c in cmd) else "?"
              for cmd in calls]
     # price DB → news → macro → adr → TDnet corpus (ADR-0010/P17-4) → revision
     # docs (P23-A, perishable) → screener → meta → S株 overlay → emit → sweep →
     # forward shadow-eval (Rule 16) → monthly fundamental cohort (P19-02b) →
-    # value-on-livelog early read (P23-F) — all tail steps non-fatal, research-only.
+    # value-on-livelog early read (P23-F) → risk-mandate trace (P25-05,
+    # Section 17) — all tail steps non-fatal, research-only/read-only.
     assert order == ["refresh", "news", "macro", "adr", "tdnet", "revisions",
                      "screener", "meta", "skabu", "emit", "sweep", "forward_eval",
-                     "cohort", "cohort", "value_livelog"]
+                     "cohort", "cohort", "value_livelog", "risk_mandate"]
 
 
 def test_afterclose_fail_closed_aborts_emit_when_screener_fails(tmp_path, monkeypatch):

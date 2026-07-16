@@ -29,6 +29,8 @@ function V4WorkflowSpine() {
           <V3PortfolioCard positions={data.positions} />
           {/* Rule 11.17 — Position Exit Discipline Board (shared governed card, four-variant parity). */}
           <ExitBoardCard />
+          {/* Section 17 — Owner Risk Mandate sleeve panel (shared governed card, four-variant parity). */}
+          <RiskMandateCard />
         </div>
 
         <div className="htr-card" style={{ display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>

@@ -51,6 +51,8 @@ function V1ProTerminal() {
           </V1Panel>
           {/* Rule 11.17 — Position Exit Discipline Board (shared governed card, four-variant parity). */}
           <ExitBoardCard />
+          {/* Section 17 — Owner Risk Mandate sleeve panel (shared governed card, four-variant parity). */}
+          <RiskMandateCard />
           <V1Panel title={<span>决策日志 · <Term>§8.6</Term></span>} sub={data.meta.tradeDate}>
             <div style={{ maxHeight: 220, overflow: "auto" }}><DecisionLog entries={data.decisionLog} max={6} /></div>
           </V1Panel>

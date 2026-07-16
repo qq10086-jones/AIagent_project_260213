@@ -67,6 +67,8 @@ function V3MarketDashboard({ layout = "tabs" }) {
           <V3PortfolioCard positions={data.positions} defaultSymbol={top.symbol} />
           {/* Rule 11.17 — Position Exit Discipline Board (shared governed card, four-variant parity). */}
           <ExitBoardCard />
+          {/* Section 17 — Owner Risk Mandate sleeve panel (shared governed card, four-variant parity). */}
+          <RiskMandateCard />
         </div>
       </div>
 

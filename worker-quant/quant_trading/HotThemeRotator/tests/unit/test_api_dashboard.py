@@ -645,3 +645,30 @@ def test_exit_board_rotate_count_matches_actionable_rows(client):
     expected = sum(1 for r in board["rows"]
                    if r["planStatus"] in ("plan_ready", "s_kabu_only"))
     assert exit_board["actionBoardPlanReady"] == expected
+
+
+# ── P25-04 / Section 17: owner risk-mandate sleeve panel ─────────────────
+
+def test_dashboard_exposes_risk_mandate_key(client):
+    resp = client.get("/api/dashboard")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert "riskMandate" in payload
+    rm = payload["riskMandate"]
+    # With the repo mandate config + live portfolio present, the panel is a
+    # dict carrying the Section 17 contract; if either is unavailable in this
+    # environment it MUST be null (fail-open), never a fabricated shape.
+    if rm is not None:
+        assert rm["scoreStatus"] == "uncalibrated_research_score"
+        assert "Rule 3" in rm["disclosure"]
+        assert rm["killSwitch"]["floorJpy"] == 100_000
+        assert rm["exposure"]["bandStatus"] in ("below_band", "within_band", "above_band")
+        ids = [s["id"] for s in rm["sleeves"]]
+        for sid in ("A", "B", "C"):
+            assert sid in ids
+
+
+def test_risk_mandate_fails_open_to_null_without_config(monkeypatch, tmp_path):
+    # A base_dir with no configs/risk_mandate.json → riskMandate is null.
+    payload = serializers.build_dashboard_payload(base_dir=tmp_path, top_n=3)
+    assert payload["riskMandate"] is None

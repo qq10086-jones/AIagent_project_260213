@@ -740,3 +740,26 @@ def test_skabu_card_not_fixed_overlay():
     root_line = [l for l in html.splitlines() if 'id="skabu-root"' in l][0]
     assert "position:fixed" not in root_line
     assert "z-index:9999" not in root_line
+
+
+# ── P25-04 / Section 17: Risk Mandate card contracts ─────────────────────
+
+def test_risk_mandate_card_exists_and_mounted_on_all_four_variants():
+    """Section 17 — the owner risk-mandate panel is a shared governed card with
+    four-variant parity (Rule 11.7), same as the exit board."""
+    shared = read_frontend_file("src/htr-shared.jsx")
+    assert "function RiskMandateCard()" in shared
+    assert "RiskMandateCard," in shared  # exported on window
+    for variant in ("src/htr-v1.jsx", "src/htr-v2.jsx", "src/htr-v3.jsx", "src/htr-v4.jsx"):
+        assert "<RiskMandateCard />" in read_frontend_file(variant), f"missing mount in {variant}"
+
+
+def test_risk_mandate_card_honesty_redlines():
+    """Rule 17.6 — the card renders the backend disclosure verbatim, labels the
+    panel as the owner's own declaration (not a prediction), and fails open."""
+    shared = read_frontend_file("src/htr-shared.jsx")
+    card = shared[shared.index("function RiskMandateCard()"):]
+    assert "board.disclosure" in card              # standing disclosure rendered
+    assert "不是预测" in card                       # owner-declaration framing
+    assert "非指令" in card                         # deployment gap is not an order
+    assert "return null" in card                   # fail-open when backend omits

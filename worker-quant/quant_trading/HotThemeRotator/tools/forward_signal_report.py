@@ -63,14 +63,21 @@ def _fmt(rec: dict) -> str:
     )
 
 
-def _price_reversal_dsr(base: str) -> dict:
+def _price_reversal_dsr(base: str, lookup_factory=None) -> dict:
     """Honest Bailey/Lopez-de-Prado DSR for the BEST price_reversal config, deflated
     against the full (lookback x horizon) search breadth. n_obs is overlap-adjusted
-    (n_days // horizon) because forward windows overlap day-to-day."""
+    (n_days // horizon) because forward windows overlap day-to-day.
+
+    ``lookup_factory(lookback) -> return_lookup`` lets the caller share memoized
+    PIT-price lookups with the rest of the report (avoids re-fetching the price DB
+    for lookbacks 5/10 that also appear in the main table); defaults to a fresh
+    lookup per lookback when omitted so the function stays standalone."""
+    if lookup_factory is None:
+        lookup_factory = lambda lb: kline_prior_return_lookup(lookback=lb)  # noqa: E731
     trials = []  # (lookback, horizon, sr, n_days, mean_ic)
     for lb in LOOKBACK_GRID:
         res = evaluate_signal(
-            make_price_reversal_signal(lookback=lb, return_lookup=kline_prior_return_lookup(lookback=lb)),
+            make_price_reversal_signal(lookback=lb, return_lookup=lookup_factory(lb)),
             base,
             horizons=HORIZON_GRID,
         )
@@ -109,10 +116,20 @@ def main(argv=None) -> int:
     base = args.base_dir
     asof = args.asof or _dt.date.today().isoformat()
 
+    # One memoized PIT-price lookup per lookback, shared across the table, the DSR
+    # grid, and the orthogonality check — so each name's price history is fetched
+    # from the DB at most once per lookback (was the report's 5-min timeout cause).
+    _lookup_cache: dict = {}
+
+    def reversal_lookup(lb: int):
+        if lb not in _lookup_cache:
+            _lookup_cache[lb] = kline_prior_return_lookup(lookback=lb)
+        return _lookup_cache[lb]
+
     signals = {"screener_buy": screener_buy, "reversal_of_score": reversal_of_score}
     for lb in (5, 10):
         signals[f"price_reversal_{lb}d"] = make_price_reversal_signal(
-            lookback=lb, return_lookup=kline_prior_return_lookup(lookback=lb)
+            lookback=lb, return_lookup=reversal_lookup(lb)
         )
     # P19-02 (2026-07-04): the P23-B gate-passing family enters the live forward
     # track. NOTE: their historical verdict horizon is 63D; the forward log only
@@ -125,13 +142,13 @@ def main(argv=None) -> int:
         )
         signals[fn.__name__] = fn
     table = {name: evaluate_signal(fn, base) for name, fn in signals.items()}
-    dsr = _price_reversal_dsr(base)
+    dsr = _price_reversal_dsr(base, lookup_factory=reversal_lookup)
 
     recs, _ = _load_records_and_returns(base, 5)
     rho = None
     rho_ey = None
     if recs:
-        pr5 = make_price_reversal_signal(lookback=5, return_lookup=kline_prior_return_lookup(lookback=5))
+        pr5 = make_price_reversal_signal(lookback=5, return_lookup=reversal_lookup(5))
         rho = cross_signal_rank_corr(recs, pr5(recs), screener_buy(recs))
         # Rule 16.3 — fundamentals vs the production momentum score (stacking
         # requires |rho| < 0.5; fundamentals should be near-orthogonal).

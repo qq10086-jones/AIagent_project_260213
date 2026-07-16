@@ -154,12 +154,19 @@ def evaluate_signal(
     """
     name = getattr(signal_fn, "__name__", str(signal_fn))
     out: dict = {"signal": name, "round_trip_cost": round_trip_cost, "horizons": {}}
+    # Scores depend ONLY on ``records`` — which are identical across horizons (a
+    # horizon changes the forward-return window, not the live-prediction set). So
+    # compute them once and reuse. Recomputing per horizon was the report's
+    # dominant cost for DB-backed signals (price_reversal does one PIT price fetch
+    # per name; ×3 horizons ×5 lookbacks was ~150s and grew with the sample).
+    scores = None
     for H in horizons:
         records, ret_by_pid = _load_records_and_returns(base_dir, H)
         if not records:
             out["horizons"][H] = {"n_days": 0}
             continue
-        scores = signal_fn(records)
+        if scores is None:
+            scores = signal_fn(records)
         daily, dret = group_scored_daily(records, scores, ret_by_pid, min_names=min_names)
         if not daily:
             out["horizons"][H] = {"n_days": 0}
@@ -219,22 +226,35 @@ def kline_prior_return_lookup(db_path=None, *, lookback: int = 5, calendar_buffe
 
     path = db_path or default_db_path()
     fetcher = LegacyDailyPriceFetcher(path)
+    # PIT prior-return is deterministic per (symbol, trade_date) — memoize so the
+    # same closure reused across evaluate_signal passes (table + DSR grid +
+    # orthogonality) hits the price DB only once per name. Scoped to this closure;
+    # no cross-call/global state.
+    _memo: dict[tuple[str, str], Optional[float]] = {}
 
     def lookup(symbol: str, trade_date: str) -> Optional[float]:
+        key = (symbol, trade_date)
+        if key in _memo:
+            return _memo[key]
         td = _date.fromisoformat(trade_date)
         end = (td - _td(days=1)).isoformat()  # strictly before decision date
         start = (td - _td(days=lookback * 2 + calendar_buffer)).isoformat()
         try:
             bars = list(fetcher.fetch(symbol=symbol, start_date=start, end_date=end))
         except Exception:
+            _memo[key] = None
             return None
         closes = [float(b.close) for b in bars if getattr(b, "close", None) not in (None, 0)]
         if len(closes) < lookback + 1:
+            _memo[key] = None
             return None
         prev, base = closes[-1], closes[-1 - lookback]
         if base <= 0:
+            _memo[key] = None
             return None
-        return prev / base - 1.0
+        val = prev / base - 1.0
+        _memo[key] = val
+        return val
 
     return lookup
 

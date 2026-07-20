@@ -704,8 +704,14 @@ The Position Exit Discipline Board (持仓纪律板) answers 00_DESIGN §2 Q4 �
 4. **Advice-only, record-only.** The board never acts: exits happen at the external broker and are recorded through the existing manual journal path (Rule 3 / §14). The board adds no POST route.
 5. **PIT + read-only + parity + degradation.** Rows derive exclusively from the served portfolio state (journal SSoT) and its recorded prices; the shared card binds every variant (Rule 11.7 content red-lines); when portfolio data is unavailable the board fail-opens to nothing (Rule 11.9.4 honest absence, never fabricated holdings).
 6. **Contract tests** assert: disclosure renders; parameters visible; breached-stop surfacing; insufficient_data forcing; no forbidden vocabulary; no new POST.
+7. **Mandate precedence (added 2026-07-20, P27).** The generic parameters in 11.17.1 encode the 00_DESIGN §1 swing strategy. They govern ONLY holdings the Section 17 owner mandate does not cover. For any symbol present in `sleeve_map`, the mandate supersedes them and the cost-anchored references MUST be suppressed for that row, replaced by the reference that actually binds:
+   - **Sleeve A** → no per-symbol level. Its expected return IS the equity risk premium (Rule 17.1); a cost-anchored stop realizes the drawdown the sleeve is compensated for holding, and on a 2× instrument a −4% band sits inside two daily sigma of the mandate's own σ ≈ 18% assumption. The binding discipline is the portfolio-level β-adjusted exposure band (Rule 17.2).
+   - **Sleeve B** → no per-symbol level; the position is pre-committed to its verdict date (Rule 17.5), and stopping out a measurement basket destroys the measurement it was bought to produce.
+   - **Sleeve C** → the declared bilateral close bracket (Rule 17.4.6), else the review-drawdown trigger off the re-underwrite price (Rule 17.4.4). **Never the entry cost** — displaying a cost-anchored stop on a C position re-displays the exact anchor 17.4.6 exists to abolish, which is the disposition effect wearing a discipline badge.
 
-Cross-references: Rule 3, 4, 8.3, 9.4, 11.6, 11.7, 11.9, 11.16, §14.
+   `exitStatus` gains `mandate_governed` / `mandate_exit_triggered` / `mandate_review_required`. Every row MUST carry `sleeve` and `disciplineSource` so a suppressed generic stop can never be misread as "no discipline", and the surface MUST state the generic parameters' scope rather than implying they are global. Absent or invalid mandate config → fail-open to the pre-P27 behaviour (generic parameters for all rows), never a fabricated sleeve. Rationale: two discipline layers that disagree on the same holding produce a false alarm that trains the owner to ignore the board — the layer that governs must be the layer that renders.
+
+Cross-references: Rule 3, 4, 8.3, 9.4, 11.6, 11.7, 11.9, 11.16, §14, §17 (17.1, 17.2, 17.4.4, 17.4.6, 17.5).
 
 ## 12. Push Mode Discipline (Anti-FOMO Layer)
 

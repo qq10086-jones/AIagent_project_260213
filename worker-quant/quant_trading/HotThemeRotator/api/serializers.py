@@ -137,7 +137,11 @@ def build_dashboard_payload(
         if action_board:
             plan_ready = sum(1 for r in action_board.get("rows", [])
                              if r.get("planStatus") in ("plan_ready", "s_kabu_only"))
-        exit_board = build_exit_board(positions, action_board_plan_ready=plan_ready)
+        # base_dir lets the board read the Section 17 mandate so sleeve holdings
+        # are governed by it rather than the generic swing params (Rule 11.17.7).
+        exit_board = build_exit_board(
+            positions, action_board_plan_ready=plan_ready, base_dir=base_dir
+        )
     except Exception:
         exit_board = None
     try:  # P25-04 / Section 17 — owner risk-mandate sleeve panel; fail-open to None

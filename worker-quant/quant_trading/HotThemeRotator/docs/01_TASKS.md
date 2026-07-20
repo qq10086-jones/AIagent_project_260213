@@ -2370,3 +2370,14 @@ Source: owner reflection session (2026-07-16) after the 07-16 semi gap-down. Own
 
 ### P26-04 Sleeve A deployment calendar (proposal — pending owner)
 - `docs/proposals/sleeve_a_deployment_schedule.md`: three mechanical cadences (fixed weekly / value-averaging / price-grid) to replace "owner's pace" (which degraded into day-by-day timing) and close the below-band gap (~0.68× vs [1.2, 1.6]). Not active until owner adopts one via Rule 4. Advice-only; no auto-execution.
+
+## Milestone P27: Exit-Discipline Layer Precedence (2026-07-20 owner question)
+
+Source: owner asked whether 1568.T, showing below its "discipline stop price", had to be sold. Investigation found two discipline layers firing on the same holdings with contradictory verdicts — and, worse, a decision already recorded on 2026-07-13 that had never reached the code.
+
+### P27-01 Mandate precedence in the exit board (Rule 11.17.7)
+- `exit_board.py` applied the generic 00_DESIGN §1 swing params (avg_cost +2/+3/+5%, −4% stop) to every holding. Section 17 (declared 2026-07-13, 11 days after Rule 11.17) governs mapped symbols with more specific, already-declared discipline. The P25 Change Log stated "8035.T 旧 −4% 止损参考被 C 纪律显式取代 …… 不是静默失效" — but no code implemented it, so the board kept rendering a cost-anchored ¥74,496 stop on a Sleeve C position whose Rule 17.4.6 bracket exists precisely to abolish the entry-cost anchor.
+- Fix: symbols in `sleeve_map` suppress the generic refs and render the binding rule instead — A → none (Rule 17.1/17.2 portfolio band; a −4% band on a 2x instrument sits inside 2 daily sigma of the mandate's own σ≈18%), B → none (Rule 17.5 pre-commitment), C → declared bilateral close bracket (17.4.6) else review-drawdown off re-underwrite price (17.4.4). Never the entry cost.
+- New `exitStatus` values `mandate_governed` / `mandate_exit_triggered` / `mandate_review_required`; every row carries `sleeve` + `disciplineSource`; board carries `mandateAware` and `params.scope`. Missing/invalid mandate → fail-open to pre-P27 behaviour.
+- Frontend: the footer claimed the params were "你声明的,Rule 4 显式配置" while the call site passed no config (dataclass default) and implied global scope. Now states scope + affected row count, or says plainly when no mandate is loaded.
+- Advice-only throughout (Rule 3): no position changed, no buy/sell rendered, no new POST route.

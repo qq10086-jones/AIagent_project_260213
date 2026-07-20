@@ -845,15 +845,32 @@ function ActionBoardCard() {
 
 // ── ExitBoardCard (P22-01 / Rule 11.17) ──
 // Position Exit Discipline Board (持仓纪律板): pure arithmetic between the
-// journal-derived holdings and the OPERATOR'S OWN declared take-profit/stop
-// parameters (00_DESIGN §1 "2-5% 止盈换仓"). Predicts nothing; never renders a
-// sell directive; a breached stop reference is surfaced prominently
-// (Rule 11.17.2). Fails open to nothing when the backend omits the board.
+// journal-derived holdings and the discipline that ACTUALLY governs each one.
+// Non-mandate holdings use the 00_DESIGN §1 swing params ("2-5% 止盈换仓");
+// Section 17 sleeve holdings use the mandate's own rule and suppress the
+// cost-anchored refs (Rule 11.17.7). Predicts nothing; never renders a sell
+// directive; a breached reference is surfaced prominently (Rule 11.17.2).
+// Fails open to nothing when the backend omits the board.
 const EXIT_BOARD_STATUS = {
   within_plan: { label: "计划内持有", color: "var(--htr-ink-2)" },
   past_first_take_profit: { label: "已越首止盈参考", color: "var(--htr-bull)" },
   stop_reference_breached: { label: "止损参考已破", color: "var(--htr-bear)" },
   insufficient_data: { label: "数据不足", color: "var(--htr-ink-3)" },
+  // Rule 11.17.7 — Section 17 mandate states
+  mandate_governed: { label: "授权纪律管辖", color: "var(--htr-ink-2)" },
+  mandate_exit_triggered: { label: "括号已触边", color: "var(--htr-bear)" },
+  mandate_review_required: { label: "需书面复核", color: "var(--htr-bear)" },
+};
+
+// Rule 11.17.7 — name the layer that produced this row's levels, so a reader
+// can never mistake a suppressed generic stop for "no discipline".
+const EXIT_DISCIPLINE_SOURCE = {
+  generic_swing: "通用波段参数 · 00_DESIGN §1",
+  mandate_sleeve_a: "Sleeve A · Rule 17.1/17.2 敞口带",
+  mandate_sleeve_b: "Sleeve B · Rule 17.5 预承诺",
+  mandate_bracket: "Sleeve C · Rule 17.4.6 双边括号",
+  mandate_review_drawdown: "Sleeve C · Rule 17.4.4 复核触发",
+  mandate_no_level: "授权覆盖 · 未声明价位",
 };
 
 function ExitBoardCard() {
@@ -861,6 +878,7 @@ function ExitBoardCard() {
   if (!board || !Array.isArray(board.rows) || !board.rows.length) return null;
   const yen = (x) => (x == null ? "—" : "¥" + Number(x).toLocaleString("ja-JP"));
   const refTxt = (t) => (t ? `${yen(t.price)} (距 ${t.distancePct > 0 ? "+" : ""}${t.distancePct}%)` : "—");
+  const lvlTxt = (p, d) => (p == null ? "—" : `${yen(p)}${d == null ? "" : ` (距 ${d > 0 ? "+" : ""}${d}%)`}`);
   return (
     <div className="htr-card" style={{ overflow: "hidden" }}>
       <div style={{ padding: "11px 14px 0" }}>
@@ -892,6 +910,25 @@ function ExitBoardCard() {
                   <span>止盈参考 {(r.takeProfitRefs || []).map(refTxt).join(" · ")}</span>
                 </div>
               )}
+              {/* Rule 11.17.7 — mandate-governed levels, shown in place of the
+                  suppressed cost-anchored refs. Bracket levels are declared
+                  close prices, never the entry cost. */}
+              {r.mandateRef && r.mandateRef.kind === "bilateral_close_bracket" && (
+                <div style={{ fontSize: 10.5, color: "var(--htr-ink-2)", display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <span>下沿 <b className="htr-bear-num">{lvlTxt(r.mandateRef.lowerJpy, r.mandateRef.lowerDistancePct)}</b></span>
+                  <span>上沿 <b>{lvlTxt(r.mandateRef.upperJpy, r.mandateRef.upperDistancePct)}</b></span>
+                </div>
+              )}
+              {r.mandateRef && r.mandateRef.kind === "review_drawdown" && (
+                <div style={{ fontSize: 10.5, color: "var(--htr-ink-2)" }}>
+                  <span>{r.mandateRef.label} <b className="htr-bear-num">{lvlTxt(r.mandateRef.priceJpy, r.mandateRef.distancePct)}</b></span>
+                </div>
+              )}
+              {r.disciplineSource && (
+                <div style={{ fontSize: 9.5, color: "var(--htr-ink-3)" }}>
+                  管辖：{EXIT_DISCIPLINE_SOURCE[r.disciplineSource] || r.disciplineSource}
+                </div>
+              )}
               {/* 10px regular red was the worst astigmatism-halation offender — slightly larger + semibold */}
               {r.statusNote && <div style={{ fontSize: 10.5, fontWeight: 600, color: st.color }}>{r.statusNote}</div>}
             </div>
@@ -899,7 +936,11 @@ function ExitBoardCard() {
         })}
       </div>
       <div style={{ padding: "0 14px 11px", fontSize: 9.5, color: "var(--htr-ink-3)" }}>
-        纪律参数（你声明的,Rule 4 显式配置）：止盈参考 {(board.params.takeProfitFracs || []).map((f) => `+${(f * 100).toFixed(0)}%`).join("/")} · 止损参考 {(board.params.stopFrac * 100).toFixed(0)}% · 基准 成本价
+        {/* Rule 11.17.7 — scope stated plainly: these params are NOT global. */}
+        通用波段参数（00_DESIGN §1）：止盈参考 {(board.params.takeProfitFracs || []).map((f) => `+${(f * 100).toFixed(0)}%`).join("/")} · 止损参考 {(board.params.stopFrac * 100).toFixed(0)}% · 基准 成本价
+        {board.mandateAware
+          ? ` — 仅适用于 Section 17 授权未覆盖的持仓（当前 ${board.params.appliesToRows ?? 0} 行）；sleeve 内持仓由授权自身纪律管辖`
+          : " — 未加载风险授权配置,全部持仓按通用参数对照"}
         {board.actionBoardPlanReady != null && ` · 今日计划板 结构就绪+仅S株可行 共 ${board.actionBoardPlanReady} 个（事实计数,非换仓指令）`}
       </div>
     </div>

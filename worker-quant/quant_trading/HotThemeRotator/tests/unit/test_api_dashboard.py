@@ -613,6 +613,8 @@ def test_action_board_watch_only_forced_on_study_only_rows(client):
 _ALLOWED_EXIT_STATUSES = {
     "within_plan", "past_first_take_profit", "stop_reference_breached",
     "insufficient_data",
+    # Rule 11.17.7 — Section 17 mandate supersedes the generic swing params
+    "mandate_governed", "mandate_exit_triggered", "mandate_review_required",
 }
 
 
@@ -633,6 +635,39 @@ def test_dashboard_exit_board_is_operator_discipline_arithmetic(client):
     assert "建议卖出" not in blob
     for forbidden_key in ("winRate", "probability", "expectedReturn"):
         assert f'"{forbidden_key}"' not in blob
+
+
+def test_dashboard_exit_board_defers_to_risk_mandate_sleeves(client):
+    """Rule 11.17.7 — the served board must not apply a cost-anchored stop to a
+    Section 17 sleeve holding. Regression for the 2026-07-20 conflict where the
+    generic −4% fired on 1568.T (Sleeve A) and re-displayed, on 8035.T, the very
+    entry-cost anchor Rule 17.4.6 exists to abolish."""
+    payload = client.get("/api/dashboard").json()
+    board, mandate_panel = payload["exitBoard"], payload["riskMandate"]
+    if board is None or mandate_panel is None:
+        return  # fail-open states carry nothing to verify
+    sleeve_of = {
+        h["symbol"]: s["id"]
+        for s in mandate_panel["sleeves"] for h in (s.get("holdings") or [])
+    }
+    if not sleeve_of:
+        return
+    assert board["mandateAware"] is True
+    seen_mandate_row = False
+    for row in board["rows"]:
+        sleeve = sleeve_of.get(row["symbol"])
+        if sleeve is None:
+            continue
+        seen_mandate_row = True
+        assert row["sleeve"] == sleeve  # board and panel agree on assignment
+        # the generic cost-anchored refs are suppressed for mandate holdings
+        assert row["stopRef"] is None
+        assert row["takeProfitRefs"] == []
+        assert row["exitStatus"] != "stop_reference_breached"
+        assert not row["disciplineSource"].startswith("generic")
+    assert seen_mandate_row, "fixture holds no mandate symbol — contract unverified"
+    # the params footer must not claim global scope
+    assert board["params"]["scope"] == "non_mandate_holdings"
 
 
 def test_exit_board_rotate_count_matches_actionable_rows(client):

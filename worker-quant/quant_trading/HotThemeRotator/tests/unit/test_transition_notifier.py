@@ -184,6 +184,48 @@ def test_delivery_failures_roll_back_to_silent_mode(tmp_path):
                for r in gate.audit_rows())
 
 
+def test_same_subject_is_cooled_down_across_sessions(tmp_path):
+    """Dedupe stops the SAME item repeating; cooldown stops one noisy subject.
+
+    Both are needed: a sleeve that generates a fresh binding item every couple
+    of sessions would otherwise push every time with dedupe fully satisfied.
+    """
+    sink = _Sink()
+    gate = _gate(tmp_path, sink)
+    path = tmp_path / "reports" / "observability" / "decision_queue.jsonl"
+    open_item(path, source_rule="17.4.6", subject="sleeve_C", summary="first",
+              created_asof="2026-07-24", severity="binding")
+    gate.notify_transitions(path, asof=date(2026, 7, 24))
+
+    open_item(path, source_rule="17.4.4", subject="sleeve_C", summary="second",
+              created_asof="2026-07-27", severity="binding")
+    gate.notify_transitions(path, asof=date(2026, 7, 27))
+    assert len(sink.sent) == 1
+    assert any(r.get("suppressed_reason") == "subject_cooldown"
+               for r in gate.audit_rows())
+
+
+def test_cooldown_expires_and_a_different_subject_is_unaffected(tmp_path):
+    sink = _Sink()
+    gate = _gate(tmp_path, sink)
+    path = tmp_path / "reports" / "observability" / "decision_queue.jsonl"
+    open_item(path, source_rule="17.4.6", subject="sleeve_C", summary="first",
+              created_asof="2026-07-24", severity="binding")
+    gate.notify_transitions(path, asof=date(2026, 7, 24))
+
+    # A different subject is never held back by sleeve_C's cooldown.
+    open_item(path, source_rule="17.2", subject="portfolio", summary="band",
+              created_asof="2026-07-27", severity="binding")
+    gate.notify_transitions(path, asof=date(2026, 7, 27))
+    assert len(sink.sent) == 2
+
+    # Past the cooldown window, sleeve_C may speak again.
+    open_item(path, source_rule="17.4.4", subject="sleeve_C", summary="later",
+              created_asof="2026-08-04", severity="binding")
+    gate.notify_transitions(path, asof=date(2026, 8, 4))
+    assert len(sink.sent) == 3
+
+
 def test_monthly_metrics_separate_suppressed_from_never_seen(tmp_path):
     sink = _Sink()
     gate = _gate(tmp_path, sink)

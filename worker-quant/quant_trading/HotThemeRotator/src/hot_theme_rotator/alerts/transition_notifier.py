@@ -31,11 +31,13 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Callable, Iterable
 
+from hot_theme_rotator.data.jpx_calendar import sessions_between
 from hot_theme_rotator.decision_queue import load_queue
 
 __all__ = [
     "MONTHLY_BUDGET",
     "MAX_CONSECUTIVE_FAILURES",
+    "SUBJECT_COOLDOWN_SESSIONS",
     "NotificationGate",
     "dedupe_key",
 ]
@@ -44,6 +46,10 @@ __all__ = [
 # as the failure mode, not a feature.
 MONTHLY_BUDGET = 20
 MAX_CONSECUTIVE_FAILURES = 3
+# Dedupe stops one item repeating; this stops one noisy SUBJECT dominating.
+# A sleeve emitting a fresh binding item every couple of sessions would clear
+# dedupe every time and still be a daily alarm.
+SUBJECT_COOLDOWN_SESSIONS = 5
 
 # Severities that may ever reach a channel. `informational` is excluded by
 # design: if it were pushable, every state would eventually be pushed.
@@ -107,6 +113,32 @@ class NotificationGate:
             if r.get("delivered") and str(r.get("asof", "")).startswith(month)
         )
 
+    def _last_delivered_by_subject(self) -> dict[str, date]:
+        last: dict[str, date] = {}
+        for row in self.audit_rows():
+            if not row.get("delivered"):
+                continue
+            subject = row.get("subject")
+            try:
+                when = date.fromisoformat(str(row.get("asof")))
+            except (TypeError, ValueError):
+                continue
+            if subject and (subject not in last or when > last[subject]):
+                last[subject] = when
+        return last
+
+    def _in_cooldown(self, subject: str, asof: date,
+                     last: dict[str, date]) -> bool:
+        previous = last.get(subject)
+        if previous is None:
+            return False
+        elapsed = sessions_between(previous, asof)
+        if elapsed is None:
+            # Outside the verified calendar: do NOT push. Silence is the safe
+            # failure here; a spurious alert is the expensive one.
+            return True
+        return elapsed < SUBJECT_COOLDOWN_SESSIONS
+
     # --- gating ----------------------------------------------------------
 
     def notify_transitions(self, queue_path: Path | str, *, asof: date) -> list[dict]:
@@ -114,6 +146,7 @@ class NotificationGate:
         month = asof.strftime("%Y-%m")
         seen = self._seen_keys()
         budget_left = MONTHLY_BUDGET - self._sent_this_month(month)
+        last_by_subject = self._last_delivered_by_subject()
         delivered: list[dict] = []
         failures = 0
 
@@ -152,6 +185,10 @@ class NotificationGate:
                 self._record({**base, "delivered": False,
                               "suppressed_reason": "monthly_budget_exhausted"})
                 continue
+            if self._in_cooldown(item.subject, asof, last_by_subject):
+                self._record({**base, "delivered": False,
+                              "suppressed_reason": "subject_cooldown"})
+                continue
 
             ok = False
             try:
@@ -161,6 +198,7 @@ class NotificationGate:
             if ok:
                 budget_left -= 1
                 failures = 0
+                last_by_subject[item.subject] = asof
                 delivered.append(base)
                 self._record({**base, "delivered": True, "suppressed_reason": None})
             else:

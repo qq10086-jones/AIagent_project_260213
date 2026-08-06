@@ -86,3 +86,18 @@ def test_list_shows_age_in_sessions_and_never_implies_an_order(tmp_path, capsys)
     assert "Rule 17.4.6" in out
     for forbidden in ("下单", "place order", "submit", "buy", "sell"):
         assert forbidden not in out.lower()
+
+
+def test_list_output_is_ascii_safe_for_a_cp932_console(tmp_path, capsys):
+    """The owner runs this by hand; capsys is utf-8 and hides console failures.
+
+    An em-dash in the header crashed a real cp932 run, so assert the bytes the
+    Japanese console has to encode, not just the text pytest can capture.
+    """
+    _open(tmp_path)
+    capsys.readouterr()
+    for argv in (["list", "--asof", "2026-08-04"], ["list", "--asof", "2026-07-24"]):
+        cli.main(["--base-dir", str(tmp_path)] + argv)
+        out = capsys.readouterr().out
+        out.encode("cp932")   # raises UnicodeEncodeError if a glyph slips back in
+        assert out.isascii()

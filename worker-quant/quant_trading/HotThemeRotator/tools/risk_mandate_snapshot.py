@@ -430,13 +430,24 @@ def main(argv=None) -> int:
             ages=ages,
             band_status=exp.get("bandStatus"),
         )
-        if opened:
+        # Report the queue every session, not only when something was opened:
+        # an item aging quietly is exactly what the daily surface must show.
+        if opened or queue_path.exists():
             try:
                 report = queue_report(queue_path, asof=_dt.date.fromisoformat(asof))
                 oldest = report["oldest_open_sessions"]
+                terminal = ", ".join(
+                    f"{k}={v}" for k, v in sorted(report["terminal_counts"].items())
+                ) or "none"
+                seen = report["median_trigger_to_seen_sessions"]
                 print(f"  decision queue: {report['open_count']} open, oldest "
-                      f"{oldest if oldest is not None else 'n/a'} sessions "
+                      f"{oldest if oldest is not None else 'n/a'} sessions; "
+                      f"terminal [{terminal}]; median trigger->seen "
+                      f"{seen if seen is not None else 'unobserved'} "
                       f"(tools/decision_queue_cli.py list)")
+                for row in report["open_items"][:3]:
+                    print(f"    [{row['advice_id']}] Rule {row['source_rule']} "
+                          f"{row['subject']} age {row['age_sessions']} sessions")
             except Exception as exc:  # noqa: BLE001 - diagnostic must never block
                 print(f"  WARNING queue_report_failed: {type(exc).__name__}: {exc}")
 

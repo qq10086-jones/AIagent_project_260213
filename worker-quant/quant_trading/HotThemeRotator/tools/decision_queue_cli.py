@@ -57,7 +57,7 @@ def _render_list(path: Path, asof: _dt.date) -> None:
         print(f"decision queue: no open items (asof {asof.isoformat()})")
     else:
         oldest = report["oldest_open_sessions"]
-        print(f"=== DECISION QUEUE asof={asof.isoformat()} — {report['open_count']} open, "
+        print(f"=== DECISION QUEUE asof={asof.isoformat()} - {report['open_count']} open, "
               f"oldest {oldest if oldest is not None else 'n/a'} sessions ===")
         for row in report["open_items"]:
             age = row["age_sessions"]

@@ -2403,11 +2403,21 @@ Dependency order: P28 → P29 → P30; P31 and P32 are independent lanes; P33 co
 
 Delivered commits: `366b08b` `4f94632` `ad5e332` `a39fe70` (session-age repair) · `0534845` (P29) · `c053fdf` (P28 tool + P32 memo) · `15777b9` `bd77739` (P30) · `2ff6578` (ASCII/CLI fix) · `8c9ea66` (P31) · `e54449e` (P33). Full smoke **1855 passed / 5 deselected / 0 failed** (baseline 1682 → +173 tests, zero regression).
 
-**The four owner decisions this backlog now waits on**, none of which the system may make (Rule 3 / Rule 4):
+**Acceptance status: CONDITIONAL ENGINEERING ACCEPTANCE, not governance closure.** The tools are built, tested and persisting artifacts; the loops they are meant to close are still open. A prior summary of this work overstated it — it presented the remaining work as owner-only when at least seven engineering items were outstanding. Those were completed on 2026-08-06 (see the remediation entry in `PROJECT_STATUS.md`), but the distinction stands: shipping the instrument is not the same as closing the loop.
+
+**Owner decisions** — none of which the system may make (Rule 3 / Rule 4):
 1. **8035.T fill price + fees** → unblocks P28 reconciliation and turns the shortfall FINAL.
-2. **Band breach** (open 17 sessions, out-of-band on 20/20 observed sessions): deploy / Rule 4 amendment / dated exception with expiry.
+2. **Band breach** (queue item age 17 sessions; **17/17 observed sessions below_band**): deploy / Rule 4 amendment / dated exception with expiry.
 3. **Mandate derivation** (P32): one of four alternatives.
-4. **What 2026-08-26 now means**, given P31 reports `confirm_reachable=false` for protocol reasons that waiting does not fix.
+4. **Adopt the 2026-08-26 rename** to *63D Evidence & Protocol Readiness Check* (see P31), and rule on the governance numbering ambiguity (see P33).
+
+**Still engineering, not owner** — known open items, listed so they are not mistaken for owner blockers:
+- `reports/research/cost_model.json` has no producer. Declaring the model needs an owner input (the cost figures); building the producer does not.
+- PBO/CPCV has no implementation anywhere in the repo.
+- No purge/embargo protocol exists for the live-log read.
+- The leakage audit needs re-running in-scope for the value experiment.
+
+Each is a precondition for `confirm` ever becoming reachable, and none is satisfied by waiting.
 
 ### P28 - Ledger, Retrospective, and Mandate-State Closure
 **Status: tooling done (`tools/implementation_shortfall.py`, 16 tests); BLOCKED on owner data.** The reporter refuses to promote a scenario price to an actual fill: `delay_cost_jpy` stays `None` and status stays `provisional`, naming the missing inputs, until the fill reaches the journal. Real run today confirms `PROVISIONAL / actual fill NOT IN JOURNAL / missing: actual_price, fees_jpy`.
@@ -2421,7 +2431,18 @@ Delivered commits: `366b08b` `4f94632` `ad5e332` `a39fe70` (session-age repair) 
 
 ### P29 - Decision Queue and Execution Observability
 **Status: DONE and live** (`src/hot_theme_rotator/decision_queue/`, `tools/decision_queue_cli.py`, 26 tests). `acknowledged` is deliberately an optional observation, not a gate — forcing acknowledge-first would make the ledger unable to record what actually happened, which is the 8035.T failure itself. Auto-open keys each item to the session the condition FIRST appeared, so a standing breach is one aging item rather than a new item per session; advisory flags stay off the queue on purpose.
-Live reading 2026-08-06: **1 open binding item at 17 sessions** (Rule 17.2 band breach, open since 2026-07-13 — every observed session since the mandate was declared), 1 executed (8035.T, trigger→terminal **7 sessions**), median trigger→seen **unobserved**. That last value is the notification gap, now a measured quantity rather than an anecdote.
+Live reading 2026-08-06: **1 open binding item, elapsed age 17 sessions** (Rule 17.2 band breach, created 2026-07-13), 1 executed (8035.T, trigger→terminal **7 sessions**), median trigger→seen **unobserved**. That last value is the notification gap, now a measured quantity rather than an anecdote.
+
+**Counting conventions — three numbers that are easy to conflate** (a corrected 2026-08-06 statement; an earlier draft said "20/20 sessions", which counted trace ROWS, the exact rows-vs-sessions error the Rule 17.4.7 repair existed to fix):
+
+| Number | What it counts |
+|---:|---|
+| **20** | rows in `risk_mandate_trace.jsonl` — includes same-day reruns, and is **not** a session count |
+| **17** | distinct JPX sessions with a trace row, 2026-07-13 … 2026-08-05, **no gaps**; all 17 record `below_band` |
+| **17** | the queue item's *elapsed* age from 2026-07-13 to 2026-08-06 — a different quantity that happens to coincide |
+| **15** | P33's band-compliance denominator: sessions at/before the reconciled-through date 2026-08-03. 08-04 and 08-05 are excluded because the position is unreconciled (the 8035.T sell is unjournaled) |
+
+So **17/17 observed sessions out-of-band** and **0/15 band compliance** are both correct under their own stated denominators, and neither is 20.
 - Persist deterministic advice IDs and append-only state transitions: `open -> acknowledged -> executed | declined | expired | superseded`.
 - Record source rule, created timestamp, JPX-session age, severity, evidence pointer, and a structured decline reason (Rule 13.9 rejected-with-reason).
 - Session-age and idempotency substrate: **done** (see above); the queue consumes it rather than reimplementing it.
@@ -2438,7 +2459,13 @@ Live reading 2026-08-06: **1 open binding item at 17 sessions** (Rule 17.2 band 
 - Automatic rollback to silent mode when a predeclared error or duplicate rate is breached (Section 12 anti-fatigue).
 
 ### P31 - Locked 63D Evidence Review Protocol
-**Status: DONE** (`tools/evidence_review_63d.py`, 34 tests). Reading as of 2026-08-06: `signal_verdict=insufficient`, `deployment_verdict=not_started` (0 Sleeve B fills; `unwind_to_A` non-operative on an empty sleeve), frozen trial family 100 inclusive / 60 in the E/P lineage, 63D has 0 matured of 2,216 rows.
+**Status: DONE** (`tools/evidence_review_63d.py`, 38 tests). Persisted artifact `reports/observability/evidence_review_63d/2026-08-06.json`: `signal_verdict=insufficient`, `deployment_verdict=not_started` (0 Sleeve B fills; `unwind_to_A` non-operative on an empty sleeve), frozen trial family 100 inclusive / 60 in the E/P lineage, 63D has 0 matured of 2,216 rows.
+
+> ### 2026-08-26 is renamed: **63D Evidence & Protocol Readiness Check**
+>
+> It is **not** a confirm/fail verdict date, and the previous framing should not be carried forward. On that date the review may report directional readings, data maturity, and remaining protocol gaps. It **may not emit `confirm`** until the verification protocol, the cost model, and the effective-sample definition are all locked. The existing freeze stays in force and this does **not** license enlarging Sleeve B.
+>
+> `confirm_reachable=false`, blocked by `cost_hurdle, pbo_cpcv, pit, purge, survivorship` — the artifact's own note: *"these checks are blocked by a missing PROTOCOL, not by a small sample: waiting for more data cannot turn them into a pass."*
 
 > ⚠ **`confirm_reachable = false`, and NOT for sample-size reasons.** Five checks are blocked by a missing *protocol*, which waiting until 2026-08-26 does not fix: PBO/CPCV has no implementation anywhere in the repo; the only leakage audit on disk is dated 2026-05-31, scoped to the backdated-calibration sample (`contaminated` / V2 `inconclusive`) and therefore transferable to the value live-log read in **neither** direction; σ_r at 63D is recorded by no artifact so the Rule 16.0 cost hurdle cannot be computed; and the live-log read records no purge protocol. Separately, the locked `min_obs=60` bar at a 63D label needs **3,780 independent date clusters** — collection stands at 49 trade days. **The 2026-08-26 milestone as previously understood cannot produce a `confirm`.** That is a governance finding, not a bug, and it needs an owner decision about what the date is now for.
 >
@@ -2466,7 +2493,11 @@ Live reading 2026-08-06: **1 open binding item at 17 sessions** (Rule 17.2 band 
 - **Account card = `unavailable`**, as it must be: an `executed` advice on 2026-08-04 has no journal entry on or after it. The card refuses to render a return on an unreconciled ledger rather than quoting a stale one.
 - **Band compliance 0.0% — 0 of 15 verifiable sessions in-band.** Independent confirmation of retrospective §4.4 from a different code path.
 - **`trigger_to_seen` = `not_applicable`**: no queue item has ever reached `acknowledged`. Not zero — never observed.
-- **92 of 264 rules have zero runtime reference (35%)**, split into `runtime_referenced` 172 / `section_referenced_only` 55 / `documentation_only` 19 / `unreferenced` 18. Collapsing those states would manufacture dead rules; the scan sees citations, not compliance, so it cannot distinguish a dormant rule from one the owner enforces by hand. **Review candidates: 0 — a CLOCK result, not a health result**, since git history for this tree begins 2026-05-25 and no rule can yet reach the 6-month window.
+- **106 of 264 rules have zero CODE reference (40%)**, by evidence strength: `implemented_in_product` 150 / `operator_tooling_only` 8 / `test_assertion_only` 19 / `artifact_echo_only` 0 / `documentation_only` 17 / `section_scope_only` 54 / `unreferenced` 16. Only the first two count as having a code reference. (The audit scans this repo including itself, so the split drifts by a few as code lands; the figure is the persisted 2026-08-06 artifact.)
+
+  > **Corrected 2026-08-06.** The first run reported "92 zero-reference / 172 runtime-referenced". That taxonomy counted `tests/` and `reports/` as runtime, so a rule named only in a test docstring ranked equal to one a shipping code path implements — a flattering aggregate of exactly the kind this audit exists to expose. Subdividing moves 17 rules out of "referenced" and the honest headline to **109 (41%)**.
+
+  Collapsing these states would manufacture dead rules; the scan sees citations, not compliance, so it cannot distinguish a dormant rule from one the owner enforces by hand. **Review candidates: 0 — a CLOCK result, not a health result**, since git history for this tree begins 2026-05-25 and no rule can yet reach the 6-month window.
 - Research card sources the frozen trial family from P31 rather than reporting `input_not_present` for a count the repo already computes.
 
 > ⚠ **Governance defect surfaced, needs an owner ruling:** the document's own numbering is ambiguous — **Rule 5.1 lives under Section 1, while Section 5 has its own item 1.** The parser refuses to invent a resolution and reports affected citations (e.g. `Rule 2.1`, cited from `event_desk.py`) under `dangling_references`; 14 cited numbers resolve to no defined rule.

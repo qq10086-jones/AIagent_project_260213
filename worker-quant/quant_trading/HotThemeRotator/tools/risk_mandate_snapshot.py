@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
     calendar_covers,
     is_trading_day,
+    previous_trading_day as _previous_trading_day,
 )
 from hot_theme_rotator.data.position_adapter import (  # noqa: E402
     DEFAULT_STRATEGY_ID,
@@ -35,7 +36,19 @@ from hot_theme_rotator.data.position_adapter import (  # noqa: E402
     default_db_path,
     load_portfolio_state,
 )
+from hot_theme_rotator.decision_queue import open_item, queue_report  # noqa: E402
 from hot_theme_rotator.risk.sleeve_engine import build_risk_mandate_panel  # noqa: E402
+
+
+# Rule 17.4 flags that constitute BINDING advice — a declared condition the
+# owner said they would act on. Advisory flags (thesis_missing, cap_breached)
+# stay off the queue on purpose: queueing every state turns the queue into the
+# dashboard nobody opens, which is the failure P29 exists to fix.
+_BINDING_FLAG_RULES = {
+    "exit_triggered": ("17.4.6", "declared exit bracket breached on close"),
+    "review_required": ("17.4.4", "review drawdown reached; re-underwrite required"),
+}
+_HEALTHY_BAND = "within_band"
 
 
 @dataclass(frozen=True)
@@ -51,6 +64,12 @@ class FlagAge:
 
     prior_observed_sessions: int
     observation_gap_sessions: int
+    # Earliest session in the current unbroken run where the flag was actually
+    # observed open. Stable while the condition persists, so the P29 decision
+    # queue can key one advice item to one unresolved condition instead of
+    # minting a fresh item (and a fresh age) every afterclose. ``None`` when
+    # today is the first sighting.
+    first_observed_asof: str | None = None
 
 
 def _effective_trace_rows(trace_path: Path) -> tuple[dict[_dt.date, dict], tuple[str, ...]]:
@@ -85,16 +104,6 @@ def _effective_trace_rows(trace_path: Path) -> tuple[dict[_dt.date, dict], tuple
             continue
         effective[asof] = row
     return effective, tuple(warnings)
-
-
-def _previous_trading_day(d: _dt.date) -> _dt.date:
-    """Previous JPX session before ``d`` (bounded backstep, mirrors the calendar)."""
-    prior = d - _dt.timedelta(days=1)
-    for _ in range(10):
-        if is_trading_day(prior):
-            return prior
-        prior -= _dt.timedelta(days=1)
-    return prior
 
 
 def _flag_ages(
@@ -136,32 +145,138 @@ def _flag_ages(
     warnings = list(load_warnings)
     for sid, flags in current_flags.items():
         for flag in flags:
-            count = 0
-            gaps = 0
-            cursor = _previous_trading_day(current_date)
-            while cursor >= earliest:
-                if not calendar_covers(cursor):
-                    warnings.append(f"flag_age_calendar_uncovered:{cursor.isoformat()}")
-                    break
-                row = effective.get(cursor)
-                if row is None:
-                    gaps += 1
-                    cursor = _previous_trading_day(cursor)
-                    continue
-                row_flags = ((row.get("flags") or {}).get(sid) or [])
-                if flag not in row_flags:
-                    break
-                count += 1
-                cursor = _previous_trading_day(cursor)
+            count, gaps, first_observed, walk_warnings = _backward_run(
+                effective,
+                current_date,
+                earliest,
+                lambda row, _sid=sid, _flag=flag: _flag in
+                ((row.get("flags") or {}).get(_sid) or []),
+            )
+            warnings.extend(walk_warnings)
             ages[(sid, flag)] = FlagAge(
                 prior_observed_sessions=count,
                 observation_gap_sessions=gaps,
+                first_observed_asof=first_observed.isoformat() if first_observed else None,
             )
             if gaps:
                 warnings.append(
                     f"flag_age_degraded:{sid}:{flag}:missing_sessions={gaps}"
                 )
     return ages, tuple(dict.fromkeys(warnings))
+
+
+def _backward_run(
+    effective: dict[_dt.date, dict],
+    current_date: _dt.date,
+    earliest: _dt.date,
+    predicate,
+) -> tuple[int, int, _dt.date | None, list[str]]:
+    """Walk sessions backwards while ``predicate(row)`` holds.
+
+    Returns (observed sessions, unobserved gaps, earliest observed date,
+    warnings). Shared by flag ages and band-status ages so both use one
+    definition of "consecutive" — a second walk with its own gap semantics is
+    how the two would silently diverge.
+    """
+    count = 0
+    gaps = 0
+    first_observed: _dt.date | None = None
+    warnings: list[str] = []
+    cursor = _previous_trading_day(current_date)
+    while cursor >= earliest:
+        if not calendar_covers(cursor):
+            warnings.append(f"flag_age_calendar_uncovered:{cursor.isoformat()}")
+            break
+        row = effective.get(cursor)
+        if row is None:
+            gaps += 1
+            cursor = _previous_trading_day(cursor)
+            continue
+        if not predicate(row):
+            break
+        count += 1
+        first_observed = cursor
+        cursor = _previous_trading_day(cursor)
+    return count, gaps, first_observed, warnings
+
+
+def _band_first_observed(trace_path: Path, current_asof: str, band_status: str) -> str:
+    """Earliest session of the current unbroken out-of-band run.
+
+    Keys the band-breach advice item so a breach standing since 2026-07-13 ages
+    from 07-13, rather than resetting to zero every afterclose.
+    """
+    try:
+        current_date = _dt.date.fromisoformat(current_asof)
+    except ValueError:
+        return current_asof
+    effective, _ = _effective_trace_rows(trace_path)
+    past = [d for d in effective
+            if d < current_date and calendar_covers(d) and is_trading_day(d)]
+    if not past:
+        return current_asof
+    _, _, first_observed, _ = _backward_run(
+        effective, current_date, min(past),
+        lambda row, _s=band_status: row.get("band_status") == _s,
+    )
+    return first_observed.isoformat() if first_observed else current_asof
+
+
+def _queue_sync(
+    queue_path: Path,
+    trace_path: Path,
+    *,
+    asof: str,
+    flags: dict,
+    ages: dict,
+    band_status: str | None,
+) -> list[str]:
+    """Open one P29 advice item per binding, unresolved mandate condition.
+
+    Each item is keyed to the session the condition FIRST appeared, so a
+    persistent breach is one item that ages rather than a new item every day.
+
+    NON-FATAL by contract (Rule 15.5): the snapshot is a diagnostic wired into
+    afterclose, and a diagnostic must never block data collection. Any failure
+    here degrades to a printed warning and an empty result.
+    """
+    opened: list[str] = []
+    try:
+        for sleeve_id, sleeve_flags in (flags or {}).items():
+            for flag in sleeve_flags:
+                mapping = _BINDING_FLAG_RULES.get(flag)
+                if mapping is None:
+                    continue
+                rule, summary = mapping
+                age = ages.get((sleeve_id, flag))
+                created = (age.first_observed_asof if age else None) or asof
+                opened.append(open_item(
+                    queue_path,
+                    source_rule=rule,
+                    subject=f"sleeve_{sleeve_id}",
+                    summary=summary,
+                    created_asof=created,
+                    severity="binding",
+                    evidence_ref=f"reports/observability/risk_mandate/{asof}.json",
+                ))
+        if band_status and band_status != _HEALTHY_BAND:
+            opened.append(open_item(
+                queue_path,
+                source_rule="17.2",
+                subject="portfolio",
+                summary=(
+                    f"β-adjusted exposure {band_status}; declared band requires "
+                    "deploy, a Rule 4 band amendment, or a dated time-bounded "
+                    "exception — silence is not a fourth option"
+                ),
+                created_asof=_band_first_observed(trace_path, asof, band_status),
+                severity="binding",
+                evidence_ref=f"reports/observability/risk_mandate/{asof}.json",
+            ))
+    except Exception as exc:  # noqa: BLE001 - diagnostic must never block
+        print(f"  WARNING queue_sync_failed: {type(exc).__name__}: {exc}")
+        return []
+    return opened
 
 
 def _semantic_trace_row(row: dict) -> dict:
@@ -306,6 +421,25 @@ def main(argv=None) -> int:
                   f"— Rule 17.4.7 demands resolve (write thesis / re-underwrite / exit)")
 
     if not args.no_write:
+        # P29: binding mandate conditions become first-class, ageable advice.
+        queue_path = obs / "decision_queue.jsonl"
+        opened = _queue_sync(
+            queue_path, obs / "risk_mandate_trace.jsonl",
+            asof=asof,
+            flags={k: v for k, v in flags.items() if v},
+            ages=ages,
+            band_status=exp.get("bandStatus"),
+        )
+        if opened:
+            try:
+                report = queue_report(queue_path, asof=_dt.date.fromisoformat(asof))
+                oldest = report["oldest_open_sessions"]
+                print(f"  decision queue: {report['open_count']} open, oldest "
+                      f"{oldest if oldest is not None else 'n/a'} sessions "
+                      f"(tools/decision_queue_cli.py list)")
+            except Exception as exc:  # noqa: BLE001 - diagnostic must never block
+                print(f"  WARNING queue_report_failed: {type(exc).__name__}: {exc}")
+
         (obs / "risk_mandate").mkdir(parents=True, exist_ok=True)
         (obs / "risk_mandate" / f"{asof}.json").write_text(
             json.dumps({"asof": asof, **panel}, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -67,6 +67,46 @@ def is_trading_day(d: date) -> bool:
     return d.weekday() < 5 and not is_jpx_holiday(d)
 
 
+def previous_trading_day(d: date) -> date:
+    """Most recent JPX session strictly BEFORE ``d``.
+
+    Bounded backstep (more than a week of consecutive closures never occurs),
+    so an uncovered-year call can never loop.
+    """
+    prior = d - timedelta(days=1)
+    for _ in range(10):
+        if is_trading_day(prior):
+            return prior
+        prior -= timedelta(days=1)
+    return prior
+
+
+def sessions_between(start: date, end: date) -> int | None:
+    """ELAPSED JPX sessions after ``start``, up to and including ``end``.
+
+    Age-zero-on-creation semantics: the ``start`` session itself is age 0, so
+    an item created and resolved the same session has elapsed age 0. For the
+    INCLUSIVE count that Rule 17.4.7 sunset uses, add 1.
+
+    Returns ``None`` when any part of the span falls outside the hand-verified
+    holiday table (Rule 15.4 fail-closed) — an uncovered year yields no count
+    rather than a weekend-only guess that would silently undercount holidays.
+    Returns 0 when ``end`` is at or before ``start``.
+    """
+    if not calendar_covers(start) or not calendar_covers(end):
+        return None
+    if end <= start:
+        return 0
+    count = 0
+    cursor = start
+    # Bounded by the span itself; each step advances at least one calendar day.
+    while cursor < end:
+        cursor += timedelta(days=1)
+        if is_trading_day(cursor):
+            count += 1
+    return count
+
+
 def latest_trading_day(today: date) -> date:
     """Most recent JPX trading day on or before ``today``.
 

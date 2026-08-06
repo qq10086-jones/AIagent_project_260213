@@ -13,6 +13,8 @@ from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
     is_jpx_holiday,
     is_trading_day,
     latest_trading_day,
+    previous_trading_day,
+    sessions_between,
 )
 
 
@@ -52,3 +54,33 @@ def test_latest_trading_day_steps_weekend_back_to_friday():
 def test_calendar_covers_only_known_years():
     assert calendar_covers(date(2026, 6, 1)) is True
     assert calendar_covers(date(2028, 6, 1)) is False     # not yet in the table
+
+
+def test_previous_trading_day_steps_over_weekends_and_holidays():
+    assert previous_trading_day(date(2026, 7, 27)) == date(2026, 7, 24)   # Mon -> Fri
+    assert previous_trading_day(date(2026, 7, 21)) == date(2026, 7, 17)   # Tue -> Fri (7/20 Marine Day)
+    assert previous_trading_day(date(2026, 5, 7)) == date(2026, 5, 1)      # past all of Golden Week
+
+
+def test_sessions_between_counts_elapsed_not_calendar_days():
+    """Age zero on the creation session: `elapsed` excludes the creation day.
+
+    2026-07-24 (Fri) -> 2026-08-04 (Tue) is 11 calendar days but 7 elapsed JPX
+    sessions (8 inclusive). This is the 8035.T bracket-exit delay; the
+    retrospective originally recorded it as 9.
+    """
+    assert sessions_between(date(2026, 7, 24), date(2026, 8, 4)) == 7
+    # 2026-07-20 is Marine Day: 07-13 -> 08-03 is 14 elapsed, not 15.
+    assert sessions_between(date(2026, 7, 13), date(2026, 8, 3)) == 14
+
+
+def test_sessions_between_is_zero_on_the_creation_session_and_never_negative():
+    assert sessions_between(date(2026, 7, 24), date(2026, 7, 24)) == 0
+    assert sessions_between(date(2026, 7, 24), date(2026, 7, 25)) == 0   # Sat, no new session
+    assert sessions_between(date(2026, 8, 4), date(2026, 7, 24)) == 0    # end before start
+
+
+def test_sessions_between_returns_none_outside_the_verified_calendar():
+    """Rule 15.4 fail-closed: an uncovered year yields no count, never a guess."""
+    assert sessions_between(date(2027, 1, 4), date(2027, 1, 8)) is None
+    assert sessions_between(date(2026, 12, 28), date(2027, 1, 8)) is None

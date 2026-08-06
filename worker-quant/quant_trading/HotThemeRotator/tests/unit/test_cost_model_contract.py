@@ -93,7 +93,7 @@ def test_non_positive_sigma_is_rejected_rather_than_producing_a_wild_hurdle(tmp_
     _declare(tmp_path, {**FULL, "sigma_r_by_horizon": {"63": 0.0}})
     model = resolve_cost_model(tmp_path, horizon=63)
     assert model.available is False
-    assert any("sigma_r_non_positive" in w for w in model.warnings)
+    assert any("sigma_r_invalid" in w for w in model.warnings)
 
 
 def test_unreadable_model_warns_and_degrades_rather_than_raising(tmp_path):
@@ -112,3 +112,78 @@ def test_as_dict_publishes_both_units_and_the_contract_path(tmp_path):
     assert payload["round_trip_cost"] == pytest.approx(0.0035)
     assert payload["contract"] == COST_MODEL_REL
     assert payload["declared_asof"] == "2026-08-01"
+
+
+# --- input validation (reviewer finding 2, 2026-08-06) --------------------
+
+@pytest.mark.parametrize("field,payload", [
+    ("turnover", {"turnover_per_rebalance": -1, "round_trip_cost_bp": 5,
+                  "sigma_r_by_horizon": {"63": 0.10}}),
+    ("round_trip_cost", {"turnover_per_rebalance": 0.7, "round_trip_cost_bp": -5,
+                         "sigma_r_by_horizon": {"63": 0.10}}),
+])
+def test_negative_inputs_are_rejected_not_used(tmp_path, field, payload):
+    """A negative turnover or cost yields a NEGATIVE hurdle, which any positive
+    IC clears — turning the Rule 16.0 gate into a rubber stamp."""
+    _declare(tmp_path, payload)
+    model = resolve_cost_model(tmp_path, horizon=63)
+    assert model.available is False
+    assert model.hurdle() is None
+    assert field in model.missing
+    assert model.provenance[field] == "invalid"
+    assert any(f"{field}_invalid" in w for w in model.warnings)
+
+
+@pytest.mark.parametrize("raw", ["NaN", "Infinity", "-Infinity"])
+def test_non_finite_inputs_are_rejected(tmp_path, raw):
+    """float('nan') IS a float, so an isinstance check alone lets it through;
+    it then compares False against every threshold, reading as 'did not fail'."""
+    path = tmp_path / COST_MODEL_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '{"turnover_per_rebalance": %s, "round_trip_cost_bp": 5, '
+        '"sigma_r_by_horizon": {"63": 0.10}}' % raw, encoding="utf-8")
+    model = resolve_cost_model(tmp_path, horizon=63)
+    assert model.available is False
+    assert "turnover" in model.missing
+    assert model.hurdle() is None
+
+
+def test_non_finite_sigma_is_rejected(tmp_path):
+    path = tmp_path / COST_MODEL_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '{"turnover_per_rebalance": 0.7, "round_trip_cost_bp": 5, '
+        '"sigma_r_by_horizon": {"63": Infinity}}', encoding="utf-8")
+    model = resolve_cost_model(tmp_path, horizon=63)
+    assert model.available is False
+    assert "sigma_r" in model.missing
+
+
+def test_zero_turnover_and_zero_cost_are_legal(tmp_path):
+    """Zero is a real declaration (a free, never-rebalanced sleeve), not an error."""
+    _declare(tmp_path, {"turnover_per_rebalance": 0.0, "round_trip_cost_bp": 0.0,
+                        "sigma_r_by_horizon": {"63": 0.10}})
+    model = resolve_cost_model(tmp_path, horizon=63)
+    assert model.available is True
+    assert model.hurdle() == pytest.approx(0.0)
+
+
+def test_implausible_magnitudes_are_flagged_but_still_usable(tmp_path):
+    """Probably a unit error (bp entered as a fraction). Warn, do not silently
+    accept and do not silently discard."""
+    _declare(tmp_path, {"turnover_per_rebalance": 0.7, "round_trip_cost_bp": 5000,
+                        "sigma_r_by_horizon": {"63": 0.10}})
+    model = resolve_cost_model(tmp_path, horizon=63)
+    assert model.available is True
+    assert any("round_trip_cost_implausible" in w for w in model.warnings)
+
+
+def test_an_invalid_declared_value_is_not_silently_replaced_by_an_observed_one(tmp_path):
+    """Declared-but-invalid must fail, not quietly fall through to observation:
+    the owner declared something wrong and needs to be told."""
+    _declare(tmp_path, {"turnover_per_rebalance": -1, "round_trip_cost_bp": 5,
+                        "sigma_r_by_horizon": {"63": 0.10}})
+    model = resolve_cost_model(tmp_path, horizon=63, observed={"turnover": 0.7})
+    assert model.available is False
+    assert "turnover" in model.missing

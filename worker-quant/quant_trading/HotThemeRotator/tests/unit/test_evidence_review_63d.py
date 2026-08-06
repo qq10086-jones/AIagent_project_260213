@@ -561,38 +561,59 @@ def test_malformed_journal_line_degrades_with_a_warning(tmp_path):
     assert len(loaded["journal_entries"]) == 1
 
 
-# --- effective-sample protocol (P31 remediation, 2026-08-06) --------------
+# --- effective-sample protocol (retracted + reissued 2026-08-06) ----------
 
-def test_effective_sample_protocol_states_its_estimator_and_rivals():
-    p = er.effective_sample_protocol(n_dates=49, horizon=63, min_obs=60)
-    assert p["gate_estimator"] == "disjoint_blocks"
-    assert p["estimators"]["disjoint_blocks"] == 0
-    assert p["estimators"]["naive_ignores_overlap"] == 49
-    assert p["locked"] is True
+def test_protocol_is_proposed_not_locked():
+    """Engineering may propose an estimator; it may not self-certify one.
 
-
-def test_newey_west_and_disjoint_blocks_agree_so_the_bar_is_not_conservatism():
-    """The load-bearing claim: n//h is not an arbitrarily harsh choice.
-
-    At maximum overlap the induced ACF is rho_k = 1 - k/h, so the variance
-    inflation factor is exactly h. A reader who thinks the bar can be relaxed
-    by adopting Newey-West gets the same number.
+    The first version emitted locked=True for a protocol invented in the same
+    commit, which is the Rule 4 bypass this project exists to prevent.
     """
-    for horizon in (5, 21, 63):
-        p = er.effective_sample_protocol(n_dates=1000, horizon=horizon, min_obs=60)
-        assert p["estimators_agree"] is True
-        assert p["newey_west_variance_inflation_factor"] == pytest.approx(horizon)
-        assert p["estimators"]["newey_west"] == pytest.approx(1000 / horizon)
-
-
-def test_protocol_reports_the_calendar_cost_of_the_locked_bar():
     p = er.effective_sample_protocol(n_dates=49, horizon=63, min_obs=60)
-    assert p["date_clusters_required"] == 3780
-    assert p["years_of_daily_cross_sections_required"] == pytest.approx(15.4, abs=0.2)
-    assert "owner protocol decision" in p["changing_this_requires"]
+    assert p["status"] == "proposed"
+    assert "Rule 4" in p["requires_owner_approval"]
+    assert "locked" not in p
+
+
+def test_newey_west_is_bartlett_weighted_and_differs_from_the_unweighted_factor():
+    """The retracted claim, now asserted the other way round.
+
+    1 + 2*sum(1-k/h)   = h        = 63.0   (true VIF under a triangular ACF)
+    1 + 2*sum(1-k/h)^2 = (2h^2+1)/(3h) = 42.005  (Newey-West, Bartlett weights)
+    """
+    p = er.effective_sample_protocol(n_dates=1000, horizon=63, min_obs=60)
+    est = p["estimators"]
+    assert est["unweighted_triangular_acf"]["variance_inflation_factor"] == pytest.approx(63.0)
+    assert est["newey_west_bartlett"]["variance_inflation_factor"] == pytest.approx(
+        (2 * 63 ** 2 + 1) / (3 * 63))
+    assert est["newey_west_bartlett"]["variance_inflation_factor"] != pytest.approx(63.0)
+
+
+def test_cluster_requirement_is_conditional_on_the_estimator():
+    p = er.effective_sample_protocol(n_dates=49, horizon=63, min_obs=60)
+    est = p["estimators"]
+    assert est["disjoint_blocks"]["date_clusters_required"] == 3780
+    assert est["newey_west_bartlett"]["date_clusters_required"] == 2520
+    assert est["disjoint_blocks"]["years_of_daily_cross_sections_required"] == pytest.approx(15.4, abs=0.2)
+    assert est["newey_west_bartlett"]["years_of_daily_cross_sections_required"] == pytest.approx(10.3, abs=0.2)
+
+
+def test_every_estimator_carries_its_assumption():
+    p = er.effective_sample_protocol(n_dates=49, horizon=63, min_obs=60)
+    for name, est in p["estimators"].items():
+        assert est["assumption"], f"{name} has no stated assumption"
+    tri = p["estimators"]["unweighted_triangular_acf"]["assumption"]
+    assert "NOT established" in tri     # the ACF shape is assumed, not derived
+
+
+def test_the_overreaching_claims_are_explicitly_retracted():
+    retracted = " ".join(er.effective_sample_protocol(49, 63, 60)["retracted_claims"])
+    assert "Newey-West estimator" in retracted
+    assert "agree analytically" in retracted
+    assert "cannot be relieved" in retracted
 
 
 def test_protocol_survives_degenerate_inputs():
     p = er.effective_sample_protocol(n_dates=0, horizon=0, min_obs=60)
-    assert p["estimators"]["disjoint_blocks"] == 0
-    assert p["date_clusters_required"] == 60      # horizon floored to 1
+    assert p["estimators"]["disjoint_blocks"]["n_obs_effective"] == 0
+    assert p["estimators"]["disjoint_blocks"]["date_clusters_required"] == 60

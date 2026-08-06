@@ -38,6 +38,7 @@ CLI_MODULES = [
     "tools.evidence_review_63d",
     "tools.rule_usage_audit",
     "tools.three_ledger_scorecard",
+    "tools.notifier_gate_cli",
 ]
 
 

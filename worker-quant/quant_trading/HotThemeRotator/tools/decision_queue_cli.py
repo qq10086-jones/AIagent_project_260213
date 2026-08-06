@@ -81,7 +81,7 @@ def _render_list(path: Path, asof: _dt.date) -> None:
 
 
 def main(argv=None) -> int:
-    
+
     # Data-sourced text (rule titles, theses) may be Japanese; degrade rather
     # than die mid-print on a cp932 console.
     enable_console_fallback()

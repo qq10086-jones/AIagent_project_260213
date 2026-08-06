@@ -120,8 +120,8 @@ def test_find_fill_reads_the_section_14_journal(tmp_path):
     jdir = tmp_path / "reports" / "portfolio" / "journal"
     jdir.mkdir(parents=True)
     (jdir / "2026-08-04.jsonl").write_text(
-        json.dumps({"_type": "fill", "symbol": "8035.T", "side": "SELL",
-                    "qty": 1, "price": 55_100.0, "fee": 55.0,
+        json.dumps({"_type": "fill", "entry_id": "e1", "symbol": "8035.T",
+                    "side": "SELL", "qty": 1, "price": 55_100.0, "fee": 55.0,
                     "ts": "2026-08-04T09:00+09:00"}) + "\n",
         encoding="utf-8")
 
@@ -134,8 +134,8 @@ def test_find_fill_returns_none_when_the_ledger_has_not_caught_up(tmp_path):
     jdir = tmp_path / "reports" / "portfolio" / "journal"
     jdir.mkdir(parents=True)
     (jdir / "2026-07-14.jsonl").write_text(
-        json.dumps({"_type": "fill", "symbol": "1568.T", "side": "BUY",
-                    "qty": 60, "price": 977.2, "fee": 0.0,
+        json.dumps({"_type": "fill", "entry_id": "e2", "symbol": "1568.T",
+                    "side": "BUY", "qty": 60, "price": 977.2, "fee": 0.0,
                     "ts": "2026-07-14T13:45+09:00"}) + "\n",
         encoding="utf-8")
     assert isf.find_fill(tmp_path, symbol="8035.T", side="SELL",
@@ -224,8 +224,8 @@ def test_find_fill_ignores_corrections_of_other_symbols(tmp_path):
     jdir.mkdir(parents=True)
     (jdir / "2026-08-04.jsonl").write_text(
         "\n".join(json.dumps(r) for r in [
-            {"_type": "fill", "symbol": "1306.T", "side": "SELL", "qty": 100,
-             "price": 411.0, "fee": 0.0, "ts": "2026-08-04T09:00+09:00"},
+            {"_type": "fill", "entry_id": "e3", "symbol": "1306.T", "side": "SELL",
+             "qty": 100, "price": 411.0, "fee": 0.0, "ts": "2026-08-04T09:00+09:00"},
             {"_type": "cash", "amount": 100.0, "ts": "2026-08-04T09:00+09:00"},
         ]) + "\n", encoding="utf-8")
     assert isf.find_fill(tmp_path, symbol="8035.T", side="SELL",
@@ -263,3 +263,62 @@ def test_main_on_an_unreconciled_ledger_exits_zero_and_says_provisional(tmp_path
     assert "provisional" in out.lower()
     assert "7,810" in out          # the scenario estimate, labelled as such
     assert "actual_price" in out   # names what is missing
+
+
+# --- journal integrity is fail-CLOSED (reviewer finding 3, 2026-08-06) ----
+
+def test_a_corrupt_line_anywhere_raises_rather_than_being_skipped(tmp_path):
+    """Skipping a bad line can hide the correction that voids a fill.
+
+    The correction is normally in a LATER file than the fill it voids, so one
+    corrupt line there makes a dead fill look live and the shortfall publishes
+    FINAL against a trade the ledger says never happened.
+    """
+    _journal(tmp_path, "2026-08-04.jsonl", [_fill("aaa", 54_990.0)])
+    (tmp_path / "reports" / "portfolio" / "journal" / "2026-08-07.jsonl").write_text(
+        '{"_type": "fill", "entry_id": "bbb", "corrects": "aa\n', encoding="utf-8")
+
+    with pytest.raises(isf.JournalIntegrityError, match="not valid JSON"):
+        isf.find_fill(tmp_path, symbol="8035.T", side="SELL", on_or_after="2026-08-01")
+
+
+def test_a_fill_without_an_entry_id_is_an_integrity_error(tmp_path):
+    """Without an entry_id the fill cannot be matched against a correction, so
+    its live/voided status is unknowable — that is not a fill we may price."""
+    row = _fill("x", 54_990.0)
+    row.pop("entry_id")
+    _journal(tmp_path, "2026-08-04.jsonl", [row])
+    with pytest.raises(isf.JournalIntegrityError, match="no entry_id"):
+        isf.find_fill(tmp_path, symbol="8035.T", side="SELL", on_or_after="2026-08-01")
+
+
+def test_a_non_object_row_is_an_integrity_error(tmp_path):
+    (tmp_path / "reports" / "portfolio" / "journal").mkdir(parents=True)
+    (tmp_path / "reports" / "portfolio" / "journal" / "2026-08-04.jsonl").write_text(
+        '["not", "an", "object"]\n', encoding="utf-8")
+    with pytest.raises(isf.JournalIntegrityError, match="not an object"):
+        isf.find_fill(tmp_path, symbol="8035.T", side="SELL", on_or_after="2026-08-01")
+
+
+def test_main_degrades_to_provisional_and_names_the_integrity_error(tmp_path, capsys):
+    _journal(tmp_path, "2026-08-04.jsonl", [_fill("aaa", 54_990.0)])
+    (tmp_path / "reports" / "portfolio" / "journal" / "2026-08-07.jsonl").write_text(
+        '{"_type": "fill", "corrects": \n', encoding="utf-8")
+
+    rc = isf.main([
+        "--base-dir", str(tmp_path), "--symbol", "8035.T", "--side", "SELL",
+        "--qty", "1", "--decision-asof", "2026-07-24",
+        "--decision-price", "62660", "--compliant-price", "62800", "--no-write",
+    ])
+    out = capsys.readouterr().out
+    assert rc == 0                                   # fail-open on exit code
+    assert "JOURNAL INTEGRITY ERROR" in out          # fail-closed on the number
+    assert "PROVISIONAL" in out.upper()
+    assert "54,990" not in out                       # the stale fill is not priced
+
+
+def test_a_clean_journal_is_unaffected_by_the_integrity_check(tmp_path):
+    _journal(tmp_path, "2026-08-04.jsonl", [_fill("ccc", 55_400.0)])
+    fill = isf.find_fill(tmp_path, symbol="8035.T", side="SELL",
+                         on_or_after="2026-08-01")
+    assert fill["entry_id"] == "ccc"

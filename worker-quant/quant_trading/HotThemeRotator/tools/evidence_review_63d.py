@@ -340,54 +340,115 @@ JPX_SESSIONS_PER_YEAR = 245        # ~245 trading sessions/yr, used only to
 
 
 def effective_sample_protocol(n_dates: int, horizon: int, min_obs: int) -> dict:
-    """The overlapping-label effective-sample protocol, stated rather than implied.
+    """Candidate effective-sample estimators for overlapping labels, with their
+    assumptions attached. PROPOSED, not locked.
 
-    ``n_obs_effective`` was previously a bare ``n_dates // horizon`` with no
-    recorded justification, which left it looking like an arbitrary act of
-    conservatism that a later reader could "relax". It is not arbitrary, and
-    this function records why:
+    ``n_obs_effective`` was originally a bare ``n_dates // horizon`` with no
+    recorded justification. A first attempt to justify it OVERREACHED and is
+    retracted here (2026-08-06), because getting this wrong in the confident
+    direction is worse than leaving it unexplained:
 
-    - **disjoint_blocks** (the locked gate estimator): only every h-th cluster
-      starts a non-overlapping window, so ``n_eff = floor(n/h)``.
-    - **newey_west**: for maximum-overlap h-period windows the induced
-      autocorrelation is ``rho_k = 1 - k/h``, giving a variance inflation
-      factor ``1 + 2*sum_{k<h}(1 - k/h) = h``. Hence ``n_eff = n/h`` — the
-      SAME answer, to the floor.
-    - **naive**: ``n_eff = n``, which is what treating overlapping windows as
-      independent would assume. Reported only to show the size of the error.
+    - it computed ``1 + 2*sum_{k<h}(1 - k/h) = h`` and labelled that
+      "Newey-West/Hansen-Hodrick". That factor is the TRUE variance inflation
+      of a mean of overlapping h-sums under a triangular ACF — it is NOT the
+      Newey-West estimator, which applies BARTLETT WEIGHTS and yields
+      ``1 + 2*sum_{k<h}(1 - k/h)^2 = (2h^2+1)/(3h) = 42.0`` at h=63
+      (Newey & West 1987, DOI 10.2307/1913610);
+    - it therefore claimed the estimators "agree" and the bar "cannot be
+      relieved by switching estimators". Both claims are withdrawn: the NW
+      estimator implies ~2,520 clusters where disjoint blocks implies ~3,780;
+    - ``rho_k = 1 - k/h`` itself holds for overlapping sums of iid equal-weight
+      increments. A 63D cross-sectional Rank-IC series is not that, so the
+      triangular ACF is an ASSUMPTION about this data, never a derivation from
+      it. Hansen & Hodrick (1980, DOI 10.1086/260910) is a different overlapping
+      -forecast setting again.
 
-    The two principled estimators agreeing matters: it means the 60-observation
-    bar cannot be met sooner by choosing a friendlier adjustment. It can only be
-    met by collecting ~15 years of daily cross-sections, or by the owner
-    changing the locked protocol — a governance decision, not a data one.
+    What survives: ``floor(n/h)`` is a defensible NON-OVERLAPPING threshold, and
+    the cluster counts below are conditional on whichever estimator is adopted.
+    Which one governs the gate is a Rule 4 owner decision. Engineering may
+    propose it; engineering may not mark it locked, which is what the previous
+    version did.
     """
     horizon = max(int(horizon), 1)
     n_dates = max(int(n_dates), 0)
-    vif = 1 + 2 * sum(1 - k / horizon for k in range(1, horizon))
-    required = horizon * min_obs
+    true_vif = float(horizon)
+    nw_vif = 1 + 2 * sum((1 - k / horizon) ** 2 for k in range(1, horizon))
+
+    def required(vif: float) -> dict:
+        clusters = int(round(min_obs * vif))
+        return {
+            "date_clusters_required": clusters,
+            "years_of_daily_cross_sections_required": round(
+                clusters / JPX_SESSIONS_PER_YEAR, 1),
+        }
+
     return {
-        "gate_estimator": "disjoint_blocks",
-        "estimators": {
-            "disjoint_blocks": n_dates // horizon,
-            "newey_west": (n_dates / vif) if vif else None,
-            "naive_ignores_overlap": n_dates,
-        },
-        "newey_west_variance_inflation_factor": vif,
-        "estimators_agree": abs(vif - horizon) < 1e-9,
-        "note": (
-            "disjoint_blocks and newey_west coincide analytically at maximum "
-            "overlap (VIF = h), so the bar is not a conservatism artifact. "
-            "naive_ignores_overlap is reported only to size the error it would "
-            "introduce; it is never used by the gate."
+        "status": "proposed",
+        "requires_owner_approval": (
+            "Rule 4 — engineering may propose an effective-sample estimator "
+            "but may not adopt one on its own authority"
         ),
+        "gate_estimator_in_use": "disjoint_blocks",
+        "gate_estimator_basis": (
+            "the pre-existing implementation, retained pending an owner "
+            "decision; it is a choice, not a result"
+        ),
+        "estimators": {
+            "disjoint_blocks": {
+                "n_obs_effective": n_dates // horizon,
+                "variance_inflation_factor": true_vif,
+                "assumption": (
+                    "only every h-th cluster starts a non-overlapping window; "
+                    "partially overlapping windows contribute nothing"
+                ),
+                **required(true_vif),
+            },
+            "unweighted_triangular_acf": {
+                "n_obs_effective": n_dates / true_vif,
+                "variance_inflation_factor": true_vif,
+                "assumption": (
+                    "overlapping sums of iid equal-weight increments give "
+                    "rho_k = 1 - k/h, whose unweighted long-run variance "
+                    "inflation is exactly h. NOT established for a "
+                    "cross-sectional Rank-IC series"
+                ),
+                **required(true_vif),
+            },
+            "newey_west_bartlett": {
+                "n_obs_effective": n_dates / nw_vif,
+                "variance_inflation_factor": nw_vif,
+                "assumption": (
+                    "Newey-West HAC with Bartlett weights at bandwidth h-1 "
+                    "applied to the same triangular ACF; downweights high lags "
+                    "by construction to guarantee a PSD estimate "
+                    "(Newey & West 1987, DOI 10.2307/1913610)"
+                ),
+                **required(nw_vif),
+            },
+            "naive_ignores_overlap": {
+                "n_obs_effective": n_dates,
+                "variance_inflation_factor": 1.0,
+                "assumption": (
+                    "overlapping windows treated as independent; reported only "
+                    "to size the error it would introduce, never used"
+                ),
+                **required(1.0),
+            },
+        },
         "min_effective_obs": min_obs,
-        "date_clusters_required": required,
-        "years_of_daily_cross_sections_required": round(
-            required / JPX_SESSIONS_PER_YEAR, 1),
-        "locked": True,
-        "changing_this_requires": (
-            "an owner protocol decision recorded under Rule 4; it is not a "
-            "data-collection question and no amount of waiting satisfies it"
+        "retracted_claims": [
+            "that the unweighted factor h is the Newey-West estimator",
+            "that the candidate estimators agree analytically",
+            "that the bar cannot be relieved by switching estimators",
+            "that ~15.4 years is an unconditional statistical necessity",
+        ],
+        "note": (
+            "Every cluster requirement below is CONDITIONAL on the estimator "
+            "adopted. Under disjoint blocks the min_obs bar needs "
+            f"{required(true_vif)['date_clusters_required']} clusters; under "
+            f"Newey-West-Bartlett it needs "
+            f"{required(nw_vif)['date_clusters_required']}. Neither is a fact "
+            "about the data until an estimator is chosen under Rule 4."
         ),
     }
 
@@ -578,18 +639,19 @@ def _assess_signal(
         "embargo",
         "pass" if n_obs_eff >= MIN_EFFECTIVE_OBS else "insufficient",
         f"overlapping {REVIEW_HORIZON}D windows: {n_dates} date clusters give "
-        f"{n_obs_eff} effective observations under the locked "
-        f"{protocol['gate_estimator']} estimator vs {MIN_EFFECTIVE_OBS} required; "
-        f"that bar needs {protocol['date_clusters_required']} date clusters "
-        f"(~{protocol['years_of_daily_cross_sections_required']} years of daily "
-        f"cross-sections). NOTE: the Newey-West/Hansen-Hodrick adjustment for "
-        f"maximum-overlap windows has variance inflation factor = h = "
-        f"{REVIEW_HORIZON}, so it yields the SAME n/h; the bar is not an "
-        f"artifact of a conservative estimator choice and cannot be relieved by "
-        f"switching estimators",
+        f"{n_obs_eff} effective observations under the "
+        f"{protocol['gate_estimator_in_use']} estimator vs {MIN_EFFECTIVE_OBS} "
+        f"required. That estimator is PROPOSED, not locked (Rule 4). The cluster "
+        f"requirement is conditional on it: "
+        f"{protocol['estimators']['disjoint_blocks']['date_clusters_required']} "
+        f"under disjoint blocks vs "
+        f"{protocol['estimators']['newey_west_bartlett']['date_clusters_required']} "
+        f"under Newey-West-Bartlett. An earlier claim that these agree, and that "
+        f"the bar could not be relieved by switching estimators, is RETRACTED",
         limiter="sample", horizon_days=REVIEW_HORIZON, n_obs_effective=n_obs_eff,
         min_effective_obs=MIN_EFFECTIVE_OBS,
-        date_clusters_required_for_min_obs=protocol["date_clusters_required"],
+        date_clusters_required_for_min_obs=(
+            protocol["estimators"]["disjoint_blocks"]["date_clusters_required"]),
         date_clusters_observed=n_dates,
         effective_sample_protocol=protocol,
     ))
@@ -1304,7 +1366,7 @@ def render_text(report: dict) -> str:
 
 
 def main(argv=None) -> int:
-    
+
     # Data-sourced text (rule titles, theses) may be Japanese; degrade rather
     # than die mid-print on a cp932 console.
     enable_console_fallback()

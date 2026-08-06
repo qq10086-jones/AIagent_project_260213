@@ -417,3 +417,62 @@ def test_every_state_appears_in_the_summary_even_at_zero(tmp_path):
     summary = rua.build_audit(tmp_path, asof="2026-08-06", git_map={})["summary"]
     for state in rua.REFERENCE_STATE_ORDER:
         assert state in summary
+
+
+# --- idempotency + dangling tiers (reviewer finding 4, 2026-08-06) --------
+
+def test_writing_the_report_does_not_change_the_next_report(tmp_path):
+    """The audit must not read its own output.
+
+    Its artifacts quote every rule number they classify, so a scan that
+    includes them flips `unreferenced` to `artifact_echo_only` on the SECOND
+    run: the published numbers would drift purely from having been published.
+    Observed before the fix: 16 unreferenced -> 0, 54 section_scope_only -> 70.
+    """
+    _gov(tmp_path, BODY)
+    _cite(tmp_path, "src/a.py", "# Rule 9.1\n")
+
+    first = rua.build_audit(tmp_path, asof="2026-08-06", git_map={})
+    out_dir = tmp_path / "reports" / "observability" / "rule_usage_audit"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "2026-08-06.json").write_text(
+        json.dumps(first, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "reports" / "observability" / "rule_usage_audit_trace.jsonl").write_text(
+        json.dumps({"asof": "2026-08-06", "rule": "Rule 9.5"}) + "\n", encoding="utf-8")
+
+    second = rua.build_audit(tmp_path, asof="2026-08-06", git_map={})
+    order = list(rua.REFERENCE_STATE_ORDER)
+    assert [first["summary"][s] for s in order] == [second["summary"][s] for s in order]
+    assert first["summary"]["zero_runtime_reference"] == second["summary"]["zero_runtime_reference"]
+
+
+def test_a_third_run_is_still_identical(tmp_path):
+    _gov(tmp_path, BODY)
+    _cite(tmp_path, "src/a.py", "# Rule 9.1\n")
+    out_dir = tmp_path / "reports" / "observability" / "rule_usage_audit"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    runs = []
+    for _ in range(3):
+        report = rua.build_audit(tmp_path, asof="2026-08-06", git_map={})
+        (out_dir / "2026-08-06.json").write_text(
+            json.dumps(report, ensure_ascii=False), encoding="utf-8")
+        runs.append([report["summary"][s] for s in rua.REFERENCE_STATE_ORDER])
+    assert runs[0] == runs[1] == runs[2]
+
+
+def test_test_fixture_dangling_numbers_are_shelved_not_headlined(tmp_path):
+    """9.98 invented by a test is synthetic; 9.90 cited from src is a defect.
+
+    Both sit inside the document's numbering space, so both reach the dangling
+    list and only the tier tells them apart. (A number outside the space, like
+    17.99 against a doc with no section 17, is dropped earlier by design.)
+    """
+    _gov(tmp_path, BODY)
+    _cite(tmp_path, "tests/unit/test_x.py", "# Rule 9.98 synthetic\n")
+    _cite(tmp_path, "src/a.py", "# Rule 9.90 real citation\n")
+
+    report = rua.build_audit(tmp_path, asof="2026-08-06", git_map={})
+    assert "9.98" not in report["dangling_references"]
+    assert "9.90" in report["dangling_references"]
+    assert "9.98" in report["dangling_references_by_tier"]["test"]
+    assert "9.90" in report["dangling_references_by_tier"]["product"]

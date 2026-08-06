@@ -30,6 +30,7 @@ declared model.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -110,9 +111,30 @@ def _read_declared(base_dir: Path, warnings: list[str]) -> dict | None:
 
 
 def _number(value) -> float | None:
+    """Finite numbers only. NaN and Inf are rejected at the door.
+
+    ``float('nan')`` is an instance of ``float``, so an isinstance check alone
+    lets NaN through; it then propagates silently into the hurdle and compares
+    False against every threshold, which reads as "did not fail".
+    """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value)
+    value = float(value)
+    return value if math.isfinite(value) else None
+
+
+# A hurdle is only fail-closed if its INPUTS are sign-checked. A negative
+# turnover or a negative round-trip cost produces a negative hurdle, which any
+# positive IC clears — turning Rule 16.0 from a gate into a rubber stamp.
+_FIELD_BOUNDS = {
+    "turnover": (0.0, None, "turnover cannot be negative"),
+    "round_trip_cost": (0.0, None, "round-trip cost cannot be negative"),
+    "sigma_r": (None, None, "dispersion must be strictly positive"),
+}
+# Above these, the value is accepted but flagged: probably a unit error
+# (e.g. bp entered as a fraction), and a silently wrong unit is how a hurdle
+# becomes unmeetable or trivial.
+_IMPLAUSIBLE_ABOVE = {"turnover": 10.0, "round_trip_cost": 0.10, "sigma_r": 5.0}
 
 
 def read_declared_cost_model(base_dir: Path | str) -> tuple[dict | None, list[str]]:
@@ -180,11 +202,24 @@ def resolve_from_declared(
         declared_sigma = sigma_map.get(str(horizon), sigma_map.get(horizon))
     model.sigma_r = pick("sigma_r", declared_sigma, observed.get("sigma_r"))
 
-    if model.sigma_r is not None and model.sigma_r <= 0:
-        # A non-positive dispersion would make the hurdle explode or invert.
-        warnings.append(f"sigma_r_non_positive:{model.sigma_r}")
-        model.sigma_r = None
-        model.provenance["sigma_r"] = "invalid"
-        model.missing.append("sigma_r")
+    # Sign/range validation AFTER resolution, so an invalid declared value is
+    # rejected rather than silently preferred over a valid observed one.
+    for name in ("turnover", "round_trip_cost", "sigma_r"):
+        value = getattr(model, name)
+        if value is None:
+            continue
+        lower, _upper, reason = _FIELD_BOUNDS[name]
+        invalid = (value <= 0) if name == "sigma_r" else (
+            lower is not None and value < lower)
+        if invalid:
+            warnings.append(f"{name}_invalid:{value}:{reason}")
+            setattr(model, name, None)
+            model.provenance[name] = "invalid"
+            model.missing.append(name)
+            continue
+        limit = _IMPLAUSIBLE_ABOVE.get(name)
+        if limit is not None and value > limit:
+            # Accepted, but loudly: this is the shape of a unit error.
+            warnings.append(f"{name}_implausible:{value}:above_{limit}")
 
     return model

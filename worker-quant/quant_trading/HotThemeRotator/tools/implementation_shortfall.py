@@ -137,8 +137,22 @@ def compute_shortfall(
     )
 
 
+class JournalIntegrityError(Exception):
+    """The journal could not be read in full. Rule 14.1 is fail-CLOSED."""
+
+
 def _read_journal(base_dir: Path | str) -> list[dict]:
-    """All journal rows, oldest file first. Unreadable files are skipped."""
+    """All journal rows, oldest file first. Any defect RAISES.
+
+    Skipping a bad line is not safe here. A correction is normally recorded in
+    a later file than the fill it voids, so a single corrupt line in that later
+    file makes a voided fill look live — and the shortfall then publishes FINAL
+    against a fill the ledger says never happened. That is the same failure the
+    correction-awareness fix was for, arriving through a different door.
+
+    Rule 14.1 makes the journal reader fail-closed; this reader now matches it.
+    Callers degrade to PROVISIONAL with the integrity error named.
+    """
     jdir = Path(base_dir) / "reports" / "portfolio" / "journal"
     if not jdir.is_dir():
         return []
@@ -146,15 +160,27 @@ def _read_journal(base_dir: Path | str) -> list[dict]:
     for path in sorted(jdir.glob("*.jsonl")):
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        for line in lines:
+        except OSError as exc:
+            raise JournalIntegrityError(
+                f"{path.name} unreadable: {type(exc).__name__}") from exc
+        for number, line in enumerate(lines, start=1):
             if not line.strip():
                 continue
             try:
-                rows.append(json.loads(line))
-            except ValueError:
-                continue
+                row = json.loads(line)
+            except ValueError as exc:
+                raise JournalIntegrityError(
+                    f"{path.name}:{number} is not valid JSON: {exc}") from exc
+            if not isinstance(row, dict):
+                raise JournalIntegrityError(
+                    f"{path.name}:{number} is {type(row).__name__}, not an object")
+            if row.get("_type") == "fill" and not row.get("entry_id"):
+                # Without an entry_id a fill cannot be matched against a
+                # correction, so its live/voided status is unknowable.
+                raise JournalIntegrityError(
+                    f"{path.name}:{number} is a fill with no entry_id; "
+                    "its correction status cannot be determined")
+            rows.append(row)
     return rows
 
 
@@ -215,7 +241,7 @@ def _fmt(value: float | None) -> str:
 
 
 def main(argv=None) -> int:
-    
+
     # Data-sourced text (rule titles, theses) may be Japanese; degrade rather
     # than die mid-print on a cp932 console.
     enable_console_fallback()
@@ -238,8 +264,13 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     asof = args.asof or _dt.date.today().isoformat()
 
-    fill = find_fill(args.base_dir, symbol=args.symbol, side=args.side,
-                     on_or_after=args.decision_asof)
+    integrity_error = None
+    try:
+        fill = find_fill(args.base_dir, symbol=args.symbol, side=args.side,
+                         on_or_after=args.decision_asof)
+    except JournalIntegrityError as exc:
+        # Fail-closed: an unreadable ledger is UNRECONCILED, never "no fill".
+        integrity_error, fill = str(exc), None
     result = compute_shortfall(
         side=args.side,
         qty_intended=args.qty,
@@ -260,6 +291,11 @@ def main(argv=None) -> int:
         print(f"  actual fill            JPY {result.actual_price:,.0f} "
               f"x{result.qty_executed:g}  fee {_fmt(result.fees_jpy)}  "
               f"({fill.get('ts', 'no ts')})")
+    elif integrity_error:
+        print("  actual fill            UNKNOWN - JOURNAL INTEGRITY ERROR")
+        print(f"    {integrity_error}")
+        print("    A defect anywhere in the journal can hide a correction that "
+              "voids a fill, so no fill is trusted until the ledger reads clean.")
     else:
         print("  actual fill            NOT IN JOURNAL (Section 14) - ledger unreconciled")
     print(f"  delay cost             {_fmt(result.delay_cost_jpy)}")
@@ -276,9 +312,12 @@ def main(argv=None) -> int:
     if not args.no_write:
         out = Path(args.base_dir) / "reports" / "observability" / "implementation_shortfall"
         out.mkdir(parents=True, exist_ok=True)
+        payload = {"asof": asof, "symbol": args.symbol, **asdict(result)}
+        if integrity_error:
+            payload["journal_integrity_error"] = integrity_error
+            payload["ledger_state"] = "unreconciled_integrity_error"
         (out / f"{asof}_{args.symbol}_{args.side}.json").write_text(
-            json.dumps({"asof": asof, "symbol": args.symbol, **asdict(result)},
-                       ensure_ascii=False, indent=2), encoding="utf-8")
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"wrote {out / (asof + '_' + args.symbol + '_' + args.side + '.json')}")
     return 0
 

@@ -103,6 +103,18 @@ REFERENCE_STATE_ORDER = (
     "section_scope_only",
     "unreferenced",
 )
+# This tool's own artifacts, excluded from its own scan. Reading them makes the
+# audit non-idempotent: publishing a report would change the next report.
+SELF_OUTPUT_PREFIXES = (
+    "reports/observability/rule_usage_audit/",
+    "reports/observability/rule_usage_audit_trace.jsonl",
+)
+
+# A dangling citation from a TEST fixture is a synthetic rule number invented by
+# the test, not a governance defect. Reporting them together buried the real
+# ones (2.1, 6.11.1) under 17.99 / 8.99 / 1.1.
+DANGLING_TIERS = ("product", "tooling", "test", "artifact", "docs")
+
 DORMANCY_THRESHOLD_MONTHS = 6.0
 DAYS_PER_MONTH = 30.4375
 MAX_REFS_PER_RULE = 12
@@ -319,6 +331,24 @@ def _category(rel_path: str) -> str:
     return "other"
 
 
+def _dangling_tier(refs) -> str:
+    """Where a dangling citation comes from, strongest signal first.
+
+    A number invented by a test fixture is not a governance defect; a number
+    cited from product code is. Same list, very different meaning.
+    """
+    categories = {r.category for r in refs}
+    if categories & set(PRODUCT_CATEGORIES):
+        return "product"
+    if categories & set(TOOLING_CATEGORIES):
+        return "tooling"
+    if categories & set(ARTIFACT_CATEGORIES):
+        return "artifact"
+    if categories & set(TEST_CATEGORIES):
+        return "test"
+    return "docs"
+
+
 def _iter_files(base: Path, scan_dirs: tuple[str, ...]):
     """Yield scannable files. Exclusions are evaluated on the path RELATIVE to
     ``base`` — an absolute-path check would let a directory name anywhere above
@@ -339,6 +369,14 @@ def _iter_files(base: Path, scan_dirs: tuple[str, ...]):
             except ValueError:
                 continue
             if any(part in SKIP_DIR_NAMES for part in rel_parts):
+                continue
+            rel_posix = "/".join(rel_parts)
+            if any(rel_posix.startswith(prefix) for prefix in SELF_OUTPUT_PREFIXES):
+                # The audit must not read its own output. Its artifacts quote
+                # every rule number they classify, so a scan that includes them
+                # turns `unreferenced` into `artifact_echo_only` on the SECOND
+                # run and the tool stops being idempotent — its published
+                # numbers would drift purely from having been published.
                 continue
             yield path
 
@@ -715,6 +753,18 @@ def build_audit(
         "dangling_references": {
             number: sorted({r.path for r in refs})[:MAX_REFS_PER_RULE]
             for number, refs in sorted(scan.dangling.items())
+            if _dangling_tier(refs) != "test"
+        },
+        # Test fixtures invent rule numbers (17.99, 8.99). Those are synthetic,
+        # not governance defects, and listing them alongside real ones buried
+        # the real ones. Kept, but on their own shelf.
+        "dangling_references_by_tier": {
+            tier: {
+                number: sorted({r.path for r in refs})[:MAX_REFS_PER_RULE]
+                for number, refs in sorted(scan.dangling.items())
+                if _dangling_tier(refs) == tier
+            }
+            for tier in DANGLING_TIERS
         },
         "retired_since_prior_audit": retired,
         "warnings": warnings,
@@ -765,9 +815,14 @@ def render_text(report: dict, *, limit: int = 20) -> str:
             out.append(f"    ... {len(zero) - limit} more")
 
     if report["dangling_references"]:
-        out.append("  --- citations to numbers that are not defined rules ---")
+        out.append("  --- citations to numbers that are not defined rules "
+                   "(test fixtures excluded) ---")
         for number, paths in list(report["dangling_references"].items())[:limit]:
             out.append(f"    {number}: {', '.join(paths[:3])}")
+    fixtures = report.get("dangling_references_by_tier", {}).get("test", {})
+    if fixtures:
+        out.append(f"  ({len(fixtures)} further dangling numbers come from test "
+                   "fixtures and are synthetic, not governance defects)")
 
     retired = report["retired_since_prior_audit"]
     if retired.get("numbers"):
@@ -816,7 +871,7 @@ def _append_trace(trace_path: Path, row: dict) -> str:
 
 
 def main(argv=None) -> int:
-    
+
     # Data-sourced text (rule titles, theses) may be Japanese; degrade rather
     # than die mid-print on a cp932 console.
     enable_console_fallback()

@@ -2386,13 +2386,25 @@ Source: owner asked whether 1568.T, showing below its "discipline stop price", h
 
 Source: the 2026-08-04 full-cycle retrospective (`docs/proposals/retrospective_review_2026-08-04.md`) and its remediation design (`docs/superpowers/specs/2026-08-06-evidence-based-retrospective-remediation-design.md`).
 
-Status for all tasks: **proposed — awaiting owner activation**. No task authorizes broker execution, capital deployment, signal promotion, or a mandate-parameter change. Anything touching `configs/risk_mandate.json` needs the Rule 4 record (field, old value, new value, reason, expected impact, verification).
+No task authorizes broker execution, capital deployment, signal promotion, or a mandate-parameter change. Anything touching `configs/risk_mandate.json` needs the Rule 4 record (field, old value, new value, reason, expected impact, verification).
 
 Dependency order: P28 → P29 → P30; P31 and P32 are independent lanes; P33 consolidates.
 
-**Already landed out of this backlog** (the zero-input slice of P29, executed 2026-08-06 under `docs/superpowers/plans/2026-08-06-risk-mandate-session-age-repair.md`): `_flag_ages` now counts distinct covered JPX sessions instead of trace rows, missing sessions are `unobserved` (neither increment nor reset, surfaced as `flag_age_degraded`), and same-`asof` snapshot writes are idempotent or explicitly superseding. Commits `366b08b` / `4f94632` / `ad5e332`.
+**Build status (2026-08-06).** The *machinery* for P29–P33 is built, tested, and wired. What remains open is owner input and owner decisions, which no amount of engineering can supply.
+
+| Task | Machinery | Blocking on |
+|---|---|---|
+| P28 | shortfall reporter built | **owner**: 8035.T fill price + fees; band-breach three-way choice |
+| P29 | queue + CLI + auto-open **live** | — |
+| P30 | gate built, **ships disabled** | **owner**: Rule 12.7 double confirmation to enable a channel |
+| P31 | protocol built, runs today | — (verdict is `insufficient`; see below) |
+| P32 | memo written | **owner**: pick one of the four alternatives |
+| P33 | scorecards + rule audit built | — |
+
+Delivered commits: `366b08b` `4f94632` `ad5e332` `a39fe70` (session-age repair) · `0534845` (P29) · `c053fdf` (P28 tool + P32 memo) · `15777b9` `bd77739` (P30) · `2ff6578` (ASCII/CLI fix) · `8c9ea66` (P31).
 
 ### P28 - Ledger, Retrospective, and Mandate-State Closure
+**Status: tooling done (`tools/implementation_shortfall.py`, 16 tests); BLOCKED on owner data.** The reporter refuses to promote a scenario price to an actual fill: `delay_cost_jpy` stays `None` and status stays `provisional`, naming the missing inputs, until the fill reaches the journal. Real run today confirms `PROVISIONAL / actual fill NOT IN JOURNAL / missing: actual_price, fees_jpy`.
 - Record the actual 8035.T sell fill through Section 14 (`tools/htr_fill_cli.py`) and confirm no stale 8035.T holding remains in the next risk snapshot.
 - Reconcile NAV, realized/unrealized P&L, benchmark return, and active return to a documented tolerance.
 - Report implementation shortfall using decision price, eligible execution reference, actual execution, fees, and `provisional`/`final` status — never a later close treated as the executed price (Perold).
@@ -2402,6 +2414,8 @@ Dependency order: P28 → P29 → P30; P31 and P32 are independent lanes; P33 co
 - Mark the withdrawn low-exposure "second empirical protection" interpretation superseded wherever it remains live in `PROJECT_STATUS.md`; preserve the original entry for audit history.
 
 ### P29 - Decision Queue and Execution Observability
+**Status: DONE and live** (`src/hot_theme_rotator/decision_queue/`, `tools/decision_queue_cli.py`, 26 tests). `acknowledged` is deliberately an optional observation, not a gate — forcing acknowledge-first would make the ledger unable to record what actually happened, which is the 8035.T failure itself. Auto-open keys each item to the session the condition FIRST appeared, so a standing breach is one aging item rather than a new item per session; advisory flags stay off the queue on purpose.
+Live reading 2026-08-06: **1 open binding item at 17 sessions** (Rule 17.2 band breach, open since 2026-07-13 — every observed session since the mandate was declared), 1 executed (8035.T, trigger→terminal **7 sessions**), median trigger→seen **unobserved**. That last value is the notification gap, now a measured quantity rather than an anecdote.
 - Persist deterministic advice IDs and append-only state transitions: `open -> acknowledged -> executed | declined | expired | superseded`.
 - Record source rule, created timestamp, JPX-session age, severity, evidence pointer, and a structured decline reason (Rule 13.9 rejected-with-reason).
 - Session-age and idempotency substrate: **done** (see above); the queue consumes it rather than reimplementing it.
@@ -2409,6 +2423,8 @@ Dependency order: P28 → P29 → P30; P31 and P32 are independent lanes; P33 co
 - CLI/afterclose recording precedes any UI write path; any new HTTP mutation first amends the Rule 11.5 whitelist and takes governance review.
 
 ### P30 - Low-Noise State-Transition Notifications
+**Status: built, SHIPS DISABLED** (`src/hot_theme_rotator/alerts/transition_notifier.py`, 15 tests). With no enabled channel the gate delivers nothing and records `no_enabled_channel` — silent runs still write audit rows, otherwise the metrics would be blind exactly while the channel is off. Two independent controls: a per-(item, state) dedupe key makes an unchanged open item structurally unable to repeat, and a 5-session per-subject cooldown stops one noisy sleeve dominating. Three consecutive delivery failures roll the gate back to silent mode rather than retry-storming.
+**Blocking on owner**: Rule 12.7 double confirmation is the only way to enable a channel; the system must not and cannot self-authorize it.
 - Enable exactly one owner-selected channel through Rule 12.7 double confirmation.
 - Notify on state transitions only; unchanged open states never re-notify.
 - Carry dedupe key, severity, cooldown, monthly budget, and delivery audit; content links the decision ID and contains no order control.
@@ -2416,6 +2432,11 @@ Dependency order: P28 → P29 → P30; P31 and P32 are independent lanes; P33 co
 - Automatic rollback to silent mode when a predeclared error or duplicate rate is breached (Section 12 anti-fatigue).
 
 ### P31 - Locked 63D Evidence Review Protocol
+**Status: DONE** (`tools/evidence_review_63d.py`, 34 tests). Reading as of 2026-08-06: `signal_verdict=insufficient`, `deployment_verdict=not_started` (0 Sleeve B fills; `unwind_to_A` non-operative on an empty sleeve), frozen trial family 100 inclusive / 60 in the E/P lineage, 63D has 0 matured of 2,216 rows.
+
+> ⚠ **`confirm_reachable = false`, and NOT for sample-size reasons.** Five checks are blocked by a missing *protocol*, which waiting until 2026-08-26 does not fix: PBO/CPCV has no implementation anywhere in the repo; the only leakage audit on disk is dated 2026-05-31, scoped to the backdated-calibration sample (`contaminated` / V2 `inconclusive`) and therefore transferable to the value live-log read in **neither** direction; σ_r at 63D is recorded by no artifact so the Rule 16.0 cost hurdle cannot be computed; and the live-log read records no purge protocol. Separately, the locked `min_obs=60` bar at a 63D label needs **3,780 independent date clusters** — collection stands at 49 trade days. **The 2026-08-26 milestone as previously understood cannot produce a `confirm`.** That is a governance finding, not a bug, and it needs an owner decision about what the date is now for.
+>
+> The B/P sign reversal is already established at the Harvey bar (21D IC −0.0713, t −3.95) and is surfaced on its own axis; no composite is emitted, precisely so it cannot be averaged away.
 - Treat 2026-08-26 as the **earliest** review date, not a guaranteed verdict date; emit `confirm` / `fail` / `insufficient`.
 - Freeze and count the trial family (all attempted variants) before computing anything.
 - Report independent date clusters, raw rows, maturity coverage, and missingness.
@@ -2425,6 +2446,7 @@ Dependency order: P28 → P29 → P30; P31 and P32 are independent lanes; P33 co
 - No capital or config change follows from the report alone.
 
 ### P32 - Risk-Mandate Decision Memo
+**Status: memo written** (`docs/proposals/risk_mandate_decision_memo_2026-08-06.md`); **BLOCKING on owner** to pick one of four alternatives. Headline: the 1.2731x-vs-1.4x argument is worth ≈0.148pp/yr (≈¥570) against +3.95pp of modelled floor probability, while LETF drag on the leveraged leg alone (≈¥7.0k/yr ≈ 32% of Sleeve A's gross premium) and the standard error of μ (f\* 95% CI ≈ [−0.29, 3.69] even at T=30y) are an order of magnitude larger. The floor formula contains neither μ nor σ, so the "≤10%" claim is not a tail-risk statement — it is a bet on knowing μ/σ².
 - One short memo, not a simulation programme. Reproduce the ADR-0012 arithmetic including the line-34 error: the recorded inputs give `0.75 × 1.6975 = 1.2731x`, while the text asserts `λ·f* ≈ 1.4x`; `target=1.4x` implies `λ = 0.8247`.
 - Show the trade-off as model outputs: expected log growth ≈4.376% at 1.2731x vs ≈4.525% at 1.4x (≈0.148pp, ≈¥575/yr on current NAV), against a floor-hit approximation rising ≈9.92% → ≈13.87%.
 - Apply LETF variance drag and the as-of **verified official** fee only to the planned leveraged component (~¥175k of 1568.T, not all ¥217k); distinguish analytic drag from observed tracking difference.

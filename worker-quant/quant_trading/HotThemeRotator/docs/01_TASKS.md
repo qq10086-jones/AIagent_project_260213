@@ -2381,3 +2381,61 @@ Source: owner asked whether 1568.T, showing below its "discipline stop price", h
 - New `exitStatus` values `mandate_governed` / `mandate_exit_triggered` / `mandate_review_required`; every row carries `sleeve` + `disciplineSource`; board carries `mandateAware` and `params.scope`. Missing/invalid mandate → fail-open to pre-P27 behaviour.
 - Frontend: the footer claimed the params were "你声明的,Rule 4 显式配置" while the call site passed no config (dataclass default) and implied global scope. Now states scope + affected row count, or says plainly when no mandate is loaded.
 - Advice-only throughout (Rule 3): no position changed, no buy/sell rendered, no new POST route.
+
+## Milestone P28-P33: Evidence-Based Retrospective Remediation (proposed)
+
+Source: the 2026-08-04 full-cycle retrospective (`docs/proposals/retrospective_review_2026-08-04.md`) and its remediation design (`docs/superpowers/specs/2026-08-06-evidence-based-retrospective-remediation-design.md`).
+
+Status for all tasks: **proposed — awaiting owner activation**. No task authorizes broker execution, capital deployment, signal promotion, or a mandate-parameter change. Anything touching `configs/risk_mandate.json` needs the Rule 4 record (field, old value, new value, reason, expected impact, verification).
+
+Dependency order: P28 → P29 → P30; P31 and P32 are independent lanes; P33 consolidates.
+
+**Already landed out of this backlog** (the zero-input slice of P29, executed 2026-08-06 under `docs/superpowers/plans/2026-08-06-risk-mandate-session-age-repair.md`): `_flag_ages` now counts distinct covered JPX sessions instead of trace rows, missing sessions are `unobserved` (neither increment nor reset, surfaced as `flag_age_degraded`), and same-`asof` snapshot writes are idempotent or explicitly superseding. Commits `366b08b` / `4f94632` / `ad5e332`.
+
+### P28 - Ledger, Retrospective, and Mandate-State Closure
+- Record the actual 8035.T sell fill through Section 14 (`tools/htr_fill_cli.py`) and confirm no stale 8035.T holding remains in the next risk snapshot.
+- Reconcile NAV, realized/unrealized P&L, benchmark return, and active return to a documented tolerance.
+- Report implementation shortfall using decision price, eligible execution reference, actual execution, fees, and `provisional`/`final` status — never a later close treated as the executed price (Perold).
+- Recompute the delay tables with age zero on creation; label `elapsed` and `inclusive` counts separately.
+- Recompute exposure and band status after 8035.T leaves the ledger (provisional read: ~0.415x, ~¥301,599 below the 1.2x lower band).
+- Obtain a dated owner decision closing the band breach: deploy, submit a Rule 4 band proposal, or approve a time-bounded exception with a hard expiry. P28 surfaces the choice; it never selects or executes it.
+- Mark the withdrawn low-exposure "second empirical protection" interpretation superseded wherever it remains live in `PROJECT_STATUS.md`; preserve the original entry for audit history.
+
+### P29 - Decision Queue and Execution Observability
+- Persist deterministic advice IDs and append-only state transitions: `open -> acknowledged -> executed | declined | expired | superseded`.
+- Record source rule, created timestamp, JPX-session age, severity, evidence pointer, and a structured decline reason (Rule 13.9 rejected-with-reason).
+- Session-age and idempotency substrate: **done** (see above); the queue consumes it rather than reimplementing it.
+- Report open-age distribution, terminal-state counts, trigger-to-seen, and trigger-to-terminal after close.
+- CLI/afterclose recording precedes any UI write path; any new HTTP mutation first amends the Rule 11.5 whitelist and takes governance review.
+
+### P30 - Low-Noise State-Transition Notifications
+- Enable exactly one owner-selected channel through Rule 12.7 double confirmation.
+- Notify on state transitions only; unchanged open states never re-notify.
+- Carry dedupe key, severity, cooldown, monthly budget, and delivery audit; content links the decision ID and contains no order control.
+- Monthly metrics: sent, delivered, acknowledged, duplicate-suppressed, trigger-to-seen.
+- Automatic rollback to silent mode when a predeclared error or duplicate rate is breached (Section 12 anti-fatigue).
+
+### P31 - Locked 63D Evidence Review Protocol
+- Treat 2026-08-26 as the **earliest** review date, not a guaranteed verdict date; emit `confirm` / `fail` / `insufficient`.
+- Freeze and count the trial family (all attempted variants) before computing anything.
+- Report independent date clusters, raw rows, maturity coverage, and missingness.
+- Emit PIT, survivorship, cost hurdle, purge, embargo, DSR, PBO/CPCV, and Harvey-style t-stat checks.
+- Report E/P and B/P independently — a composite must not hide the B/P sign reversal.
+- Separate `signal_verdict` from `deployment_verdict`; the latter is `not_started` until a Sleeve B fill exists, and `unwind_to_A` is non-operative on an empty sleeve.
+- No capital or config change follows from the report alone.
+
+### P32 - Risk-Mandate Decision Memo
+- One short memo, not a simulation programme. Reproduce the ADR-0012 arithmetic including the line-34 error: the recorded inputs give `0.75 × 1.6975 = 1.2731x`, while the text asserts `λ·f* ≈ 1.4x`; `target=1.4x` implies `λ = 0.8247`.
+- Show the trade-off as model outputs: expected log growth ≈4.376% at 1.2731x vs ≈4.525% at 1.4x (≈0.148pp, ≈¥575/yr on current NAV), against a floor-hit approximation rising ≈9.92% → ≈13.87%.
+- Apply LETF variance drag and the as-of **verified official** fee only to the planned leveraged component (~¥175k of 1568.T, not all ¥217k); distinguish analytic drag from observed tracking difference.
+- State parameter-uncertainty assumptions explicitly (`SE(mu_hat)=sigma/sqrt(T)`; the floor formula contains neither μ nor σ, so uncertainty re-enters only through the implied λ).
+- Present at least three owner alternatives: retain 1.4x and withdraw the ≤10% claim; align the target with the stated fractional-Kelly bound; or abandon the Kelly provenance and re-justify the band as declared owner preference. A time-bounded deferral goes through the P28 exception path.
+- Block bootstrap and jump/regime Monte Carlo are **deferred** — they become a separate proposed task only if the owner picks a risk-calibrated band, intends to occupy it, and first states what decision the simulation could change.
+- Output proposals only; do not edit the active mandate.
+
+### P33 - Three-Ledger KPI and Rule-Sunset Review
+- Publish separate account / research / execution scorecards; never one blended grade (outcome-bias guard).
+- Define every numerator, denominator, unavailable state, and as-of date; `insufficient` is not zero, and N/A is not failure.
+- Measure ledger lag and band compliance only on days with valid prices and reconciled positions.
+- Scan runtime references from rules to config, code, tests, and reports.
+- Rules unreferenced for six months enter an owner review list — never automatic deletion; preserve audit history when rules are merged or retired.

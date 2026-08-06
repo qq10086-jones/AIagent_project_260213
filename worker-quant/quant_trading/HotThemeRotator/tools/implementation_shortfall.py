@@ -3,7 +3,7 @@
 The 2026-08-04 retrospective priced an execution delay by treating a later
 CLOSE as the executed price. Perold's decomposition says the comparison is
 between the paper (decision) portfolio and the portfolio actually implemented
-— so until a real fill exists in the §14 journal, there is no realised
+- so until a real fill exists in the Section 14 journal, there is no realised
 shortfall, only a scenario estimate. This tool keeps those two apart by
 construction:
 
@@ -17,7 +17,7 @@ compliant reference and a buy filled above it both read negative.
 
 Read-only / advice-only (Rule 3): it reads the journal and prints; it never
 records a fill, places an order, or touches a position. Recording a fill stays
-with `tools/htr_fill_cli.py` (§14).
+with `tools/htr_fill_cli.py` (Section 14).
 
     python tools/implementation_shortfall.py --symbol 8035.T --side SELL --qty 1 \
         --decision-asof 2026-07-24 --decision-price 62660 \
@@ -34,6 +34,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+
+from hot_theme_rotator.common.console import (  # noqa: E402
+    enable_console_fallback,
+)
 
 _SIDES = {"BUY", "SELL"}
 
@@ -133,20 +137,13 @@ def compute_shortfall(
     )
 
 
-def find_fill(base_dir: Path | str, *, symbol: str, side: str,
-              on_or_after: str) -> dict | None:
-    """First matching §14 journal fill at/after ``on_or_after``, else ``None``.
-
-    ``None`` means the ledger has not caught up — an honest unreconciled state,
-    never an excuse to substitute a market close for the fill.
-    """
+def _read_journal(base_dir: Path | str) -> list[dict]:
+    """All journal rows, oldest file first. Unreadable files are skipped."""
     jdir = Path(base_dir) / "reports" / "portfolio" / "journal"
     if not jdir.is_dir():
-        return None
-    side = side.upper()
+        return []
+    rows: list[dict] = []
     for path in sorted(jdir.glob("*.jsonl")):
-        if path.stem < on_or_after:
-            continue
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except OSError:
@@ -155,13 +152,61 @@ def find_fill(base_dir: Path | str, *, symbol: str, side: str,
             if not line.strip():
                 continue
             try:
-                row = json.loads(line)
+                rows.append(json.loads(line))
             except ValueError:
                 continue
-            if (row.get("_type") == "fill"
-                    and row.get("symbol") == symbol
-                    and str(row.get("side", "")).upper() == side):
-                return row
+    return rows
+
+
+def _voided_entry_ids(rows: list[dict]) -> set[str]:
+    """Entry ids that must be ignored under Rule 14.4 SKIP-BOTH semantics.
+
+    A ``source='correction'`` entry invalidates the entry it references, and
+    the correction itself is bookkeeping — both are skipped, because the
+    corrected fill mathematically never happened and the right values arrive
+    as a separate fresh entry. Mirrors
+    ``hot_theme_rotator.portfolio.derive._collect_skip_ids``.
+    """
+    skip: set[str] = set()
+    for row in rows:
+        if row.get("source") == "correction":
+            if row.get("entry_id"):
+                skip.add(row["entry_id"])
+            if row.get("corrects"):
+                skip.add(row["corrects"])
+    return skip
+
+
+def find_fill(base_dir: Path | str, *, symbol: str, side: str,
+              on_or_after: str) -> dict | None:
+    """First LIVE §14 journal fill at/after ``on_or_after``, else ``None``.
+
+    Correction-aware: a fill voided under Rule 14.4 is never returned. Pricing
+    a shortfall off a corrected entry would publish a FINAL figure built on a
+    fill the ledger says did not occur — strictly worse than PROVISIONAL,
+    because it looks settled.
+
+    The skip set is built from the WHOLE journal, not the queried slice: a
+    correction is normally recorded days after the fill it voids, and often in
+    a different file.
+
+    ``None`` means the ledger has not caught up — an honest unreconciled state,
+    never an excuse to substitute a market close for the fill.
+    """
+    rows = _read_journal(base_dir)
+    voided = _voided_entry_ids(rows)
+    side = side.upper()
+    for row in rows:
+        if row.get("_type") != "fill":
+            continue
+        if row.get("entry_id") in voided:
+            continue
+        ts = str(row.get("ts", ""))
+        if ts[:10] < on_or_after:
+            continue
+        if (row.get("symbol") == symbol
+                and str(row.get("side", "")).upper() == side):
+            return row
     return None
 
 
@@ -170,6 +215,10 @@ def _fmt(value: float | None) -> str:
 
 
 def main(argv=None) -> int:
+    
+    # Data-sourced text (rule titles, theses) may be Japanese; degrade rather
+    # than die mid-print on a cp932 console.
+    enable_console_fallback()
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base-dir", default=str(ROOT))

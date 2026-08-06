@@ -1,6 +1,6 @@
-"""Three-ledger scorecard — account / research / execution, never blended (P33).
+"""Three-ledger scorecard - account / research / execution, never blended (P33).
 
-Design §4.3 requires three SEPARATE cards. Blending them is outcome bias with a
+Design Section 4.3 requires three SEPARATE cards. Blending them is outcome bias with a
 number attached: a good month launders a broken process, a bad month buries a
 correct one. So this tool publishes three cards side by side and computes no
 overall figure of merit at all.
@@ -30,8 +30,8 @@ Two states are easy to confuse and are kept apart deliberately:
 
 Ledger lag and band compliance are measured ONLY on days with a valid reading
 and a reconciled position. As of 2026-08-06 the account ledger is NOT
-reconciled — a Rule 17.4.6 exit advice has been open since 2026-07-24 while the
-Section 14 journal stops at 2026-07-14 — so the account card renders
+reconciled - a Rule 17.4.6 exit advice has been open since 2026-07-24 while the
+Section 14 journal stops at 2026-07-14 - so the account card renders
 ``unavailable`` and the band-compliance denominator stops at the last day the
 position was verifiable.
 
@@ -55,6 +55,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+
+from hot_theme_rotator.common.console import (  # noqa: E402
+    enable_console_fallback,
+)
 
 from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
     calendar_covers,
@@ -953,6 +957,10 @@ def _append_trace(trace_path: Path, row: dict) -> str:
 
 
 def main(argv=None) -> int:
+    
+    # Data-sourced text (rule titles, theses) may be Japanese; degrade rather
+    # than die mid-print on a cp932 console.
+    enable_console_fallback()
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--asof", default=None, help="ISO date stamp (default: today).")

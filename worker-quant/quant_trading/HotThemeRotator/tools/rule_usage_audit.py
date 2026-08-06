@@ -1,8 +1,8 @@
-"""Rule-usage audit — which governance rules are actually load-bearing (P33).
+"""Rule-usage audit - which governance rules are actually load-bearing (P33).
 
-Retrospective §3.3 named the structural risk plainly: rules compound, edge does
+Retrospective Section 3.3 named the structural risk plainly: rules compound, edge does
 not. ``docs/02_GOVERNANCE.md`` reached 131KB across 17 sections without anyone
-being able to say which rules a running system actually consults. §5 P4 asks
+being able to say which rules a running system actually consults. Section 5 P4 asks
 for the missing feedback loop: a periodic rules-in-use audit that feeds an
 OWNER REVIEW LIST.
 
@@ -18,7 +18,7 @@ What this tool refuses to do
 ----------------------------
 - It never edits governance, config, or any position (Rule 3: advice-only).
 - It never proposes deletion. It CANNOT distinguish a dead rule from one the
-  owner enforces by hand — silence in the code is not evidence of uselessness.
+  owner enforces by hand - silence in the code is not evidence of uselessness.
   Its output is a review candidate list for a human decision.
 - It never invents a date. Dormancy needs an anchor; without git history and
   without a declared ``(added YYYY-MM-DD)`` the state is ``insufficient``, not
@@ -29,11 +29,11 @@ Honest states (a rule is placed in exactly one):
 ``runtime_referenced``
     Referenced from a runtime directory. Load-bearing in code.
 ``documentation_only``
-    Referenced only from prose. Documented, not automated — a DIFFERENT thing
+    Referenced only from prose. Documented, not automated - a DIFFERENT thing
     from unreferenced, and often exactly right for a human-enforced rule.
 ``section_referenced_only``
     Nothing cites the rule number, but runtime code cites its section (e.g.
-    "§14"). Coverage is at section granularity; the rule itself is unverified.
+    "Section 14"). Coverage is at section granularity; the rule itself is unverified.
 ``unreferenced``
     No citation anywhere outside its own definition.
 
@@ -57,6 +57,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from hot_theme_rotator.common.console import (  # noqa: E402
+    enable_console_fallback,
+)
 
 GOVERNANCE_REL = "docs/02_GOVERNANCE.md"
 SCAN_DIRS = ("src", "tools", "api", "frontend", "tests", "configs", "reports", "docs")
@@ -760,6 +765,10 @@ def _append_trace(trace_path: Path, row: dict) -> str:
 
 
 def main(argv=None) -> int:
+    
+    # Data-sourced text (rule titles, theses) may be Japanese; degrade rather
+    # than die mid-print on a cp932 console.
+    enable_console_fallback()
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--asof", default=None, help="ISO date stamp (default: today).")

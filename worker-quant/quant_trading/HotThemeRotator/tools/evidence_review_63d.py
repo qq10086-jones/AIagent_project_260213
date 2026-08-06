@@ -1,4 +1,4 @@
-"""Locked 63D evidence review protocol (P31, design 2026-08-06 §4.4 / §4.5).
+"""Locked 63D evidence review protocol (P31, design 2026-08-06 Section 4.4 / Section 4.5).
 
 Purpose: stop a CALENDAR from moving a research gate. 2026-08-26 is the
 EARLIEST date at which the 63D value/E-P live reading may be reviewed; it is
@@ -6,21 +6,21 @@ never a guaranteed verdict date and it can never upgrade an immature gate.
 
 What this emits, in this order (the order matters):
 
-1. The FROZEN trial family — every attempted variant counted BEFORE a single
+1. The FROZEN trial family - every attempted variant counted BEFORE a single
    statistic is computed. Search breadth may not be hidden (Rule 8.2.2), and it
    is the denominator the Deflated Sharpe deflates over.
-2. The data inventory — raw rows, independent date clusters, maturity coverage,
+2. The data inventory - raw rows, independent date clusters, maturity coverage,
    and missingness, per signal and per horizon.
-3. The check battery — PIT, survivorship, cost hurdle (Rule 16.0), purge,
+3. The check battery - PIT, survivorship, cost hurdle (Rule 16.0), purge,
    embargo, DSR, PBO/CPCV, and the Harvey-style t-stat bar (Rule 16.6 /
    ADR-0010). A check that cannot be computed from what is on disk reports
    ``insufficient`` WITH the reason. It never reports a pass it did not earn
    and never reports a failure it did not observe (Rule 11.9).
 4. A three-valued verdict: ``confirm`` / ``fail`` / ``insufficient``.
-   ``insufficient`` is the default and is NOT a failure and NOT a zero — it
+   ``insufficient`` is the default and is NOT a failure and NOT a zero - it
    means the minimum evidence needed to decide is absent and collection
    continues without any capital change.
-5. ``signal_verdict`` and ``deployment_verdict`` kept SEPARATE (design §4.5).
+5. ``signal_verdict`` and ``deployment_verdict`` kept SEPARATE (design Section 4.5).
    Sleeve B holds no capital, so the deployment question is ``not_started``
    until a real Sleeve B fill exists in the journal, and the declared
    ``unwind_to_A`` response is non-operative on an empty sleeve.
@@ -34,7 +34,7 @@ Read-only / advice-only (Rule 3): it computes and records, never acts. No
 capital and no config change follows from this report. Fail-open: absent inputs
 produce an honest "unavailable" report and exit 0, never a traceback
 (Rule 11.9.4). Output carries no probability, win-rate, or expected-return
-claim (Rule 8.3) — it reports IC, t-stat, DSR, and counts.
+claim (Rule 8.3) - it reports IC, t-stat, DSR, and counts.
 """
 from __future__ import annotations
 
@@ -48,6 +48,10 @@ from statistics import pstdev
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+
+from hot_theme_rotator.common.console import (  # noqa: E402
+    enable_console_fallback,
+)
 
 from hot_theme_rotator.calibration.overfit_gate import promote_gate  # noqa: E402
 from hot_theme_rotator.risk.sleeve_engine import load_mandate  # noqa: E402
@@ -1196,6 +1200,10 @@ def render_text(report: dict) -> str:
 
 
 def main(argv=None) -> int:
+    
+    # Data-sourced text (rule titles, theses) may be Japanese; degrade rather
+    # than die mid-print on a cp932 console.
+    enable_console_fallback()
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )

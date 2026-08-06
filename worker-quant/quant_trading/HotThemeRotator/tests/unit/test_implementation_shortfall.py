@@ -142,6 +142,83 @@ def test_find_fill_returns_none_when_the_ledger_has_not_caught_up(tmp_path):
                          on_or_after="2026-08-01") is None
 
 
+def _journal(tmp_path: Path, name: str, rows: list[dict]) -> None:
+    jdir = tmp_path / "reports" / "portfolio" / "journal"
+    jdir.mkdir(parents=True, exist_ok=True)
+    (jdir / name).write_text(
+        "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+
+def _fill(entry_id: str, price: float, **over) -> dict:
+    row = {"_type": "fill", "entry_id": entry_id, "symbol": "8035.T",
+           "side": "SELL", "qty": 1, "price": price, "fee": 55.0,
+           "source": "manual", "corrects": None,
+           "ts": "2026-08-04T09:00+09:00"}
+    row.update(over)
+    return row
+
+
+def test_a_corrected_fill_is_never_returned(tmp_path):
+    """Rule 14.4 is skip-BOTH: a corrected entry mathematically never happened.
+
+    Returning it would produce a FINAL shortfall from a fill the ledger says
+    did not occur — worse than reporting provisional, because it looks settled.
+    """
+    _journal(tmp_path, "2026-08-04.jsonl", [
+        _fill("aaa", 54_990.0),
+        _fill("bbb", 54_990.0, source="correction", corrects="aaa"),
+    ])
+    assert isf.find_fill(tmp_path, symbol="8035.T", side="SELL",
+                         on_or_after="2026-08-01") is None
+
+
+def test_the_replacement_entry_is_returned_not_the_corrected_one(tmp_path):
+    _journal(tmp_path, "2026-08-04.jsonl", [
+        _fill("aaa", 54_990.0),
+        _fill("bbb", 54_990.0, source="correction", corrects="aaa"),
+        _fill("ccc", 55_400.0),
+    ])
+    fill = isf.find_fill(tmp_path, symbol="8035.T", side="SELL",
+                         on_or_after="2026-08-01")
+    assert fill["entry_id"] == "ccc" and fill["price"] == 55_400.0
+
+
+def test_a_correction_landing_in_a_later_file_still_voids_the_earlier_fill(tmp_path):
+    """The correction is usually recorded days later, in another file."""
+    _journal(tmp_path, "2026-08-04.jsonl", [_fill("aaa", 54_990.0)])
+    _journal(tmp_path, "2026-08-07.jsonl", [
+        _fill("bbb", 54_990.0, source="correction", corrects="aaa",
+              ts="2026-08-07T10:00+09:00"),
+    ])
+    assert isf.find_fill(tmp_path, symbol="8035.T", side="SELL",
+                         on_or_after="2026-08-01") is None
+
+
+def test_correction_scan_covers_files_before_the_window(tmp_path):
+    """A correction may target a fill outside the queried window; the skip set
+    must be built from the WHOLE journal, not just the scanned slice."""
+    _journal(tmp_path, "2026-07-14.jsonl", [
+        _fill("old", 900.0, symbol="1568.T", side="BUY",
+              ts="2026-07-14T13:45+09:00"),
+    ])
+    _journal(tmp_path, "2026-08-04.jsonl", [
+        _fill("fix", 900.0, symbol="1568.T", side="BUY", source="correction",
+              corrects="old", ts="2026-08-04T09:00+09:00"),
+    ])
+    assert isf.find_fill(tmp_path, symbol="1568.T", side="BUY",
+                         on_or_after="2026-07-01") is None
+
+
+def test_a_correction_referencing_an_unknown_entry_voids_only_itself(tmp_path):
+    _journal(tmp_path, "2026-08-04.jsonl", [
+        _fill("ccc", 55_400.0),
+        _fill("zzz", 1.0, source="correction", corrects="does-not-exist"),
+    ])
+    fill = isf.find_fill(tmp_path, symbol="8035.T", side="SELL",
+                         on_or_after="2026-08-01")
+    assert fill["entry_id"] == "ccc"
+
+
 def test_find_fill_ignores_corrections_of_other_symbols(tmp_path):
     jdir = tmp_path / "reports" / "portfolio" / "journal"
     jdir.mkdir(parents=True)

@@ -1,4 +1,4 @@
-"""Decision-queue CLI (P29) — record what happened to each piece of advice.
+"""Decision-queue CLI (P29) - record what happened to each piece of advice.
 
 Rule 3 is untouched: this records the owner's decisions, it never places,
 routes, or cancels an order, and it stores no broker identifier. Execution
@@ -13,7 +13,7 @@ happens at the broker; this is the ledger that makes the delay measurable.
         --summary "..." --asof 2026-08-06 --severity binding
     python tools/decision_queue_cli.py report --asof 2026-08-06
 
-Declining is a first-class, legitimate outcome — but it REQUIRES a structured
+Declining is a first-class, legitimate outcome - but it REQUIRES a structured
 reason. That is the whole design: "decided not to act" and "never saw it" must
 never again be the same thing to this system.
 """
@@ -27,6 +27,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+
+from hot_theme_rotator.common.console import (  # noqa: E402
+    enable_console_fallback,
+)
 
 from hot_theme_rotator.decision_queue import (  # noqa: E402
     ALLOWED_DECLINE_REASONS,
@@ -77,6 +81,10 @@ def _render_list(path: Path, asof: _dt.date) -> None:
 
 
 def main(argv=None) -> int:
+    
+    # Data-sourced text (rule titles, theses) may be Japanese; degrade rather
+    # than die mid-print on a cp932 console.
+    enable_console_fallback()
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base-dir", default=str(ROOT))

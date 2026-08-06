@@ -79,11 +79,50 @@ class NotificationGate:
         self.base_dir = Path(base_dir)
         self.sink = sink
         self.enabled_channels = set(enabled_channels or ())
-        self.rolled_back = False
         self._audit_path = (
             self.base_dir / "reports" / "observability" / "notifications"
             / "transition_log.jsonl"
         )
+        self._state_path = self._audit_path.parent / "gate_state.json"
+        state = self._load_state()
+        # Rollback and the failure streak MUST outlive the process: afterclose
+        # is a fresh interpreter every session, so in-memory state would rearm
+        # a broken channel tomorrow — the same retry storm, one day apart.
+        self.rolled_back = bool(state.get("rolled_back"))
+        self._failures = int(state.get("consecutive_failures") or 0)
+
+    # --- persisted gate state -------------------------------------------
+
+    def _load_state(self) -> dict:
+        if not self._state_path.exists():
+            return {}
+        try:
+            return json.loads(self._state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # Unreadable state fails SAFE (silent), not open: a corrupt file
+            # must not be a licence to start pushing again.
+            return {"rolled_back": True, "consecutive_failures": 0}
+
+    def _save_state(self) -> None:
+        self._state_path.parent.mkdir(parents=True, exist_ok=True)
+        self._state_path.write_text(
+            json.dumps({
+                "rolled_back": self.rolled_back,
+                "consecutive_failures": self._failures,
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8")
+
+    def reset_rollback(self, *, asof: str, note: str = "") -> None:
+        """Re-arm after an operator has repaired the channel.
+
+        Deliberately explicit: automatic re-arming is what turns a broken
+        channel into a daily alarm the owner learns to ignore.
+        """
+        self.rolled_back = False
+        self._failures = 0
+        self._save_state()
+        self._record({"asof": asof, "event": "rollback_reset", "note": note,
+                      "delivered": False, "suppressed_reason": None})
 
     # --- audit -----------------------------------------------------------
 
@@ -148,7 +187,7 @@ class NotificationGate:
         budget_left = MONTHLY_BUDGET - self._sent_this_month(month)
         last_by_subject = self._last_delivered_by_subject()
         delivered: list[dict] = []
-        failures = 0
+        state_dirty = False
 
         for item in load_queue(queue_path).values():
             if item.severity not in _PUSHABLE:
@@ -195,22 +234,26 @@ class NotificationGate:
                 ok = bool(self.sink(base))
             except Exception:  # noqa: BLE001 - a broken channel must not raise here
                 ok = False
+            state_dirty = True
             if ok:
                 budget_left -= 1
-                failures = 0
+                self._failures = 0
                 last_by_subject[item.subject] = asof
                 delivered.append(base)
                 self._record({**base, "delivered": True, "suppressed_reason": None})
             else:
-                failures += 1
+                self._failures += 1
                 self._record({**base, "delivered": False,
                               "suppressed_reason": "delivery_failed"})
-                if failures >= MAX_CONSECUTIVE_FAILURES:
+                if self._failures >= MAX_CONSECUTIVE_FAILURES:
                     # Stop attempting for the rest of this run and stay silent
-                    # until an operator re-enables. A retry storm on a broken
-                    # channel is the fastest route to a permanently ignored one.
+                    # until an operator calls reset_rollback(). A retry storm on
+                    # a broken channel is the fastest route to a permanently
+                    # ignored one.
                     self.rolled_back = True
 
+        if state_dirty:
+            self._save_state()
         return delivered
 
     # --- metrics ---------------------------------------------------------
@@ -234,18 +277,25 @@ class NotificationGate:
             mid = len(ordered) // 2
             median = (float(ordered[mid]) if len(ordered) % 2
                       else (ordered[mid - 1] + ordered[mid]) / 2.0)
+        def count(reason: str) -> int:
+            return sum(1 for r in rows if r.get("suppressed_reason") == reason)
+
+        failed = count("delivery_failed")
         return {
             "month": month,
-            "sent": len(sent),
+            # attempted = actually handed to a channel (succeeded or not).
+            # Reporting `sent` as a synonym for `delivered` hid every failure.
+            "attempted": len(sent) + failed,
             "delivered": len(sent),
             "acknowledged": acknowledged,
-            "duplicate_suppressed": sum(
-                1 for r in rows if r.get("suppressed_reason") == "duplicate"),
-            "budget_suppressed": sum(
-                1 for r in rows if r.get("suppressed_reason") == "monthly_budget_exhausted"),
-            "delivery_failed": sum(
-                1 for r in rows if r.get("suppressed_reason") == "delivery_failed"),
+            "duplicate_suppressed": count("duplicate"),
+            "budget_suppressed": count("monthly_budget_exhausted"),
+            "cooldown_suppressed": count("subject_cooldown"),
+            "channel_disabled_suppressed": count("no_enabled_channel"),
+            "rollback_suppressed": count("rolled_back_error_rate"),
+            "delivery_failed": failed,
             "rolled_back": self.rolled_back,
+            "consecutive_failures": self._failures,
             # None = never acknowledged. Not 0, which would assert a
             # same-session visibility that was never observed.
             "median_trigger_to_seen_sessions": median,

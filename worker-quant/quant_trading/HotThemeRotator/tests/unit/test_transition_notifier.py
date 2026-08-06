@@ -226,6 +226,97 @@ def test_cooldown_expires_and_a_different_subject_is_unaffected(tmp_path):
     assert len(sink.sent) == 3
 
 
+def _binding(path: Path, n: int, *, asof: str = "2026-07-24") -> None:
+    for i in range(n):
+        open_item(path, source_rule=f"17.{i}", subject=f"s{i}", summary="x",
+                  created_asof=asof, severity="binding")
+
+
+def test_rollback_survives_a_new_process(tmp_path):
+    """afterclose is a fresh process every session. In-memory rollback would
+    silently rearm a broken channel tomorrow — the retry storm, one day apart.
+    """
+    path = tmp_path / "reports" / "observability" / "decision_queue.jsonl"
+    _binding(path, 4)
+    first = _gate(tmp_path, _Sink(fail=True))
+    first.notify_transitions(path, asof=date(2026, 7, 24))
+    assert first.rolled_back is True
+
+    revived = _gate(tmp_path, _Sink())          # new process, healthy sink
+    assert revived.rolled_back is True
+    _binding(path, 1, asof="2026-08-04")
+    assert revived.notify_transitions(path, asof=date(2026, 8, 4)) == []
+
+
+def test_failure_streak_accumulates_across_processes(tmp_path):
+    """Two failures yesterday plus one today is still three in a row."""
+    path = tmp_path / "reports" / "observability" / "decision_queue.jsonl"
+    _binding(path, 2)
+    _gate(tmp_path, _Sink(fail=True)).notify_transitions(path, asof=date(2026, 7, 24))
+
+    _binding(path, 1, asof="2026-08-04")
+    second = _gate(tmp_path, _Sink(fail=True))
+    assert second.rolled_back is False          # loaded streak = 2, not yet tripped
+    second.notify_transitions(path, asof=date(2026, 8, 4))
+    assert second.rolled_back is True
+
+
+def test_a_success_clears_the_persisted_streak(tmp_path):
+    path = tmp_path / "reports" / "observability" / "decision_queue.jsonl"
+    _binding(path, 2)
+    _gate(tmp_path, _Sink(fail=True)).notify_transitions(path, asof=date(2026, 7, 24))
+
+    _binding(path, 1, asof="2026-08-04")
+    healthy = _gate(tmp_path, _Sink())
+    healthy.notify_transitions(path, asof=date(2026, 8, 4))
+
+    _binding(path, 1, asof="2026-08-11")
+    third = _gate(tmp_path, _Sink(fail=True))
+    third.notify_transitions(path, asof=date(2026, 8, 11))
+    assert third.rolled_back is False           # streak restarted at 1, not 3
+
+
+def test_rollback_requires_an_explicit_reset(tmp_path):
+    path = tmp_path / "reports" / "observability" / "decision_queue.jsonl"
+    _binding(path, 4)
+    gate = _gate(tmp_path, _Sink(fail=True))
+    gate.notify_transitions(path, asof=date(2026, 7, 24))
+
+    healed = _gate(tmp_path, _Sink())
+    healed.reset_rollback(asof="2026-08-04", note="channel repaired")
+    assert healed.rolled_back is False
+    _binding(path, 1, asof="2026-08-04")
+    assert len(healed.notify_transitions(path, asof=date(2026, 8, 4))) == 1
+
+
+def test_metrics_separate_attempts_from_deliveries(tmp_path):
+    """'sent' and 'delivered' being one number hides every failed attempt."""
+    path = tmp_path / "reports" / "observability" / "decision_queue.jsonl"
+    _binding(path, 2)
+    gate = _gate(tmp_path, _Sink(fail=True))
+    gate.notify_transitions(path, asof=date(2026, 7, 24))
+
+    metrics = gate.monthly_metrics("2026-07")
+    assert metrics["attempted"] == 2
+    assert metrics["delivered"] == 0
+    assert metrics["delivery_failed"] == 2
+
+
+def test_metrics_count_cooldown_suppression_separately(tmp_path):
+    path = tmp_path / "reports" / "observability" / "decision_queue.jsonl"
+    open_item(path, source_rule="17.4.6", subject="sleeve_C", summary="a",
+              created_asof="2026-07-24", severity="binding")
+    gate = _gate(tmp_path, _Sink())
+    gate.notify_transitions(path, asof=date(2026, 7, 24))
+    open_item(path, source_rule="17.4.4", subject="sleeve_C", summary="b",
+              created_asof="2026-07-27", severity="binding")
+    gate.notify_transitions(path, asof=date(2026, 7, 27))
+
+    metrics = gate.monthly_metrics("2026-07")
+    assert metrics["cooldown_suppressed"] == 1
+    assert metrics["attempted"] == 1 and metrics["delivered"] == 1
+
+
 def test_monthly_metrics_separate_suppressed_from_never_seen(tmp_path):
     sink = _Sink()
     gate = _gate(tmp_path, sink)
@@ -234,7 +325,7 @@ def test_monthly_metrics_separate_suppressed_from_never_seen(tmp_path):
     gate.notify_transitions(path, asof=date(2026, 7, 27))   # duplicate suppressed
 
     metrics = gate.monthly_metrics("2026-07")
-    assert metrics["sent"] == 1
+    assert metrics["attempted"] == 1
     assert metrics["delivered"] == 1
     assert metrics["duplicate_suppressed"] == 1
     # Nobody acknowledged: unobserved, not zero-latency.

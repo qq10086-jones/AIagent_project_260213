@@ -2399,9 +2399,15 @@ Dependency order: P28 → P29 → P30; P31 and P32 are independent lanes; P33 co
 | P30 | gate built, **ships disabled** | **owner**: Rule 12.7 double confirmation to enable a channel |
 | P31 | protocol built, runs today | — (verdict is `insufficient`; see below) |
 | P32 | memo written | **owner**: pick one of the four alternatives |
-| P33 | scorecards + rule audit built | — |
+| P33 | scorecards + rule audit **done** | — |
 
-Delivered commits: `366b08b` `4f94632` `ad5e332` `a39fe70` (session-age repair) · `0534845` (P29) · `c053fdf` (P28 tool + P32 memo) · `15777b9` `bd77739` (P30) · `2ff6578` (ASCII/CLI fix) · `8c9ea66` (P31).
+Delivered commits: `366b08b` `4f94632` `ad5e332` `a39fe70` (session-age repair) · `0534845` (P29) · `c053fdf` (P28 tool + P32 memo) · `15777b9` `bd77739` (P30) · `2ff6578` (ASCII/CLI fix) · `8c9ea66` (P31) · `e54449e` (P33). Full smoke **1855 passed / 5 deselected / 0 failed** (baseline 1682 → +173 tests, zero regression).
+
+**The four owner decisions this backlog now waits on**, none of which the system may make (Rule 3 / Rule 4):
+1. **8035.T fill price + fees** → unblocks P28 reconciliation and turns the shortfall FINAL.
+2. **Band breach** (open 17 sessions, out-of-band on 20/20 observed sessions): deploy / Rule 4 amendment / dated exception with expiry.
+3. **Mandate derivation** (P32): one of four alternatives.
+4. **What 2026-08-26 now means**, given P31 reports `confirm_reachable=false` for protocol reasons that waiting does not fix.
 
 ### P28 - Ledger, Retrospective, and Mandate-State Closure
 **Status: tooling done (`tools/implementation_shortfall.py`, 16 tests); BLOCKED on owner data.** The reporter refuses to promote a scenario price to an actual fill: `delay_cost_jpy` stays `None` and status stays `provisional`, naming the missing inputs, until the fill reaches the journal. Real run today confirms `PROVISIONAL / actual fill NOT IN JOURNAL / missing: actual_price, fees_jpy`.
@@ -2456,6 +2462,16 @@ Live reading 2026-08-06: **1 open binding item at 17 sessions** (Rule 17.2 band 
 - Output proposals only; do not edit the active mandate.
 
 ### P33 - Three-Ledger KPI and Rule-Sunset Review
+**Status: DONE** (`tools/three_ledger_scorecard.py`, `tools/rule_usage_audit.py`, 60 tests). Real readings 2026-08-06:
+- **Account card = `unavailable`**, as it must be: an `executed` advice on 2026-08-04 has no journal entry on or after it. The card refuses to render a return on an unreconciled ledger rather than quoting a stale one.
+- **Band compliance 0.0% — 0 of 15 verifiable sessions in-band.** Independent confirmation of retrospective §4.4 from a different code path.
+- **`trigger_to_seen` = `not_applicable`**: no queue item has ever reached `acknowledged`. Not zero — never observed.
+- **92 of 264 rules have zero runtime reference (35%)**, split into `runtime_referenced` 172 / `section_referenced_only` 55 / `documentation_only` 19 / `unreferenced` 18. Collapsing those states would manufacture dead rules; the scan sees citations, not compliance, so it cannot distinguish a dormant rule from one the owner enforces by hand. **Review candidates: 0 — a CLOCK result, not a health result**, since git history for this tree begins 2026-05-25 and no rule can yet reach the 6-month window.
+- Research card sources the frozen trial family from P31 rather than reporting `input_not_present` for a count the repo already computes.
+
+> ⚠ **Governance defect surfaced, needs an owner ruling:** the document's own numbering is ambiguous — **Rule 5.1 lives under Section 1, while Section 5 has its own item 1.** The parser refuses to invent a resolution and reports affected citations (e.g. `Rule 2.1`, cited from `event_desk.py`) under `dangling_references`; 14 cited numbers resolve to no defined rule.
+
+**Known gap (not built):** `reports/research/cost_model.json` has no producer, so the Rule 16.0 cost hurdle renders `input_not_present` on both this card and P31. That is the same missing input blocking `confirm_reachable`.
 - Publish separate account / research / execution scorecards; never one blended grade (outcome-bias guard).
 - Define every numerator, denominator, unavailable state, and as-of date; `insufficient` is not zero, and N/A is not failure.
 - Measure ledger lag and band compliance only on days with valid prices and reconciled positions.

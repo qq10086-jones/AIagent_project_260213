@@ -198,3 +198,26 @@ def test_main_surfaces_and_persists_degraded_age_warning(tmp_path, monkeypatch, 
     assert written[-1]["age_warnings"] == [
         "flag_age_degraded:C:exit_triggered:missing_sessions=1"
     ]
+
+
+def test_append_trace_row_suppresses_identical_same_asof(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    row = _row("2026-07-30")
+
+    assert rms._append_trace_row(trace, row) == "appended"
+    assert rms._append_trace_row(trace, row) == "unchanged"
+    assert len(trace.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_append_trace_row_records_changed_same_asof_as_revision(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    first = _row("2026-07-30")
+    changed = {**first, "nav_jpy": 123.0}
+
+    assert rms._append_trace_row(trace, first) == "appended"
+    assert rms._append_trace_row(trace, changed) == "revised"
+
+    rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    assert rows[0]["asof_revision"] == 1
+    assert rows[1]["asof_revision"] == 2
+    assert rows[1]["supersedes_revision"] == 1

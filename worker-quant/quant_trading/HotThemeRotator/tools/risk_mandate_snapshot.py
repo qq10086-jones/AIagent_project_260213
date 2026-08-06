@@ -164,6 +164,53 @@ def _flag_ages(
     return ages, tuple(dict.fromkeys(warnings))
 
 
+def _semantic_trace_row(row: dict) -> dict:
+    """The row's state, stripped of the bookkeeping fields revisions add."""
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in {"asof_revision", "supersedes_revision"}
+    }
+
+
+def _append_trace_row(trace_path: Path, row: dict) -> str:
+    """Append once per semantic state; preserve changed same-date revisions.
+
+    A rerun with identical state writes nothing — that duplicate row is what
+    inflated the Rule 17.4.7 age. A rerun with CHANGED state is real new
+    information and is appended as an explicit revision, never an overwrite:
+    §14 append-only history is preserved and ``_effective_trace_rows`` treats
+    the last row for a date as authoritative. Historical duplicates are left
+    in place, auditable, and no longer counted.
+    """
+    existing: list[dict] = []
+    if trace_path.exists():
+        try:
+            existing = [
+                json.loads(line)
+                for line in trace_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        except (OSError, ValueError):
+            existing = []
+
+    same_date = [item for item in existing if item.get("asof") == row.get("asof")]
+    prior_revision = max(
+        (int(item.get("asof_revision", 1)) for item in same_date),
+        default=0,
+    )
+    if same_date and _semantic_trace_row(same_date[-1]) == _semantic_trace_row(row):
+        return "unchanged"
+
+    output = {**row, "asof_revision": prior_revision + 1}
+    if prior_revision:
+        output["supersedes_revision"] = prior_revision
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    with trace_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(output, ensure_ascii=False) + "\n")
+    return "revised" if prior_revision else "appended"
+
+
 def _positions_dict() -> dict:
     """Serialize portfolio state in the same shape the dashboard uses."""
     try:
@@ -275,9 +322,8 @@ def main(argv=None) -> int:
         }
         if age_warnings:
             row["age_warnings"] = list(age_warnings)
-        with (obs / "risk_mandate_trace.jsonl").open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-        print(f"wrote {obs / 'risk_mandate' / (asof + '.json')} + trace row")
+        trace_result = _append_trace_row(obs / "risk_mandate_trace.jsonl", row)
+        print(f"wrote {obs / 'risk_mandate' / (asof + '.json')} + trace {trace_result}")
     return 0
 
 

@@ -1,6 +1,6 @@
 # Risk-Mandate Session-Age Repair Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make Rule 17.4.7 sunset age count distinct consecutive JPX sessions and make same-date risk-snapshot reruns idempotent without rewriting historical trace rows.
 
@@ -25,7 +25,7 @@ Execution order: start this zero-input code repair immediately. P28 remains the 
 - Read: `tools/risk_mandate_snapshot.py:36-56`
 - Read: `src/hot_theme_rotator/data/jpx_calendar.py`
 
-- [ ] **Step 1: Write the failing counter tests**
+- [x] **Step 1: Write the failing counter tests**
 
 ```python
 from __future__ import annotations
@@ -220,7 +220,7 @@ def test_main_surfaces_and_persists_degraded_age_warning(tmp_path, monkeypatch, 
     ]
 ```
 
-- [ ] **Step 2: Run the tests and confirm RED**
+- [x] **Step 2: Run the tests and confirm RED**
 
 Run:
 
@@ -230,7 +230,7 @@ python -m pytest tests/unit/test_risk_mandate_snapshot.py -q
 
 Expected: failures reporting that `_flag_ages()` does not accept `current_asof` and still counts duplicate rows.
 
-- [ ] **Step 3: Commit the failing tests**
+- [x] **Step 3: Commit the failing tests**
 
 ```powershell
 git add -- tests/unit/test_risk_mandate_snapshot.py
@@ -243,7 +243,7 @@ git commit -m "test: lock risk flag session-age semantics"
 - Modify: `tools/risk_mandate_snapshot.py:19-56`
 - Test: `tests/unit/test_risk_mandate_snapshot.py`
 
-- [ ] **Step 1: Import the existing calendar helpers**
+- [x] **Step 1: Import the existing calendar helpers**
 
 Add beside the current project imports:
 
@@ -256,7 +256,7 @@ from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
 )
 ```
 
-- [ ] **Step 2: Replace `_flag_ages` with effective-row and previous-session helpers**
+- [x] **Step 2: Replace `_flag_ages` with effective-row and previous-session helpers**
 
 ```python
 @dataclass(frozen=True)
@@ -357,7 +357,7 @@ def _flag_ages(
     return ages, tuple(dict.fromkeys(warnings))
 ```
 
-- [ ] **Step 3: Pass `asof` from `main`**
+- [x] **Step 3: Pass `asof` from `main`**
 
 Replace the existing call with:
 
@@ -402,7 +402,7 @@ When constructing the trace `row`, persist warnings only when present:
 
 `openSessions` remains the inclusive count of sessions where the flag was actually observed open. Missing sessions appear separately and do not increment or reset it. Do not relabel this as the age-zero P29 queue age.
 
-- [ ] **Step 4: Run the focused tests and confirm GREEN**
+- [x] **Step 4: Run the focused tests and confirm GREEN**
 
 Run:
 
@@ -412,7 +412,7 @@ python -m pytest tests/unit/test_risk_mandate_snapshot.py tests/unit/test_jpx_ca
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit the counter repair**
+- [x] **Step 5: Commit the counter repair**
 
 ```powershell
 git add -- tools/risk_mandate_snapshot.py tests/unit/test_risk_mandate_snapshot.py
@@ -425,7 +425,7 @@ git commit -m "fix: count risk flags by JPX session"
 - Modify: `tools/risk_mandate_snapshot.py:139-155`
 - Modify: `tests/unit/test_risk_mandate_snapshot.py`
 
-- [ ] **Step 1: Add failing persistence tests**
+- [x] **Step 1: Add failing persistence tests**
 
 Append:
 
@@ -453,7 +453,7 @@ def test_append_trace_row_records_changed_same_asof_as_revision(tmp_path):
     assert rows[1]["supersedes_revision"] == 1
 ```
 
-- [ ] **Step 2: Run the two tests and confirm RED**
+- [x] **Step 2: Run the two tests and confirm RED**
 
 Run:
 
@@ -463,7 +463,7 @@ python -m pytest tests/unit/test_risk_mandate_snapshot.py -q
 
 Expected: failures because `_append_trace_row` does not exist.
 
-- [ ] **Step 3: Add the append helper**
+- [x] **Step 3: Add the append helper**
 
 ```python
 def _semantic_trace_row(row: dict) -> dict:
@@ -506,7 +506,7 @@ def _append_trace_row(trace_path: Path, row: dict) -> str:
 
 This deliberately does not delete or rewrite the duplicate historical lines. `_effective_trace_rows` makes the last row authoritative for counting; the later retrospective correction explains the old inflated values.
 
-- [ ] **Step 4: Route `main` through the helper**
+- [x] **Step 4: Route `main` through the helper**
 
 Replace the direct append block with:
 
@@ -518,7 +518,7 @@ Replace the direct append block with:
         )
 ```
 
-- [ ] **Step 5: Run focused tests and confirm GREEN**
+- [x] **Step 5: Run focused tests and confirm GREEN**
 
 Run:
 
@@ -528,7 +528,7 @@ python -m pytest tests/unit/test_risk_mandate_snapshot.py tests/unit/test_daily_
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit the persistence repair**
+- [x] **Step 6: Commit the persistence repair**
 
 ```powershell
 git add -- tools/risk_mandate_snapshot.py tests/unit/test_risk_mandate_snapshot.py
@@ -544,7 +544,7 @@ git commit -m "fix: make risk trace reruns idempotent"
 - Reference: `reports/observability/risk_mandate_trace.jsonl`
 - Reference: `docs/superpowers/specs/2026-08-06-evidence-based-retrospective-remediation-design.md:53-86`
 
-- [ ] **Step 1: Correct the retrospective delay table**
+- [x] **Step 1: Correct the retrospective delay table**
 
 Use these exact distinctions:
 
@@ -558,7 +558,7 @@ Use these exact distinctions:
 
 Replace the provisional arithmetic with `JPY 62,800 - JPY 54,990 = JPY 7,810`, retaining the `provisional` label until the actual fill and fees enter the Section 14 journal.
 
-- [ ] **Step 2: Add P28-P33 as proposed tasks**
+- [x] **Step 2: Add P28-P33 as proposed tasks**
 
 Append this backlog block after P27. Keep every item `proposed - awaiting owner activation`; do not mark P28 complete while the sell fill or mandate-state decision is absent.
 
@@ -614,7 +614,7 @@ Status for all tasks: **proposed - awaiting owner activation**. No task authoriz
 - Preserve audit history when rules are merged or retired.
 ```
 
-- [ ] **Step 3: Propagate the withdrawn status claim**
+- [x] **Step 3: Propagate the withdrawn status claim**
 
 Add a current-state correction and annotate the 2026-07-18 entry:
 
@@ -624,7 +624,7 @@ Add a current-state correction and annotate the 2026-07-18 entry:
 
 Preserve the original entry for audit history. Do not delete it.
 
-- [ ] **Step 4: Run documentation checks**
+- [x] **Step 4: Run documentation checks**
 
 Run:
 
@@ -635,7 +635,7 @@ git diff --check -- docs/proposals/retrospective_review_2026-08-04.md docs/01_TA
 
 Expected: the first command returns no unqualified live claims; historical text may remain only beside an explicit `SUPERSEDED` annotation. `git diff --check` returns no errors.
 
-- [ ] **Step 5: Run the focused and non-slow regression lanes**
+- [x] **Step 5: Run the focused and non-slow regression lanes**
 
 Run:
 
@@ -646,7 +646,7 @@ python -m pytest -m "not slow" --basetemp .runtime/pytest-session-age -q
 
 Expected: both commands exit 0; the second preserves the existing five slow deselections and introduces no failures.
 
-- [ ] **Step 6: Commit the recomputation and proposed backlog**
+- [x] **Step 6: Commit the recomputation and proposed backlog**
 
 ```powershell
 git add -- docs/proposals/retrospective_review_2026-08-04.md docs/01_TASKS.md PROJECT_STATUS.md

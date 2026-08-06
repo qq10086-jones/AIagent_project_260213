@@ -4,7 +4,7 @@
 
 **Goal:** Make Rule 17.4.7 sunset age count distinct consecutive JPX sessions and make same-date risk-snapshot reruns idempotent without rewriting historical trace rows.
 
-**Architecture:** Keep the repair inside `tools/risk_mandate_snapshot.py`. Add a fail-open reader that reduces the append-only trace to the last effective row per valid `asof`, count backward through the covered JPX calendar, and add an append helper that suppresses identical reruns while recording changed same-date rows as explicit revisions. Preserve the existing `openSessions` inclusive field for compatibility; the later P29 decision queue will use age-zero elapsed-session semantics.
+**Architecture:** Keep the repair inside `tools/risk_mandate_snapshot.py`. Reduce the append-only trace to the last effective row per parseable `asof`, then count backward through only the covered JPX path needed by the current flag. A missing eligible-session row is `unobserved`, not `closed`: skip it without incrementing or resetting age, emit and persist a degraded-history warning, and reset only on an explicit observed row where the flag is absent. Same-date persistence suppresses identical reruns and records changed rows as explicit revisions. Preserve the existing `openSessions` inclusive field for compatibility; the later P29 decision queue will use age-zero elapsed-session semantics.
 
 **Tech Stack:** Python 3, stdlib JSON/date/pathlib, existing `hot_theme_rotator.data.jpx_calendar`, pytest.
 
@@ -13,6 +13,10 @@
 ## Scope boundary
 
 This is the first executable repair extracted from the broader P28-P33 design. It does not reconcile the owner-reported 8035.T fill, choose a band-breach response, build the P29 decision queue, change the mandate, or rewrite old trace lines. Those are separate operational or implementation plans because they have different inputs and approval gates.
+
+Semantic decision for Rule 17.4.7: continuity ends only when a trace row explicitly observes the flag closed. Missing rows neither add age nor erase previously observed open sessions. Any missing, malformed, or uncovered history actually encountered by the backward walk degrades confidence and must be visible in stdout and the new trace row. An uncovered current `asof` disables age escalation for that run with a warning; an unrelated future or out-of-path row cannot poison the full history.
+
+Execution order: start this zero-input code repair immediately. P28 remains the highest governance priority, but its final ledger reconciliation and band-breach disposition wait for the owner-reported fill and owner choice; that dependency must not block this plan.
 
 ### Task 1: Lock the distinct-session behavior with unit tests
 
@@ -46,6 +50,26 @@ def _row(asof: str, present: bool = True) -> dict:
     }
 
 
+def _panel() -> dict:
+    return {
+        "navJpy": 384_321.0,
+        "cashJpy": 283_463.0,
+        "exposure": {
+            "betaAdjustedJpy": 159_586.0,
+            "ratio": 0.415,
+            "bandStatus": "below_band",
+        },
+        "killSwitch": {
+            "bufferJpy": 284_321.0,
+            "bufferPct": 73.98,
+            "breached": False,
+        },
+        "mandate": {"flagSunsetSessions": 7},
+        "sleeves": [{"id": "C", "flags": ["exit_triggered"], "holdings": []}],
+        "sectorLookThrough": [],
+    }
+
+
 def test_flag_ages_deduplicates_same_asof_and_counts_prior_sessions(tmp_path):
     trace = tmp_path / "trace.jsonl"
     _write(trace, [
@@ -57,13 +81,19 @@ def test_flag_ages_deduplicates_same_asof_and_counts_prior_sessions(tmp_path):
         _row("2026-07-29"),
     ])
 
-    ages = rms._flag_ages(
+    ages, warnings = rms._flag_ages(
         trace,
         {"C": ["exit_triggered"]},
         current_asof="2026-07-30",
     )
 
-    assert ages == {("C", "exit_triggered"): 4}
+    assert ages == {
+        ("C", "exit_triggered"): rms.FlagAge(
+            prior_observed_sessions=4,
+            observation_gap_sessions=0,
+        )
+    }
+    assert warnings == ()
 
 
 def test_flag_ages_ignores_existing_current_asof_on_rerun(tmp_path):
@@ -76,29 +106,37 @@ def test_flag_ages_ignores_existing_current_asof_on_rerun(tmp_path):
         _row("2026-07-30"),
     ])
 
-    ages = rms._flag_ages(
+    ages, warnings = rms._flag_ages(
         trace,
         {"C": ["exit_triggered"]},
         current_asof="2026-07-30",
     )
 
-    assert ages == {("C", "exit_triggered"): 4}
+    assert ages[("C", "exit_triggered")].prior_observed_sessions == 4
+    assert ages[("C", "exit_triggered")].observation_gap_sessions == 0
+    assert warnings == ()
 
 
-def test_flag_ages_stops_when_an_eligible_session_is_missing(tmp_path):
+def test_flag_ages_skips_missing_session_without_increment_or_reset(tmp_path):
     trace = tmp_path / "trace.jsonl"
     _write(trace, [
         _row("2026-07-27"),
         _row("2026-07-29"),
     ])
 
-    ages = rms._flag_ages(
+    ages, warnings = rms._flag_ages(
         trace,
         {"C": ["exit_triggered"]},
         current_asof="2026-07-30",
     )
 
-    assert ages == {("C", "exit_triggered"): 1}
+    assert ages[("C", "exit_triggered")] == rms.FlagAge(
+        prior_observed_sessions=2,
+        observation_gap_sessions=1,
+    )
+    assert warnings == (
+        "flag_age_degraded:C:exit_triggered:missing_sessions=1",
+    )
 
 
 def test_flag_ages_stops_at_closed_flag_before_reopen(tmp_path):
@@ -108,35 +146,78 @@ def test_flag_ages_stops_at_closed_flag_before_reopen(tmp_path):
         _row("2026-07-29", present=False),
     ])
 
-    ages = rms._flag_ages(
+    ages, warnings = rms._flag_ages(
         trace,
         {"C": ["exit_triggered"]},
         current_asof="2026-07-30",
     )
 
-    assert ages == {("C", "exit_triggered"): 0}
+    assert ages[("C", "exit_triggered")].prior_observed_sessions == 0
+    assert warnings == ()
 
 
-def test_flag_ages_fails_open_on_corrupt_history(tmp_path):
+def test_flag_ages_skips_corrupt_line_and_warns_instead_of_silencing(tmp_path):
     trace = tmp_path / "trace.jsonl"
-    trace.write_text('{"asof":"2026-07-29"}\nnot-json\n', encoding="utf-8")
+    trace.write_text(
+        json.dumps(_row("2026-07-29")) + "\nnot-json\n",
+        encoding="utf-8",
+    )
 
-    assert rms._flag_ages(
+    ages, warnings = rms._flag_ages(
         trace,
         {"C": ["exit_triggered"]},
         current_asof="2026-07-30",
-    ) == {}
+    )
+
+    assert ages[("C", "exit_triggered")].prior_observed_sessions == 1
+    assert warnings == ("malformed_trace_line:2",)
 
 
-def test_flag_ages_fails_open_outside_covered_calendar(tmp_path):
+def test_flag_ages_warns_and_disables_escalation_when_current_calendar_uncovered(tmp_path):
     trace = tmp_path / "trace.jsonl"
     _write(trace, [_row("2027-01-04")])
 
-    assert rms._flag_ages(
+    ages, warnings = rms._flag_ages(
         trace,
         {"C": ["exit_triggered"]},
         current_asof="2027-01-05",
-    ) == {}
+    )
+
+    assert ages == {}
+    assert warnings == ("flag_age_calendar_uncovered:2027-01-05",)
+
+
+def test_unrelated_future_uncovered_row_does_not_poison_current_path(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    _write(trace, [
+        _row("2026-07-29"),
+        _row("2027-01-04"),
+    ])
+
+    ages, warnings = rms._flag_ages(
+        trace,
+        {"C": ["exit_triggered"]},
+        current_asof="2026-07-30",
+    )
+
+    assert ages[("C", "exit_triggered")].prior_observed_sessions == 1
+    assert warnings == ()
+
+
+def test_main_surfaces_and_persists_degraded_age_warning(tmp_path, monkeypatch, capsys):
+    trace = tmp_path / "reports" / "observability" / "risk_mandate_trace.jsonl"
+    trace.parent.mkdir(parents=True)
+    _write(trace, [_row("2026-07-27"), _row("2026-07-29")])
+    monkeypatch.setattr(rms, "_positions_dict", lambda: {})
+    monkeypatch.setattr(rms, "build_risk_mandate_panel", lambda *_args, **_kwargs: _panel())
+
+    assert rms.main(["--asof", "2026-07-30", "--base-dir", str(tmp_path)]) == 0
+
+    assert "WARNING flag_age_degraded:C:exit_triggered:missing_sessions=1" in capsys.readouterr().out
+    written = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    assert written[-1]["age_warnings"] == [
+        "flag_age_degraded:C:exit_triggered:missing_sessions=1"
+    ]
 ```
 
 - [ ] **Step 2: Run the tests and confirm RED**
@@ -167,6 +248,8 @@ git commit -m "test: lock risk flag session-age semantics"
 Add beside the current project imports:
 
 ```python
+from dataclasses import dataclass
+
 from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
     calendar_covers,
     is_trading_day,
@@ -176,28 +259,38 @@ from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
 - [ ] **Step 2: Replace `_flag_ages` with effective-row and previous-session helpers**
 
 ```python
-def _effective_trace_rows(trace_path: Path) -> dict[_dt.date, dict] | None:
-    """Return the last valid row for each covered JPX asof.
+@dataclass(frozen=True)
+class FlagAge:
+    prior_observed_sessions: int
+    observation_gap_sessions: int
 
-    None means the history is unreadable or internally invalid, in which case
-    sunset escalation fails open rather than inventing continuity.
-    """
+
+def _effective_trace_rows(trace_path: Path) -> tuple[dict[_dt.date, dict], tuple[str, ...]]:
+    """Return the last parseable row per asof plus non-fatal diagnostics."""
+    if not trace_path.exists():
+        return {}, ()
     try:
         raw_lines = trace_path.read_text(encoding="utf-8").splitlines()
-        rows = [json.loads(line) for line in raw_lines if line.strip()]
-    except (OSError, ValueError, json.JSONDecodeError):
-        return None
+    except OSError as exc:
+        return {}, (f"flag_age_trace_unreadable:{type(exc).__name__}",)
 
     effective: dict[_dt.date, dict] = {}
-    for row in rows:
+    warnings: list[str] = []
+    for line_number, line in enumerate(raw_lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            warnings.append(f"malformed_trace_line:{line_number}")
+            continue
         try:
             asof = _dt.date.fromisoformat(str(row["asof"]))
         except (KeyError, TypeError, ValueError):
-            return None
-        if not calendar_covers(asof) or not is_trading_day(asof):
-            return None
+            warnings.append(f"invalid_trace_asof:{line_number}")
+            continue
         effective[asof] = row
-    return effective
+    return effective, tuple(warnings)
 
 
 def _previous_trading_day(d: _dt.date) -> _dt.date:
@@ -214,34 +307,54 @@ def _flag_ages(
     current_flags: dict,
     *,
     current_asof: str,
-) -> dict:
-    """Count consecutive prior covered JPX sessions for each current flag."""
+) -> tuple[dict[tuple[str, str], FlagAge], tuple[str, ...]]:
+    """Count prior observed-open sessions; gaps degrade but do not reset."""
     if not current_flags:
-        return {}
+        return {}, ()
     try:
         current_date = _dt.date.fromisoformat(current_asof)
     except ValueError:
-        return {}
+        return {}, (f"flag_age_invalid_current_asof:{current_asof}",)
     if not calendar_covers(current_date) or not is_trading_day(current_date):
-        return {}
+        return {}, (f"flag_age_calendar_uncovered:{current_asof}",)
 
-    effective = _effective_trace_rows(trace_path)
-    if effective is None:
-        return {}
+    effective, load_warnings = _effective_trace_rows(trace_path)
+    past_dates = [
+        d for d in effective
+        if d < current_date and calendar_covers(d) and is_trading_day(d)
+    ]
+    earliest = min(past_dates) if past_dates else current_date
 
-    ages: dict = {}
+    ages: dict[tuple[str, str], FlagAge] = {}
+    warnings = list(load_warnings)
     for sid, flags in current_flags.items():
         for flag in flags:
             count = 0
+            gaps = 0
             cursor = _previous_trading_day(current_date)
-            while cursor in effective:
-                row_flags = ((effective[cursor].get("flags") or {}).get(sid) or [])
+            while cursor >= earliest:
+                if not calendar_covers(cursor):
+                    warnings.append(f"flag_age_calendar_uncovered:{cursor.isoformat()}")
+                    break
+                row = effective.get(cursor)
+                if row is None:
+                    gaps += 1
+                    cursor = _previous_trading_day(cursor)
+                    continue
+                row_flags = ((row.get("flags") or {}).get(sid) or [])
                 if flag not in row_flags:
                     break
                 count += 1
                 cursor = _previous_trading_day(cursor)
-            ages[(sid, flag)] = count
-    return ages
+            ages[(sid, flag)] = FlagAge(
+                prior_observed_sessions=count,
+                observation_gap_sessions=gaps,
+            )
+            if gaps:
+                warnings.append(
+                    f"flag_age_degraded:{sid}:{flag}:missing_sessions={gaps}"
+                )
+    return ages, tuple(dict.fromkeys(warnings))
 ```
 
 - [ ] **Step 3: Pass `asof` from `main`**
@@ -249,14 +362,45 @@ def _flag_ages(
 Replace the existing call with:
 
 ```python
-    ages = _flag_ages(
+    ages, age_warnings = _flag_ages(
         obs / "risk_mandate_trace.jsonl",
         {k: v for k, v in flags.items() if v},
         current_asof=asof,
     )
+    for warning in age_warnings:
+        print(f"  WARNING {warning}")
 ```
 
-Keep `open_sessions = prior + 1`: this field remains the inclusive Rule 17.4.7 count. Do not relabel it as the age-zero P29 queue age.
+Replace the escalation loop with:
+
+```python
+    escalations = []
+    for (sid, flag), age in ages.items():
+        open_sessions = age.prior_observed_sessions + 1
+        if open_sessions >= sunset_n:
+            escalation = {
+                "sleeve": sid,
+                "flag": flag,
+                "openSessions": open_sessions,
+                "observationGapSessions": age.observation_gap_sessions,
+                "ageQuality": "degraded" if age.observation_gap_sessions else "complete",
+            }
+            escalations.append(escalation)
+            print(
+                f"  SUNSET [{sid}] '{flag}' open {open_sessions} observed sessions "
+                f">= {sunset_n} (gaps={age.observation_gap_sessions}) - "
+                "Rule 17.4.7 demands resolve"
+            )
+```
+
+When constructing the trace `row`, persist warnings only when present:
+
+```python
+        if age_warnings:
+            row["age_warnings"] = list(age_warnings)
+```
+
+`openSessions` remains the inclusive count of sessions where the flag was actually observed open. Missing sessions appear separately and do not increment or reset it. Do not relabel this as the age-zero P29 queue age.
 
 - [ ] **Step 4: Run the focused tests and confirm GREEN**
 
@@ -340,7 +484,7 @@ def _append_trace_row(trace_path: Path, row: dict) -> str:
                 for line in trace_path.read_text(encoding="utf-8").splitlines()
                 if line.strip()
             ]
-        except (OSError, ValueError, json.JSONDecodeError):
+        except (OSError, ValueError):
             existing = []
 
     same_date = [item for item in existing if item.get("asof") == row.get("asof")]
@@ -516,6 +660,9 @@ The implementation is complete only when:
 - the duplicate 2026-07-28 and 2026-07-29 rows remain auditable but no longer inflate age;
 - a replay for 2026-07-30 yields `openSessions=5`, not 7;
 - a replay for 2026-08-05 yields `openSessions=9`, not 11;
+- an unobserved eligible session neither increments nor resets age, and produces a persisted `flag_age_degraded` warning;
+- an explicit observed flag absence resets continuity;
+- an uncovered current calendar disables escalation with a visible warning, while an unrelated future row cannot poison current history;
 - repeating the same `asof` with unchanged data appends no trace row;
 - a changed same-date snapshot appends an explicit revision and does not add a session;
 - the retrospective uses seven elapsed/eight inclusive sessions for the 8035.T delay;

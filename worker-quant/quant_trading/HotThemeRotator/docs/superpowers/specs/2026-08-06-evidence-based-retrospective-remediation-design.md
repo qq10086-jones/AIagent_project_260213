@@ -81,7 +81,10 @@ Required remediation:
 
 - collapse history to one effective record per `asof` before computing age;
 - make same-`asof` snapshot writes idempotent, or define an append-only correction record that supersedes the prior row without adding a session;
-- validate dates with the covered JPX calendar rather than treating arbitrary trace dates as sessions;
+- treat a missing eligible-session row as `unobserved`, not `closed`: it neither increments nor resets age; only an explicit observed row without the flag ends continuity;
+- surface and persist degraded-history diagnostics whenever a missing or malformed row is encountered in the consumed history;
+- validate only the covered JPX path needed by the current computation rather than allowing an unrelated invalid or future row to disable all history;
+- if the current `asof` is outside calendar coverage, suppress age escalation for that run and emit a visible warning rather than failing silently;
 - recompute all retrospective delay and sunset tables from the corrected definition;
 - label the hypothesis that the retrospective copied an inflated trace value as `INFERRED`, because the repository does not preserve provenance proving that copy path.
 
@@ -229,6 +232,7 @@ Acceptance:
 - deterministic advice ID and append-only transition records;
 - source rule, created timestamp, trading-session age, severity, and evidence pointer;
 - `_flag_ages` uses distinct covered JPX `asof` sessions, same-date runs do not increase age, and same-date snapshot persistence is idempotent or explicitly superseding;
+- missing observations do not increment or reset age, explicit flag absence resets it, and all degraded/calendar-uncovered states are visible in stdout and trace diagnostics;
 - decline requires a structured reason plus optional note;
 - afterclose reports open age distribution and terminal-state counts;
 - trigger-to-seen and trigger-to-terminal are separately measurable;
@@ -370,3 +374,5 @@ The design's success condition is narrower: the revised review becomes internall
 | JPY 8.7k drag / 36% of edge | Modify | It incorrectly applies leveraged-fund costs to all JPY 217k; the declared mix has only about JPY 175k in 1568.T. |
 | Owner binary choice | Modify | At least three coherent governance alternatives exist, plus a time-bounded exception; none may be silently activated. |
 | Arithmetic/session/status corrections | Accept | Repository arithmetic, the covered JPX calendar, and the live status text support the corrections. |
+| Missing trace row resets age | Reject reset semantics | Missing means unobserved, not closed. Skip without incrementing, retain prior observations, and mark the age degraded; only explicit absence resets continuity. |
+| Any invalid row disables all age history | Reject | Validation must be scoped to the consumed path and every degradation must be visible; unrelated future rows cannot poison current escalation. |

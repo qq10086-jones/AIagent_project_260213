@@ -24,18 +24,32 @@ What this tool refuses to do
   without a declared ``(added YYYY-MM-DD)`` the state is ``insufficient``, not
   a plausible-looking number (Rule 11.9).
 
-Honest states (a rule is placed in exactly one):
+Honest states (a rule is placed in exactly one, strongest evidence first):
 
-``runtime_referenced``
-    Referenced from a runtime directory. Load-bearing in code.
+``implemented_in_product``
+    Cited from the shipping surface (src / api / frontend / configs). A running
+    code path consults it.
+``operator_tooling_only``
+    Cited only from ``tools/``. Real, but it runs when an operator runs it.
+``test_assertion_only``
+    Cited only from ``tests/``. A test naming a rule is evidence someone meant
+    to enforce it, NOT evidence that product code does.
+``artifact_echo_only``
+    Cited only from ``reports/``. Weakest of all: artifacts are OUTPUT, so they
+    can quote a rule number no code ever consults.
 ``documentation_only``
-    Referenced only from prose. Documented, not automated - a DIFFERENT thing
-    from unreferenced, and often exactly right for a human-enforced rule.
-``section_referenced_only``
-    Nothing cites the rule number, but runtime code cites its section (e.g.
-    "Section 14"). Coverage is at section granularity; the rule itself is unverified.
+    Cited only from prose. Documented, not automated - a DIFFERENT thing from
+    unreferenced, and often exactly right for a human-enforced rule.
+``section_scope_only``
+    Nothing cites the rule number, but code cites its section (e.g. "Section 14").
+    Coverage is at section granularity; the rule itself is unverified.
 ``unreferenced``
     No citation anywhere outside its own definition.
+
+The first two are counted as having a code reference; the rest are not. An
+earlier version of this audit called all seven scanned directories "runtime"
+and reported one flattering total, which put a test docstring on the same
+footing as an implementation.
 
 Artifacts are dated and append-only: ``reports/observability/rule_usage_audit/
 {asof}.json`` plus a summary row in ``rule_usage_audit_trace.jsonl``. A prior
@@ -67,6 +81,28 @@ GOVERNANCE_REL = "docs/02_GOVERNANCE.md"
 SCAN_DIRS = ("src", "tools", "api", "frontend", "tests", "configs", "reports", "docs")
 RUNTIME_CATEGORIES = ("src", "tools", "api", "frontend", "tests", "configs", "reports")
 DOC_CATEGORIES = ("docs", "other")
+
+# The original audit called all seven RUNTIME_CATEGORIES "runtime referenced",
+# which conflated three genuinely different kinds of evidence and flattered the
+# headline number. A rule number in a test docstring is not the same as a rule
+# a shipping code path implements, and a number echoed into a report artifact is
+# weaker still: the artifact is OUTPUT, so it can quote a rule the code never
+# consults. These subsets keep them apart.
+PRODUCT_CATEGORIES = ("src", "api", "frontend", "configs")   # shipping surface
+TOOLING_CATEGORIES = ("tools",)                              # operator scripts
+TEST_CATEGORIES = ("tests",)
+ARTIFACT_CATEGORIES = ("reports",)
+
+# Ordered strongest-evidence-first; classification takes the first that hits.
+REFERENCE_STATE_ORDER = (
+    "implemented_in_product",
+    "operator_tooling_only",
+    "test_assertion_only",
+    "artifact_echo_only",
+    "documentation_only",
+    "section_scope_only",
+    "unreferenced",
+)
 DORMANCY_THRESHOLD_MONTHS = 6.0
 DAYS_PER_MONTH = 30.4375
 MAX_REFS_PER_RULE = 12
@@ -93,10 +129,10 @@ DISCLAIMER = (
 # A rule number: 1-3 dot- or underscore-separated components, each 1-2 digits.
 # The width cap is what keeps dates and prices (2026, 977.2) out of the scan.
 _NUM = r"(?<![\d.])(?:\d{1,2}[._])*\d{1,2}(?!\d)"
-# "Rule 8.3", "rules 12.5", "source_rule": "17.4.6", RULE_8_3_GUARD, "§14".
+# "Rule 8.3", "rules 12.5", "source_rule": "17.4.6", RULE_8_3_GUARD, section token.
 # The lookbehind rejects mid-word hits while still allowing an underscore
 # prefix, which is how the codebase spells rule ids in identifiers and JSON.
-_TOKEN_RE = re.compile(r"(?i)(?<![a-z])(rules?|sections?|§)[\s:#\-_\"'=]*(" + _NUM + r")")
+_TOKEN_RE = re.compile(r"(?i)(?<![a-z])(rules?|sections?|§)[\s:#\-_\"\'=]*(" + _NUM + r")")
 # Continuation of a same-line citation list: "Rule 3, 4, 8.3".
 # An explicit separator is REQUIRED. Allowing bare whitespace made
 # "the Rule 12.5 20%-NAV concentration warning" cite a non-existent Rule 20.
@@ -104,7 +140,7 @@ _CONT_RE = re.compile(
     r"(?i)[\s]*(?:[,/、&+]|\band\b|\bor\b|与|和)[\s]*"
     r"(?:rules?[\s:#\-_\"'=]*|§[\s]*)?(" + _NUM + r")"
 )
-# Parenthesised expansion: "§17 (17.1, 17.2, 17.4.4)". Restricted to DOTTED
+# Parenthesised expansion: section token then "(17.1, 17.2, 17.4.4)". Restricted to DOTTED
 # numbers because "Rule 12.4 (24-hour cooling-off)" is not a citation of 24.
 _CONT_PAREN_RE = re.compile(
     r"(?i)[\s]*\([\s]*(?:rules?[\s:#\-_\"'=]*|§[\s]*)?"
@@ -145,7 +181,7 @@ class Reference:
     path: str
     line: int
     category: str
-    match_kind: str  # "explicit" (adjacent to a Rule/§ token) | "list" (same-line list)
+    match_kind: str  # "explicit" (adjacent to a Rule/Section  token) | "list" (same-line list)
 
 
 @dataclass
@@ -171,7 +207,7 @@ def _item_title(text: str) -> str:
     if bold:
         return bold.group(1).strip().rstrip(":").strip()
     plain = re.sub(r"[*`]", "", text).strip()
-    for stop in (": ", ". ", " — ", " - "):
+    for stop in (": ", ". ", " - ", " - "):
         idx = plain.find(stop)
         if 0 < idx <= 90:
             return plain[:idx].strip()
@@ -200,7 +236,7 @@ def parse_governance(text: str) -> tuple[RuleDef, ...]:
     Known limitation, reported rather than papered over: a section that
     numbers its obligations directly (``## 2. Change Workflow`` and its list)
     is NOT enumerated, so citations like "Rule 2.1" land in the dangling list.
-    Enumerating those would collide with the document's own numbering — Rule
+    Enumerating those would collide with the document's own numbering - Rule
     5.1 lives under Section 1 while Section 5 has its own item 1 — and
     inventing a resolution for that ambiguity is the owner's call, not the
     parser's.
@@ -332,7 +368,7 @@ def scan_references(
 ) -> ScanResult:
     """Find every citation of ``rules`` under ``base_dir``.
 
-    A rule's own definition line is a definition, not a reference — counting it
+    A rule's own definition line is a definition, not a reference - counting it
     would make every rule look used. Everything else counts, including
     cross-references inside the governance document itself, which is precisely
     what separates "documented" from "automated".
@@ -377,7 +413,7 @@ def scan_references(
             if not _PREFILTER_RE.search(line):
                 continue
             for number, token, kind in _line_citations(line):
-                prefers_section = token.startswith("section") or token == "§"
+                prefers_section = token.startswith("section") or token == "Section "
                 if prefers_section and number in section_numbers:
                     target, bucket = "section", result.by_section
                 elif number in rule_numbers:
@@ -520,12 +556,27 @@ def build_audit(
         docs_total = sum(counts[c] for c in DOC_CATEGORIES)
         sect_runtime = section_runtime.get(rule.section, 0)
 
-        if runtime_total:
-            state = "runtime_referenced"
+        product = sum(counts.get(c, 0) for c in PRODUCT_CATEGORIES)
+        tooling = sum(counts.get(c, 0) for c in TOOLING_CATEGORIES)
+        tests_only = sum(counts.get(c, 0) for c in TEST_CATEGORIES)
+        artifacts = sum(counts.get(c, 0) for c in ARTIFACT_CATEGORIES)
+
+        # Strongest evidence wins. The ladder matters: "a test mentions it" and
+        # "shipping code implements it" were previously the same headline
+        # number, which is exactly the kind of flattering aggregate this audit
+        # exists to expose elsewhere.
+        if product:
+            state = "implemented_in_product"
+        elif tooling:
+            state = "operator_tooling_only"
+        elif tests_only:
+            state = "test_assertion_only"
+        elif artifacts:
+            state = "artifact_echo_only"
         elif docs_total:
             state = "documentation_only"
         elif sect_runtime:
-            state = "section_referenced_only"
+            state = "section_scope_only"
         else:
             state = "unreferenced"
 
@@ -543,7 +594,7 @@ def build_audit(
             review_state = "insufficient"
         elif dormancy >= threshold_months:
             review_state = "review_candidate"
-        elif state == "runtime_referenced":
+        elif state in ("implemented_in_product", "operator_tooling_only"):
             review_state = "not_a_candidate"
         else:
             review_state = "too_recent"
@@ -575,9 +626,12 @@ def build_audit(
             "references_truncated": len(refs) > MAX_REFS_PER_RULE,
         })
 
-    by_state = {s: sum(1 for r in rows if r["reference_state"] == s) for s in (
-        "runtime_referenced", "documentation_only", "section_referenced_only", "unreferenced")}
-    zero_runtime = [r for r in rows if r["reference_state"] != "runtime_referenced"]
+    by_state = {s: sum(1 for r in rows if r["reference_state"] == s)
+                for s in REFERENCE_STATE_ORDER}
+    # "Zero CODE reference" is the honest headline: a rule only a test or a
+    # report artifact mentions has no implementing code path.
+    zero_runtime = [r for r in rows if r["reference_state"] not in
+                    ("implemented_in_product", "operator_tooling_only")]
     candidates = [r["number"] for r in rows if r["review_state"] == "review_candidate"]
     observed = [r["dormancy_months"] for r in rows if r["dormancy_months"] is not None]
     dormancy_max = max(observed) if observed else None
@@ -600,7 +654,8 @@ def build_audit(
             f"anchor in this tree is {dormancy_max} months old (git history for the scanned "
             f"path begins {git_history['earliest_commit_date']}), so no rule can yet reach "
             f"the {threshold_months}-month window. "
-            f"{len(zero_runtime)} rules already have zero runtime reference."
+            f"{len(zero_runtime)} rules already have zero CODE reference "
+            f"(no src/api/frontend/configs/tools citation)."
         )
     else:
         window_note = ("Anchors older than the window exist and none qualified; "
@@ -654,7 +709,7 @@ def build_audit(
         "dangling_definition": (
             "Citations that use a governance section number but resolve to no "
             "defined rule. Includes citations aimed at OTHER documents' section "
-            "numbering (e.g. 00_DESIGN §6.11.1) and at section-body list items "
+            "numbering (e.g. 00_DESIGN Section 6.11.1) and at section-body list items "
             "this parser deliberately does not enumerate (e.g. Rule 2.1)."
         ),
         "dangling_references": {
@@ -677,11 +732,9 @@ def render_text(report: dict, *, limit: int = 20) -> str:
                f"scanned {s['files_scanned']} files (skipped {s['files_skipped']})")
     out.append(f"  rules defined: {s['rules_total']} "
                f"({s['header_rules']} headers + {s['derived_subrules']} list sub-items)")
-    out.append(f"  runtime referenced      : {s['runtime_referenced']}")
-    out.append(f"  documentation only      : {s['documentation_only']}")
-    out.append(f"  section referenced only : {s['section_referenced_only']}")
-    out.append(f"  unreferenced            : {s['unreferenced']}")
-    out.append(f"  ZERO runtime reference  : {s['zero_runtime_reference']} "
+    for state in REFERENCE_STATE_ORDER:
+        out.append(f"  {state:<24}: {s.get(state, 0)}")
+    out.append(f"  ZERO code reference     : {s['zero_runtime_reference']} "
                f"(headers {s['zero_runtime_reference_by_kind']['header']} / "
                f"sub-items {s['zero_runtime_reference_by_kind']['list_item']})")
     out.append(f"  review candidates (dormant >= {report['dormancy_threshold_months']} months): "
@@ -700,9 +753,10 @@ def render_text(report: dict, *, limit: int = 20) -> str:
         if len(report["review_candidates"]) > limit:
             out.append(f"    ... {len(report['review_candidates']) - limit} more")
 
-    zero = [r for r in report["rules"] if r["reference_state"] != "runtime_referenced"]
+    zero = [r for r in report["rules"] if r["reference_state"] not in
+            ("implemented_in_product", "operator_tooling_only")]
     if zero:
-        out.append("  --- zero runtime reference (top by state) ---")
+        out.append("  --- zero code reference (top by state) ---")
         for row in zero[:limit]:
             out.append(f"    Rule {row['number']}: {row['title'][:56]}  "
                        f"[{row['reference_state']}] docs={row['counts']['docs_total']} "
@@ -731,10 +785,7 @@ def _trace_row(report: dict) -> dict:
     return {
         "asof": report["asof"],
         "rules_total": s["rules_total"],
-        "runtime_referenced": s["runtime_referenced"],
-        "documentation_only": s["documentation_only"],
-        "section_referenced_only": s["section_referenced_only"],
-        "unreferenced": s["unreferenced"],
+        **{state: s.get(state, 0) for state in REFERENCE_STATE_ORDER},
         "zero_runtime_reference": s["zero_runtime_reference"],
         "review_candidates": s["review_candidates"],
         "dormancy_insufficient": s["dormancy_insufficient"],

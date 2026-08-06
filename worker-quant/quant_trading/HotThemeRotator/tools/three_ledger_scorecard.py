@@ -60,6 +60,10 @@ from hot_theme_rotator.common.console import (  # noqa: E402
     enable_console_fallback,
 )
 
+from hot_theme_rotator.research.cost_model import (  # noqa: E402
+    COST_MODEL_REL,
+    resolve_cost_model,
+)
 from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
     calendar_covers,
     is_trading_day,
@@ -82,7 +86,7 @@ REL_QUEUE = "reports/observability/decision_queue.jsonl"
 REL_VALUE_LIVELOG = "reports/observability/value_livelog"
 REL_BENCHMARK = "reports/observability/benchmark_trace.jsonl"
 REL_TRIAL_FAMILY = "reports/research/trial_family.json"
-REL_COST_MODEL = "reports/research/cost_model.json"
+REL_COST_MODEL = COST_MODEL_REL   # shared contract, not a local path
 REL_EVIDENCE_REVIEW_DIR = "reports/observability/evidence_review_63d"
 REL_OUT_DIR = "reports/observability/three_ledger"
 REL_OUT_TRACE = "reports/observability/three_ledger_trace.jsonl"
@@ -215,7 +219,7 @@ def _iso(value) -> str | None:
 
 
 def _effective_rows(rows: list[dict]) -> list[tuple[str, dict]]:
-    """Last row per ``asof``, in date order — same-date reruns count once."""
+    """Last row per ``asof``, in date order - same-date reruns count once."""
     latest: dict[str, dict] = {}
     for row in rows:
         iso = _iso(row.get("asof"))
@@ -605,23 +609,39 @@ def _research_card(base: Path, asof: str, warnings: list[str]) -> dict:
         source=trial_source, asof=asof, value=t_value, state=t_state, reason=t_reason,
         frozen_asof=(trials or {}).get("frozen_asof"))
 
-    cost = _read_json(base / REL_COST_MODEL, warnings, "cost_model")
-    if cost is None:
-        c_state, c_value, c_reason = "unavailable", None, f"input_not_present:{REL_COST_MODEL}"
+    # Same contract the P31 evidence review consumes, so the two reports can
+    # never disagree about whether the Rule 16.0 hurdle is computable. Nothing
+    # is defaulted: an assumed cost that clears the hurdle is the failure mode
+    # Rule 16.0 exists to prevent.
+    cost = resolve_cost_model(base, horizon=63)
+    warnings.extend(cost.warnings)
+    if cost.round_trip_cost is None:
+        c_state, c_value, c_reason = (
+            "unavailable", None, f"input_not_present:{REL_COST_MODEL}")
         unmet.append(f"cost_hurdle_bp:input_not_present:{REL_COST_MODEL}")
     else:
-        bp = cost.get("round_trip_bp")
-        if _is_number(bp):
-            c_state, c_value, c_reason = "ok", round(float(bp), 4), None
-        else:
-            c_state, c_value, c_reason = "insufficient", None, "round_trip_bp_not_declared"
-            unmet.append("cost_hurdle_bp:not_declared")
+        c_state, c_value, c_reason = "ok", round(cost.round_trip_cost * 10_000, 4), None
     metrics["cost_hurdle_bp"] = _metric(
         "cost_hurdle_bp",
         numerator="declared round-trip execution cost of the traded basket, basis points",
         denominator="1 (a hurdle level the realised gross spread must clear, not a ratio)",
         unit="basis_points",
-        source=REL_COST_MODEL, asof=asof, value=c_value, state=c_state, reason=c_reason)
+        source=REL_COST_MODEL, asof=asof, value=c_value, state=c_state, reason=c_reason,
+        cost_model=cost.as_dict())
+
+    hurdle = cost.hurdle()
+    metrics["cost_hurdle_ic"] = _metric(
+        "cost_hurdle_ic",
+        numerator="tau * c_rt (per-rebalance turnover x round-trip cost)",
+        denominator="sigma_r at the 63D label horizon (cross-sectional dispersion)",
+        unit="information_coefficient",
+        source=REL_COST_MODEL, asof=asof,
+        value=round(hurdle, 6) if hurdle is not None else None,
+        state="ok" if hurdle is not None else "unavailable",
+        reason=None if hurdle is not None else f"missing:{','.join(cost.missing)}",
+        cost_model=cost.as_dict())
+    if hurdle is None:
+        unmet.append(f"cost_hurdle_ic:missing:{','.join(cost.missing)}")
 
     for name, label, numerator in (
         ("dsr", "Deflated Sharpe Ratio",

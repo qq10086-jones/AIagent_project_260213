@@ -244,6 +244,14 @@ def test_pbo_cpcv_is_insufficient_and_blocks_confirmability():
     assert "pbo_cpcv" in conf["blocking_checks"]
 
 
+DECLARED_COSTS = {
+    "asof": "2026-08-01",
+    "turnover_per_rebalance": 0.7,
+    "round_trip_cost_bp": 5,          # 0.0005 as a fraction
+    "sigma_r_by_horizon": {"63": 0.10},
+}
+
+
 def test_cost_hurdle_is_insufficient_when_dispersion_at_the_locked_horizon_is_absent():
     fe = {"table": {"earnings_yield": {"horizons": {
         "5": {"sigma_r": 0.05, "round_trip_cost": 0.0005}}}}}
@@ -251,18 +259,50 @@ def test_cost_hurdle_is_insufficient_when_dispersion_at_the_locked_horizon_is_ab
                              livelog_asof="2026-08-05", forward_eval=fe)
     ch = _check(report, "earnings_yield", "cost_hurdle")
     assert ch["status"] == "insufficient"
-    assert "63" in ch["detail"]
+    assert "sigma_r" in ch["detail"]
+    assert ch["cost_model"]["missing"]
 
 
-def test_cost_hurdle_is_computed_when_dispersion_at_the_locked_horizon_exists():
+def test_a_hurdle_from_observed_values_alone_is_reported_but_not_scored_a_pass():
+    """Tightened 2026-08-06 with the shared cost contract.
+
+    Previously the round-trip cost silently fell back to a module default and a
+    hurdle built from per-run observations could return `pass`. An assumed cost
+    clearing a governed gate is exactly what Rule 16.0 exists to prevent, so an
+    undeclared model now yields `insufficient` with the number still shown.
+    """
     fe = {"table": {"earnings_yield": {"horizons": {
-        "63": {"sigma_r": 0.10, "round_trip_cost": 0.0005}}}}}
+        "63": {"sigma_r": 0.10, "round_trip_cost": 0.0005, "turnover": 0.7}}}}}
     report = er.build_review(asof="2026-08-06", livelog=_mature_livelog(),
                              livelog_asof="2026-08-05", forward_eval=fe)
     ch = _check(report, "earnings_yield", "cost_hurdle")
-    assert ch["status"] == "pass"
-    assert ch["hurdle"] == pytest.approx(er.TURNOVER * 0.0005 / 0.10)
+    assert ch["status"] == "insufficient"
+    assert ch["hurdle"] == pytest.approx(0.7 * 0.0005 / 0.10)
+    assert ch["cost_model"]["fully_declared"] is False
+    assert ch["cost_model"]["provenance"]["sigma_r"] == "observed_forward_artifact"
+
+
+def test_a_fully_declared_cost_model_lets_the_hurdle_be_scored():
+    fe = {"table": {"earnings_yield": {"horizons": {"63": {}}}}}
+    report = er.build_review(asof="2026-08-06", livelog=_mature_livelog(),
+                             livelog_asof="2026-08-05", forward_eval=fe,
+                             declared_cost_model=DECLARED_COSTS)
+    ch = _check(report, "earnings_yield", "cost_hurdle")
+    assert ch["status"] in ("pass", "fail")
+    assert ch["hurdle"] == pytest.approx(0.7 * 0.0005 / 0.10)
     assert ch["mean_ic"] == pytest.approx(0.06)
+    assert ch["cost_model"]["fully_declared"] is True
+
+
+def test_declared_model_overrides_the_observed_artifact():
+    fe = {"table": {"earnings_yield": {"horizons": {
+        "63": {"sigma_r": 0.99, "round_trip_cost": 0.09}}}}}
+    report = er.build_review(asof="2026-08-06", livelog=_mature_livelog(),
+                             livelog_asof="2026-08-05", forward_eval=fe,
+                             declared_cost_model=DECLARED_COSTS)
+    ch = _check(report, "earnings_yield", "cost_hurdle")
+    assert ch["cost_model"]["sigma_r"] == pytest.approx(0.10)
+    assert ch["cost_model"]["fully_declared"] is True
 
 
 def test_effective_observation_arithmetic_is_reported_not_asserted():
@@ -519,3 +559,40 @@ def test_malformed_journal_line_degrades_with_a_warning(tmp_path):
     loaded = er.load_inputs(base, "2026-08-06")
     assert any("malformed" in w for w in loaded["warnings"])
     assert len(loaded["journal_entries"]) == 1
+
+
+# --- effective-sample protocol (P31 remediation, 2026-08-06) --------------
+
+def test_effective_sample_protocol_states_its_estimator_and_rivals():
+    p = er.effective_sample_protocol(n_dates=49, horizon=63, min_obs=60)
+    assert p["gate_estimator"] == "disjoint_blocks"
+    assert p["estimators"]["disjoint_blocks"] == 0
+    assert p["estimators"]["naive_ignores_overlap"] == 49
+    assert p["locked"] is True
+
+
+def test_newey_west_and_disjoint_blocks_agree_so_the_bar_is_not_conservatism():
+    """The load-bearing claim: n//h is not an arbitrarily harsh choice.
+
+    At maximum overlap the induced ACF is rho_k = 1 - k/h, so the variance
+    inflation factor is exactly h. A reader who thinks the bar can be relaxed
+    by adopting Newey-West gets the same number.
+    """
+    for horizon in (5, 21, 63):
+        p = er.effective_sample_protocol(n_dates=1000, horizon=horizon, min_obs=60)
+        assert p["estimators_agree"] is True
+        assert p["newey_west_variance_inflation_factor"] == pytest.approx(horizon)
+        assert p["estimators"]["newey_west"] == pytest.approx(1000 / horizon)
+
+
+def test_protocol_reports_the_calendar_cost_of_the_locked_bar():
+    p = er.effective_sample_protocol(n_dates=49, horizon=63, min_obs=60)
+    assert p["date_clusters_required"] == 3780
+    assert p["years_of_daily_cross_sections_required"] == pytest.approx(15.4, abs=0.2)
+    assert "owner protocol decision" in p["changing_this_requires"]
+
+
+def test_protocol_survives_degenerate_inputs():
+    p = er.effective_sample_protocol(n_dates=0, horizon=0, min_obs=60)
+    assert p["estimators"]["disjoint_blocks"] == 0
+    assert p["date_clusters_required"] == 60      # horizon floored to 1

@@ -54,6 +54,11 @@ from hot_theme_rotator.common.console import (  # noqa: E402
 )
 
 from hot_theme_rotator.calibration.overfit_gate import promote_gate  # noqa: E402
+from hot_theme_rotator.research.cost_model import (  # noqa: E402
+    COST_MODEL_REL,
+    read_declared_cost_model,
+    resolve_from_declared,
+)
 from hot_theme_rotator.risk.sleeve_engine import load_mandate  # noqa: E402
 
 # --------------------------------------------------------------------------
@@ -322,7 +327,68 @@ def _inventory_row(row: dict, raw_rows, horizon: int) -> dict:
         "mean_ic": _num(row.get("mean_ic")),
         "t_stat": _num(row.get("t_stat")),
         # Overlapping windows: only every ``horizon``-th cluster is independent.
+        # See ``effective_sample_protocol`` for the estimator and its rivals —
+        # this integer is a floor, not the only defensible number.
         "n_obs_effective": n_dates // horizon if horizon else None,
+        "n_obs_effective_continuous": (n_dates / horizon) if horizon else None,
+        "n_obs_effective_method": "disjoint_blocks",
+    }
+
+
+JPX_SESSIONS_PER_YEAR = 245        # ~245 trading sessions/yr, used only to
+                                   # express a cluster count as calendar time.
+
+
+def effective_sample_protocol(n_dates: int, horizon: int, min_obs: int) -> dict:
+    """The overlapping-label effective-sample protocol, stated rather than implied.
+
+    ``n_obs_effective`` was previously a bare ``n_dates // horizon`` with no
+    recorded justification, which left it looking like an arbitrary act of
+    conservatism that a later reader could "relax". It is not arbitrary, and
+    this function records why:
+
+    - **disjoint_blocks** (the locked gate estimator): only every h-th cluster
+      starts a non-overlapping window, so ``n_eff = floor(n/h)``.
+    - **newey_west**: for maximum-overlap h-period windows the induced
+      autocorrelation is ``rho_k = 1 - k/h``, giving a variance inflation
+      factor ``1 + 2*sum_{k<h}(1 - k/h) = h``. Hence ``n_eff = n/h`` — the
+      SAME answer, to the floor.
+    - **naive**: ``n_eff = n``, which is what treating overlapping windows as
+      independent would assume. Reported only to show the size of the error.
+
+    The two principled estimators agreeing matters: it means the 60-observation
+    bar cannot be met sooner by choosing a friendlier adjustment. It can only be
+    met by collecting ~15 years of daily cross-sections, or by the owner
+    changing the locked protocol — a governance decision, not a data one.
+    """
+    horizon = max(int(horizon), 1)
+    n_dates = max(int(n_dates), 0)
+    vif = 1 + 2 * sum(1 - k / horizon for k in range(1, horizon))
+    required = horizon * min_obs
+    return {
+        "gate_estimator": "disjoint_blocks",
+        "estimators": {
+            "disjoint_blocks": n_dates // horizon,
+            "newey_west": (n_dates / vif) if vif else None,
+            "naive_ignores_overlap": n_dates,
+        },
+        "newey_west_variance_inflation_factor": vif,
+        "estimators_agree": abs(vif - horizon) < 1e-9,
+        "note": (
+            "disjoint_blocks and newey_west coincide analytically at maximum "
+            "overlap (VIF = h), so the bar is not a conservatism artifact. "
+            "naive_ignores_overlap is reported only to size the error it would "
+            "introduce; it is never used by the gate."
+        ),
+        "min_effective_obs": min_obs,
+        "date_clusters_required": required,
+        "years_of_daily_cross_sections_required": round(
+            required / JPX_SESSIONS_PER_YEAR, 1),
+        "locked": True,
+        "changing_this_requires": (
+            "an owner protocol decision recorded under Rule 4; it is not a "
+            "data-collection question and no amount of waiting satisfies it"
+        ),
     }
 
 
@@ -406,6 +472,7 @@ def _assess_signal(
     leakage_pair,
     sr_std,
     n_sr_observed,
+    declared_cost_model=None,
 ) -> dict:
     locked = inventory.get(str(REVIEW_HORIZON), {})
     matured = locked.get("matured", 0)
@@ -447,20 +514,36 @@ def _assess_signal(
         ((forward_eval or {}).get("table") or {}).get(signal, {}).get("horizons"),
         REVIEW_HORIZON,
     )
-    sigma_r = _num(fe_row.get("sigma_r"))
-    c_rt = _num(fe_row.get("round_trip_cost"))
-    if c_rt is None:
-        c_rt = DEFAULT_ROUND_TRIP_COST
-    if sigma_r and sigma_r > 0 and ic is not None:
-        hurdle = TURNOVER * c_rt / sigma_r
-        net = ic * sigma_r - TURNOVER * c_rt
-        checks.append(_check(
-            "cost_hurdle",
-            "pass" if (ic > 0 and net > 0) else "fail",
+    # Rule 16.0 inputs come from the SHARED contract so this report and the P33
+    # scorecard can never disagree about whether the hurdle is computable.
+    # Note the removed behaviour: the round-trip cost used to fall back to a
+    # module default, which meant the hurdle could "pass" on an assumed cost.
+    cost = resolve_from_declared(
+        declared_cost_model, horizon=REVIEW_HORIZON, observed=fe_row)
+    hurdle = cost.hurdle()
+    if hurdle is not None and ic is not None:
+        net = ic * cost.sigma_r - cost.turnover * cost.round_trip_cost
+        # A hurdle computed from observed per-run values is not the same
+        # evidence as one computed from a declared model, and cannot clear a
+        # governance gate on its own.
+        verdict = ("pass" if (ic > 0 and net > 0) else "fail") \
+            if cost.fully_declared else "insufficient"
+        detail = (
             f"Rule 16.0 hurdle {hurdle:.5f} vs mean IC {ic:+.5f} "
-            f"(sigma_r={sigma_r:.5f}, tau={TURNOVER}, c_rt={c_rt})",
-            limiter="sample", hurdle=hurdle, mean_ic=ic, sigma_r=sigma_r,
-            net_ic_after_cost=net, turnover=TURNOVER, round_trip_cost=c_rt,
+            f"(sigma_r={cost.sigma_r:.5f}, tau={cost.turnover}, "
+            f"c_rt={cost.round_trip_cost})"
+        )
+        if not cost.fully_declared:
+            detail += (
+                f"; computed from OBSERVED values, not a declared cost model "
+                f"({COST_MODEL_REL} absent or partial), so it is reported and "
+                f"not scored as a pass"
+            )
+        checks.append(_check(
+            "cost_hurdle", verdict, detail,
+            limiter="sample" if cost.fully_declared else "protocol",
+            hurdle=hurdle, mean_ic=ic, net_ic_after_cost=net,
+            cost_model=cost.as_dict(),
         ))
     else:
         available = sorted(
@@ -471,11 +554,14 @@ def _assess_signal(
         )
         checks.append(_check(
             "cost_hurdle", "insufficient",
-            f"cross-sectional dispersion sigma_r at {REVIEW_HORIZON}D is not "
-            f"recorded by any artifact (horizons on disk: "
-            f"{', '.join(available) if available else 'none'}); the Rule 16.0 "
-            f"hurdle cannot be computed and is not assumed",
+            f"Rule 16.0 hurdle inputs absent: {', '.join(cost.missing)}. "
+            f"The shared contract {COST_MODEL_REL} is the canonical source; "
+            f"forward-eval horizons on disk: "
+            f"{', '.join(available) if available else 'none'}. Nothing is "
+            f"assumed - a defaulted cost that clears the hurdle is the failure "
+            f"mode Rule 16.0 exists to prevent",
             limiter="protocol", sigma_r_available_horizons=available,
+            cost_model=cost.as_dict(),
         ))
 
     checks.append(_check(
@@ -487,17 +573,25 @@ def _assess_signal(
         limiter="protocol",
     ))
 
+    protocol = effective_sample_protocol(n_dates, REVIEW_HORIZON, MIN_EFFECTIVE_OBS)
     checks.append(_check(
         "embargo",
         "pass" if n_obs_eff >= MIN_EFFECTIVE_OBS else "insufficient",
         f"overlapping {REVIEW_HORIZON}D windows: {n_dates} date clusters give "
-        f"{n_obs_eff} non-overlapping effective observations vs "
-        f"{MIN_EFFECTIVE_OBS} required; that bar needs "
-        f"{REVIEW_HORIZON * MIN_EFFECTIVE_OBS} date clusters",
+        f"{n_obs_eff} effective observations under the locked "
+        f"{protocol['gate_estimator']} estimator vs {MIN_EFFECTIVE_OBS} required; "
+        f"that bar needs {protocol['date_clusters_required']} date clusters "
+        f"(~{protocol['years_of_daily_cross_sections_required']} years of daily "
+        f"cross-sections). NOTE: the Newey-West/Hansen-Hodrick adjustment for "
+        f"maximum-overlap windows has variance inflation factor = h = "
+        f"{REVIEW_HORIZON}, so it yields the SAME n/h; the bar is not an "
+        f"artifact of a conservative estimator choice and cannot be relieved by "
+        f"switching estimators",
         limiter="sample", horizon_days=REVIEW_HORIZON, n_obs_effective=n_obs_eff,
         min_effective_obs=MIN_EFFECTIVE_OBS,
-        date_clusters_required_for_min_obs=REVIEW_HORIZON * MIN_EFFECTIVE_OBS,
+        date_clusters_required_for_min_obs=protocol["date_clusters_required"],
         date_clusters_observed=n_dates,
+        effective_sample_protocol=protocol,
     ))
 
     # Deflated Sharpe over the FROZEN family (counted first, above).
@@ -759,6 +853,7 @@ def build_review(
     mandate: dict | None = None,
     leakage_audit: dict | None = None,
     leakage_audit_asof: str | None = None,
+    declared_cost_model: dict | None = None,
     warnings=(),
 ) -> dict:
     """Pure assembly of the locked review artifact from already-loaded inputs."""
@@ -861,6 +956,7 @@ def build_review(
             leakage_pair=leakage_pair,
             sr_std=sr_std,
             n_sr_observed=len(sharpes),
+            declared_cost_model=declared_cost_model,
         )
         for signal in SIGNALS
     }
@@ -1067,6 +1163,13 @@ def load_inputs(base_dir, asof: str) -> dict:
 
     trace_rows = _read_jsonl(obs / "value_livelog_trace.jsonl", warnings, "trace")
 
+    # Rule 16.0 inputs come from the shared contract, loaded once here so
+    # build_review stays a pure assembly of already-read inputs.
+    declared_cost_model, cost_warnings = read_declared_cost_model(base)
+    warnings.extend(cost_warnings)
+    if declared_cost_model is None:
+        warnings.append(f"declared_cost_model_absent:{COST_MODEL_REL}")
+
     journal_entries: list[dict] = []
     jdir = base / "reports" / "portfolio" / "journal"
     if jdir.is_dir():
@@ -1113,6 +1216,7 @@ def load_inputs(base_dir, asof: str) -> dict:
         "leakage_audit_asof": (
             audit_path.stem[len("leakage_audit_"):] if audit_path else None
         ),
+        "declared_cost_model": declared_cost_model,
         "warnings": warnings,
     }
 
@@ -1232,6 +1336,7 @@ def main(argv=None) -> int:
             mandate=loaded["mandate"],
             leakage_audit=loaded["leakage_audit"],
             leakage_audit_asof=loaded["leakage_audit_asof"],
+            declared_cost_model=loaded["declared_cost_model"],
             warnings=loaded["warnings"],
         )
     except Exception as exc:  # fail-open

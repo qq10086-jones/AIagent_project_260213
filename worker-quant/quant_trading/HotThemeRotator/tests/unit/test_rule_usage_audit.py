@@ -197,27 +197,28 @@ def test_documentation_only_is_a_distinct_state_from_unreferenced(tmp_path):
     })
     report = _audit(base, git_map={})
     assert _row(report, "8.3")["reference_state"] == "documentation_only"
-    assert _row(report, "3")["reference_state"] == "runtime_referenced"
+    assert _row(report, "3")["reference_state"] == "implemented_in_product"
     assert _row(report, "17.6")["reference_state"] == "unreferenced"
 
 
 def test_section_only_reference_is_its_own_state(tmp_path):
     base = _mkrepo(tmp_path, {"src/a.py": "# Section 17 applies\n"})
     report = _audit(base, git_map={})
-    assert _row(report, "17.4")["reference_state"] == "section_referenced_only"
+    assert _row(report, "17.4")["reference_state"] == "section_scope_only"
 
 
-def test_zero_runtime_reference_count_aggregates_the_three_non_runtime_states(tmp_path):
+def test_zero_code_reference_count_aggregates_every_non_code_state(tmp_path):
     base = _mkrepo(tmp_path, {
         "docs/notes.md": "Rule 8.3.\n",
         "src/a.py": "# Rule 3 and Section 17\n",
     })
     report = _audit(base, git_map={})
     s = report["summary"]
-    assert s["zero_runtime_reference"] == (
-        s["documentation_only"] + s["section_referenced_only"] + s["unreferenced"]
-    )
-    assert s["runtime_referenced"] + s["zero_runtime_reference"] == s["rules_total"]
+    non_code = ("test_assertion_only", "artifact_echo_only", "documentation_only",
+                "section_scope_only", "unreferenced")
+    assert s["zero_runtime_reference"] == sum(s[state] for state in non_code)
+    with_code = s["implemented_in_product"] + s["operator_tooling_only"]
+    assert with_code + s["zero_runtime_reference"] == s["rules_total"]
 
 
 # --- dormancy -------------------------------------------------------------
@@ -257,7 +258,7 @@ def test_runtime_reference_dormancy_uses_the_git_last_touch_of_the_referencing_f
     assert _row(report, "3")["review_state"] == "not_a_candidate"
     assert _row(report, "3")["last_activity_date"] == "2026-08-01"
     stale = _row(report, "8.3")
-    assert stale["reference_state"] == "runtime_referenced"
+    assert stale["reference_state"] == "implemented_in_product"
     assert stale["review_state"] == "review_candidate"
     assert stale["last_activity_basis"] == "git_last_touch_of_referencing_file"
 
@@ -273,7 +274,7 @@ def test_an_empty_candidate_list_says_whether_the_clock_could_even_run(tmp_path)
     assert report["summary"]["dormancy_months_max"] < 6
     note = report["review_window_note"]
     assert "oldest activity anchor" in note
-    assert "zero runtime reference" in note
+    assert "zero CODE reference" in note
     assert "oldest activity anchor" in rua.render_text(report)
 
 
@@ -336,3 +337,83 @@ def test_missing_governance_document_fails_open_with_exit_zero(tmp_path, capsys)
     (tmp_path / "src").mkdir()
     assert rua.main(["--base-dir", str(tmp_path), "--asof", "2026-08-06", "--no-write"]) == 0
     assert "unavailable" in capsys.readouterr().out.lower()
+
+
+# --- reference-state subdivision (P33 remediation, 2026-08-06) ------------
+
+def _gov(tmp_path, body: str):
+    path = tmp_path / "docs" / "02_GOVERNANCE.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+def _cite(tmp_path, rel: str, text: str):
+    path = tmp_path / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+BODY = (
+    "## 9. Section\n\n"
+    "### Rule 9.1: Product\n\nb\n\n"
+    "### Rule 9.2: Tooling\n\nb\n\n"
+    "### Rule 9.3: Tests\n\nb\n\n"
+    "### Rule 9.4: Artifact\n\nb\n\n"
+    "### Rule 9.5: Nothing\n\nb\n"
+)
+
+
+def _states(tmp_path):
+    report = rua.build_audit(tmp_path, asof="2026-08-06", git_map={})
+    return {r["number"]: r["reference_state"] for r in report["rules"]}
+
+
+def test_a_test_only_citation_is_not_counted_as_implemented(tmp_path):
+    """The reclassification that moved the headline from 92 to 109.
+
+    A rule number in a test docstring is evidence that someone MEANT to enforce
+    it, never evidence that shipping code does.
+    """
+    _gov(tmp_path, BODY)
+    _cite(tmp_path, "src/a.py", "# Rule 9.1 enforced here\n")
+    _cite(tmp_path, "tools/b.py", "# Rule 9.2\n")
+    _cite(tmp_path, "tests/unit/test_c.py", "# Rule 9.3\n")
+    _cite(tmp_path, "reports/d.json", '{"rule": "Rule 9.4"}\n')
+
+    states = _states(tmp_path)
+    assert states["9.1"] == "implemented_in_product"
+    assert states["9.2"] == "operator_tooling_only"
+    assert states["9.3"] == "test_assertion_only"
+    assert states["9.4"] == "artifact_echo_only"
+    assert states["9.5"] == "unreferenced"
+
+
+def test_product_citation_outranks_a_weaker_one(tmp_path):
+    _gov(tmp_path, BODY)
+    _cite(tmp_path, "tests/unit/test_c.py", "# Rule 9.1\n")
+    _cite(tmp_path, "reports/d.json", '{"rule": "Rule 9.1"}\n')
+    _cite(tmp_path, "src/a.py", "# Rule 9.1\n")
+    assert _states(tmp_path)["9.1"] == "implemented_in_product"
+
+
+def test_zero_code_reference_excludes_only_product_and_tooling(tmp_path):
+    _gov(tmp_path, BODY)
+    _cite(tmp_path, "src/a.py", "# Rule 9.1\n")
+    _cite(tmp_path, "tools/b.py", "# Rule 9.2\n")
+    _cite(tmp_path, "tests/unit/test_c.py", "# Rule 9.3\n")
+
+    report = rua.build_audit(tmp_path, asof="2026-08-06", git_map={})
+    zero = {r["number"] for r in report["rules"]
+            if r["reference_state"] not in
+            ("implemented_in_product", "operator_tooling_only")}
+    assert zero == {"9.3", "9.4", "9.5"}
+    assert report["summary"]["zero_runtime_reference"] == 3
+
+
+def test_every_state_appears_in_the_summary_even_at_zero(tmp_path):
+    """A missing key would silently drop a category from the headline."""
+    _gov(tmp_path, BODY)
+    summary = rua.build_audit(tmp_path, asof="2026-08-06", git_map={})["summary"]
+    for state in rua.REFERENCE_STATE_ORDER:
+        assert state in summary

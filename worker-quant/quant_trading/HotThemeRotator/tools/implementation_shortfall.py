@@ -179,7 +179,7 @@ def _voided_entry_ids(rows: list[dict]) -> set[str]:
 
 def find_fill(base_dir: Path | str, *, symbol: str, side: str,
               on_or_after: str) -> dict | None:
-    """First LIVE §14 journal fill at/after ``on_or_after``, else ``None``.
+    """First LIVE Section 14 journal fill at/after ``on_or_after``, else ``None``.
 
     Correction-aware: a fill voided under Rule 14.4 is never returned. Pricing
     a shortfall off a corrected entry would publish a FINAL figure built on a

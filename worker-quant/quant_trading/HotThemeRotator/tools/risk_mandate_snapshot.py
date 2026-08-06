@@ -420,9 +420,13 @@ def main(argv=None) -> int:
                   f"(gaps={age.observation_gap_sessions}) "
                   f"— Rule 17.4.7 demands resolve (write thesis / re-underwrite / exit)")
 
+    # P29: binding mandate conditions become first-class, ageable advice.
+    # Opening items WRITES, so it honours --no-write; reporting is read-only
+    # and always runs, because an item aging quietly is exactly what the daily
+    # surface must show.
+    queue_path = obs / "decision_queue.jsonl"
+    opened: list[str] = []
     if not args.no_write:
-        # P29: binding mandate conditions become first-class, ageable advice.
-        queue_path = obs / "decision_queue.jsonl"
         opened = _queue_sync(
             queue_path, obs / "risk_mandate_trace.jsonl",
             asof=asof,
@@ -430,27 +434,26 @@ def main(argv=None) -> int:
             ages=ages,
             band_status=exp.get("bandStatus"),
         )
-        # Report the queue every session, not only when something was opened:
-        # an item aging quietly is exactly what the daily surface must show.
-        if opened or queue_path.exists():
-            try:
-                report = queue_report(queue_path, asof=_dt.date.fromisoformat(asof))
-                oldest = report["oldest_open_sessions"]
-                terminal = ", ".join(
-                    f"{k}={v}" for k, v in sorted(report["terminal_counts"].items())
-                ) or "none"
-                seen = report["median_trigger_to_seen_sessions"]
-                print(f"  decision queue: {report['open_count']} open, oldest "
-                      f"{oldest if oldest is not None else 'n/a'} sessions; "
-                      f"terminal [{terminal}]; median trigger->seen "
-                      f"{seen if seen is not None else 'unobserved'} "
-                      f"(tools/decision_queue_cli.py list)")
-                for row in report["open_items"][:3]:
-                    print(f"    [{row['advice_id']}] Rule {row['source_rule']} "
-                          f"{row['subject']} age {row['age_sessions']} sessions")
-            except Exception as exc:  # noqa: BLE001 - diagnostic must never block
-                print(f"  WARNING queue_report_failed: {type(exc).__name__}: {exc}")
+    if opened or queue_path.exists():
+        try:
+            report = queue_report(queue_path, asof=_dt.date.fromisoformat(asof))
+            oldest = report["oldest_open_sessions"]
+            terminal = ", ".join(
+                f"{k}={v}" for k, v in sorted(report["terminal_counts"].items())
+            ) or "none"
+            seen = report["median_trigger_to_seen_sessions"]
+            print(f"  decision queue: {report['open_count']} open, oldest "
+                  f"{oldest if oldest is not None else 'n/a'} sessions; "
+                  f"terminal [{terminal}]; median trigger->seen "
+                  f"{seen if seen is not None else 'unobserved'} "
+                  f"(tools/decision_queue_cli.py list)")
+            for row in report["open_items"][:3]:
+                print(f"    [{row['advice_id']}] Rule {row['source_rule']} "
+                      f"{row['subject']} age {row['age_sessions']} sessions")
+        except Exception as exc:  # noqa: BLE001 - diagnostic must never block
+            print(f"  WARNING queue_report_failed: {type(exc).__name__}: {exc}")
 
+    if not args.no_write:
         (obs / "risk_mandate").mkdir(parents=True, exist_ok=True)
         (obs / "risk_mandate" / f"{asof}.json").write_text(
             json.dumps({"asof": asof, **panel}, ensure_ascii=False, indent=2), encoding="utf-8")

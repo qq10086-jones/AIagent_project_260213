@@ -53,24 +53,42 @@ DB_REL = "data/raw/htr_market.db"
 REQUIRED_MATURED = 100          # from the frozen stopping rule
 
 
-def _load_prices(db_path: Path) -> dict[str, list[tuple[str, float]]]:
+def _load_prices(db_path: Path) -> dict[str, list]:
+    """Per-symbol PriceBars (close + volume) for the adjusted-return contract."""
+    from hot_theme_rotator.data.adjusted_prices import PriceBar
     conn = sqlite3.connect(str(db_path))
     try:
         rows = conn.execute(
-            "select symbol,date,close from daily_prices where close>0 order by symbol,date"
+            "select symbol,date,close,volume from daily_prices where close>0 "
+            "order by symbol,date"
         ).fetchall()
     finally:
         conn.close()
-    ser: dict[str, list[tuple[str, float]]] = defaultdict(list)
-    for sym, d, close in rows:
-        ser[sym].append((d, float(close)))
+    ser: dict[str, list] = defaultdict(list)
+    for sym, d, close, vol in rows:
+        ser[sym].append(PriceBar(date=d, close=float(close),
+                                 volume=float(vol) if vol else None))
     return ser
 
 
-def _returns_from(series: list[tuple[str, float]], start_idx: int, n: int) -> list[float]:
+def _adjusted_series(bars: list) -> tuple[list[float], list[int]]:
+    """Split-adjusted closes via the P35-01 contract.
+
+    Returns (adjusted_closes, ambiguous_bar_indices). Contamination is
+    PER-WINDOW: an event window is excluded iff an unresolved jump falls inside
+    it — an anomaly the window never touches contaminates nothing it computes.
+    Raw returns here were the P34-08 lesson: 1306.T (this study's benchmark)
+    has a 10:1 split on 2026-03-30 that reads as −90.1%.
+    """
+    from hot_theme_rotator.data.adjusted_prices import adjust_prices, ambiguous_indices
+    adjusted, actions = adjust_prices(bars, strict=False)
+    return adjusted, ambiguous_indices(actions)
+
+
+def _returns_from(closes: list[float], start_idx: int, n: int) -> list[float]:
     out = []
-    for k in range(start_idx, min(start_idx + n, len(series) - 1)):
-        prev, nxt = series[k][1], series[k + 1][1]
+    for k in range(start_idx, min(start_idx + n, len(closes) - 1)):
+        prev, nxt = closes[k], closes[k + 1]
         if prev > 0:
             out.append(nxt / prev - 1.0)
     return out
@@ -83,10 +101,11 @@ def build_windows(base: Path, asof: str, max_horizon: int) -> tuple[list[EventWi
         raise SystemExit(f"missing {events_path}; run tools/extract_buyback_events.py first")
 
     prices = _load_prices(base / DB_REL)
-    bench = prices.get(BENCH, [])
-    bench_dates = [d for d, _ in bench]
-    if not bench:
+    bench_bars = prices.get(BENCH, [])
+    if not bench_bars:
         raise SystemExit(f"benchmark {BENCH} not in {DB_REL}")
+    bench_adj, bench_bad = _adjusted_series(bench_bars)
+    bench_dates = [b.date for b in bench_bars]
 
     windows: list[EventWindow] = []
     # Three distinct causes that a single "no data" bucket would hide, and which
@@ -98,7 +117,7 @@ def build_windows(base: Path, asof: str, max_horizon: int) -> tuple[list[EventWi
     skipped = {"not_t1": 0, "ticker_absent_from_price_db": 0,
                "symbol_series_stale_before_event": 0,
                "published_after_price_data_ends": 0, "too_few_bars": 0,
-               "construct_error": 0}
+               "ambiguous_corporate_action": 0, "construct_error": 0}
     stale_examples: list[str] = []
     last_price_date = bench_dates[-1]
 
@@ -112,14 +131,21 @@ def build_windows(base: Path, asof: str, max_horizon: int) -> tuple[list[EventWi
             continue
         sym = ev["ticker"]
         pub = ev["published_ts"][:10]
-        series = prices.get(sym)
-        if not series:
+        bars = prices.get(sym)
+        if not bars:
             skipped["ticker_absent_from_price_db"] += 1
             continue
-        dates = [d for d, _ in series]
+        adj, bad_idx = _adjusted_series(bars)
+        dates = [b.date for b in bars]
         # PIT: first trading date STRICTLY after publication
         i = bisect_right(dates, pub)
         j = bisect_right(bench_dates, pub)
+        # Per-window contamination: exclude ONLY when an unresolved jump falls
+        # inside this event's window (asset or benchmark side).
+        if any(i <= k <= i + max_horizon for k in bad_idx) or \
+           any(j <= k <= j + max_horizon for k in bench_bad):
+            skipped["ambiguous_corporate_action"] += 1
+            continue
         if i >= len(dates) - 1 or j >= len(bench_dates) - 1:
             if pub >= last_price_date:
                 skipped["published_after_price_data_ends"] += 1
@@ -131,8 +157,8 @@ def build_windows(base: Path, asof: str, max_horizon: int) -> tuple[list[EventWi
                 if len(stale_examples) < 10:
                     stale_examples.append(f"{sym} series_ends={dates[-1]} event={pub}")
             continue
-        asset_r = _returns_from(series, i, max_horizon)
-        bench_r = _returns_from(bench, j, max_horizon)
+        asset_r = _returns_from(adj, i, max_horizon)
+        bench_r = _returns_from(bench_adj, j, max_horizon)
         n = min(len(asset_r), len(bench_r))
         if n < 1:
             skipped["too_few_bars"] += 1

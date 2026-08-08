@@ -190,6 +190,8 @@ def refresh(
     target_date: str,
     fetch: Callable[[list[str], list[str]], list[PriceRow]] = _fetch_yf_daily,
     priority_symbols: Iterable[str] = MEMORY_SEMI_PRIORITY_SYMBOLS,
+    event_fetch: Callable | None = None,   # per-symbol tail fetcher; test injection
+    event_base_dir: Path | None = None,    # where events_*.jsonl live; test injection
 ) -> dict:
     """Snapshot-if-needed + append missing trading days from ``fetch``."""
     htr_db = Path(htr_db)
@@ -197,10 +199,45 @@ def refresh(
     base_date = db_max_date(htr_db)
     if base_date is None:
         return {"ok": False, "reason": "HTR DB has no daily_prices", "copied": copied}
+    # P35-02: event-study universe stays covered PER SYMBOL, before the shared
+    # missing-days fetch. A plain `universe |= event_universe` would be wrong:
+    # the shared fetch only requests the GLOBAL missing days, so a brand-new or
+    # long-stale event ticker would get a few recent bars and never its own
+    # history. The per-symbol pass fills each ticker's own tail (or a
+    # pre-declared lookback when it has no rows at all). Fail-open per symbol,
+    # but a partial result is REPORTED as partial, never as full success.
+    event_result: dict = {"status": "SKIPPED", "reason": "unavailable"}
+    try:
+        from backfill_event_universe_prices import (  # local import: avoids cycle
+            event_universe, fetch_tail_yf, run_backfill)
+        ev_base = event_base_dir if event_base_dir is not None else htr_db.parents[2]
+        ev_universe = sorted(event_universe(ev_base))
+        if ev_universe:
+            event_result = run_backfill(
+                htr_db, ev_universe, target_date,
+                fetch=event_fetch or fetch_tail_yf, log=lambda s: None)
+        else:
+            event_result = {"status": "SKIPPED", "reason": "no event universe yet"}
+    except Exception as exc:
+        event_result = {"status": "FAILURE",
+                        "reason": f"{type(exc).__name__}: {exc}"}
+
+    event_summary = {
+        "status": event_result.get("status"),
+        "planned": event_result.get("planned"),
+        "bars_appended": event_result.get("bars_appended"),
+        "failed": len(event_result.get("failed", []))
+                  if isinstance(event_result.get("failed"), list) else None,
+        "reason": event_result.get("reason"),
+    }
     days = missing_trading_days(after=base_date, target=target_date)
     if not days:
+        # The GLOBAL max date being current does not mean every event ticker is:
+        # per-symbol maintenance has already run above, so its result is
+        # reported even on this early path — that lag was the original defect.
         return {"ok": True, "copied": copied, "base_date": base_date,
                 "missing_days": [], "appended": 0,
+                "event_universe_maintenance": event_summary,
                 "note": f"already current through {base_date}"}
     # task#8: also keep HELD (journal) + WATCHLIST (user_state) names fresh — not just
     # the screener universe — else non-universe holdings (e.g. 8035.T TEL) gap out of the
@@ -228,6 +265,7 @@ def refresh(
         "fetched_rows": len(rows),
         "appended": appended,
         "new_max_date": new_max,
+        "event_universe_maintenance": event_summary,
     }
 
 

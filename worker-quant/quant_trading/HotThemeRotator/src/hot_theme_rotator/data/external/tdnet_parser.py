@@ -33,6 +33,14 @@ _CATEGORY_RULES: tuple[tuple[str, "re.Pattern[str]"], ...] = (
     ("tob",        re.compile(r"(公開買付|公開買い付け|TOB)")),
     ("split",      re.compile(r"(株式分割|株式併合|株式の分割|株式の併合)")),
     ("suspension", re.compile(r"(売買停止|上場廃止|監理銘柄)")),
+    # `buyback` MUST precede `dividend`, `order` and `governance` (P34-01a).
+    # 「自己株式の取得に係る事項の決定」 contains 株式の取得, which `order` matches,
+    # so before this rule existed buyback resolutions were filed as `order`;
+    # 自己株式の処分 titles naming 役員 were filed as `governance`; and a combined
+    # 自己株式取得及び配当 release was filed as `dividend`. Measured on the stored
+    # corpus, 547 treasury disclosures were split across four wrong categories
+    # and none was identifiable as a buyback.
+    ("buyback",    re.compile(r"(自己株式|自社株)")),
     ("dividend",   re.compile(r"(配当|増配|減配|無配)")),
     ("order",      re.compile(r"(大型受注|業務提携|資本提携|子会社化|株式取得|株式の取得|事業提携)")),
     ("earnings",   re.compile(r"(業績|決算|通期予想|四半期)")),

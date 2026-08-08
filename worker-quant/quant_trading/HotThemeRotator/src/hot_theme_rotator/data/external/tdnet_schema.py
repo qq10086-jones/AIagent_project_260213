@@ -22,6 +22,8 @@ ALLOWED_TDNET_CATEGORIES = frozenset(
         "order",        # 業務提携、大型受注
         "tob",          # TOB / 公開買付
         "dividend",     # 配当予想、配当増額、減配
+        "buyback",      # 自己株式の取得/消却/処分/取得状況 (P34-01a; see buyback_events.py
+                        # for the subtype split — 処分 is a DISPOSAL, not a buyback)
         "split",        # 株式分割、株式併合
         "suspension",   # 売買停止、上場廃止
         "governance",   # 役員異動、業務改善命令

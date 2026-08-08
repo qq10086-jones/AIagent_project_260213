@@ -189,13 +189,18 @@ def test_from_dict_rejects_unknown_keys():
         TdnetDisclosure.from_dict(payload)
 
 
-def test_allowed_categories_contains_eight_required_types():
+def test_allowed_categories_contains_nine_required_types():
+    # `buyback` added 2026-08-08 (P34-01a). Before it, 自己株式 disclosures were
+    # split across order/governance/dividend/other because the `order` rule
+    # matches 株式の取得; 547 of them in the stored corpus. The taxonomy grew on
+    # purpose, so this exact-set assertion grew with it rather than being relaxed.
     assert ALLOWED_TDNET_CATEGORIES == frozenset(
         {
             "earnings",
             "order",
             "tob",
             "dividend",
+            "buyback",
             "split",
             "suspension",
             "governance",

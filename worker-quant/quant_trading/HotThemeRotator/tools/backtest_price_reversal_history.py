@@ -33,21 +33,45 @@ HORIZONS = (1, 3, 5)
 
 
 def load_universe(min_dollar_vol=1e8, min_price=100.0, min_history=90):
+    """Liquidity screen on RAW closes; return series on ADJUSTED closes (P35).
+
+    The liquidity gate (dollar volume, price floor) is a raw-basis question —
+    it asks what traded — but every signal/forward return below compounds
+    prices across time, and raw closes carry unadjusted splits (80 artifacts
+    in this DB; 1306.T −90.1% among them). Series are therefore adjusted via
+    the P35-01 contract, and days whose signal-or-forward window crosses an
+    UNRESOLVED jump are dropped per-window in ic_daily (ser entries carry the
+    ambiguous indices).
+    """
+    from hot_theme_rotator.data.adjusted_series_store import load_adjusted_series
     c = sqlite3.connect(str(DB))
     rows = c.execute(
         "select symbol,date,close,volume from daily_prices where close>0 order by symbol,date"
     ).fetchall()
+    c.close()
     by_sym = defaultdict(list)
     for s, d, cl, v in rows:
         by_sym[s].append((d, float(cl), float(v or 0)))
-    uni = {}
+    keep = []
     for s, ser in by_sym.items():
         if len(ser) < min_history:
             continue
         dv = sorted(cl * v for _, cl, v in ser)
         med = dv[len(dv) // 2]
         if med >= min_dollar_vol and ser[-1][1] >= min_price:
-            uni[s] = ser
+            keep.append(s)
+    adjusted = load_adjusted_series(DB, symbols=keep)
+    uni = {}
+    for s in keep:
+        adj = adjusted.get(s)
+        if adj is None or adj.error is not None:
+            continue
+        vol_by_date = {d: v for d, _, v in by_sym[s]}
+        uni[s] = {
+            "ser": [(d, cl, vol_by_date.get(d, 0.0))
+                    for d, cl in zip(adj.dates, adj.closes)],
+            "ambiguous": adj.ambiguous,
+        }
     return uni
 
 
@@ -57,12 +81,19 @@ def ic_daily(uni, lookback, horizon, min_names=20, mom_top_frac=None, mom_lb=20)
     a proxy for the screener's momentum-selected candidate cohort (tests 'fade the
     extended winners' where the live 24d window measured it)."""
     byday = defaultdict(list)
-    for ser in uni.values():
+    for entry in uni.values():
+        ser = entry["ser"]
+        bad = entry["ambiguous"]
         closes = [cl for _, cl, _ in ser]
         dates = [d for d, _, _ in ser]
         m = len(closes)
         need = max(lookback, mom_lb)
         for i in range(need, m - horizon):
+            # Per-window contamination (P35): drop THIS day iff an unresolved
+            # jump falls in its signal lookback or forward window; clean days of
+            # the same symbol stay in the sample.
+            if any(i - need <= k <= i + horizon for k in bad):
+                continue
             base = closes[i - lookback]
             if base <= 0 or closes[i] <= 0:
                 continue

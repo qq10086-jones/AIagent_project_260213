@@ -654,7 +654,14 @@ def _serialize_real_candidates(
             if recent:
                 ref_bar = recent[-1]
                 if len(recent) >= 2 and recent[-2].close:
-                    chg = round((recent[-1].close / recent[-2].close - 1.0) * 100.0, 2)
+                    ratio = recent[-1].close / recent[-2].close
+                    # P35 guard: daily_prices is RAW (Rule 11.9.6), so a split
+                    # shows as a one-day cliff (1306.T: -90.1% on 2026-03-30).
+                    # A |move| beyond 45% is a corporate action until proven
+                    # otherwise; fall back to the existing no-signal placeholder
+                    # rather than display a phantom crash.
+                    if abs(ratio - 1.0) <= 0.45:
+                        chg = round((ratio - 1.0) * 100.0, 2)
         except KlineAdapterError:
             ref_bar = None
         if ref_bar is None:

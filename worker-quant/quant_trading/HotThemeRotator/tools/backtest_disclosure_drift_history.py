@@ -37,11 +37,22 @@ HORIZONS = (1, 3, 5, 10)
 
 
 def load_prices():
-    c = sqlite3.connect(str(DB))
-    rows = c.execute("select symbol,date,close,volume from daily_prices where close>0 order by symbol,date").fetchall()
-    ser = defaultdict(list)
-    for s, d, cl, v in rows:
-        ser[s].append((d, float(cl), float(v or 0)))
+    """ADJUSTED closes + ambiguous-jump indices via the P35-01 contract.
+
+    Shape per symbol: list of (date, adjusted_close, ambiguous_flag) where the
+    flag marks the bar index of an UNRESOLVED jump; fwd_ret refuses any window
+    containing one. Raw closes carry 80 unadjusted corporate actions and the
+    benchmark's own 10:1 split, so raw event returns here were poisoned both
+    on the asset and the excess side.
+    """
+    from hot_theme_rotator.data.adjusted_series_store import load_adjusted_series
+    ser = {}
+    for s, adj in load_adjusted_series(DB).items():
+        if adj.error is not None:
+            continue
+        bad = set(adj.ambiguous)
+        ser[s] = [(d, cl, 1.0 if i in bad else 0.0)
+                  for i, (d, cl) in enumerate(zip(adj.dates, adj.closes))]
     return ser
 
 
@@ -67,6 +78,10 @@ def load_events():
 
 def fwd_ret(ser_list, dates, entry_i, H):
     if entry_i is None or entry_i + H >= len(ser_list):
+        return None
+    # third tuple field flags an unresolved corporate-action jump (P35):
+    # a window containing one is unmeasurable, not a return.
+    if any(ser_list[k][2] for k in range(entry_i, entry_i + H + 1)):
         return None
     a, b = ser_list[entry_i][1], ser_list[entry_i + H][1]
     return b / a - 1.0 if a > 0 else None
@@ -128,13 +143,21 @@ def main() -> int:
     files = glob.glob(str(CORPUS / "*.jsonl"))
     print(f"=== disclosure-drift HISTORICAL event study ===")
     print(f"corpus: {len(files)} days | directional events: {len(events):,} | benchmark {BENCH}\n")
-    # liquidity terciles by median dollar-volume
+    # liquidity terciles by median dollar-volume — on RAW closes on purpose
+    # (P35): turnover asks what actually traded, in the units it traded in;
+    # the adjusted series above is for returns only.
+    c = sqlite3.connect(str(DB))
+    raw_dv = defaultdict(list)
+    for s, cl, v in c.execute(
+            "select symbol, close, volume from daily_prices where close>0"):
+        raw_dv[s].append(float(cl) * float(v or 0))
+    c.close()
     med = {}
-    for s, ser in prices.items():
-        if len(ser) < 60:
+    for s, dvs in raw_dv.items():
+        if s not in prices or len(prices[s]) < 60:
             continue
-        dv = sorted(cl * v for _, cl, v in ser)
-        med[s] = dv[len(dv) // 2]
+        dvs.sort()
+        med[s] = dvs[len(dvs) // 2]
     ranked = sorted(med, key=lambda s: med[s])
     n = len(ranked)
     small = set(ranked[: n // 3])          # least liquid third (proxy small-cap/low-coverage)

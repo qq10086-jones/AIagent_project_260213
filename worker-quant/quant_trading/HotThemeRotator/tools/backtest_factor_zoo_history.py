@@ -33,20 +33,28 @@ MIN_NAMES = 20
 
 
 def load_prices():
-    c = sqlite3.connect(str(DB))
-    ser = defaultdict(list)
-    for s, d, cl in c.execute("select symbol,date,close from daily_prices where close>0 order by symbol,date"):
-        ser[s].append((d, float(cl)))
-    return {s: ([d for d, _ in v], [cl for _, cl in v]) for s, v in ser.items()}
+    """ADJUSTED closes via the P35-01 contract (was raw; raw carries 80
+    unadjusted corporate actions incl. the 1306.T 10:1 split, so every
+    factor-IC forward return crossing one was a fake cliff)."""
+    from hot_theme_rotator.data.adjusted_series_store import load_adjusted_series
+    out = {}
+    for s, adj in load_adjusted_series(DB).items():
+        if adj.error is None:
+            out[s] = (adj.dates, adj.closes, adj.ambiguous)
+    return out
 
 
 def fwd(prices, sym, asof, H):
     p = prices.get(sym)
     if not p:
         return None
-    dates, closes = p
+    dates, closes, ambiguous = p
     i = bisect_right(dates, asof)          # first trading day strictly after asof (PIT)
     if i >= len(dates) or i + H >= len(closes):
+        return None
+    # Per-window contamination (P35): a forward window that crosses an
+    # UNRESOLVED jump is unmeasurable, not zero and not a cliff.
+    if any(i <= k <= i + H for k in ambiguous):
         return None
     a, b = closes[i], closes[i + H]
     return b / a - 1.0 if a > 0 else None

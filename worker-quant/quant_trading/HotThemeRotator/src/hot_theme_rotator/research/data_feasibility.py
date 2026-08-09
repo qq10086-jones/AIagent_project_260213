@@ -143,15 +143,44 @@ def assess_pit_timestamp(
     lag_spread = (max(lags) - min(lags)) if lags else 0
     median_lag = statistics.median(lags) if lags else 0
 
+    # The decisive test is SPAN, not count. A backfill stamp collapses every
+    # record onto the few days the script ran, so the timestamps span far less
+    # time than the events they describe. A real filing calendar spans the same
+    # years as its events — and can still have a low distinct-day ratio purely
+    # because filings cluster (most Japanese fiscal years end 31 March, so tens
+    # of thousands of reports legitimately share ~1,100 filing days). Judging on
+    # the ratio alone flagged the genuine EDINET panel as a backfill; that was a
+    # false positive, and this is the correction.
+    def _span_days(days: set[str]) -> int:
+        if len(days) < 2:
+            return 0
+        lo, hi = min(days), max(days)
+        try:
+            from datetime import date as _d
+            a = _d(*(int(x) for x in lo.split("-")))
+            b = _d(*(int(x) for x in hi.split("-")))
+            return (b - a).days
+        except (ValueError, TypeError):
+            return 0
+
+    event_days = {str(r.get(event_field, ""))[:10] for r in rows if r.get(event_field)}
+    ts_span = _span_days(ts_days)
+    event_span = _span_days(event_days)
+    span_ratio = (ts_span / event_span) if event_span else 0.0
+
     status = "available"
-    detail = (f"{len(ts_days)} distinct timestamp days across {len(rows)} records "
+    detail = (f"{len(ts_days)} distinct timestamp days across {len(rows)} records; "
+              f"timestamps span {ts_span}d vs events {event_span}d "
               f"(median lag {median_lag}d)")
-    if ratio <= max_distinct_ratio:
+    # Fetch-time tell: timestamps cover a small fraction of the event span AND
+    # the distinct-day ratio is tiny. Both must hold.
+    if span_ratio < 0.25 and ratio <= max_distinct_ratio:
         status = "absent"
-        detail = (f"{len(ts_days)} distinct timestamp days for {len(rows)} records "
-                  f"(ratio {ratio:.4f} <= {max_distinct_ratio}), median lag "
-                  f"{median_lag}d, lag spread {lag_spread}d: this column records "
-                  f"when data was FETCHED, not when it became public")
+        detail = (f"timestamps span only {ts_span}d while their events span "
+                  f"{event_span}d ({span_ratio:.1%}), and {len(ts_days)} distinct "
+                  f"timestamp days cover {len(rows)} records (ratio {ratio:.4f}); "
+                  f"median lag {median_lag}d, spread {lag_spread}d: this column "
+                  f"records when data was FETCHED, not when it became public")
     return ChainLink(
         name=name, required=True, status=status, detail=detail,
         evidence={"distinct_timestamp_days": sorted(ts_days)[:12],
@@ -160,7 +189,10 @@ def assess_pit_timestamp(
                   "n_distinct_events": len(events),
                   "distinct_ratio": ratio,
                   "median_lag_days": median_lag,
-                  "lag_spread_days": lag_spread},
+                  "lag_spread_days": lag_spread,
+                  "timestamp_span_days": ts_span,
+                  "event_span_days": event_span,
+                  "span_ratio": span_ratio},
         remedy=remedy,
     )
 

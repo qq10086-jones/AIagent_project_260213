@@ -37,7 +37,54 @@ from hot_theme_rotator.research.data_feasibility import (  # noqa: E402
 )
 
 DB_REL = "data/raw/htr_market.db"
+# A probe that hard-codes ONE database answers a question about that database,
+# not about the project. The 2026-08-08 run did exactly that and reported
+# "0 of 95 symbols have >=5 fiscal periods" — true of htr_market.db's legacy
+# near-empty table, and badly false of the project: the P23-B panel in
+# htr_fundamentals.db holds 181k rows across 4,421 symbols. Every fundamentals
+# store is now scanned and the BEST coverage wins.
+FUNDAMENTAL_DBS = (
+    "data/raw/htr_fundamentals.db",   # P23-B EDINET panel (the real one)
+    "data/raw/htr_market.db",         # legacy snapshot table
+)
 OWNERSHIP_HINTS = ("ownership", "shareholder", "holder", "foreign", "investor_type")
+
+
+def _load_fundamental_rows(base: Path) -> tuple[list[dict], str | None]:
+    """Rows from whichever fundamentals store has the deepest history."""
+    best: list[dict] = []
+    best_src: str | None = None
+    for rel in FUNDAMENTAL_DBS:
+        path = base / rel
+        if not path.exists():
+            continue
+        try:
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        except sqlite3.Error:
+            continue
+        try:
+            tables = {r[0] for r in conn.execute(
+                "select name from sqlite_master where type='table'")}
+            if "fundamental_snapshots" not in tables:
+                continue
+            cols = {d[1] for d in conn.execute(
+                "pragma table_info(fundamental_snapshots)")}
+            ts_col = "published_ts" if "published_ts" in cols else "available_ts"
+            rows = [
+                {"symbol": s, "fiscal_period_end": f, "ts": t,
+                 "relative_year": ry}
+                for s, f, t, ry in conn.execute(
+                    f"select symbol, fiscal_period_end, {ts_col}, "
+                    f"{'relative_year' if 'relative_year' in cols else '0'} "
+                    f"from fundamental_snapshots where eps is not null")
+            ]
+        except sqlite3.Error:
+            continue
+        finally:
+            conn.close()
+        if len(rows) > len(best):
+            best, best_src = rows, rel
+    return best, best_src
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -61,29 +108,39 @@ def main(argv: list[str] | None = None) -> int:
             all_columns.add(f"{t}.{d[1]}".lower())
 
     # --- link 1: PIT announcement timestamps --------------------------------
-    fund_rows = [
-        {"symbol": s, "fiscal_period_end": f, "available_ts": a}
-        for s, f, a in conn.execute(
-            "select symbol, fiscal_period_end, available_ts from fundamental_snapshots "
-            "where eps is not null")
-    ]
+    fund_rows, fund_src = _load_fundamental_rows(base)
+    # relative_year > 0 rows are prior fiscal years RESTATED inside a later
+    # filing; their timestamp is honest (that is when the figure was published)
+    # but their lag is years. PIT quality is judged on the AS-FILED rows.
+    as_filed = [r for r in fund_rows if not r.get("relative_year")]
     link_pit = assess_pit_timestamp(
-        fund_rows, ts_field="available_ts", event_field="fiscal_period_end",
+        [{"available_ts": r["ts"], "fiscal_period_end": r["fiscal_period_end"]}
+         for r in as_filed],
+        ts_field="available_ts", event_field="fiscal_period_end",
         name="pit_earnings_announcement_timestamp",
-        remedy=("source the disclosure timestamp from the TDnet 決算短信 record "
-                "(published_ts) or from EDINET submission metadata, and stop "
-                "treating the backfill run time as a PIT boundary"))
+        remedy=("source the disclosure timestamp from EDINET submitDateTime "
+                "(P23-B panel) or the TDnet 決算短信 record — never a backfill "
+                "run time"))
+    link_pit.evidence["source_db"] = fund_src
+    link_pit.evidence["as_filed_rows"] = len(as_filed)
+    link_pit.evidence["restated_rows"] = len(fund_rows) - len(as_filed)
 
-    # --- link 2: quarterly EPS depth for a seasonal SUE ---------------------
+    # --- link 2: EPS history depth for a seasonal SUE -----------------------
     periods = collections.defaultdict(set)
     for r in fund_rows:
         periods[r["symbol"]].add(r["fiscal_period_end"])
     link_eps = assess_time_series_depth(
         periods, min_distinct_periods=5,
-        name="quarterly_eps_history_for_srw_sue",
-        remedy=("backfill >= 5 distinct fiscal quarters per symbol from EDINET "
-                "XBRL; a seasonal-random-walk SUE compares EPS_q with EPS_{q-4} "
-                "and cannot be formed from a single period"))
+        name="eps_history_depth_for_srw_sue",
+        remedy=("backfill >= 5 distinct fiscal periods per symbol from EDINET "
+                "XBRL; a seasonal SUE compares a period with the same period a "
+                "year earlier and cannot be formed from a single period"))
+    link_eps.evidence["source_db"] = fund_src
+    link_eps.evidence["frequency_note"] = (
+        "P23-B collects doc types 120 (有価証券報告書, annual) and 160 "
+        "(半期報告書, semi-annual) — so this depth is ANNUAL/SEMI-ANNUAL, not "
+        "quarterly. A seasonal SUE at annual frequency is computable today; a "
+        "QUARTERLY SUE would additionally need 四半期報告書 filings.")
 
     # --- link 3: ownership structure ----------------------------------------
     has_ownership = any(

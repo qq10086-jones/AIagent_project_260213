@@ -125,3 +125,24 @@ def test_report_dict_names_blocking_links():
     assert d["blocking_links"] == ["ownership"]
     assert d["n_blocking"] == 1
     assert "partial data does not yield a partial answer" in d["note"]
+
+
+def test_real_filing_calendar_with_clustered_dates_is_not_a_backfill():
+    """Regression: the genuine EDINET panel was flagged as a backfill because
+    Japanese filings cluster (most FYs end 31 March). Span, not count, decides."""
+    rows = []
+    for year in range(2017, 2027):          # 10 years of events AND timestamps
+        for i in range(300):                # many records share few filing days
+            rows.append({"period": f"{year}-03-31",
+                         "ts": f"{year}-06-{20 + i % 8:02d}T09:00:00"})
+    link = assess_pit_timestamp(rows, ts_field="ts", event_field="period")
+    assert link.status == "available"
+    assert link.evidence["span_ratio"] > 0.9
+    assert link.evidence["median_lag_days"] > 80
+
+
+def test_backfill_still_detected_by_span_collapse():
+    rows = _backfill_rows()
+    link = assess_pit_timestamp(rows, ts_field="ts", event_field="period")
+    assert link.status == "absent"
+    assert link.evidence["span_ratio"] < 0.25

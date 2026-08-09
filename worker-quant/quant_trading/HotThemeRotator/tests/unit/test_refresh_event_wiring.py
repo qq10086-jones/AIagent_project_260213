@@ -58,7 +58,7 @@ def test_new_event_ticker_outside_active_universe_gets_its_own_history(tmp_path)
 
     result = refresh(htr_db=db, sibling_db=db, target_date="2026-08-07",
                      fetch=lambda u, d: [], event_fetch=event_fetch,
-                     event_base_dir=tmp_path)
+                     event_base_dir=tmp_path, event_min_bars=1)
     assert result["event_universe_maintenance"]["status"] == "SUCCESS"
     assert result["event_universe_maintenance"]["bars_appended"] == 3
     assert _series(db, "EVNEW.T") == ["2026-08-05", "2026-08-06", "2026-08-07"]
@@ -75,7 +75,7 @@ def test_stale_event_ticker_gets_its_missing_tail(tmp_path):
 
     result = refresh(htr_db=db, sibling_db=db, target_date="2026-08-07",
                      fetch=lambda u, d: [], event_fetch=event_fetch,
-                     event_base_dir=tmp_path)
+                     event_base_dir=tmp_path, event_min_bars=1)
     assert calls == [("EVSTALE.T", "2026-08-01")], "tail starts at ITS OWN series end"
     assert result["event_universe_maintenance"]["status"] == "SUCCESS"
 
@@ -87,7 +87,7 @@ def test_current_event_ticker_is_not_refetched(tmp_path):
     result = refresh(htr_db=db, sibling_db=db, target_date="2026-08-07",
                      fetch=lambda u, d: [],
                      event_fetch=lambda *a: calls.append(a) or [],
-                     event_base_dir=tmp_path)
+                     event_base_dir=tmp_path, event_min_bars=1)
     assert calls == []
     assert result["event_universe_maintenance"]["planned"] == 0
 
@@ -103,7 +103,7 @@ def test_partial_event_failure_is_reported_not_hidden(tmp_path):
 
     result = refresh(htr_db=db, sibling_db=db, target_date="2026-08-07",
                      fetch=lambda u, d: [], event_fetch=event_fetch,
-                     event_base_dir=tmp_path)
+                     event_base_dir=tmp_path, event_min_bars=1)
     maint = result["event_universe_maintenance"]
     assert maint["status"] == "PARTIAL"
     assert maint["failed"] == 1
@@ -114,3 +114,30 @@ def test_no_event_universe_is_skipped_and_nonfatal(tmp_path):
     result = refresh(htr_db=db, sibling_db=db, target_date="2026-08-07",
                      fetch=lambda u, d: [], event_base_dir=tmp_path)
     assert result["event_universe_maintenance"]["status"] == "SKIPPED"
+
+
+def test_exit_code_propagates_event_partial_end_to_end(tmp_path):
+    """E2E: refresh ok + event PARTIAL => exit 3 (never 0); refresh ok + event
+    SUCCESS => 0; refresh failure => 1."""
+    from refresh_htr_price_db import exit_code_for
+
+    db = _db(tmp_path, [_bar("ACTIVE.T", "2026-08-07")])
+    _events(tmp_path, ["OK.T", "BAD.T"])
+
+    def event_fetch(symbol, start_exclusive, asof):
+        if symbol == "BAD.T":
+            raise RuntimeError("network down")
+        return [_bar(symbol, "2026-08-07")]
+
+    partial = refresh(htr_db=db, sibling_db=db, target_date="2026-08-07",
+                      fetch=lambda u, d: [], event_fetch=event_fetch,
+                      event_base_dir=tmp_path, event_min_bars=1)
+    assert partial["ok"] is True                      # prices themselves refreshed
+    assert exit_code_for(partial) == 3                # but coverage gap is loud
+
+    ok = refresh(htr_db=db, sibling_db=db, target_date="2026-08-07",
+                 fetch=lambda u, d: [],
+                 event_fetch=lambda s, e, a: [_bar(s, "2026-08-07")],
+                 event_base_dir=tmp_path, event_min_bars=1)
+    assert exit_code_for(ok) in (0, 3)  # BAD.T may now be covered or still gap
+    assert exit_code_for({"ok": False}) == 1

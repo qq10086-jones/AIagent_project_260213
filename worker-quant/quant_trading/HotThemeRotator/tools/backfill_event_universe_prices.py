@@ -126,6 +126,75 @@ def fetch_tail_yf(symbol: str, start_exclusive: str | None, asof: str) -> list[P
     return rows
 
 
+MIN_COVERED_BARS = 30   # pre-declared minimum history depth for "covered"
+
+
+def _global_max_date(db_path: Path) -> str | None:
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        row = conn.execute("select max(date) from daily_prices").fetchone()
+        return row[0] if row and row[0] else None
+    finally:
+        conn.close()
+
+
+def verify_coverage(
+    db_path: Path,
+    universe: Sequence[str],
+    asof: str,
+    *,
+    fetch_failed: set[str] = frozenset(),
+    fetched_empty: set[str] = frozenset(),
+    min_bars: int = MIN_COVERED_BARS,
+) -> dict:
+    """POST-execution, per-ticker verification against the database itself.
+
+    An appended-bars counter says what the run DID; it does not say what the
+    universe now HAS — a fetch that returned nothing appends zero and looks
+    identical to a ticker that was already current. Coverage is therefore
+    re-queried after the fact and classified per ticker:
+
+      COVERED               series_end reaches the reference date AND depth >= min_bars
+      STALE                 has rows, but the tail is still missing
+      NO_DATA               no rows at all
+      FETCH_FAILED          the fetch raised for this symbol this run
+      DELISTED_OR_SUSPENDED had rows, fetch SUCCEEDED but returned nothing new —
+                            the vendor has stopped producing bars for it
+
+    The reference date is min(asof, global max trading date in the DB): on a
+    weekend `asof`, no symbol can have a bar on `asof` itself, and marking the
+    whole universe STALE for that would be noise, not information.
+    """
+    global_max = _global_max_date(db_path)
+    reference = min(asof, global_max) if global_max else asof
+    counts = {"COVERED": 0, "STALE": 0, "NO_DATA": 0,
+              "FETCH_FAILED": 0, "DELISTED_OR_SUSPENDED": 0}
+    detail: dict[str, list[str]] = {k: [] for k in counts}
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        for sym in sorted(set(universe)):
+            end, n = conn.execute(
+                "select max(date), count(*) from daily_prices "
+                "where symbol=? and close>0", (sym,)).fetchone()
+            if sym in fetch_failed:
+                cls = "FETCH_FAILED"
+            elif end is None:
+                cls = "NO_DATA"
+            elif end >= reference and n >= min_bars:
+                cls = "COVERED"
+            elif sym in fetched_empty:
+                cls = "DELISTED_OR_SUSPENDED"
+            else:
+                cls = "STALE"
+            counts[cls] += 1
+            if cls != "COVERED" and len(detail[cls]) < 25:
+                detail[cls].append(f"{sym} end={end} n={n}")
+    finally:
+        conn.close()
+    return {"reference_date": reference, "min_bars": min_bars,
+            "counts": counts, "samples": {k: v for k, v in detail.items() if v}}
+
+
 def run_backfill(
     db_path: Path,
     universe: Sequence[str],
@@ -134,6 +203,7 @@ def run_backfill(
     fetch: Callable[[str, str | None, str], list[PriceRow]] = fetch_tail_yf,
     dry_run: bool = False,
     log: Callable[[str], None] = print,
+    min_bars: int = MIN_COVERED_BARS,
 ) -> dict:
     """Plan and execute the per-symbol tail backfill. Pure of CLI concerns."""
     plan = plan_backfill(db_path, universe, asof)
@@ -155,24 +225,48 @@ def run_backfill(
         result["status"] = "SUCCESS"
         return result
 
+    fetch_failed: set[str] = set()
+    fetched_empty: set[str] = set()
     for sym, end in plan:
         try:
             rows = fetch(sym, end, asof)
             n = append_daily_prices(db_path, rows)
             result["bars_appended"] += n
-            result["symbols_appended"] += 1
+            if n > 0:
+                result["symbols_appended"] += 1
+            else:
+                # A fetch that returned nothing is NOT coverage — the run
+                # "succeeded" while the ticker stayed exactly as stale.
+                fetched_empty.add(sym)
             log(f"  {sym}: {end or 'NO ROWS'} -> +{n} bar(s)")
         except Exception as exc:  # fail-open per symbol, loudly accounted below
+            fetch_failed.add(sym)
             result["failed"].append(
                 {"symbol": sym, "error": f"{type(exc).__name__}: {exc}"})
             log(f"  {sym}: FAILED ({type(exc).__name__})")
 
-    if not result["failed"]:
-        result["status"] = "SUCCESS"
-    elif result["symbols_appended"] > 0:
+    # Success is defined by the DATABASE AFTER the run, not by the absence of
+    # exceptions: an appended-bars counter says what the run did, never what
+    # the universe now has. Verify per ticker.
+    verification = verify_coverage(
+        db_path, universe, asof,
+        fetch_failed=fetch_failed, fetched_empty=fetched_empty,
+        min_bars=min_bars)
+    result["verification"] = verification
+    counts = verification["counts"]
+    result["attempted"] = len(plan)
+    result["covered"] = counts["COVERED"]
+    # SUCCESS means the whole universe is verified covered — nothing less.
+    # DELISTED_OR_SUSPENDED and NO_DATA also deny it: they may be permanent,
+    # but "permanently not covered" is still not covered, and the class name
+    # in the verification block is what tells the reader it will not resolve.
+    uncovered = sum(v for k, v in counts.items() if k != "COVERED")
+    if counts["FETCH_FAILED"] and not counts["COVERED"]:
+        result["status"] = "FAILURE"
+    elif uncovered:
         result["status"] = "PARTIAL"
     else:
-        result["status"] = "FAILURE"
+        result["status"] = "SUCCESS"
     return result
 
 

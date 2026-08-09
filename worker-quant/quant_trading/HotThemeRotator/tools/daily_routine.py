@@ -137,6 +137,11 @@ def refresh_candidates(asof: date, db_path: Path, *, runner: Runner = _run) -> d
         [sys.executable, str(REFRESH_DB), "--target-date", asof.isoformat(),
          "--db", str(db_path), "--sibling", str(SIBLING_DB)],
         cwd=str(ROOT), env_extra={"PYTHONIOENCODING": "utf-8"}, timeout=400)
+    # P35: refresh exit 3 = prices refreshed OK but event-universe maintenance
+    # was PARTIAL/FAILURE. Recorded as a warning, not a fatal step — coverage
+    # gaps must surface in the routine record without aborting the morning run.
+    event_maintenance = {0: "ok", 3: "event_universe_partial"}.get(
+        rc_refresh, "refresh_failed")
     # Refresh the HTR-native news timeline (Google News JP) so the dashboard +
     # theme engine see fresh catalysts, not the frozen sibling news tables.
     # Non-fatal: a news fetch failure never blocks candidate screening.
@@ -178,7 +183,8 @@ def refresh_candidates(asof: date, db_path: Path, *, runner: Runner = _run) -> d
             cmd, cwd=str(SIBLING), env_extra={"PYTHONIOENCODING": "utf-8"}, timeout=300)
     except subprocess.TimeoutExpired:
         return {"ok": False, "reason": "screener timeout (300s)", "out": str(out),
-                "htr_db_refresh_rc": rc_refresh}
+                "htr_db_refresh_rc": rc_refresh,
+                "event_maintenance": event_maintenance}
     if rc != 0:
         return {"ok": False, "reason": f"screener exit {rc}", "stderr": stderr[-500:],
                 "out": str(out)}
@@ -202,7 +208,8 @@ def refresh_candidates(asof: date, db_path: Path, *, runner: Runner = _run) -> d
         cwd=str(ROOT), env_extra={"PYTHONIOENCODING": "utf-8"}, timeout=120)
     return {"ok": True, "out": str(out), "ticker_count": len(symbols),
             "trade_date": data.get("asof") or asof.isoformat(),
-            "htr_db_refresh_rc": rc_refresh, "news_refresh_rc": rc_news,
+            "htr_db_refresh_rc": rc_refresh, "event_maintenance": event_maintenance,
+            "news_refresh_rc": rc_news,
             "macro_refresh_rc": rc_macro, "meta_refresh_rc": rc_meta,
             "s_kabu_overlay_rc": rc_skabu, "adr_refresh_rc": rc_adr,
             "tdnet_poll_rc": rc_tdnet, "revision_capture_rc": rc_rev}

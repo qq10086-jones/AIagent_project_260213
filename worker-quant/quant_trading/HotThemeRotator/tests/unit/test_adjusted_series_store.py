@@ -68,3 +68,30 @@ def test_invalid_series_surfaces_error_not_silence(tmp_path):
     s = load_adjusted_series(db)["BAD.T"]
     assert s.error is not None and "duplicate" in s.error
     assert not window_is_clean(s, 0, 0)
+
+
+def test_zero_close_row_is_refused_not_filtered(tmp_path):
+    """A close=0 row must surface as a per-symbol error — the old SQL filter
+    silently laundered it out of the series."""
+    db = _db(tmp_path, [("Z.T", "2026-03-01", 100.0, 1e6),
+                        ("Z.T", "2026-03-02", 0.0, 1e6)])
+    s = load_adjusted_series(db)["Z.T"]
+    assert s.error is not None and "finite and > 0" in s.error
+
+
+def test_negative_close_row_is_refused(tmp_path):
+    db = _db(tmp_path, [("N.T", "2026-03-01", 100.0, 1e6),
+                        ("N.T", "2026-03-02", -5.0, 1e6)])
+    assert load_adjusted_series(db)["N.T"].error is not None
+
+
+def test_nan_close_row_is_refused(tmp_path):
+    db = _db(tmp_path, [("F.T", "2026-03-01", 100.0, 1e6),
+                        ("F.T", "2026-03-02", float("nan"), 1e6)])
+    assert load_adjusted_series(db)["F.T"].error is not None
+
+
+def test_null_close_row_is_refused(tmp_path):
+    db = _db(tmp_path, [("U.T", "2026-03-01", 100.0, 1e6),
+                        ("U.T", "2026-03-02", None, 1e6)])
+    assert load_adjusted_series(db)["U.T"].error is not None

@@ -46,20 +46,26 @@ def load_adjusted_series(
     """
     conn = sqlite3.connect(f"file:{Path(db_path)}?mode=ro", uri=True)
     try:
+        # No `close>0` filter in SQL — deliberately. Filtering here would
+        # silently launder a corrupted row out of existence; the central
+        # `validate_bars` must SEE the bad bar and refuse the series, so the
+        # corruption is surfaced per symbol instead of vanishing.
         if symbols is not None:
             syms = sorted(set(symbols))
             q = ",".join("?" * len(syms))
             cur = conn.execute(
                 f"select symbol,date,close,volume from daily_prices "
-                f"where close>0 and symbol in ({q}) order by symbol,date", syms)
+                f"where symbol in ({q}) order by symbol,date", syms)
         else:
             cur = conn.execute(
                 "select symbol,date,close,volume from daily_prices "
-                "where close>0 order by symbol,date")
+                "order by symbol,date")
         raw: dict[str, list[PriceBar]] = defaultdict(list)
         for s, d, c, v in cur:
-            raw[s].append(PriceBar(date=d, close=float(c),
-                                   volume=float(v) if v else None))
+            raw[s].append(PriceBar(
+                date=d,
+                close=float(c) if c is not None else float("nan"),
+                volume=float(v) if v else None))
     finally:
         conn.close()
 

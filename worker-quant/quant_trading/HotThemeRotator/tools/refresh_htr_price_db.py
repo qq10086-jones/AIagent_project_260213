@@ -192,6 +192,7 @@ def refresh(
     priority_symbols: Iterable[str] = MEMORY_SEMI_PRIORITY_SYMBOLS,
     event_fetch: Callable | None = None,   # per-symbol tail fetcher; test injection
     event_base_dir: Path | None = None,    # where events_*.jsonl live; test injection
+    event_min_bars: int | None = None,     # coverage depth floor; test injection
 ) -> dict:
     """Snapshot-if-needed + append missing trading days from ``fetch``."""
     htr_db = Path(htr_db)
@@ -213,9 +214,10 @@ def refresh(
         ev_base = event_base_dir if event_base_dir is not None else htr_db.parents[2]
         ev_universe = sorted(event_universe(ev_base))
         if ev_universe:
+            kwargs = {} if event_min_bars is None else {"min_bars": event_min_bars}
             event_result = run_backfill(
                 htr_db, ev_universe, target_date,
-                fetch=event_fetch or fetch_tail_yf, log=lambda s: None)
+                fetch=event_fetch or fetch_tail_yf, log=lambda s: None, **kwargs)
         else:
             event_result = {"status": "SKIPPED", "reason": "no event universe yet"}
     except Exception as exc:
@@ -225,6 +227,8 @@ def refresh(
     event_summary = {
         "status": event_result.get("status"),
         "planned": event_result.get("planned"),
+        "attempted": event_result.get("attempted"),
+        "covered": event_result.get("covered"),
         "bars_appended": event_result.get("bars_appended"),
         "failed": len(event_result.get("failed", []))
                   if isinstance(event_result.get("failed"), list) else None,
@@ -287,7 +291,22 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Fetched rows:  {result.get('fetched_rows')}")
     print(f"Appended:      {result.get('appended')}")
     print(f"New max date:  {result.get('new_max_date')}")
-    return 0 if result.get("ok") else 1
+    maint = result.get("event_universe_maintenance") or {}
+    print(f"EVENT_MAINTENANCE: {maint.get('status')}  "
+          f"(attempted={maint.get('attempted')} covered={maint.get('covered')} "
+          f"failed={maint.get('failed')})")
+    return exit_code_for(result)
+
+
+def exit_code_for(result: dict) -> int:
+    """0 = fully ok; 1 = refresh failed; 3 = refresh ok but event maintenance
+    PARTIAL/FAILURE. The distinct code exists so the daily routine can record a
+    coverage gap as a warning instead of either aborting the morning pipeline
+    or silently reporting complete success — both of which misstate the state."""
+    if not result.get("ok"):
+        return 1
+    status = (result.get("event_universe_maintenance") or {}).get("status")
+    return 3 if status in ("PARTIAL", "FAILURE") else 0
 
 
 if __name__ == "__main__":

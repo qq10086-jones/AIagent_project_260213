@@ -103,10 +103,57 @@ def _fake_fetch(rows_by_symbol):
 def test_success_status_and_append(tmp_path):
     db = _db(tmp_path, [_bar("A.T", "2026-08-01")])
     fetch = _fake_fetch({"A.T": [_bar("A.T", "2026-08-08")]})
-    res = run_backfill(db, ["A.T"], "2026-08-08", fetch=fetch, log=lambda s: None)
+    res = run_backfill(db, ["A.T"], "2026-08-08", fetch=fetch, log=lambda s: None,
+                       min_bars=1)
     assert res["status"] == "SUCCESS"
     assert res["bars_appended"] == 1
+    assert res["covered"] == 1 and res["attempted"] == 1
     assert series_end(db, "A.T") == "2026-08-08"
+
+
+def test_empty_fetch_is_not_coverage(tmp_path):
+    """The closeout defect: fetch returns nothing, append=0, and the old logic
+    called that SUCCESS while the ticker stayed exactly as stale."""
+    # CURRENT.T pins the global max date; without it EMPTY.T's own stale bar
+    # WOULD BE the global max and the reference date would collapse onto it.
+    db = _db(tmp_path, [_bar("EMPTY.T", "2026-05-01"),
+                        _bar("CURRENT.T", "2026-08-08")])
+    res = run_backfill(db, ["EMPTY.T"], "2026-08-08",
+                       fetch=_fake_fetch({"EMPTY.T": []}), log=lambda s: None,
+                       min_bars=1)
+    assert res["status"] != "SUCCESS"
+    assert res["verification"]["counts"]["DELISTED_OR_SUSPENDED"] == 1
+
+
+def test_no_rows_and_empty_fetch_is_no_data(tmp_path):
+    db = _db(tmp_path, [_bar("OTHER.T", "2026-08-08")])
+    res = run_backfill(db, ["GHOST.T"], "2026-08-08",
+                       fetch=_fake_fetch({"GHOST.T": []}), log=lambda s: None,
+                       min_bars=1)
+    assert res["verification"]["counts"]["NO_DATA"] == 1
+    assert res["status"] == "PARTIAL"
+
+
+def test_min_bars_depth_gates_coverage(tmp_path):
+    """Reaching the reference date with a 1-bar history is not coverage."""
+    db = _db(tmp_path, [_bar("THIN.T", "2026-05-01")])
+    res = run_backfill(db, ["THIN.T"], "2026-08-08",
+                       fetch=_fake_fetch({"THIN.T": [_bar("THIN.T", "2026-08-08")]}),
+                       log=lambda s: None, min_bars=30)
+    assert res["covered"] == 0
+    assert res["status"] == "PARTIAL"
+
+
+def test_weekend_asof_does_not_mark_universe_stale(tmp_path):
+    """Reference date = min(asof, global max): a Sunday asof must not flag a
+    Friday-current ticker."""
+    db = _db(tmp_path, [_bar("FRI.T", f"2026-08-{d:02d}") for d in range(1, 8)])
+    res = run_backfill(db, ["FRI.T"], "2026-08-09",   # Sunday
+                       fetch=_fake_fetch({"FRI.T": []}), log=lambda s: None,
+                       min_bars=5)
+    assert res["verification"]["reference_date"] == "2026-08-07"
+    assert res["verification"]["counts"]["COVERED"] == 1
+    assert res["status"] == "SUCCESS"
 
 
 def test_partial_failure_is_loud_not_silent(tmp_path):
@@ -114,10 +161,11 @@ def test_partial_failure_is_loud_not_silent(tmp_path):
     fetch = _fake_fetch({"OK.T": [_bar("OK.T", "2026-08-08")],
                          "BAD.T": RuntimeError("network")})
     res = run_backfill(db, ["OK.T", "BAD.T"], "2026-08-08", fetch=fetch,
-                       log=lambda s: None)
+                       log=lambda s: None, min_bars=1)
     assert res["status"] == "PARTIAL"
     assert res["failed"][0]["symbol"] == "BAD.T"
     assert res["symbols_appended"] == 1
+    assert res["verification"]["counts"]["FETCH_FAILED"] == 1
 
 
 def test_all_failed_is_failure(tmp_path):

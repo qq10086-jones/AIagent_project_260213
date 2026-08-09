@@ -52,12 +52,12 @@ _CURATED: dict[str, dict] = {
         classification="raw_required",
         rationale="mark-to-market vs avg_cost; raw by definition"),
     "tools/audit_calibration_leakage.py": dict(
-        classification="already_adjusted_basis",
+        classification="split_guarded_raw_return",
         rationale="uses decision_log.outcome_join.compute_outcome, which "
                   "FAILS CLOSED on any split inside the outcome window "
                   "(_detect_split_in_window)"),
     "tools/backdated_calibration_bootstrap.py": dict(
-        classification="already_adjusted_basis",
+        classification="split_guarded_raw_return",
         rationale="same compute_outcome fail-closed path as the sweep"),
     "tools/backfill_raw_prices.py": dict(
         classification="raw_required",
@@ -67,21 +67,21 @@ _CURATED: dict[str, dict] = {
         rationale="writer for the auto_adjust=True research store; vendor-"
                   "adjusted at fetch time by design"),
     "tools/backtest_disclosure_drift_history.py": dict(
-        classification="adjusted_return_required", migrated=True,
+        classification="central_adjusted_price_return", migrated=True,
         site="fwd_ret()/load_prices(); liquidity terciles kept raw on purpose"),
     "tools/backtest_factor_zoo_history.py": dict(
-        classification="adjusted_return_required", migrated=True,
+        classification="central_adjusted_price_return", migrated=True,
         site="fwd()/load_prices()"),
     "tools/backtest_price_reversal_history.py": dict(
-        classification="adjusted_return_required", migrated=True,
+        classification="central_adjusted_price_return", migrated=True,
         site="ic_daily()/load_universe(); liquidity screen kept raw"),
     "tools/backtest_value_on_livelog.py": dict(
-        classification="already_adjusted_basis",
+        classification="vendor_adjusted_total_return",
         rationale="forward returns read htr_research_prices.db, fetched with "
                   "auto_adjust=True — already adjusted at the vendor; scanner "
                   "false positive on the migration list"),
     "tools/backtest_value_quality_history.py": dict(
-        classification="already_adjusted_basis",
+        classification="vendor_adjusted_total_return",
         rationale="dual-store by design: RAW_PRICE_DB for yield denominators, "
                   "ADJ_PRICE_DB (auto_adjust=True) for forward returns"),
     "tools/daily_routine.py": dict(
@@ -92,7 +92,7 @@ _CURATED: dict[str, dict] = {
         rationale="reads the trade-date close as the emit REFERENCE price; "
                   "entry/reference prices are raw by contract"),
     "tools/fundamental_cohort.py": dict(
-        classification="already_adjusted_basis",
+        classification="vendor_adjusted_total_return",
         rationale="P19-02b cohort joins forward returns from the research "
                   "store (auto_adjust=True), yields from raw — same split as "
                   "value_quality_history"),
@@ -107,18 +107,18 @@ _CURATED: dict[str, dict] = {
         classification="raw_required",
         rationale="raw writer (Rule 11.9.6)"),
     "tools/sweep_pending_outcomes.py": dict(
-        classification="already_adjusted_basis",
+        classification="split_guarded_raw_return",
         rationale="compute_outcome fails closed on splits in the window "
                   "(status=malformed_data), so labels are guarded"),
     "tools/t1_event_study_readiness.py": dict(
-        classification="adjusted_return_required", migrated=True,
+        classification="central_adjusted_price_return", migrated=True,
         site="_adjusted_series(); per-window contamination"),
     "api/candidate_history.py": dict(
         classification="not_a_return_consumer",
         rationale="semantic read: serves stored chg fields; the computation "
                   "lives in serializers"),
     "api/serializers.py": dict(
-        classification="adjusted_return_required", migrated=True,
+        classification="split_guarded_raw_return", migrated=True,
         site="1D chg at :657, guarded 2026-08-09",
         rationale="1-day change on raw closes; now falls back to the no-signal "
                   "placeholder when |move|>45% (corporate-action guard) instead "
@@ -133,14 +133,14 @@ _CURATED: dict[str, dict] = {
         classification="not_a_return_consumer",
         rationale="the contract itself"),
     "src/hot_theme_rotator/data/adjusted_series_store.py": dict(
-        classification="already_adjusted_basis",
+        classification="central_adjusted_price_return", migrated=True,
         rationale="the shared loader implementing the contract"),
     "tools/audit_raw_price_consumers.py": dict(
         classification="not_a_return_consumer", rationale="this audit"),
     "tools/backfill_event_universe_prices.py": dict(
         classification="raw_required", rationale="raw writer (Rule 11.9.6)"),
     "tools/tsmom_shadow_report.py": dict(
-        classification="adjusted_return_required", migrated=True,
+        classification="split_guarded_raw_return", migrated=True,
         site="compare_arms with jump guard + longest_clean_segment",
         rationale="guarded via detect_price_jumps; refuses contaminated series"),
 }
@@ -157,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     base = Path(args.base_dir).resolve()
-    consumers = []
+    scanned: dict[str, dict] = {}
     for root in ("src", "tools", "api"):
         for p in sorted((base / root).rglob("*.py")):
             rel_parts = p.relative_to(base).parts
@@ -170,23 +170,42 @@ def main(argv: list[str] | None = None) -> int:
             if "daily_prices" not in text:
                 continue
             rel = str(p.relative_to(base)).replace("\\", "/")
-            curated = _CURATED.get(rel, {})
-            entry = {
-                "file": rel,
+            scanned[rel] = {
                 "scan_computes_returns": bool(_RETURNY.search(text)),
                 "scan_uses_adjusted_contract": bool(_ADOPTED.search(text)),
-                "classification": curated.get("classification", "UNREVIEWED"),
-                "migrated": curated.get("migrated"),
-                "return_site": curated.get("site"),
-                "rationale": curated.get("rationale", ""),
             }
-            consumers.append(entry)
+    # The inventory is the UNION of today's scan and the curated history: a
+    # consumer that migrated behind the central store may stop matching the
+    # literal string and must NOT silently vanish from the record.
+    consumers = []
+    for rel in sorted(set(scanned) | set(_CURATED)):
+        curated = _CURATED.get(rel, {})
+        scan = scanned.get(rel)
+        entry = {
+            "file": rel,
+            "in_scan": scan is not None,
+            "scan_computes_returns": scan["scan_computes_returns"] if scan else None,
+            "scan_uses_adjusted_contract": (
+                scan["scan_uses_adjusted_contract"] if scan else None),
+            "classification": curated.get("classification", "UNREVIEWED"),
+            "migrated": curated.get("migrated"),
+            "return_site": curated.get("site"),
+            "rationale": curated.get("rationale", ""),
+        }
+        if scan is None:
+            entry["note"] = ("no longer directly references daily_prices "
+                             "(migrated behind the central store); retained "
+                             "from the curated history")
+        if not (base / rel).exists():
+            entry["note"] = "curated file no longer exists"
+        consumers.append(entry)
 
     by_class: dict[str, int] = {}
     for c in consumers:
         by_class[c["classification"]] = by_class.get(c["classification"], 0) + 1
     pending = [c["file"] for c in consumers
-               if c["classification"] == "adjusted_return_required"
+               if c["classification"] in ("adjusted_return_required",
+                                          "central_adjusted_price_return")
                and not c["migrated"]]
     unreviewed = [c["file"] for c in consumers if c["classification"] == "UNREVIEWED"]
     payload = {

@@ -221,11 +221,25 @@ class FeasibilityReport:
 
     @property
     def blocking(self) -> list[ChainLink]:
+        """Required links that are outright missing."""
         return [l for l in self.links if l.required and l.status == "absent"]
 
     @property
+    def not_ready(self) -> list[ChainLink]:
+        """Required links that are missing OR only partially populated.
+
+        ``degraded`` is kept distinct from ``absent`` because the remedies
+        differ (acquire vs finish acquiring), but neither is a green light:
+        a half-filled conditioning variable silently studies whichever subset
+        happens to be loaded.
+        """
+        return [l for l in self.links
+                if l.required and l.status in ("absent", "degraded")]
+
+    @property
     def feasible(self) -> bool:
-        return not self.blocking
+        """True only when every required link is fully ``available``."""
+        return not self.not_ready
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -234,6 +248,7 @@ class FeasibilityReport:
             "feasible": self.feasible,
             "n_blocking": len(self.blocking),
             "blocking_links": [l.name for l in self.blocking],
+            "not_ready_links": [l.name for l in self.not_ready],
             "links": [l.to_dict() for l in self.links],
             "note": (
                 "A chain is feasible only when every REQUIRED link is available. "

@@ -143,16 +143,61 @@ def main(argv: list[str] | None = None) -> int:
         "QUARTERLY SUE would additionally need 四半期報告書 filings.")
 
     # --- link 3: ownership structure ----------------------------------------
-    has_ownership = any(
-        any(h in col for h in OWNERSHIP_HINTS) for col in all_columns)
-    link_own = assess_presence(
-        has_ownership, name="pit_ownership_structure",
-        detail_present="an ownership-like column exists",
-        detail_absent=("no table or column anywhere in the database carries "
-                       "foreign/individual ownership share; T2's entire "
-                       "conditioning variable is missing"),
-        remedy=("extract 所有者別状況 / 大株主の状況 from EDINET 有価証券報告書 "
-                "into an annual PIT table with validity windows"))
+    # Presence is not enough — an empty table would pass a column-name check.
+    # Coverage is measured: how many symbols actually carry a PIT snapshot.
+    own_symbols, own_rows, own_span = 0, 0, None
+    for rel in FUNDAMENTAL_DBS:
+        path = base / rel
+        if not path.exists():
+            continue
+        oc = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            tabs = {r[0] for r in oc.execute(
+                "select name from sqlite_master where type='table'")}
+            if "ownership_snapshots" not in tabs:
+                continue
+            n, syms = oc.execute(
+                "select count(*), count(distinct symbol) from ownership_snapshots "
+                "where pct_individual_total is not null").fetchone()
+            if n and n > own_rows:
+                own_rows, own_symbols = n, syms
+                own_span = oc.execute(
+                    "select min(published_ts), max(published_ts) "
+                    "from ownership_snapshots").fetchone()
+        except sqlite3.Error:
+            continue
+        finally:
+            oc.close()
+    # A non-empty table is not a usable panel. Presence alone would have called
+    # a 12-symbol smoke test "available" — the same premature-victory error the
+    # coverage verification in P35 was built to stop. A conditioning variable
+    # needs enough cross-section to form ownership buckets at all.
+    MIN_OWNERSHIP_SYMBOLS = 500
+    span_txt = (f"{own_span[0][:10]}..{own_span[1][:10]}"
+                if own_span and own_span[0] else "?")
+    if own_symbols >= MIN_OWNERSHIP_SYMBOLS:
+        own_status, own_detail = "available", (
+            f"ownership_snapshots: {own_rows} PIT snapshots across "
+            f"{own_symbols} symbols, published {span_txt}")
+    elif own_symbols > 0:
+        own_status, own_detail = "degraded", (
+            f"only {own_symbols} symbols carry an ownership snapshot "
+            f"(need >= {MIN_OWNERSHIP_SYMBOLS} to form conditioning buckets); "
+            f"{own_rows} rows, published {span_txt} — backfill still in progress")
+    else:
+        own_status, own_detail = "absent", (
+            "no table or column anywhere carries foreign/individual ownership "
+            "share; T2's conditioning variable is missing")
+    from hot_theme_rotator.research.data_feasibility import ChainLink
+    link_own = ChainLink(
+        name="pit_ownership_structure", required=True, status=own_status,
+        detail=own_detail,
+        evidence={"rows": own_rows, "symbols": own_symbols,
+                  "published_span": own_span,
+                  "min_symbols_for_available": MIN_OWNERSHIP_SYMBOLS},
+        remedy=("run tools/backfill_edinet_ownership.py --from-stored-docs — "
+                "extracts 所有者別状況 from EDINET 有価証券報告書 as annual PIT "
+                "snapshots"))
 
     # --- link 4: size / liquidity controls ----------------------------------
     n_price_symbols = conn.execute(

@@ -146,3 +146,19 @@ def test_backfill_still_detected_by_span_collapse():
     link = assess_pit_timestamp(rows, ts_field="ts", event_field="period")
     assert link.status == "absent"
     assert link.evidence["span_ratio"] < 0.25
+
+
+def test_degraded_required_link_is_not_feasible():
+    """A half-filled conditioning variable is not a green light: it would
+    silently study whichever subset happens to be loaded."""
+    ok = assess_presence(True, name="a")
+    partial = assess_time_series_depth(
+        {**{f"{i}.T": ["p1", "p2", "p3", "p4", "p5"] for i in range(5)},
+         **{f"{100+i}.T": ["p1"] for i in range(50)}},
+        min_distinct_periods=5, name="partial")
+    assert partial.status == "degraded"
+    report = build_chain_report("T2", [ok, partial])
+    assert report.feasible is False
+    assert report.blocking == []                      # not absent...
+    assert [l.name for l in report.not_ready] == ["partial"]   # ...but not ready
+    assert report.to_dict()["not_ready_links"] == ["partial"]

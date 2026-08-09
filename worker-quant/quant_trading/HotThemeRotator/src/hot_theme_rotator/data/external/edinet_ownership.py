@@ -165,9 +165,18 @@ def validate_ownership(record: Mapping[str, Any]) -> tuple[bool, str]:
             return False, (
                 f"ownership categories sum to {total:.2f} — these look like "
                 f"PERCENTS, but this schema stores FRACTIONS (68.83% -> 0.6883)")
+        # Name the outlier: observed cause is a filer typing ONE field in a
+        # different unit (e.g. 3925.T reports foreign-corporate as 51.45 while
+        # every sibling field is a fraction). Recording which field is out of
+        # family lets a human adjudicate; guessing a rescale would fabricate.
+        outlier = max(
+            ((f, record.get(f)) for f in _PCT_FIELDS if record.get(f) is not None),
+            key=lambda kv: kv[1], default=(None, None))
+        extra = (f"; largest category {outlier[0]}={outlier[1]} looks out of "
+                 f"family" if outlier[0] and outlier[1] and outlier[1] > 1.0 else "")
         return False, (
             f"ownership categories sum to {total:.4f}, outside 1.0 "
-            f"+/- {_SUM_TOLERANCE}; the register does not partition")
+            f"+/- {_SUM_TOLERANCE}; the register does not partition{extra}")
     for f in _PCT_FIELDS:
         v = record.get(f)
         if v is not None and not (0.0 <= v <= 1.0):

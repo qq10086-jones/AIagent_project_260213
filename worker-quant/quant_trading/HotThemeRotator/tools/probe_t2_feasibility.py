@@ -30,6 +30,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from hot_theme_rotator.research.data_feasibility import (  # noqa: E402
+    ChainLink,
     assess_pit_timestamp,
     assess_presence,
     assess_time_series_depth,
@@ -107,23 +108,57 @@ def main(argv: list[str] | None = None) -> int:
         for d in conn.execute(f"pragma table_info({t})"):
             all_columns.add(f"{t}.{d[1]}".lower())
 
-    # --- link 1: PIT announcement timestamps --------------------------------
+    # --- link 1: PIT EARNINGS-ANNOUNCEMENT timestamps -----------------------
+    # CORRECTED 2026-08-09. This link previously used EDINET submitDateTime and
+    # scored `available`. That timestamp is real, but it is the wrong EVENT:
+    # median lag 87d identifies the 有価証券報告書 (statutory 3-month annual
+    # report), whereas Jinushi's event is the 決算短信 earnings announcement
+    # (TSE requests it within ~45 days). Studying drift from the annual report
+    # would measure a different, later, largely-priced-in disclosure.
     fund_rows, fund_src = _load_fundamental_rows(base)
-    # relative_year > 0 rows are prior fiscal years RESTATED inside a later
-    # filing; their timestamp is honest (that is when the figure was published)
-    # but their lag is years. PIT quality is judged on the AS-FILED rows.
     as_filed = [r for r in fund_rows if not r.get("relative_year")]
-    link_pit = assess_pit_timestamp(
-        [{"available_ts": r["ts"], "fiscal_period_end": r["fiscal_period_end"]}
-         for r in as_filed],
-        ts_field="available_ts", event_field="fiscal_period_end",
-        name="pit_earnings_announcement_timestamp",
-        remedy=("source the disclosure timestamp from EDINET submitDateTime "
-                "(P23-B panel) or the TDnet 決算短信 record — never a backfill "
-                "run time"))
-    link_pit.evidence["source_db"] = fund_src
-    link_pit.evidence["as_filed_rows"] = len(as_filed)
-    link_pit.evidence["restated_rows"] = len(fund_rows) - len(as_filed)
+    tanshin_days, tanshin_n = set(), 0
+    corpus = base / "reports" / "tdnet"
+    if corpus.is_dir():
+        for f in sorted(corpus.glob("*.jsonl")):
+            for line in f.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if "決算短信" in (ev.get("title") or ""):
+                    tanshin_n += 1
+                    tanshin_days.add((ev.get("published_ts") or "")[:10])
+    if tanshin_n == 0:
+        pit_status = "absent"
+        pit_detail = ("no 決算短信 earnings-announcement timestamps available; "
+                      "EDINET submitDateTime is the ANNUAL REPORT (median lag "
+                      "87d), not the earnings event Jinushi studies")
+    elif len(tanshin_days) < 250:
+        pit_status = "degraded"
+        pit_detail = (f"{tanshin_n} 決算短信 across only {len(tanshin_days)} "
+                      f"corpus days — the correct event source exists but has "
+                      f"too little history for a retrospective study "
+                      f"(prospective accrual only)")
+    else:
+        pit_status = "available"
+        pit_detail = (f"{tanshin_n} 決算短信 across {len(tanshin_days)} corpus days")
+    link_pit = ChainLink(
+        name="pit_earnings_announcement_timestamp", required=True,
+        status=pit_status, detail=pit_detail,
+        evidence={"tanshin_disclosures": tanshin_n,
+                  "tanshin_corpus_days": len(tanshin_days),
+                  "edinet_as_filed_rows": len(as_filed),
+                  "edinet_source_db": fund_src,
+                  "why_edinet_is_not_the_event":
+                      "median lag 87d = 有価証券報告書 (3-month statutory "
+                      "deadline); 決算短信 lands ~45d after fiscal year end"},
+        remedy=("accumulate 決算短信 publication timestamps from the TDnet "
+                "poller (already running), or source a historical "
+                "earnings-announcement calendar"))
 
     # --- link 2: EPS history depth for a seasonal SUE -----------------------
     periods = collections.defaultdict(set)
@@ -188,7 +223,6 @@ def main(argv: list[str] | None = None) -> int:
         own_status, own_detail = "absent", (
             "no table or column anywhere carries foreign/individual ownership "
             "share; T2's conditioning variable is missing")
-    from hot_theme_rotator.research.data_feasibility import ChainLink
     link_own = ChainLink(
         name="pit_ownership_structure", required=True, status=own_status,
         detail=own_detail,
@@ -200,20 +234,92 @@ def main(argv: list[str] | None = None) -> int:
                 "snapshots"))
 
     # --- link 4: size / liquidity controls ----------------------------------
+    # CORRECTED 2026-08-09: previously `available` while its own detail admitted
+    # "market cap still needs shares outstanding". close x volume is TURNOVER —
+    # it measures what traded, not how big the company is. Jinushi controls for
+    # SIZE, so this is measured against the ownership panel it must cover.
     n_price_symbols = conn.execute(
         "select count(distinct symbol) from daily_prices").fetchone()[0]
-    link_ctrl = assess_presence(
-        n_price_symbols > 1000, name="size_liquidity_controls",
-        detail_present=f"daily_prices covers {n_price_symbols} symbols "
-                       f"(close x volume gives ADV; market cap still needs shares "
-                       f"outstanding)",
-        detail_absent="insufficient price coverage for controls",
-        remedy="join shares-outstanding to derive market cap")
+    n_shares_symbols = 0
+    try:
+        cols = {d[1] for d in conn.execute("pragma table_info(fundamental_snapshots)")}
+        if "shares_outstanding" in cols:
+            n_shares_symbols = conn.execute(
+                "select count(distinct symbol) from fundamental_snapshots "
+                "where shares_outstanding is not null").fetchone()[0]
+    except sqlite3.Error:
+        pass
+    if n_shares_symbols >= 0.5 * max(own_symbols, 1):
+        ctrl_status = "available"
+        ctrl_detail = (f"market cap derivable for {n_shares_symbols} symbols; "
+                       f"ADV from {n_price_symbols} price symbols")
+    elif n_price_symbols > 1000:
+        ctrl_status = "degraded"
+        ctrl_detail = (f"LIQUIDITY only: ADV from {n_price_symbols} price symbols, "
+                       f"but shares_outstanding covers just {n_shares_symbols} "
+                       f"symbols vs {own_symbols} in the ownership panel — SIZE "
+                       f"control is not available; turnover is not size")
+    else:
+        ctrl_status = "absent"
+        ctrl_detail = "insufficient price coverage for any control"
+    link_ctrl = ChainLink(
+        name="size_liquidity_controls", required=True, status=ctrl_status,
+        detail=ctrl_detail,
+        evidence={"price_symbols": n_price_symbols,
+                  "shares_outstanding_symbols": n_shares_symbols,
+                  "ownership_symbols": own_symbols},
+        remedy=("backfill shares outstanding (EDINET 発行済株式総数) to derive "
+                "market cap, or pre-declare in the registration that SIZE is "
+                "not controlled and say why"))
+
+    # --- link 5: HISTORICAL PIT ownership vintages --------------------------
+    # A single cross-section proves the variable exists and is dispersed; it
+    # cannot date-align to past events. A retrospective study needs an ownership
+    # snapshot published BEFORE each event it conditions.
+    joinable = 0
+    for rel in FUNDAMENTAL_DBS:
+        path = base / rel
+        if not path.exists():
+            continue
+        jc = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            tabs = {r[0] for r in jc.execute(
+                "select name from sqlite_master where type='table'")}
+            if not {"ownership_snapshots", "fundamental_snapshots"} <= tabs:
+                continue
+            joinable = max(joinable, jc.execute(
+                "select count(*) from fundamental_snapshots f where "
+                "f.relative_year=0 and exists(select 1 from ownership_snapshots o "
+                "where o.symbol=f.symbol and o.published_ts < f.published_ts)"
+            ).fetchone()[0])
+        except sqlite3.Error:
+            continue
+        finally:
+            jc.close()
+    total_events = len(as_filed)
+    frac = joinable / total_events if total_events else 0.0
+    if frac >= 0.5:
+        vin_status = "available"
+    elif joinable > 0:
+        vin_status = "degraded"
+    else:
+        vin_status = "absent"
+    link_vintage = ChainLink(
+        name="historical_pit_ownership_vintages", required=True,
+        status=vin_status,
+        detail=(f"only {joinable} of {total_events} as-filed events have an "
+                f"ownership snapshot published BEFORE them ({frac:.1%}) — one "
+                f"cross-section cannot date-align to past events"),
+        evidence={"joinable_events": joinable, "total_as_filed_events": total_events,
+                  "fraction": frac},
+        remedy=("backfill additional ownership VINTAGES (earlier filing "
+                "seasons), or pre-declare T2 as purely PROSPECTIVE and accrue "
+                "forward from today"))
 
     conn.close()
 
     report = build_chain_report("T2_ownership_conditioned_pead",
-                                [link_pit, link_eps, link_own, link_ctrl])
+                                [link_pit, link_eps, link_own, link_ctrl, link_vintage])
     payload = report.to_dict()
     payload.update({
         "asof": args.asof,

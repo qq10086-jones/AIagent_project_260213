@@ -72,13 +72,46 @@ def _stored_docs(db: Path) -> list[dict]:
              "doc_type_code": c} for d, s, p, t, c in rows]
 
 
-def _process(client, docs, db: Path, *, limit: int | None, label: str) -> dict:
+_TERMINAL_OUTCOMES = {"no_ownership_block", "validation_failed"}
+
+
+def _known_failures() -> set[str]:
+    """doc_ids whose failure is DETERMINISTIC — a missing block or a filing that
+    does not partition parses the same way every time. Without this the same
+    documents are refetched on every run forever (observed: the 4,000-doc run
+    and the next 40-doc run both reported the identical 7+5 failures)."""
+    led = LOG_PATH.parent / "edinet_ownership_failures.jsonl"
+    if not led.exists():
+        return set()
+    out: set[str] = set()
+    for line in led.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if e.get("outcome") in _TERMINAL_OUTCOMES and e.get("doc_id"):
+            out.add(e["doc_id"])
+    return out
+
+
+def _process(client, docs, db: Path, *, limit: int | None, label: str,
+             retry_failed: bool = False) -> dict:
     done = stored_ownership_doc_ids(db)
-    todo = [d for d in docs if d["doc_id"] not in done]
+    skip = set(done)
+    if not retry_failed:
+        skip |= _known_failures()
+    todo = [d for d in docs if d["doc_id"] not in skip]
     if limit:
         todo = todo[:limit]
     stats = {"scope": label, "candidates": len(docs), "todo": len(todo),
              "stored": 0, "no_block": 0, "invalid": 0, "errors": 0}
+    # Document-level ledger: a bare count tells you 5 documents failed but not
+    # WHICH, so the next run refetches them forever and no one can audit why a
+    # symbol is absent from the panel.
+    ledger: list[dict] = []
     batch: list[dict] = []
     for i, d in enumerate(todo, 1):
         try:
@@ -86,6 +119,9 @@ def _process(client, docs, db: Path, *, limit: int | None, label: str) -> dict:
             parsed = parse_ownership_csv(blob)
             if not parsed:
                 stats["no_block"] += 1
+                ledger.append({"doc_id": d["doc_id"], "symbol": d["symbol"],
+                               "outcome": "no_ownership_block",
+                               "period_end": d.get("period_end")})
             else:
                 batch.append(build_ownership_record(
                     doc_id=d["doc_id"], symbol=d["symbol"],
@@ -93,10 +129,15 @@ def _process(client, docs, db: Path, *, limit: int | None, label: str) -> dict:
                     submitted_at=d["submitted_at"] or "",
                     doc_type_code=d["doc_type_code"] or "120",
                     parsed=parsed))
-        except OwnershipParseError:
+        except OwnershipParseError as exc:
             stats["invalid"] += 1
-        except Exception:
+            ledger.append({"doc_id": d["doc_id"], "symbol": d["symbol"],
+                           "outcome": "validation_failed", "reason": str(exc)[:200]})
+        except Exception as exc:
             stats["errors"] += 1
+            ledger.append({"doc_id": d["doc_id"], "symbol": d["symbol"],
+                           "outcome": "fetch_error",
+                           "reason": f"{type(exc).__name__}: {exc}"[:200]})
         if len(batch) >= 200:
             stats["stored"] += upsert_ownership(db, batch)
             batch = []
@@ -108,6 +149,15 @@ def _process(client, docs, db: Path, *, limit: int | None, label: str) -> dict:
         time.sleep(THROTTLE_SECONDS)
     if batch:
         stats["stored"] += upsert_ownership(db, batch)
+    if ledger:
+        led = LOG_PATH.parent / "edinet_ownership_failures.jsonl"
+        led.parent.mkdir(parents=True, exist_ok=True)
+        with open(led, "a", encoding="utf-8") as fh:
+            for e in ledger:
+                e["logged_at"] = datetime.now().isoformat(timespec="seconds")
+                fh.write(json.dumps(e, ensure_ascii=False) + "\n")
+        stats["failure_ledger"] = str(led.relative_to(PROJECT_ROOT)).replace("\\", "/")
+    stats["ledger_entries"] = len(ledger)
     return stats
 
 
@@ -123,6 +173,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="re-read documents P23-B already indexed (cheapest path)")
     ap.add_argument("--db", default=str(DEFAULT_DB))
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--retry-failed", action="store_true",
+                    help="re-attempt documents previously logged as terminal failures")
     args = ap.parse_args(argv)
 
     db = Path(args.db)
@@ -131,7 +183,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.from_stored_docs:
         docs = _stored_docs(db)
         print(f"stored 有報 documents: {len(docs)}")
-        stats = _process(client, docs, db, limit=args.limit, label="from_stored_docs")
+        stats = _process(client, docs, db, limit=args.limit,
+                         label="from_stored_docs", retry_failed=args.retry_failed)
     else:
         if not (args.start and args.end):
             print("need --start/--end or --from-stored-docs", file=sys.stderr)
@@ -148,7 +201,8 @@ def main(argv: list[str] | None = None) -> int:
             day += timedelta(days=1)
         print(f"listed documents {args.start}..{args.end}: {len(docs)}")
         stats = _process(client, docs, db, limit=args.limit,
-                         label=f"{args.start}..{args.end}")
+                         label=f"{args.start}..{args.end}",
+                         retry_failed=args.retry_failed)
 
     _log(stats)
     print(f"\nstored={stats['stored']}  no_block={stats['no_block']}  "

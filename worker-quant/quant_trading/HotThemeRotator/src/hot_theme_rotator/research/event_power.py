@@ -38,6 +38,8 @@ __all__ = [
     "minimum_detectable_effect",
     "required_events",
     "power_for_effect",
+    "power_from_effective_n",
+    "effective_sample_size_from_sizes",
 ]
 
 # Two-sided test at the conventional levels; z rather than t because the
@@ -79,10 +81,14 @@ def design_effect(avg_cluster_size: float, icc: float) -> float:
 
 
 def effective_sample_size(n_events: int, n_clusters: int, icc: float) -> float:
-    """Events discounted for within-day correlation.
+    """Events discounted for within-day correlation, EQUAL-cluster approximation.
 
-    Never exceeds ``n_events``, and at ``icc = 1`` collapses to ``n_clusters`` —
-    the two limits a reader can check by inspection.
+    ⚠ This assumes clusters of similar size and is OPTIMISTIC when they are not.
+    The T2 buckets have cluster-size CV ≈ 1.6 (a single day holds up to 178
+    events), under which this formula overstated effective N by ~70% (337 vs
+    the correct ~197). Prefer :func:`effective_sample_size_from_sizes` whenever
+    the actual cluster sizes are available — which, for any assembled sample,
+    they always are.
     """
     if n_events <= 0:
         raise PowerError("n_events must be positive")
@@ -91,6 +97,25 @@ def effective_sample_size(n_events: int, n_clusters: int, icc: float) -> float:
             f"n_clusters must be in [1, n_events]; got {n_clusters} of {n_events}")
     m = n_events / n_clusters
     return n_events / design_effect(m, icc)
+
+
+def effective_sample_size_from_sizes(cluster_sizes: Sequence[int],
+                                     icc: float) -> float:
+    """Effective N from the ACTUAL cluster sizes (exact, not approximated).
+
+    Uses the size-weighted mean cluster size ``m_e = Σm² / Σm`` — equivalently
+    ``m̄(1 + CV²)`` — in the design effect. With unequal clusters this is the
+    correct discount: a 178-event day dominates the variance of the mean far
+    beyond what the average cluster size suggests.
+    """
+    sizes = [int(x) for x in cluster_sizes]
+    if not sizes or any(x <= 0 for x in sizes):
+        raise PowerError("cluster_sizes must be non-empty positive integers")
+    if not (0.0 <= icc <= 1.0):
+        raise PowerError(f"icc must be in [0, 1], got {icc}")
+    n = sum(sizes)
+    m_e = sum(x * x for x in sizes) / n
+    return n / (1.0 + (m_e - 1.0) * icc)
 
 
 @dataclass(frozen=True)
@@ -169,6 +194,24 @@ def power_for_effect(
     if sigma <= 0:
         raise PowerError("sigma must be positive")
     eff = effective_sample_size(n_events, n_clusters, icc)
-    z = abs(effect) * math.sqrt(eff) / sigma - _z_alpha(alpha)
-    # Normal CDF via erf; no scipy dependency.
-    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+    return power_from_effective_n(effect=effect, effective_n=eff,
+                                  sigma=sigma, alpha=alpha)
+
+
+def power_from_effective_n(*, effect: float, effective_n: float, sigma: float,
+                           alpha: float = 0.05) -> float:
+    """Two-sided power from an effective N — BOTH rejection tails.
+
+    The earlier version dropped the far tail, so power at effect = 0 came out
+    as α/2 instead of α. The far tail is negligible for detectable effects but
+    the formula should still be the formula.
+    """
+    if sigma <= 0:
+        raise PowerError("sigma must be positive")
+    if effective_n <= 0:
+        raise PowerError("effective_n must be positive")
+    lam = abs(effect) * math.sqrt(effective_n) / sigma
+    za = _z_alpha(alpha)
+    def _phi(x: float) -> float:
+        return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+    return _phi(lam - za) + _phi(-lam - za)

@@ -146,3 +146,64 @@ def test_power_is_a_probability():
 def test_zero_effect_requires_infinite_n():
     with pytest.raises(PowerError):
         required_events(effect=0.0, sigma=0.15, avg_cluster_size=1.0, icc=0.0)
+
+
+# --- unequal clusters + two-sided tail (review corrections 2026-08-10) -------
+
+def test_unequal_clusters_discount_far_more_than_the_average():
+    """The real H1 bucket: 420 events / 121 days / CV 1.58. Equal-cluster Kish
+    said eff N ~337; the size-weighted truth is ~197 — a 70% overstatement."""
+    from hot_theme_rotator.research.event_power import (
+        effective_sample_size_from_sizes)
+    # H1-like profile: one 178-event day dominating many small days (sum=420)
+    sizes = [178] + [6] * 30 + [1] * 62
+    eff = effective_sample_size_from_sizes(sizes, 0.1)
+    equal = effective_sample_size(sum(sizes), len(sizes), 0.1)
+    assert eff < equal * 0.7
+
+
+def test_size_weighted_me_matches_hand_computation():
+    from hot_theme_rotator.research.event_power import (
+        effective_sample_size_from_sizes)
+    sizes = [4, 1, 1]                       # n=6, m_e=(16+1+1)/6=3
+    eff = effective_sample_size_from_sizes(sizes, 0.5)
+    assert eff == pytest.approx(6 / (1 + 2 * 0.5))     # = 3
+
+
+def test_equal_sizes_reduce_to_kish():
+    from hot_theme_rotator.research.event_power import (
+        effective_sample_size_from_sizes)
+    assert effective_sample_size_from_sizes([5] * 10, 0.2) == pytest.approx(
+        effective_sample_size(50, 10, 0.2))
+
+
+def test_from_sizes_rejects_bad_input():
+    from hot_theme_rotator.research.event_power import (
+        effective_sample_size_from_sizes)
+    with pytest.raises(PowerError):
+        effective_sample_size_from_sizes([], 0.1)
+    with pytest.raises(PowerError):
+        effective_sample_size_from_sizes([3, 0], 0.1)
+    with pytest.raises(PowerError):
+        effective_sample_size_from_sizes([3, 2], 1.5)
+
+
+def test_two_sided_power_at_zero_effect_equals_alpha():
+    """The dropped far tail: power(0) must be alpha, not alpha/2."""
+    from hot_theme_rotator.research.event_power import power_from_effective_n
+    p = power_from_effective_n(effect=0.0, effective_n=200, sigma=0.2, alpha=0.05)
+    assert p == pytest.approx(0.05, abs=1e-4)
+
+
+def test_two_sided_power_known_value():
+    """lambda = 0.02*sqrt(197)/0.20 = 1.4036 -> power ~ 0.289 (the reviewer's 29%)."""
+    from hot_theme_rotator.research.event_power import power_from_effective_n
+    p = power_from_effective_n(effect=0.02, effective_n=197, sigma=0.20)
+    assert p == pytest.approx(0.289, abs=0.005)
+
+
+def test_power_symmetric_in_effect_sign():
+    from hot_theme_rotator.research.event_power import power_from_effective_n
+    a = power_from_effective_n(effect=0.03, effective_n=300, sigma=0.2)
+    b = power_from_effective_n(effect=-0.03, effective_n=300, sigma=0.2)
+    assert a == pytest.approx(b)

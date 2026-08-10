@@ -148,24 +148,47 @@ def main(argv: list[str] | None = None) -> int:
                          "preregistration before any outcome is read"),
             }
 
-    # Per-fiscal-year buckets — Jinushi sorts WITHIN each year, so the pooled
-    # figure overstates what any single year's test has to work with.
+    # Per-FISCAL-year buckets (April–March, labelled by ENDING year — Jinushi's
+    # convention). An earlier version used calendar years, which is not the
+    # paper's design and mis-sized every bucket.
+    def _fy(d: str) -> str:
+        y, m = int(d[:4]), int(d[5:7])
+        return str(y + 1 if m >= 4 else y)
+
     by_year_buckets = {}
-    years = sorted({e.event_date[:4] for e, _ in joined})
+    years = sorted({_fy(e.event_date) for e, _ in joined})
     for y in years:
-        sub = [(e, s_) for e, s_ in joined if e.event_date[:4] == y]
+        sub = [(e, s_) for e, s_ in joined if _fy(e.event_date) == y]
         fv = sorted(s_[1] for _, s_ in sub if s_[1] is not None)
         iv = sorted(s_[2] for _, s_ in sub if s_[2] is not None)
         if not fv or not iv:
             continue
         f20 = fv[max(0, int(0.20 * len(fv)) - 1)]
         i80 = iv[min(len(iv) - 1, int(0.80 * len(iv)))]
+        # cluster-size stats per bucket: with CV ~1.6 the equal-cluster Kish
+        # approximation overstates effective N by ~70%, so the sizes must ride
+        # along for any honest power calculation.
+        def _cluster_stats(rows):
+            days = collections.Counter(e.event_date for e, _ in rows)
+            sizes = sorted(days.values(), reverse=True)
+            n = sum(sizes)
+            if not sizes:
+                return {}
+            m = n / len(sizes)
+            var = sum((x - m) ** 2 for x in sizes) / len(sizes)
+            return {"days": len(sizes), "max_day": sizes[0],
+                    "cv": round((var ** 0.5) / m, 3),
+                    "m_e": round(sum(x * x for x in sizes) / n, 2)}
+        lf = [(e, s_) for e, s_ in sub if s_[1] is not None and s_[1] <= f20]
+        hi = [(e, s_) for e, s_ in sub if s_[2] is not None and s_[2] >= i80]
         by_year_buckets[y] = {
             "n_events": len(sub),
-            "low_foreign": sum(1 for _, s_ in sub
-                               if s_[1] is not None and s_[1] <= f20),
-            "high_individual": sum(1 for _, s_ in sub
-                                   if s_[2] is not None and s_[2] >= i80),
+            "fiscal_year_note": "April–March, labelled by ending year",
+            "partial_fiscal_year": y == years[-1],
+            "low_foreign": len(lf),
+            "high_individual": len(hi),
+            "low_foreign_clusters": _cluster_stats(lf),
+            "high_individual_clusters": _cluster_stats(hi),
         }
 
     payload = {
@@ -227,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  clustering: {cl['distinct_event_days']} distinct event days, "
           f"max {cl['max_events_on_one_day']} on one day; by year {cl['by_year']}")
     if by_year_buckets:
-        print("  per-fiscal-year buckets (Jinushi sorts WITHIN year):")
+        print("  per-FISCAL-year buckets (Apr–Mar, ending-year label):")
         for y, b in by_year_buckets.items():
             print(f"    {y}: n={b['n_events']:>4}  low-foreign={b['low_foreign']:>4}"
                   f"  high-individual={b['high_individual']:>4}")

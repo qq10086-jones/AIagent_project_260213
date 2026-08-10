@@ -101,50 +101,69 @@ def test_power_falls_as_intraday_correlation_rises():
     assert tight.rejection_rate < loose.rejection_rate
 
 
-def _t2_shaped_clusters(n_events=420, G=42, biggest=178):
-    """One dominant event day plus many small ones — the real T2 bucket shape."""
-    sizes = [biggest] + [(n_events - biggest) // (G - 1)] * (G - 1)
-    sizes[-1] += n_events - sum(sizes)
-    assert sum(sizes) == n_events and len(sizes) == G
+def real_bucket_sizes(name="H1_low_foreign"):
+    """The ACTUAL cluster sizes, read from the join report — never hard-coded.
+
+    A hard-coded shape is exactly how the 2026-08-10 error happened: the
+    full-sample maximum event day (178 events) was written into a test as if it
+    were a bucket maximum, when H1's真 maximum is 36 across 121 days. Every
+    conclusion drawn from that fabricated shape (CR1 size 0.102, the whole power
+    curve, "CR1 over-rejects 2x") was wrong. Tests now read the real arrays.
+    """
+    import json
+    report = PROJECT_ROOT / "reports" / "research" / "t2_join_report_2026-08-10.json"
+    if not report.exists():
+        pytest.skip("join report not present in this working tree")
+    sizes = json.loads(report.read_text(encoding="utf-8"))["bucket_cluster_sizes"][name]
+    assert sizes, "empty bucket"
     return sizes
 
 
-def test_cr1_OVER_REJECTS_on_the_real_unbalanced_shape():
-    """The finding that forced the wild bootstrap into the plan.
-
-    A first version of this test asserted that lumpy clusters cost POWER. They
-    appear to gain it — but only because the CR1 test is broken here: with one
-    day holding 42% of the observations its size is ~2x nominal, so the extra
-    'power' is over-rejection. Size must be checked before power, always.
-    """
-    lumpy = _t2_shaped_clusters()
-    size = simulate_slope_power(lumpy, beta1_true=1.0, sigma_announce=0.06,
-                                sigma_post=0.20, n_sims=1200, alpha=0.05,
-                                seed=11).rejection_rate
-    assert size > 0.08, f"expected CR1 over-rejection on this shape, got {size}"
+def test_real_bucket_max_day_is_not_the_full_sample_max():
+    """Regression guard on the actual error: the bucket max must not be 178."""
+    sizes = real_bucket_sizes()
+    assert max(sizes) < 50, (
+        "a bucket's largest event day should be ~36; 178 is the FULL-sample "
+        "maximum and using it fabricates a different experiment")
+    assert len(sizes) > 100
 
 
-def test_balanced_clusters_keep_cr1_honest():
-    size = simulate_slope_power([10] * 42, beta1_true=1.0, sigma_announce=0.06,
-                                sigma_post=0.20, n_sims=1200, alpha=0.05,
-                                seed=11).rejection_rate
-    assert 0.02 < size < 0.09
+def test_cr1_has_correct_size_on_the_REAL_bucket_shape():
+    """WITHDRAWN CLAIM: an earlier test asserted CR1 over-rejects 2x here. That
+    came from the fabricated 178/42 shape. On the real 420/121/max-36 shape CR1
+    is essentially exact."""
+    size = simulate_slope_power(real_bucket_sizes(), beta1_true=1.0,
+                                sigma_announce=0.06, sigma_post=0.20,
+                                n_sims=2000, alpha=0.05, seed=23).rejection_rate
+    assert 0.03 < size < 0.075, f"CR1 should be ~nominal on the real shape, got {size}"
 
 
-def test_wild_cluster_bootstrap_restores_size_on_the_real_shape():
-    """WCB is REQUIRED for this sample, not a refinement."""
-    lumpy = _t2_shaped_clusters()
-    size = simulate_slope_power(lumpy, beta1_true=1.0, sigma_announce=0.06,
-                                sigma_post=0.20, n_sims=300, alpha=0.05,
-                                seed=11, inference="wild_cluster_bootstrap",
+def test_wild_cluster_bootstrap_size_is_not_liberal_on_the_real_shape():
+    """WCB is kept as a robust design choice for unbalanced clusters — NOT
+    because CR1 was shown to fail. It must not be liberal."""
+    size = simulate_slope_power(real_bucket_sizes(), beta1_true=1.0,
+                                sigma_announce=0.06, sigma_post=0.20,
+                                n_sims=300, alpha=0.05, seed=23,
+                                inference="wild_cluster_bootstrap",
                                 n_boot=199).rejection_rate
-    assert size < 0.09, f"WCB should restore ~nominal size, got {size}"
+    assert size <= 0.08, f"WCB should be at or below nominal, got {size}"
+
+
+def test_severely_unbalanced_shape_does_degrade_cr1():
+    """The mechanism is real even though our sample does not suffer from it —
+    kept as a synthetic, clearly-labelled illustration, not as our sample."""
+    synthetic = [178] + [5] * 41
+    synthetic[-1] += 420 - sum(synthetic)
+    size = simulate_slope_power(synthetic, beta1_true=1.0, sigma_announce=0.06,
+                                sigma_post=0.20, n_sims=1200, alpha=0.05,
+                                seed=11).rejection_rate
+    assert size > 0.075, "extreme imbalance should degrade CR1 size"
 
 
 def test_wild_bootstrap_p_is_a_valid_probability():
     from hot_theme_rotator.research.slope_power_mc import wild_cluster_bootstrap_p
     rng = np.random.default_rng(4)
-    sizes = _t2_shaped_clusters()
+    sizes = real_bucket_sizes()
     cid = np.repeat(np.arange(len(sizes)), sizes)
     a = rng.normal(0, 0.06, cid.size)
     y = a + rng.normal(0, 0.20, cid.size)

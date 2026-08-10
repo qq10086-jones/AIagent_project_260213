@@ -128,7 +128,36 @@ def main(argv: list[str] | None = None) -> int:
     ladder.append(("...with an ownership snapshot published BEFORE the event",
                    len(joined)))
 
-    # conditioning buckets on the joined set, per the paper's percentile design
+    # Pooled buckets built by the SAME within-fiscal-year sort as the analysis,
+    # so their cluster arrays are the ones any power simulation must consume.
+    def _fy_(d: str) -> str:
+        y, m = int(d[:4]), int(d[5:7])
+        return str(y + 1 if m >= 4 else y)
+
+    pooled_buckets = {"H1_low_foreign": [], "H2_high_individual": []}
+    for _y in sorted({_fy_(e.event_date) for e, _ in joined}):
+        _sub = [(e, s_) for e, s_ in joined if _fy_(e.event_date) == _y]
+        _fv = sorted(s_[1] for _, s_ in _sub if s_[1] is not None)
+        _iv = sorted(s_[2] for _, s_ in _sub if s_[2] is not None)
+        if _fv:
+            _c = _fv[max(0, int(0.20 * len(_fv)) - 1)]
+            pooled_buckets["H1_low_foreign"] += [
+                e for e, s_ in _sub if s_[1] is not None and s_[1] <= _c]
+        if _iv:
+            _c = _iv[min(len(_iv) - 1, int(0.80 * len(_iv)))]
+            pooled_buckets["H2_high_individual"] += [
+                e for e, s_ in _sub if s_[2] is not None and s_[2] >= _c]
+
+    # THE arrays a power simulation must use. Hard-coding a shape in a test is
+    # how the 2026-08-10 error happened: the full-sample maximum event day (178)
+    # was used as if it were a bucket's maximum, when H1's is 36. Emitting the
+    # real arrays here removes the opportunity to guess.
+    bucket_cluster_sizes = {
+        name: sorted(collections.Counter(e.event_date for e in evs).values(),
+                     reverse=True)
+        for name, evs in pooled_buckets.items()
+    }
+
     buckets = {}
     if joined:
         fvals = sorted(s[1] for _, s in joined if s[1] is not None)
@@ -214,6 +243,11 @@ def main(argv: list[str] | None = None) -> int:
         # control only needs shares for these — not for every vintage of every
         # joined symbol, which is ~6x more documents.
         "_join_ownership_doc_ids": sorted({s_[3] for _, s_ in joined}),
+        "bucket_cluster_sizes": bucket_cluster_sizes,
+        "bucket_cluster_summary": {
+            name: {"n_events": sum(sz), "n_days": len(sz), "max_day": max(sz)}
+            for name, sz in bucket_cluster_sizes.items() if sz
+        },
         "event_day_clustering": {
             "distinct_event_days": len({e.event_date for e, _ in joined}),
             "max_events_on_one_day": (

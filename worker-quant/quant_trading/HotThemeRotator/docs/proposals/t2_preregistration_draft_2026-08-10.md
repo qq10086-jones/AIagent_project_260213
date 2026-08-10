@@ -1,244 +1,218 @@
-# T2 — Ownership-Conditioned PEAD: Preregistration DRAFT v3
+# T2 — Ownership-Conditioned PEAD: Preregistration DRAFT v4
 
-Status: **DRAFT — NOT FROZEN.** Freezing happens only via a freeze tool after
-the open items in §10 are closed, and **no CAR/BHAR/AR may be computed before
-that freeze**. v3 supersedes v2 (same day): v2 fixed the estimand, fiscal-year mapping and
-power model after owner review; **v3 corrects the null VALUE (β₁ = 1, not 0)
-and replaces the inference method after the Monte Carlo showed the ordinary
-cluster-robust test over-rejects 2× on this sample.** Rule 3 advice-only.
+Status: **DRAFT — NOT FROZEN. Trial family NOT registered.** Rule 3 advice-only.
 
-**This design is a "Jinushi-inspired pooled adaptation". It does NOT replicate
-the paper's year-by-year β₁ trend test** — with two complete fiscal years and
-one partial, a decay-over-time trend cannot be tested here. What can be tested
-is whether conditional PEAD **exists** in the current sample.
+**v4 supersedes v3 after owner review. v3's simulation used a cluster shape that
+does not exist in this study**, so every number it produced is withdrawn (§5).
+v4 also switches the primary specification to the disjoint window (§1), because
+the additive identity that gives "H0: β₁ = 1" its meaning does not hold for the
+paper's BHAR left-hand side.
 
----
-
-## 1. Hypotheses and estimand (corrected in v2)
-
-**The estimand is the SLOPE of post-announcement abnormal return on the
-announcement-window reaction — not an unconditional mean CAR.** v1 defined
-H1/H2 as "mean 60-session CAR > 0 in the bucket"; that tests a different claim:
-positive and negative earnings news cancel in an unconditional mean, so a real
-drift can produce a mean near zero. Jinushi's main model is
-
-    AR_i,[-1,+60] = β0 + β1 · AR_i,[-1,+1] + ε_i
-
-where β1 > 0 is underreaction: the market keeps moving in the direction of its
-initial reaction.
-
-Our primary specification, per bucket (pooled across fiscal years):
-
-    AR_i,[-1,+60] = β0 + β1 · AR_i,[-1,+1] + γ' X_i + δ_FY + ε_i
-
-- `AR_i,[w]` — abnormal return of firm i over window w, sessions indexed
-  relative to the **event date** of §2 (0 = first tradable session); abnormal =
-  split-adjusted return minus 1306.T return over the same window.
-- `X_i` — controls: log market cap (shares outstanding × close at session −2)
-  and log 60-session ADV, both from data available before the event.
-- `δ_FY` — fiscal-year fixed effects.
-- SEs two-way clustered by **event day and firm**.
-
-**⚠ The null value is 1, not 0 (corrected in v3).** The LHS `AR[-1,+60]`
-mechanically CONTAINS the regressor `AR[-1,+1]`: writing
-`AR[-1,+60] = AR[-1,+1] + AR[+2,+60]` shows that if the post-window is
-unrelated to the reaction (an efficient market) the slope is **1**. Verified by
-simulation: independent post-window ⇒ β̂₁ = 0.991. v2 wrote "β₁ > 0", which
-**market efficiency itself satisfies** — the test would have been vacuous.
-
-**H1 (low foreign ownership):** β₁ > 1 in the bottom within-fiscal-year foreign
-ownership quintile.
-**H2 (high individual ownership):** β₁ > 1 in the top within-fiscal-year
-individual-ownership quintile.
-
-(For the disjoint robustness LHS `AR[+2,+60]` the null is β₁ = 0; simulation
-confirms β̂₁ = −0.009 under no drift. Each specification carries its own null
-value, stated with it, so the two can never be crossed.)
-
-H1 and H2 are **tested separately**. Full-sample β1 is reported for context.
-Direction predicted positive; a null or negative β1 is a valid, reportable
-outcome. **Note the paper's LHS window [-1,+60] mechanically contains the
-regressor window [-1,+1]**; we keep the paper's definition as primary for
-comparability and register `AR_[+2,+60]` as the overlap-free robustness LHS
-(secondary, §6).
+Version history: v1 mean-CAR estimand · v2 slope estimand + fiscal-year fix ·
+v3 null value = 1 + Monte Carlo · **v4 real cluster shapes, disjoint primary,
+Holm, full-model inference.**
 
 ---
 
-## 2. Event definition (unchanged from v1)
+## 1. Hypotheses and estimand (primary changed in v4)
 
-- **Event**: TDnet 決算短信 classified `annual` by `classify_tanshin`
-  (p36-02-v1) — not quarterly/中間, not 訂正, not a notice about a 短信.
-- **Event date**: first trading session at or after `published_ts`; at or after
-  the 15:30 close ⇒ NEXT trading day (73% of annual 短信 are after-close).
-- **Benchmark**: 1306.T. **Returns**: split-adjusted only (P35-01 contract);
-  windows crossing an unresolved corporate action are excluded.
-- **Exclusions**: quarterly/correction/notice; <30 pre or <60 post sessions;
-  no prior ownership snapshot; ambiguous corporate action in window;
-  `validate_bars` failure.
+The estimand is the relation between the **announcement reaction** and the
+**subsequent** abnormal return. An unconditional mean CAR is not PEAD (signed
+news cancels); the slope is.
+
+### Primary specification (P) — disjoint windows
+
+    AR_i[+2,+60] = β₀ + β₁ · AR_i[-1,+1] + γ'X_i + δ_FY + ε_i        H₀: β₁ = 0
+
+**H1** — β₁ > 0 in the bottom within-fiscal-year foreign-ownership quintile.
+**H2** — β₁ > 0 in the top within-fiscal-year individual-ownership quintile.
+
+Chosen as primary because its null value follows from the design rather than
+from an accounting identity, and because the regressor is not contained in the
+dependent variable. Simulation check: with an independent post-window,
+β̂₁ = −0.009.
+
+### Secondary replication specification (R) — the paper's overlapping window
+
+    CAR_i[-1,+60] = β₀ + β₁ · CAR_i[-1,+1] + …                        H₀: β₁ = 1
+
+**⚠ Two conditions, both stated because v3 got this wrong.** (a) The null of 1
+follows from `CAR[-1,+60] = CAR[-1,+1] + CAR[+2,+60]`, which holds for
+**additive** CAR / log abnormal returns — **not for BHAR**, which does not
+decompose that way. (b) Jinushi's LHS is a BHAR while the regressor is an
+announcement CAR, so **this specification is a comparability exercise, not a
+literal replication**; it is run on additive CAR and labelled as such. v3's
+"β₁ > 0 on the overlapping LHS" is withdrawn outright — market efficiency alone
+satisfies it (simulated β̂₁ = 0.991 with no drift).
+
+H1 and H2 are tested **separately**. Direction predicted positive; a null or
+negative result is valid and reportable.
 
 ---
 
-## 3. Conditioning variable (fiscal-year mapping corrected in v2)
+## 2. Event definition — unchanged from v2
 
-- Source and PIT rule unchanged: 所有者別状況 fractions, matched to the latest
-  snapshot **published strictly before** the event.
-- **Fiscal year = April–March, labelled by ENDING year** (Jinushi's
-  convention). v1's "per-year" buckets silently used calendar years — not the
-  paper's design; every bucket was mis-sized.
-- Sort: within each fiscal year, 20th percentile of `pct_foreign_total` (H1)
-  and 80th percentile of `pct_individual_total` (H2). Fixed absolute
-  thresholds are OUR configuration and register separately.
+TDnet 決算短信 classified `annual` (p36-02-v1); event date = first session at
+or after publication, **after-close ⇒ next trading day** (73% of annual 短信);
+benchmark 1306.T; split-adjusted returns only (P35-01), windows crossing an
+unresolved corporate action excluded. Exclusions: quarterly/correction/notice;
+<30 pre or <60 post sessions; no prior ownership snapshot; `validate_bars`
+failure.
+
+## 3. Conditioning variable — unchanged from v2
+
+所有者別状況 fractions (p36-01-v1), matched to the latest snapshot **published
+strictly before** the event. **Fiscal year = April–March, labelled by ending
+year.** Within-fiscal-year sorts: 20th percentile of `pct_foreign_total` (H1),
+80th percentile of `pct_individual_total` (H2). Fixed absolute thresholds are
+our own configuration and register separately.
 
 ---
 
-## 4. Assembled sample (fiscal years, measured 2026-08-10)
+## 4. Assembled sample (measured 2026-08-10)
 
 Ladder: 3,752 annual 短信 → 2,785 with prices → 2,397 with windows → **2,099
-with a prior ownership snapshot** (1,844 symbols; 246 event days, max 178 on
-one day).
+with a prior ownership snapshot** (1,844 symbols).
 
-| fiscal year (Apr–Mar) | events | H1 bucket | H2 bucket | cluster CV (H1/H2) |
-|---|---|---|---|---|
-| FY2025 | 647 | 130 | 130 | — |
-| FY2026 | 1,303 | 260 | 261 | — |
-| FY2027 (**partial**, truncated) | 149 | 30 | 30 | — |
-| pooled | 2,099 | **420** (121 days, CV 1.58) | **421** (125 days, CV 1.64) | m_e ≈ 12.1 / 12.5 |
+| fiscal year | events | H1 | H2 |
+|---|---|---|---|
+| FY2025 | 647 | 130 | 130 |
+| FY2026 | 1,303 | 260 | 261 |
+| FY2027 (**partial**) | 149 | 30 | 30 |
+| pooled | 2,099 | **420** | **421** |
 
-FY2027 is an incomplete fiscal year and is never interpreted alongside complete
-ones; it enters the pooled regression through its fixed effect only.
+**Real bucket cluster structure** — emitted by the join tool
+(`bucket_cluster_sizes`), never hand-entered:
+
+| bucket | events | event days | largest day |
+|---|---|---|---|
+| H1 low-foreign | 420 | 121 | **36** |
+| H2 high-individual | 421 | 125 | **38** |
+
+The full sample's largest day is 178, but **no bucket contains such a day**.
 
 ---
 
-## 5. Power (corrected in v2 — the honest version)
+## 5. Power — v3's numbers WITHDRAWN, recomputed on the real shape
 
-**v1's power table is superseded and was too optimistic on two counts.**
+**What went wrong.** v3 simulated 42 clusters with a 178-event day, taking the
+full-sample maximum as if it were a bucket's. The real buckets have 121–125
+days with a maximum of 36–38. Everything v3 derived from that shape is void:
+CR1 size 0.102, WCB size 0.045, the β₁ = 1.10–1.50 power curve, and the
+conclusion "CR1 over-rejects 2×". The join tool now emits the real arrays and
+the tests read them, so a shape can no longer be invented.
 
-1. **Equal-cluster Kish overstated effective N by ~70%.** The buckets are
-   dominated by a few huge event days (CV ≈ 1.6, one day = 178 events). Using
-   the size-weighted cluster size m_e = Σm²/Σm ≈ 12.1–12.5 at ρ = 0.10:
-   **effective N ≈ 196–199** per pooled bucket (not 337–340). For a mean-CAR
-   style read at σ = 0.20 that implies **MDE ≈ 4.0% and ~29% power against a
-   2% effect** (v1 claimed 3.0% / 47%).
-2. **These numbers are for the MEAN estimand and do not transfer to the slope.**
-   Power for β1 depends on the variance of the announcement-window reaction,
-   the residual variance of the 60-session window, and the real (unequal)
-   cluster structure — none of which can be assumed from a single σ.
+**Size on the real H1 shape (420 / 121 / max 36), α = 0.05 one-sided:**
 
-### v3: the Monte Carlo is done, and it changed the inference method
+| method | size | n_sims |
+|---|---|---|
+| CR1 t-test | **0.0503** ✅ essentially exact | 3,000 |
+| Wild cluster bootstrap | 0.033 (conservative) | 600 |
 
-`research/slope_power_mc.py` simulates the slope on the ACTUAL event-day
-cluster sizes (no outcome data touched). Checking **size before power**
-surfaced a defect that would have invalidated the whole test:
+**CR1 is not broken on this sample.** The wild cluster bootstrap is retained as
+the **primary inference on robustness grounds** — the standard choice under
+unbalanced clusters and moderate cluster counts (Cameron–Gelbach–Miller 2008;
+MacKinnon–Nielsen–Webb 2023) — *not* because CR1 was shown to fail. CR1 is
+reported alongside.
 
-| cluster shape | CR1 t-test size at nominal 5% |
-|---|---|
-| balanced (42 × 10) | **0.054** ✅ |
-| real T2 shape (one 178-event day) | **0.102** ❌ — over-rejects 2× |
+**Power on the real H1 shape** (central scenario σ_a = 0.06, σ_post = 0.20,
+ICC = 0.10; drift shown per 1 s.d. announcement reaction):
 
-With one day holding ~42% of a bucket, the ordinary cluster-robust t-test
-rejects at roughly **twice** its nominal level: a "significant at 5%" result
-would really be at 10%. An earlier draft of this analysis mistook that
-over-rejection for *higher power* from lumpy clusters — the opposite of the
-truth, and caught only by simulating the null first.
+| β₁ | implied drift | power |
+|---|---|---|
+| 1.00 | 0 | 0.050 (size) |
+| 1.05 | 0.30% | 0.09 |
+| 1.10 | 0.60% | 0.15 |
+| 1.15 | 0.90% | 0.24 |
+| 1.20 | 1.20% | 0.34 |
+| 1.30 | 1.80% | 0.55 |
 
-**Wild cluster bootstrap (Cameron–Gelbach–Miller, null imposed) restores size
-to 0.045**, and is therefore **mandatory for this sample, not a refinement.**
+*(Tabulated for specification R's parameterisation; P's β₁ equals R's β₁ − 1
+under the additive identity, so the drift column is the quantity that carries
+across.)*
 
-**Power under WCB on the pooled H1 shape** (σ_a = 0.06, σ_post = 0.20, ICC = 0.10):
+### β₁* is NOT proposed in v4
 
-| true β₁ | rejection rate |
-|---|---|
-| 1.00 (null) | 0.072 — size |
-| 1.10 | 0.16 |
-| 1.20 | 0.35 |
-| 1.30 | 0.57 |
-| 1.50 | 0.90 |
+v3 proposed β₁* = 1.30 "because it is the smallest effect we can see at better
+than a coin flip". **That reasoning is rejected: detectability cannot define
+economic importance.** β₁* must be argued from economics — the drift per 1 s.d.
+reaction (1.8% at β₁ = 1.30) set against round-trip cost and the literature's
+effect sizes — and the resulting power then *reported*, not used to pick it.
+Left open (§10).
 
-**So the study can detect a large drift (β₁ ≈ 1.3–1.5) and cannot reliably
-detect a modest one (β₁ ≈ 1.1).** β₁* — the minimum economically meaningful
-slope — is proposed at **1.30** (≈57% power), the smallest value this sample
-can see at better than a coin flip. Below that, a null is *imprecise*, not
-evidence of absence.
+### Sensitivity grid (pre-declared, replacing a single scenario)
 
-Per-fiscal-year testing remains severely underpowered (FY2027: 30 events per
-bucket) and is secondary/descriptive only.
+σ_a ∈ {0.04, 0.06, 0.08} × σ_post ∈ {0.15, 0.20, 0.30} ×
+ICC_announce ∈ {0.05, 0.10, 0.20} × ICC_post ∈ {0.05, 0.10, 0.20} ×
+corr(day shocks) ∈ {0, 0.3} — run on **each bucket's own** cluster array.
+The central scenario is reported with the grid, never alone.
+
+Per-fiscal-year testing stays secondary and underpowered (FY2027: 30 events).
 
 ---
 
 ## 6. Analysis plan
 
-- **Primary family (`P36_T2_v1`): exactly 2 trials** — H1 and H2, slope β1 at
-  the [-1,+60] LHS window. (v1 declared 16 primary trials while calling 60
-  sessions "the primary horizon" — contradictory; resolved in favour of 2.)
-- **Secondary (registered, not primary):** LHS `AR_[+2,+60]` (overlap-free);
-  horizons 5/20/120; BHAR variants; per-fiscal-year estimates (reported with
-  their MDE, nulls labelled underpowered); fixed-threshold and AND-combination
-  buckets; full-sample β1.
-- **Overlap-robust cross-check:** calendar-time portfolio (P34-03) long the
-  bucket's positive-reaction events and short the negative-reaction events,
-  which carries the slope's sign content in portfolio form. If regression and
-  calendar-time disagree, the disagreement is the finding.
-- **Inference:** **wild cluster bootstrap by event day, null imposed, ≥999
-  replications** — required, because the plain CR1 test over-rejects 2× on this
-  cluster shape (§5). Two-way clustered SEs (event day × firm) reported
-  alongside as a diagnostic, never as the decision rule.
-- All trials register in `P36_T2_v1` before any outcome read; P31 is cited
-  additively, never written.
-
----
+- **Primary family `P36_T2_v1`: 2 trials** — H1 and H2 under specification P.
+  **Family-wise error controlled at 5% by Holm**; power must be recomputed
+  against the actual Holm decision rule, not a marginal 5% test.
+- **Secondary (registered, not primary):** specification R; horizons 5/20/120;
+  BHAR variants; per-fiscal-year estimates (reported with their power); fixed
+  threshold and AND-combination buckets; full-sample β₁.
+- **Inference:** wild cluster bootstrap by event day, **null imposed**, ≥999
+  replications, **run on the SAME model as the point estimate** — including
+  size, ADV and fiscal-year fixed effects. v3's simulation used an
+  intercept-and-slope model only; simulation and inference must be the same
+  specification.
+- **Confidence intervals by bootstrap test inversion**, so the interval and the
+  decision come from one procedure. CR1 intervals are diagnostics only.
+- **Cross-check:** calendar-time portfolio long positive-reaction and short
+  negative-reaction events within the bucket. Disagreement with the regression
+  is itself the finding.
 
 ## 7. Controls
 
-- **Size**: market cap from shares outstanding (coverage **2,058/2,058 =
-  100%**, range 224,507..16.3bn shares) × pre-event close.
-- **Liquidity**: 60-session ADV from raw close × volume (raw correct here).
-- Ownership sorts are within fiscal year, absorbing year-level conditions.
+Size = shares outstanding (**2,058/2,058 = 100%** coverage, 224,507..16.3bn) ×
+pre-event close; liquidity = 60-session ADV on raw prices; ownership sorts
+within fiscal year.
 
----
+## 8. Interpretation (rewritten in v4 for the new nulls)
 
-## 8. Interpretation rules (v2 — replaces the realized-σ downgrade)
+Stated per specification, against its own null:
 
-v1 allowed realized σ to retroactively downgrade the study to "exploratory";
-the owner correctly rejected that — a preregistered test's status must not
-depend on what the data turned out to be. Instead, **interpretation is by
-pre-registered interval criteria**:
-
-- **Supported**: β1 > 0 with the two-way-clustered 95% CI excluding 0, AND the
-  calendar-time cross-check agreeing in sign.
-- **Refuted / effect excluded**: the 95% CI excludes the pre-declared minimum
-  economically meaningful slope β1* (to be fixed at freeze together with the
-  Monte Carlo power analysis — an equivalence-style bound).
-- **Inconclusive**: the CI contains both 0 and β1*. Reported as *imprecise*,
+- **Supported** — specification P: bootstrap p ≤ Holm-adjusted threshold **and**
+  β̂₁ > 0 **and** the calendar-time cross-check agrees in sign.
+- **Effect excluded** — the bootstrap-inverted CI lies entirely below β₁*
+  (once β₁* is set on economic grounds).
+- **Inconclusive** — the CI contains both 0 and β₁*. Reported as *imprecise*,
   never as "no drift".
 
-σ enters planning only; results are judged by the intervals above.
+Specification R uses the same wording with its null of 1 and β₁* − 1.
+Nothing about this classification depends on realized σ.
 
 ## 9. Cost hurdle is about tradability, not truth
 
-The Rule 16.0 hurdle decides whether a supported effect is **tradable at our
-costs**. It does not modulate whether the statistical hypothesis is supported.
-The two verdicts are reported separately (statistical: §8; economic:
-cost-model contract, currently uncomputable pending O-3).
+Rule 16.0 decides whether a supported effect is tradable at our costs. It never
+modulates statistical support. Two verdicts, reported separately.
 
 ## 10. Open items blocking the freeze
 
-1. ~~Monte Carlo power for the slope estimand~~ — **CLOSED (v3).** Done on the
-   real cluster shape; it forced the wild cluster bootstrap into the plan and
-   yields the power curve above. **β₁* = 1.30 is now a proposal awaiting owner
-   sign-off**, together with the planning assumptions σ_a = 0.06,
-   σ_post = 0.20, ICC = 0.10 (these are DECLARED PLANNING VALUES, not
-   measurements).
-2. ~~Shares coverage~~ — CLOSED (2,058/2,058).
-3. Registry family `P36_T2_v1` created; 2 primary + all secondary trials
-   registered before the confirmatory run.
-4. Rule 16.0 cost figures (O-3) for the tradability verdict.
-5. **Owner sign-off on THIS revised design** (slope estimand, fiscal-year
-   mapping, pooled-primary, 2-trial primary family, interval-based
-   interpretation).
+1. **β₁\* from economics, not detectability** — drift per 1 s.d. reaction versus
+   round-trip cost and literature effect sizes. Then report the implied power.
+2. **Sensitivity grid executed** on each bucket's real cluster array (§5).
+3. **WCB extended to the full model** (controls + fiscal-year fixed effects) and
+   the simulation re-run on that same model.
+4. **Holm-adjusted power** for the 2-trial family.
+5. Family registration — **deliberately not done yet**, since the specification
+   is still moving.
+6. O-3 cost figures, for the separate tradability verdict.
+7. Owner sign-off on: disjoint-window primary, the sensitivity grid, and β₁*.
 
 ## 11. Provenance
 
-Join report `t2_join_report_2026-08-10.json` (fiscal-year buckets + cluster
-stats now emitted by the tool itself); parsers p36-01-v1 / p36-02-v1; power
-`research/event_power.py` (unequal-cluster + two-sided corrections 2026-08-10).
-Nothing computed from an outcome.
+Join report `t2_join_report_2026-08-10.json` (now emitting
+`bucket_cluster_sizes`); parsers p36-01-v1 / p36-02-v1;
+`research/slope_power_mc.py` (real-shape simulation, WCB) and
+`research/event_power.py`. **No AR, CAR or BHAR has been computed on real
+data.** All simulation figures come from `numpy` draws under declared
+assumptions.

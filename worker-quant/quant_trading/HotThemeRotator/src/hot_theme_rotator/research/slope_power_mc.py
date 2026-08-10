@@ -92,11 +92,19 @@ def wild_cluster_bootstrap_p(
 ) -> float:
     """Wild cluster bootstrap p-value for ``H0: β₁ = null_slope``.
 
-    Necessary, not optional, for this sample. The plain CR1 t-test assumes many
-    balanced clusters; the T2 buckets have one event day holding ~42% of the
-    observations, and under that shape the CR1 test **over-rejects at roughly
-    twice its nominal level** (measured: 10.2% at a nominal 5%). A "significant"
-    result would then be significant at 10%, not 5%.
+    ⚠ **Correction 2026-08-10.** An earlier version of this docstring justified
+    the bootstrap by claiming CR1 "over-rejects at roughly twice its nominal
+    level (10.2%)" on this sample. **That claim is WITHDRAWN.** It was measured
+    on a fabricated cluster shape — 42 clusters with one holding 178 events —
+    taken from the FULL 2,099-event sample's largest day rather than from a
+    bucket. On the real H1 shape (420 events, 121 days, largest day 36) CR1's
+    size is **0.0503**, essentially exact.
+
+    The bootstrap is kept anyway, on the correct grounds: it is the robust
+    choice under unbalanced clusters and modest cluster counts (Cameron–Gelbach–
+    Miller 2008; MacKinnon–Nielsen–Webb 2023), and it does not rely on CR1
+    happening to behave. Measured size on the real shape: 0.033 — conservative,
+    not liberal.
 
     Implements Cameron–Gelbach–Miller: impose the null, resample cluster-level
     Rademacher weights on the restricted residuals, and compare the bootstrap

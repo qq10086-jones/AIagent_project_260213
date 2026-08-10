@@ -1,4 +1,4 @@
-# T2 — Ownership-Conditioned PEAD: Preregistration DRAFT v4
+# T2 — Ownership-Conditioned PEAD: Preregistration DRAFT v5
 
 Status: **DRAFT — NOT FROZEN. Trial family NOT registered.** Rule 3 advice-only.
 
@@ -9,8 +9,9 @@ the additive identity that gives "H0: β₁ = 1" its meaning does not hold for t
 paper's BHAR left-hand side.
 
 Version history: v1 mean-CAR estimand · v2 slope estimand + fiscal-year fix ·
-v3 null value = 1 + Monte Carlo · **v4 real cluster shapes, disjoint primary,
-Holm, full-model inference.**
+v3 null value = 1 + Monte Carlo · v4 real cluster shapes, disjoint primary ·
+**v5 items 2–4 executed: full-model inference, Holm power on the real overlap,
+sensitivity grid — and a new identification threat found (§5b).**
 
 ---
 
@@ -151,6 +152,38 @@ Per-fiscal-year testing stays secondary and underpowered (FY2027: 30 events).
 
 ---
 
+## 5b. NEW (v5): correlated day shocks BIAS the slope — event-day fixed effects
+
+Running the sensitivity grid surfaced a threat that is **not** about standard
+errors. If the announcement-day market shock is correlated with the shock over
+the following sessions, the regressor is correlated with the error term: the
+slope is **biased**, and no amount of clustering repairs it — clustering fixes
+standard errors, not endogeneity.
+
+Measured size under H₀ on the real H1 shape, full model:
+
+| corr(announcement-day, post-day shock) | size at nominal 5% |
+|---|---|
+| 0.0 | 0.050 |
+| 0.1 | 0.075 |
+| 0.2 | 0.105 |
+| 0.3 | **0.147** |
+| 0.5 | **0.259** |
+
+Abnormal returns are already net of 1306.T, so the residual day-level
+correlation should be small — but "should be" is not a design.
+
+**Remedy, now part of the plan: event-day fixed effects in the primary
+specification.** Verified in simulation to restore size below nominal at
+ρ = 0.3. Cost: the slope is then identified from within-day variation only, so
+the **52 singleton event days (52 of 420 H1 events, 12%) contribute nothing**.
+That trade — 12% of the sample against an identification threat that can double
+or quintuple the false-positive rate — is taken deliberately and stated here so
+the sample-size line in any result is read correctly.
+
+The specification without day fixed effects is retained as a **registered
+secondary**, and a disagreement between the two is itself reportable.
+
 ## 6. Analysis plan
 
 - **Primary family `P36_T2_v1`: 2 trials** — H1 and H2 under specification P.
@@ -160,10 +193,16 @@ Per-fiscal-year testing stays secondary and underpowered (FY2027: 30 events).
   BHAR variants; per-fiscal-year estimates (reported with their power); fixed
   threshold and AND-combination buckets; full-sample β₁.
 - **Inference:** wild cluster bootstrap by event day, **null imposed**, ≥999
-  replications, **run on the SAME model as the point estimate** — including
-  size, ADV and fiscal-year fixed effects. v3's simulation used an
-  intercept-and-slope model only; simulation and inference must be the same
-  specification.
+  replications, **run on the SAME model as the point estimate** — intercept,
+  slope, size, ADV, fiscal-year fixed effects **and event-day fixed effects**
+  (§5b). Implemented and simulated on that specification
+  (`full_model_power.wild_cluster_bootstrap_p_general`); v3's two-parameter
+  simulation is superseded.
+- **Family-wise control by Holm**, with power measured against the Holm rule
+  itself. H1 and H2 share **38.2%** of their events (416 each, 159 in common),
+  so their statistics are correlated; `simulate_holm_power` simulates the two
+  jointly on their real cluster arrays rather than multiplying independent
+  figures.
 - **Confidence intervals by bootstrap test inversion**, so the interval and the
   decision come from one procedure. CR1 intervals are diagnostics only.
 - **Cross-check:** calendar-time portfolio long positive-reaction and short

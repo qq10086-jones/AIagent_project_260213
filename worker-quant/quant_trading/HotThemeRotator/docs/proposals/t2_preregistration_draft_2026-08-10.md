@@ -1,10 +1,11 @@
-# T2 — Ownership-Conditioned PEAD: Preregistration DRAFT v2
+# T2 — Ownership-Conditioned PEAD: Preregistration DRAFT v3
 
 Status: **DRAFT — NOT FROZEN.** Freezing happens only via a freeze tool after
 the open items in §10 are closed, and **no CAR/BHAR/AR may be computed before
-that freeze**. v2 supersedes v1 (2026-08-10 earlier the same day) after owner
-review; the material changes are the estimand (§1), the fiscal-year mapping
-(§3–4), and the power model (§5). Rule 3 advice-only.
+that freeze**. v3 supersedes v2 (same day): v2 fixed the estimand, fiscal-year mapping and
+power model after owner review; **v3 corrects the null VALUE (β₁ = 1, not 0)
+and replaces the inference method after the Monte Carlo showed the ordinary
+cluster-robust test over-rejects 2× on this sample.** Rule 3 advice-only.
 
 **This design is a "Jinushi-inspired pooled adaptation". It does NOT replicate
 the paper's year-by-year β₁ trend test** — with two complete fiscal years and
@@ -38,10 +39,21 @@ Our primary specification, per bucket (pooled across fiscal years):
 - `δ_FY` — fiscal-year fixed effects.
 - SEs two-way clustered by **event day and firm**.
 
-**H1 (low foreign ownership):** β1 > 0 in the bottom within-fiscal-year foreign
+**⚠ The null value is 1, not 0 (corrected in v3).** The LHS `AR[-1,+60]`
+mechanically CONTAINS the regressor `AR[-1,+1]`: writing
+`AR[-1,+60] = AR[-1,+1] + AR[+2,+60]` shows that if the post-window is
+unrelated to the reaction (an efficient market) the slope is **1**. Verified by
+simulation: independent post-window ⇒ β̂₁ = 0.991. v2 wrote "β₁ > 0", which
+**market efficiency itself satisfies** — the test would have been vacuous.
+
+**H1 (low foreign ownership):** β₁ > 1 in the bottom within-fiscal-year foreign
 ownership quintile.
-**H2 (high individual ownership):** β1 > 0 in the top within-fiscal-year
+**H2 (high individual ownership):** β₁ > 1 in the top within-fiscal-year
 individual-ownership quintile.
+
+(For the disjoint robustness LHS `AR[+2,+60]` the null is β₁ = 0; simulation
+confirms β̂₁ = −0.009 under no drift. Each specification carries its own null
+value, stated with it, so the two can never be crossed.)
 
 H1 and H2 are **tested separately**. Full-sample β1 is reported for context.
 Direction predicted positive; a null or negative β1 is a valid, reportable
@@ -112,16 +124,44 @@ ones; it enters the pooled regression through its fixed effect only.
    the residual variance of the 60-session window, and the real (unequal)
    cluster structure — none of which can be assumed from a single σ.
 
-**Consequence (blocking the freeze):** the freeze requires a **Monte Carlo
-power analysis of the slope estimand on the ACTUAL event-day cluster
-structure**, simulating placebo returns under declared variance/ICC assumptions
-(no outcome data touched). The σ range is **not declared yet** — a single CAR σ
-is insufficient for the slope, and signing one would be theater.
+### v3: the Monte Carlo is done, and it changed the inference method
 
-What survives from v1 unchanged: per-fiscal-year testing is severely
-underpowered (FY2027 has 30 events per bucket) and is secondary/descriptive
-only; the pooled specification is primary **with owner approval in principle,
-subject to the estimand correction now made**.
+`research/slope_power_mc.py` simulates the slope on the ACTUAL event-day
+cluster sizes (no outcome data touched). Checking **size before power**
+surfaced a defect that would have invalidated the whole test:
+
+| cluster shape | CR1 t-test size at nominal 5% |
+|---|---|
+| balanced (42 × 10) | **0.054** ✅ |
+| real T2 shape (one 178-event day) | **0.102** ❌ — over-rejects 2× |
+
+With one day holding ~42% of a bucket, the ordinary cluster-robust t-test
+rejects at roughly **twice** its nominal level: a "significant at 5%" result
+would really be at 10%. An earlier draft of this analysis mistook that
+over-rejection for *higher power* from lumpy clusters — the opposite of the
+truth, and caught only by simulating the null first.
+
+**Wild cluster bootstrap (Cameron–Gelbach–Miller, null imposed) restores size
+to 0.045**, and is therefore **mandatory for this sample, not a refinement.**
+
+**Power under WCB on the pooled H1 shape** (σ_a = 0.06, σ_post = 0.20, ICC = 0.10):
+
+| true β₁ | rejection rate |
+|---|---|
+| 1.00 (null) | 0.072 — size |
+| 1.10 | 0.16 |
+| 1.20 | 0.35 |
+| 1.30 | 0.57 |
+| 1.50 | 0.90 |
+
+**So the study can detect a large drift (β₁ ≈ 1.3–1.5) and cannot reliably
+detect a modest one (β₁ ≈ 1.1).** β₁* — the minimum economically meaningful
+slope — is proposed at **1.30** (≈57% power), the smallest value this sample
+can see at better than a coin flip. Below that, a null is *imprecise*, not
+evidence of absence.
+
+Per-fiscal-year testing remains severely underpowered (FY2027: 30 events per
+bucket) and is secondary/descriptive only.
 
 ---
 
@@ -138,8 +178,10 @@ subject to the estimand correction now made**.
   bucket's positive-reaction events and short the negative-reaction events,
   which carries the slope's sign content in portfolio form. If regression and
   calendar-time disagree, the disagreement is the finding.
-- **Inference:** two-way clustered SEs (event day × firm); date-cluster
-  bootstrap CI as the primary interval.
+- **Inference:** **wild cluster bootstrap by event day, null imposed, ≥999
+  replications** — required, because the plain CR1 test over-rejects 2× on this
+  cluster shape (§5). Two-way clustered SEs (event day × firm) reported
+  alongside as a diagnostic, never as the decision rule.
 - All trials register in `P36_T2_v1` before any outcome read; P31 is cited
   additively, never written.
 
@@ -180,9 +222,12 @@ cost-model contract, currently uncomputable pending O-3).
 
 ## 10. Open items blocking the freeze
 
-1. **Monte Carlo power for the slope estimand** on the actual cluster
-   structure, with declared variance/ICC assumptions — then declare β1* and
-   the planning ranges.
+1. ~~Monte Carlo power for the slope estimand~~ — **CLOSED (v3).** Done on the
+   real cluster shape; it forced the wild cluster bootstrap into the plan and
+   yields the power curve above. **β₁* = 1.30 is now a proposal awaiting owner
+   sign-off**, together with the planning assumptions σ_a = 0.06,
+   σ_post = 0.20, ICC = 0.10 (these are DECLARED PLANNING VALUES, not
+   measurements).
 2. ~~Shares coverage~~ — CLOSED (2,058/2,058).
 3. Registry family `P36_T2_v1` created; 2 primary + all secondary trials
    registered before the confirmatory run.

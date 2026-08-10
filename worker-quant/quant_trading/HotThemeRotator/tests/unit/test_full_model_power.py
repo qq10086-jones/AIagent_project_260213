@@ -21,11 +21,20 @@ from hot_theme_rotator.research.full_model_power import (  # noqa: E402
 )
 
 
-def real_sizes(name="H1_low_foreign"):
+def _report():
     report = PROJECT_ROOT / "reports" / "research" / "t2_join_report_2026-08-10.json"
     if not report.exists():
         pytest.skip("join report not present")
-    return json.loads(report.read_text(encoding="utf-8"))["bucket_cluster_sizes"][name]
+    return json.loads(report.read_text(encoding="utf-8"))
+
+
+def real_sizes(name="H1_low_foreign"):
+    return _report()["bucket_cluster_sizes"][name]
+
+
+def real_events(name="H1_low_foreign"):
+    """(event_id, event_date) pairs — the mapping a joint simulation needs."""
+    return _report()["bucket_events"][name]
 
 
 # --- general OLS + cluster-robust SE ----------------------------------------
@@ -53,10 +62,12 @@ def test_ols_recovers_a_control_coefficient_too():
 
 
 def test_singular_design_is_refused():
+    """Now caught by the RANK check rather than by inv() raising — which is the
+    point: inv() often does not raise, it just returns a wrong answer."""
     n = 100
     a = np.ones(n)
     X = np.column_stack([np.ones(n), a])      # perfectly collinear
-    with pytest.raises(FullModelError, match="singular"):
+    with pytest.raises(FullModelError, match="rank deficient"):
         ols_cluster_robust(X, np.zeros(n), np.arange(n) // 10, 1)
 
 
@@ -179,27 +190,92 @@ def test_event_day_fixed_effects_absorb_the_day_shock_bias():
     assert fixed < 0.09, f"day FE should restore ~nominal size, got {fixed}"
 
 
-# --- Holm power with the real overlap ----------------------------------------
+# --- Holm power on the REAL shared-event mapping -----------------------------
 
-def test_holm_power_is_below_marginal_power():
-    r = simulate_holm_power(real_sizes("H1_low_foreign"),
-                            real_sizes("H2_high_individual"),
-                            overlap_fraction=0.382, beta1=0.30,
-                            n_sims=150, seed=34)
+def test_overlap_actually_changes_the_joint_distribution():
+    """The defect this rewrite fixes.
+
+    The previous simulate_holm_power took an overlap RATIO and added a constant
+    to both outcomes; a regression with an intercept absorbs a constant, so
+    overlap 0.0, 0.382 and 1.0 produced identical power to three decimals. The
+    joint simulation now shares the actual 159 events, so their realised values
+    enter both regressions and the overlap has to matter.
+    """
+    h1, h2 = real_events("H1_low_foreign"), real_events("H2_high_individual")
+    disjoint = [[eid + "_X", d] for eid, d in h2]     # same shape, zero overlap
+    joint = simulate_holm_power(h1, h2, beta1=0.30, n_sims=40, seed=61,
+                                inference="cr1", event_day_fe=True)
+    apart = simulate_holm_power(h1, disjoint, beta1=0.30, n_sims=40, seed=61,
+                                inference="cr1", event_day_fe=True)
+    assert joint.overlap_fraction > 0.3 and apart.overlap_fraction == 0.0
+    assert joint.power_both_holm != apart.power_both_holm, (
+        "sharing 159 events must change the joint rejection distribution")
+
+
+def test_holm_power_respects_the_step_down_ordering():
+    h1, h2 = real_events("H1_low_foreign"), real_events("H2_high_individual")
+    r = simulate_holm_power(h1, h2, beta1=0.30, n_sims=40, seed=62,
+                            inference="cr1", event_day_fe=True)
     assert r.power_h1_holm <= r.power_h1_marginal
     assert r.power_both_holm <= r.power_any_holm
 
 
-def test_holm_power_result_records_overlap_and_assumptions():
-    r = simulate_holm_power(real_sizes(), real_sizes("H2_high_individual"),
-                            overlap_fraction=0.382, beta1=0.20,
-                            n_sims=60, seed=35, sigma_a=0.06, sigma_post=0.20)
-    d = r.to_dict()
-    assert d["overlap_fraction"] == pytest.approx(0.382)
-    assert d["assumptions"]["sigma_a"] == 0.06
+def test_holm_result_records_the_real_mapping_not_a_ratio():
+    h1, h2 = real_events("H1_low_foreign"), real_events("H2_high_individual")
+    r = simulate_holm_power(h1, h2, beta1=0.20, n_sims=10, seed=63,
+                            inference="cr1", event_day_fe=True)
+    a = r.to_dict()["assumptions"]
+    assert a["n_shared_events"] == 159
+    assert a["n_unique_events"] == 679          # 419 + 419 - 159
+    assert a["event_day_fe"] is True
 
 
-def test_bad_overlap_refused():
+def test_empty_bucket_refused():
     with pytest.raises(FullModelError):
-        simulate_holm_power([10] * 5, [10] * 5, overlap_fraction=1.5, beta1=0.1,
-                            n_sims=10)
+        simulate_holm_power([], real_events(), beta1=0.1, n_sims=2)
+
+
+@pytest.mark.slow
+def test_holm_power_under_the_actual_decision_rule():
+    """day FE + wild cluster bootstrap + Holm, all at once — the rule the
+    preregistration actually commits to."""
+    h1, h2 = real_events("H1_low_foreign"), real_events("H2_high_individual")
+    r = simulate_holm_power(h1, h2, beta1=0.30, n_sims=25, seed=64,
+                            inference="wild_cluster_bootstrap", n_boot=99,
+                            event_day_fe=True)
+    assert 0.0 <= r.power_h1_holm <= 1.0
+    assert r.assumptions["inference"] == "wild_cluster_bootstrap"
+
+
+def test_rank_deficient_design_is_refused_not_silently_wrong():
+    """np.linalg.inv does NOT raise on a near-singular X'X — measured on the
+    real structure it returned slope 0.6354 when the truth was 0.30. The rank
+    check must fire first."""
+    sizes = real_sizes()
+    cid = np.repeat(np.arange(len(sizes)), sizes)
+    n = cid.size
+    rng = np.random.default_rng(1)
+    fy = np.sort(rng.integers(0, 3, len(sizes)))[cid]      # FY nested in day
+    a = rng.normal(0, 0.06, n)
+    cols = [np.ones(n), a] + [(fy == l).astype(float) for l in np.unique(fy)[1:]]
+    D = np.zeros((n, len(sizes) - 1))
+    for g in range(1, len(sizes)):
+        D[cid == g, g - 1] = 1.0
+    X = np.column_stack(cols + [D])
+    with pytest.raises(FullModelError, match="rank deficient"):
+        ols_cluster_robust(X, rng.normal(0, 0.2, n), cid, 1)
+
+
+def test_fiscal_year_is_assigned_per_DAY_not_per_event():
+    """One event day cannot span several fiscal years; assigning FY per event
+    hid the day/FY collinearity entirely."""
+    from hot_theme_rotator.research.full_model_power import _simulate_bucket
+    rng = np.random.default_rng(5)
+    sizes = [10] * 20
+    X, y, cid = _simulate_bucket(rng, sizes, beta1=0.2, sigma_a=0.06,
+                                 sigma_post=0.2, icc_a=0.1, icc_post=0.1,
+                                 day_shock_corr=0.0, n_fy=3, control_effect=0.01)
+    fy_cols = X[:, 4:]                     # after 1, a, ctrl1, ctrl2
+    for g in np.unique(cid):
+        block = fy_cols[cid == g]
+        assert (block == block[0]).all(), "fiscal year must be constant within a day"

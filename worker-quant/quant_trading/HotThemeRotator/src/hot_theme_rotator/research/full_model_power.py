@@ -59,6 +59,19 @@ def ols_cluster_robust(
     n, k = X.shape
     if y.size != n or cluster_id.size != n:
         raise FullModelError("X, y and cluster_id must agree in length")
+    # Rank check BEFORE inverting. np.linalg.inv does NOT raise on a
+    # near-singular X'X — it returns a plausible-looking answer that is wrong.
+    # Measured 2026-08-10 on the real structure: with fiscal-year dummies left
+    # in alongside event-day dummies (rank 124 of 126, cond 4e16) the slope came
+    # back 0.6354 when the truth was 0.30, silently. Failing here is the only
+    # way that cannot happen.
+    rank = np.linalg.matrix_rank(X)
+    if rank < k:
+        raise FullModelError(
+            f"design matrix is rank deficient: rank {rank} < {k} columns. "
+            f"Most likely a set of dummies is spanned by another (event-day "
+            f"dummies absorb fiscal-year dummies, since each event day lies in "
+            f"exactly one fiscal year). Drop the redundant block; do NOT invert.")
     XtX = X.T @ X
     try:
         XtX_inv = np.linalg.inv(XtX)
@@ -153,16 +166,23 @@ def holm_reject(pvalues: Sequence[float], alpha: float = 0.05) -> list[bool]:
 
 
 def _build_design(
-    a: np.ndarray, controls: np.ndarray, fy: np.ndarray
+    a: np.ndarray, controls: np.ndarray, fy: np.ndarray,
+    *, include_fy: bool = True
 ) -> np.ndarray:
-    """[1, a, controls…, FY dummies (drop first)] — the preregistered model."""
+    """[1, a, controls…, FY dummies] — the preregistered model.
+
+    ``include_fy=False`` when event-day fixed effects are used: each event day
+    lies in exactly one fiscal year, so day dummies already span the FY dummies
+    and keeping both makes the design rank deficient.
+    """
     n = a.size
     cols = [np.ones(n), a]
     if controls.size:
         cols.extend(controls[:, j] for j in range(controls.shape[1]))
-    levels = np.unique(fy)
-    for lv in levels[1:]:
-        cols.append((fy == lv).astype(float))
+    if include_fy:
+        levels = np.unique(fy)
+        for lv in levels[1:]:
+            cols.append((fy == lv).astype(float))
     return np.column_stack(cols)
 
 
@@ -192,7 +212,12 @@ def _simulate_bucket(
 
     a = u + rng.normal(0.0, sigma_a * math.sqrt(1 - icc_a), n)
     controls = rng.normal(0.0, 1.0, (n, 2))          # log mcap, log ADV (standardised)
-    fy = rng.integers(0, n_fy, n)
+    # Fiscal year is a property of the event DAY, not of the event. Assigning it
+    # per event (as an earlier version did) lets one day span several fiscal
+    # years — impossible in the data, and it hid the fact that event-day dummies
+    # SPAN the fiscal-year dummies once the nesting is respected.
+    fy_by_day = np.sort(rng.integers(0, n_fy, len(cluster_sizes)))
+    fy = fy_by_day[cid]
     fy_effect = (rng.normal(0.0, 0.01, n_fy))[fy]
 
     post = (beta1 * a + control_effect * controls.sum(axis=1) + fy_effect
@@ -251,6 +276,8 @@ def simulate_full_model_power(
             day_shock_corr=day_shock_corr, n_fy=n_fy,
             control_effect=control_effect)
         if event_day_fe:
+            # Rebuild WITHOUT fiscal-year dummies: day dummies absorb them.
+            X = np.column_stack([X[:, :4], ])      # 1, a, ctrl1, ctrl2
             X = _add_day_dummies(X, cid)
         if inference == "wild_cluster_bootstrap":
             p = wild_cluster_bootstrap_p_general(X, y, cid, 1, null_value=0.0,
@@ -280,63 +307,111 @@ class HolmPowerResult:
 
 
 def simulate_holm_power(
-    h1_sizes: Sequence[int],
-    h2_sizes: Sequence[int],
+    h1_events: Sequence[Sequence[str]],
+    h2_events: Sequence[Sequence[str]],
     *,
-    overlap_fraction: float,
     beta1: float,
-    n_sims: int = 300,
+    n_sims: int = 200,
     alpha: float = 0.05,
     seed: int = 20260810,
-    **kwargs: Any,
+    sigma_a: float = 0.06,
+    sigma_post: float = 0.20,
+    icc_a: float = 0.10,
+    icc_post: float = 0.10,
+    day_shock_corr: float = 0.0,
+    control_effect: float = 0.01,
+    event_day_fe: bool = True,
+    inference: str = "wild_cluster_bootstrap",
+    n_boot: int = 199,
 ) -> HolmPowerResult:
-    """Joint power for H1/H2 under Holm, respecting their shared events.
+    """Joint H1/H2 power under Holm, on the REAL shared-event mapping.
 
-    The buckets overlap by ``overlap_fraction`` of their events, so their test
-    statistics are correlated. Treating them as independent would overstate the
-    chance that at least one survives Holm and understate the chance that both
-    do; the shared events are simulated with a common shock to induce the
-    correlation.
+    ⚠ **Rewritten 2026-08-10.** The previous version took an
+    ``overlap_fraction`` scalar and added ``overlap * sigma * shared`` to both
+    outcomes. That is a CONSTANT, which a regression with an intercept absorbs
+    entirely — so it changed neither slope nor p-value, and the "joint"
+    simulation was two independent experiments. Measured: overlap 0.0, 0.382
+    and 1.0 all returned identical power to three decimals.
+
+    The correct construction is to simulate **one outcome per unique event** and
+    let the 159 events that belong to both buckets carry the SAME realised
+    values into both regressions. Correlation then arises from the data, not
+    from a parameter.
+
+    Each argument is a sequence of ``(event_id, event_date)`` pairs, taken
+    directly from the join report's ``bucket_events`` — never reconstructed.
     """
-    if not (0.0 <= overlap_fraction <= 1.0):
-        raise FullModelError("overlap_fraction must be in [0, 1]")
-    rng = np.random.default_rng(seed)
-    z = 1.6449
-    h1_marg = h1_holm = h2_holm = any_holm = both_holm = 0
+    h1 = [(str(a), str(b)) for a, b in h1_events]
+    h2 = [(str(a), str(b)) for a, b in h2_events]
+    if not h1 or not h2:
+        raise FullModelError("both buckets must be non-empty")
 
+    all_events = sorted({e for e in h1} | {e for e in h2})
+    eid_index = {eid: i for i, (eid, _) in enumerate(all_events)}
+    days = sorted({d for _, d in all_events})
+    day_index = {d: i for i, d in enumerate(days)}
+    day_of = np.array([day_index[d] for _, d in all_events])
+    n_all, n_days = len(all_events), len(days)
+
+    shared = len({e[0] for e in h1} & {e[0] for e in h2})
+    rng = np.random.default_rng(seed)
+
+    h1_rows = np.array([eid_index[eid] for eid, _ in h1])
+    h2_rows = np.array([eid_index[eid] for eid, _ in h2])
+
+    h1_marg = h1_holm = h2_holm = any_holm = both_holm = 0
     for _ in range(n_sims):
-        shared = rng.normal(0.0, 1.0)          # common component from shared events
+        # ONE draw per unique event; shared events therefore enter both
+        # regressions with identical values.
+        z1 = rng.normal(size=n_days)
+        z2 = (day_shock_corr * z1
+              + math.sqrt(max(1 - day_shock_corr ** 2, 0.0)) * rng.normal(size=n_days))
+        u = (sigma_a * math.sqrt(icc_a) * z1)[day_of]
+        v = (sigma_post * math.sqrt(icc_post) * z2)[day_of]
+        a_all = u + rng.normal(0.0, sigma_a * math.sqrt(1 - icc_a), n_all)
+        ctrl_all = rng.normal(0.0, 1.0, (n_all, 2))
+        y_all = (beta1 * a_all + control_effect * ctrl_all.sum(axis=1) + v
+                 + rng.normal(0.0, sigma_post * math.sqrt(1 - icc_post), n_all))
+
         ps = []
-        for sizes in (h1_sizes, h2_sizes):
-            X, y, cid = _simulate_bucket(
-                rng, sizes, beta1=beta1,
-                sigma_a=kwargs.get("sigma_a", 0.06),
-                sigma_post=kwargs.get("sigma_post", 0.20),
-                icc_a=kwargs.get("icc_a", 0.10),
-                icc_post=kwargs.get("icc_post", 0.10),
-                day_shock_corr=kwargs.get("day_shock_corr", 0.0),
-                n_fy=kwargs.get("n_fy", 3),
-                control_effect=kwargs.get("control_effect", 0.01))
-            # inject the shared-event correlation as a common outcome shift
-            y = y + overlap_fraction * kwargs.get("sigma_post", 0.20) * 0.10 * shared
-            b, se = ols_cluster_robust(X, y, cid, 1)
-            t = b / se if se > 0 else 0.0
-            # one-sided normal p-value
-            ps.append(0.5 * math.erfc(t / math.sqrt(2.0)))
-        marg = [p <= alpha for p in ps]
+        for rows in (h1_rows, h2_rows):
+            a = a_all[rows]
+            ctrl = ctrl_all[rows]
+            y = y_all[rows]
+            cid = day_of[rows]
+            X = np.column_stack([np.ones(a.size), a, ctrl[:, 0], ctrl[:, 1]])
+            if event_day_fe:
+                X = _add_day_dummies(X, cid)
+            try:
+                if inference == "wild_cluster_bootstrap":
+                    p = wild_cluster_bootstrap_p_general(
+                        X, y, cid, 1, null_value=0.0, n_boot=n_boot, rng=rng)
+                else:
+                    b, se = ols_cluster_robust(X, y, cid, 1)
+                    t = b / se if se > 0 else 0.0
+                    p = 0.5 * math.erfc(t / math.sqrt(2.0))
+            except FullModelError:
+                p = 1.0
+            ps.append(p)
+
         hol = holm_reject(ps, alpha=alpha)
-        h1_marg += int(marg[0])
+        h1_marg += int(ps[0] <= alpha)
         h1_holm += int(hol[0])
         h2_holm += int(hol[1])
         any_holm += int(hol[0] or hol[1])
         both_holm += int(hol[0] and hol[1])
 
     return HolmPowerResult(
-        beta1=beta1, alpha=alpha, overlap_fraction=overlap_fraction,
+        beta1=beta1, alpha=alpha,
+        overlap_fraction=shared / len(h1),
         power_h1_marginal=h1_marg / n_sims, power_h1_holm=h1_holm / n_sims,
         power_h2_holm=h2_holm / n_sims, power_any_holm=any_holm / n_sims,
         power_both_holm=both_holm / n_sims, n_sims=n_sims,
-        assumptions={k: kwargs.get(k) for k in
-                     ("sigma_a", "sigma_post", "icc_a", "icc_post",
-                      "day_shock_corr", "n_fy", "control_effect")},
+        assumptions={"sigma_a": sigma_a, "sigma_post": sigma_post,
+                     "icc_a": icc_a, "icc_post": icc_post,
+                     "day_shock_corr": day_shock_corr,
+                     "control_effect": control_effect,
+                     "event_day_fe": event_day_fe, "inference": inference,
+                     "n_boot": n_boot, "n_shared_events": shared,
+                     "n_unique_events": n_all, "n_event_days": n_days},
     )

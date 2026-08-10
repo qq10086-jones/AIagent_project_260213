@@ -1,4 +1,4 @@
-# T2 — Ownership-Conditioned PEAD: Preregistration DRAFT v5
+# T2 — Ownership-Conditioned PEAD: Preregistration DRAFT v6
 
 Status: **DRAFT — NOT FROZEN. Trial family NOT registered.** Rule 3 advice-only.
 
@@ -10,8 +10,10 @@ paper's BHAR left-hand side.
 
 Version history: v1 mean-CAR estimand · v2 slope estimand + fiscal-year fix ·
 v3 null value = 1 + Monte Carlo · v4 real cluster shapes, disjoint primary ·
-**v5 items 2–4 executed: full-model inference, Holm power on the real overlap,
-sensitivity grid — and a new identification threat found (§5b).**
+v5 claimed items 2-4 complete ·
+**v6 withdraws that claim: the joint simulation was a no-op, the design was
+rank deficient, and the "primary specification power" was not the primary
+specification's (see 5c).**
 
 ---
 
@@ -174,35 +176,59 @@ Abnormal returns are already net of 1306.T, so the residual day-level
 correlation should be small — but "should be" is not a design.
 
 **Remedy, now part of the plan: event-day fixed effects in the primary
-specification.** Verified in simulation to restore size below nominal at
-ρ = 0.3. Cost: the slope is then identified from within-day variation only, so
-the **52 singleton event days (52 of 420 H1 events, 12%) contribute nothing**.
-That trade — 12% of the sample against an identification threat that can double
-or quintuple the false-positive rate — is taken deliberately and stated here so
-the sample-size line in any result is read correctly.
+specification.**
+
+WARNING - claim scope, tightened in v6. Day fixed effects are shown to absorb
+the common, additive, identical-across-firms event-day shock IN THIS DGP. They
+are NOT shown to remove heterogeneous exposure to a common shock, firm-level
+persistent shocks, or any omitted variable correlated with the announcement
+reaction. This is not "an unbiased estimate bought" - it is one named threat
+closed.
+
+Cost, reported for BOTH buckets: the slope is identified from within-day
+variation only, so H1 loses 52 singleton days (367 events keep within-day
+identification) and H2 loses 60 (359 keep it).
 
 **Verified both ways at ρ = 0.3**: size 0.152 without day fixed effects,
 **0.033 with them**.
 
-### Power of the ACTUAL primary specification (disjoint window, full model,
-### event-day FE, ρ = 0.3)
+### WITHDRAWN: the v5 "primary specification power" table
 
-| β₁ (drift coefficient) | drift per 1 s.d. reaction | power |
-|---|---|---|
-| 0.10 | 0.6% | 0.10 |
-| 0.20 | 1.2% | 0.23 |
-| 0.30 | 1.8% | **0.40** |
-| 0.50 | 3.0% | 0.77 |
+It was computed with CR1, without bootstrap, Holm, or the real overlap, so it
+was a single-bucket marginal figure and NOT the power of the rule this document
+commits to. The replacement is being simulated under day FE + wild cluster
+bootstrap + Holm on the real shared-event mapping and will be stored as a
+reproducible artifact before any freeze. **Until then this document states no
+power number for the primary rule.**
 
-**The remedy costs power, and the number is stated rather than omitted**: at
-β₁ = 0.30 power falls from ~0.55 (no day FE) to **0.40** with them — the price
-of the 12% singleton-day loss plus the degrees of freedom the dummies consume.
-Buying an unbiased estimate with power is the right trade when the alternative
-is a test whose false-positive rate is three times its nominal level, but it is
-a trade, and the eventual result must be read against 0.40, not 0.55.
+What survives: day fixed effects cost power (the singleton-day loss plus the
+degrees of freedom the dummies consume), so the eventual figure will sit
+materially below any no-day-FE comparison.
 
 The specification without day fixed effects is retained as a **registered
 secondary**, and a disagreement between the two is itself reportable.
+
+## 5c. v5 defects found in review and corrected (2026-08-10)
+
+Three, each verified by reproduction before being accepted.
+
+1. The "joint" Holm simulation was two independent experiments. It took an
+   overlap RATIO and added `overlap x sigma x shared` to both outcomes - a
+   constant, which an intercept absorbs entirely. Reproduced: overlap 0.0,
+   0.382 and 1.0 gave identical power to three decimals. FIXED by emitting the
+   real `bucket_events` mapping (419 events per bucket, 159 shared) and
+   simulating ONE draw per unique event (679 unique), so shared events carry
+   identical realised values into both regressions. Verified to matter: real
+   overlap `both = 0.175` vs artificially disjoint `both = 0.025`.
+2. Fiscal-year and event-day fixed effects are exactly collinear, because an
+   event day lies in exactly one fiscal year. The v5 simulation assigned FY
+   PER EVENT, which is impossible in data and hid the collinearity. On the real
+   structure the design is 420x126, rank 124, condition number 4e16 - and
+   `np.linalg.inv` does NOT raise: it returned slope 0.6354 where the truth was
+   0.30 (0.2575 with the redundant block dropped). FIXED: FY assigned per day,
+   FY dummies dropped when day FE is used, and `ols_cluster_robust` now checks
+   rank before inverting and refuses.
+3. The headline power figure was not the decision rule's. Withdrawn above.
 
 ## 6. Analysis plan
 

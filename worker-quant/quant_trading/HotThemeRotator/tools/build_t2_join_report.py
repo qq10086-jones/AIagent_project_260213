@@ -157,6 +157,25 @@ def main(argv: list[str] | None = None) -> int:
                      reverse=True)
         for name, evs in pooled_buckets.items()
     }
+    # A joint H1/H2 simulation needs the SHARED EVENTS themselves, not an
+    # overlap ratio: passing a scalar cannot correlate two regressions (an
+    # earlier attempt added a constant to both outcomes, which the intercept
+    # absorbed entirely, so the "overlap" changed nothing). Emit each bucket's
+    # (event_id, event_date) list and the shared ids.
+    bucket_events = {
+        name: sorted({(e.event_id, e.event_date) for e in evs})
+        for name, evs in pooled_buckets.items()
+    }
+    _ids = {n: {eid for eid, _ in evs} for n, evs in bucket_events.items()}
+    shared = sorted(_ids["H1_low_foreign"] & _ids["H2_high_individual"])
+    bucket_overlap = {
+        "shared_event_ids": shared,
+        "n_shared": len(shared),
+        "n_h1": len(_ids["H1_low_foreign"]),
+        "n_h2": len(_ids["H2_high_individual"]),
+        "overlap_fraction_of_h1": (
+            len(shared) / len(_ids["H1_low_foreign"]) if _ids["H1_low_foreign"] else 0),
+    }
 
     buckets = {}
     if joined:
@@ -244,6 +263,8 @@ def main(argv: list[str] | None = None) -> int:
         # joined symbol, which is ~6x more documents.
         "_join_ownership_doc_ids": sorted({s_[3] for _, s_ in joined}),
         "bucket_cluster_sizes": bucket_cluster_sizes,
+        "bucket_events": {k: [list(t) for t in v] for k, v in bucket_events.items()},
+        "bucket_overlap": bucket_overlap,
         "bucket_cluster_summary": {
             name: {"n_events": sum(sz), "n_days": len(sz), "max_day": max(sz)}
             for name, sz in bucket_cluster_sizes.items() if sz

@@ -188,3 +188,82 @@ def test_two_years_of_same_symbol_coexist(tmp_path):
     upsert_ownership(db, [_record(doc_id="S100OLDX", period_end="2025-03-31",
                                   submitted_at="2025-06-26T09:02:00")])
     assert len(stored_ownership_doc_ids(db)) == 2
+
+
+# --- shares outstanding (size control) --------------------------------------
+
+def _zip_with_shares(share_ctx="FilingDateInstant_OrdinaryShareMember"):
+    lines = ["\t".join(f'"{h}"' for h in HEADER)]
+    for eid, val in list(REAL_PCTS.items()) + list(REAL_COUNTS.items()):
+        lines.append("\t".join([f'"{eid}"', '"l"',
+                                '"CurrentYearInstant_OrdinaryShareMember"',
+                                '""', '""', '""', '""', '""', f'"{val}"']))
+    lines.append("\t".join(
+        ['"jpcrp_cor:NumberOfIssuedSharesAsOfFiscalYearEndIssuedSharesTotalNumberOfSharesEtc"',
+         '"l"', f'"{share_ctx}"', '""', '""', '""', '""', '""', '"7618000"']))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("jpcrp_x.csv", "\n".join(lines).encode("utf-16"))
+    return buf.getvalue()
+
+
+def test_shares_outstanding_is_extracted():
+    got = parse_ownership_csv(_zip_with_shares())
+    assert got["shares_outstanding"] == 7618000
+    assert got["pct_individual"] == pytest.approx(0.6883)
+
+
+def test_shares_outstanding_accepts_current_year_context():
+    got = parse_ownership_csv(_zip_with_shares(share_ctx="CurrentYearInstant"))
+    assert got["shares_outstanding"] == 7618000
+
+
+def test_prior_year_share_count_is_rejected():
+    """A 5-year block must not overwrite the current count with an old one."""
+    got = parse_ownership_csv(_zip_with_shares(
+        share_ctx="Prior4YearInstant_NonConsolidatedMember"))
+    assert "shares_outstanding" not in got
+
+
+def test_record_and_storage_carry_shares(tmp_path):
+    r = build_ownership_record(
+        doc_id="S1", symbol="4750.T", period_end="2026-03-31",
+        submitted_at="2026-06-26T09:02:00", doc_type_code="120",
+        parsed=parse_ownership_csv(_zip_with_shares()))
+    assert r["shares_outstanding"] == 7618000
+    db = tmp_path / "own.db"
+    upsert_ownership(db, [r])
+    import sqlite3
+    conn = sqlite3.connect(str(db))
+    got = conn.execute("select shares_outstanding from ownership_snapshots").fetchone()[0]
+    conn.close()
+    assert got == 7618000
+
+
+def test_legacy_table_without_shares_column_is_migrated(tmp_path):
+    """An existing panel predates the column; upsert must ALTER, not crash."""
+    import sqlite3
+    db = tmp_path / "legacy.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("CREATE TABLE ownership_snapshots (doc_id TEXT, symbol TEXT, "
+                 "as_of TEXT, published_ts TEXT, doc_type_code TEXT, "
+                 "pct_government REAL, pct_financial_institutions REAL, "
+                 "pct_securities_firms REAL, pct_other_corporations REAL, "
+                 "pct_foreign_corporate REAL, pct_foreign_individual REAL, "
+                 "pct_individual REAL, pct_foreign_total REAL, "
+                 "pct_individual_total REAL, n_shareholders_total REAL, "
+                 "n_shareholders_individual REAL, "
+                 "n_shareholders_foreign_corporate REAL, "
+                 "n_shareholders_foreign_individual REAL, source TEXT, "
+                 "PRIMARY KEY (doc_id, symbol))")
+    conn.commit()
+    conn.close()
+    r = build_ownership_record(
+        doc_id="S1", symbol="4750.T", period_end="2026-03-31",
+        submitted_at="2026-06-26T09:02:00", doc_type_code="120",
+        parsed=parse_ownership_csv(_zip_with_shares()))
+    assert upsert_ownership(db, [r]) == 1
+    conn = sqlite3.connect(str(db))
+    cols = {d[1] for d in conn.execute("pragma table_info(ownership_snapshots)")}
+    conn.close()
+    assert "shares_outstanding" in cols

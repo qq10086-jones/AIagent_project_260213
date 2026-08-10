@@ -97,13 +97,71 @@ def _known_failures() -> set[str]:
     return out
 
 
+def _docs_missing_shares(db: Path) -> set[str]:
+    """Stored doc_ids whose shares_outstanding is NULL — rows written before the
+    field existed. Re-reading only these avoids a full re-fetch of the panel."""
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        cols = {d[1] for d in conn.execute("pragma table_info(ownership_snapshots)")}
+        if "shares_outstanding" not in cols:
+            return {r[0] for r in conn.execute(
+                "select distinct doc_id from ownership_snapshots")}
+        return {r[0] for r in conn.execute(
+            "select distinct doc_id from ownership_snapshots "
+            "where shares_outstanding is null")}
+    except sqlite3.Error:
+        return set()
+    finally:
+        conn.close()
+
+
+def docs_for_join_events(db: Path, join_report: Path) -> set[str]:
+    """The ownership doc_ids the T2 join ACTUALLY uses.
+
+    Size control is only needed for events that survive the join, so re-reading
+    all ~29k stored documents to fill shares_outstanding is wasted work. The
+    join pairs each event with its latest ownership snapshot published BEFORE
+    it; this reproduces that pairing and returns exactly those documents.
+    """
+    if not join_report.exists():
+        return set()
+    payload = json.loads(join_report.read_text(encoding="utf-8"))
+    docs = payload.get("_join_ownership_doc_ids")
+    if docs:
+        return set(docs)
+    # Fallback for an older report: every vintage of every joined symbol. That
+    # is ~6x more documents than the join actually pairs, so it is a last
+    # resort, not the path.
+    symbols = payload.get("_join_symbols") or []
+    if not symbols:
+        return set()
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        out: set[str] = set()
+        for sym in symbols:
+            for (doc,) in conn.execute(
+                    "select doc_id from ownership_snapshots where symbol=?", (sym,)):
+                out.add(doc)
+        return out
+    finally:
+        conn.close()
+
+
 def _process(client, docs, db: Path, *, limit: int | None, label: str,
-             retry_failed: bool = False) -> dict:
+             retry_failed: bool = False, only_missing_shares: bool = False,
+             restrict_docs: set[str] | None = None) -> dict:
     done = stored_ownership_doc_ids(db)
-    skip = set(done)
-    if not retry_failed:
-        skip |= _known_failures()
-    todo = [d for d in docs if d["doc_id"] not in skip]
+    if only_missing_shares:
+        # Re-read stored documents that predate the shares_outstanding column.
+        want = _docs_missing_shares(db)
+        if restrict_docs is not None:
+            want &= restrict_docs
+        todo = [d for d in docs if d["doc_id"] in want]
+    else:
+        skip = set(done)
+        if not retry_failed:
+            skip |= _known_failures()
+        todo = [d for d in docs if d["doc_id"] not in skip]
     if limit:
         todo = todo[:limit]
     stats = {"scope": label, "candidates": len(docs), "todo": len(todo),
@@ -173,6 +231,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="re-read documents P23-B already indexed (cheapest path)")
     ap.add_argument("--db", default=str(DEFAULT_DB))
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--refresh-shares", action="store_true",
+                    help="re-read stored documents whose shares_outstanding is "
+                         "NULL (rows written before the column existed)")
+    ap.add_argument("--shares-for-join", metavar="JOIN_REPORT",
+                    help="with --refresh-shares: restrict to the ownership "
+                         "documents the given T2 join report actually uses")
     ap.add_argument("--retry-failed", action="store_true",
                     help="re-attempt documents previously logged as terminal failures")
     args = ap.parse_args(argv)
@@ -183,8 +247,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.from_stored_docs:
         docs = _stored_docs(db)
         print(f"stored 有報 documents: {len(docs)}")
+        restrict = None
+        if args.shares_for_join:
+            restrict = docs_for_join_events(db, Path(args.shares_for_join))
+            print(f"restricted to join-relevant documents: {len(restrict)}")
         stats = _process(client, docs, db, limit=args.limit,
-                         label="from_stored_docs", retry_failed=args.retry_failed)
+                         label="from_stored_docs", retry_failed=args.retry_failed,
+                         only_missing_shares=args.refresh_shares,
+                         restrict_docs=restrict)
     else:
         if not (args.start and args.end):
             print("need --start/--end or --from-stored-docs", file=sys.stderr)

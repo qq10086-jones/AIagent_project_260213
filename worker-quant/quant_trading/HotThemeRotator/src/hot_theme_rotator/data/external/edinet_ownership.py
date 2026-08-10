@@ -43,6 +43,7 @@ __all__ = [
     "OWNERSHIP_SCHEMA",
     "PERCENT_ELEMENTS",
     "COUNT_ELEMENTS",
+    "SHARE_COUNT_ELEMENTS",
     "OwnershipParseError",
     "parse_ownership_csv",
     "build_ownership_record",
@@ -62,6 +63,17 @@ PERCENT_ELEMENTS = {
     "jpcrp_cor:PercentageOfShareholdingsIndividualsAndOthers": "pct_individual",
 }
 
+# Shares outstanding lives in the SAME document (経営指標等 / 株式の総数). It is
+# captured here rather than in a separate pass because market cap = shares x
+# price is the SIZE control T2 needs, and fetching the document twice to read
+# two blocks would double an already-slow backfill.
+SHARE_COUNT_ELEMENTS = {
+    "jpcrp_cor:NumberOfIssuedSharesAsOfFiscalYearEndIssuedSharesTotalNumberOfSharesEtc":
+        "shares_outstanding",
+    "jpcrp_cor:TotalNumberOfIssuedSharesSummaryOfBusinessResults":
+        "shares_outstanding",
+}
+
 COUNT_ELEMENTS = {
     "jpcrp_cor:NumberOfShareholdersTotal": "n_shareholders_total",
     "jpcrp_cor:NumberOfShareholdersIndividualsAndOthers": "n_shareholders_individual",
@@ -76,6 +88,10 @@ _PCT_FIELDS = tuple(PERCENT_ELEMENTS.values())
 # Ownership is an instant on the ordinary-share class. Treasury/other share
 # classes carry their own members and are deliberately NOT summed in.
 _CTX_RE = re.compile(r"^CurrentYearInstant(_OrdinaryShareMember)?$")
+
+_SHARE_CTX_RE = re.compile(
+    r"^(FilingDateInstant|CurrentYearInstant)"
+    r"(_OrdinaryShareMember|_NonConsolidatedMember)?$")
 
 _EMPTY_VALUES = {"", "－", "―", "-", "N/A", "NaN", "null", "None"}
 
@@ -136,10 +152,19 @@ def parse_ownership_csv(zip_bytes: bytes) -> dict[str, Any]:
         if len(cells) != len(header):
             continue
         eid = cells[i_eid].strip('"')
-        field = PERCENT_ELEMENTS.get(eid) or COUNT_ELEMENTS.get(eid)
+        field = (PERCENT_ELEMENTS.get(eid) or COUNT_ELEMENTS.get(eid)
+                 or SHARE_COUNT_ELEMENTS.get(eid))
         if field is None:
             continue
-        if not _CTX_RE.match(cells[i_ctx].strip('"')):
+        ctx = cells[i_ctx].strip('"')
+        # Share counts are stamped FilingDateInstant / CurrentYearInstant
+        # (optionally _OrdinaryShareMember or _NonConsolidatedMember); ownership
+        # categories are CurrentYearInstant only. Prior-year share contexts are
+        # rejected so a 5-year block cannot overwrite the current count.
+        if field == "shares_outstanding":
+            if not _SHARE_CTX_RE.match(ctx):
+                continue
+        elif not _CTX_RE.match(ctx):
             continue
         value = _parse_value(cells[i_val])
         if value is None:
@@ -212,6 +237,7 @@ def build_ownership_record(
         record[f] = parsed.get(f)
     for f in COUNT_ELEMENTS.values():
         record[f] = parsed.get(f)
+    record["shares_outstanding"] = parsed.get("shares_outstanding")
 
     # Derived aggregates — the two T2 actually conditions on.
     fc = parsed.get("pct_foreign_corporate") or 0.0
@@ -241,6 +267,7 @@ CREATE TABLE IF NOT EXISTS ownership_snapshots (
     n_shareholders_individual REAL,
     n_shareholders_foreign_corporate REAL,
     n_shareholders_foreign_individual REAL,
+    shares_outstanding REAL,
     source TEXT,
     PRIMARY KEY (doc_id, symbol)
 );
@@ -256,10 +283,15 @@ def upsert_ownership(db_path: Path | str, records: list[dict[str, Any]]) -> int:
     conn = sqlite3.connect(str(db_path))
     try:
         conn.executescript(OWNERSHIP_SCHEMA)
+        # Migrate an existing table created before shares_outstanding existed.
+        have = {d[1] for d in conn.execute("pragma table_info(ownership_snapshots)")}
+        if "shares_outstanding" not in have:
+            conn.execute("ALTER TABLE ownership_snapshots ADD COLUMN "
+                         "shares_outstanding REAL")
         cols = [
             "doc_id", "symbol", "as_of", "published_ts", "doc_type_code",
             *_PCT_FIELDS, "pct_foreign_total", "pct_individual_total",
-            *COUNT_ELEMENTS.values(), "source",
+            *COUNT_ELEMENTS.values(), "shares_outstanding", "source",
         ]
         placeholders = ",".join("?" * len(cols))
         conn.executemany(

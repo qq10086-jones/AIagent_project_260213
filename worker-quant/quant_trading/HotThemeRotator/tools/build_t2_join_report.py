@@ -89,11 +89,11 @@ def main(argv: list[str] | None = None) -> int:
     # --- ownership snapshots (symbol -> sorted [(published_ts, ...)]) -------
     fc = sqlite3.connect(f"file:{base / FUND_DB}?mode=ro", uri=True)
     own = collections.defaultdict(list)
-    for sym, pub, f, i in fc.execute(
-            "select symbol, published_ts, pct_foreign_total, pct_individual_total "
-            "from ownership_snapshots where pct_individual_total is not null "
+    for sym, pub, f, i, doc in fc.execute(
+            "select symbol, published_ts, pct_foreign_total, pct_individual_total, "
+            "doc_id from ownership_snapshots where pct_individual_total is not null "
             "order by symbol, published_ts"):
-        own[sym].append((pub, f, i))
+        own[sym].append((pub, f, i, doc))
     fc.close()
 
     # --- events -------------------------------------------------------------
@@ -148,6 +148,26 @@ def main(argv: list[str] | None = None) -> int:
                          "preregistration before any outcome is read"),
             }
 
+    # Per-fiscal-year buckets — Jinushi sorts WITHIN each year, so the pooled
+    # figure overstates what any single year's test has to work with.
+    by_year_buckets = {}
+    years = sorted({e.event_date[:4] for e, _ in joined})
+    for y in years:
+        sub = [(e, s_) for e, s_ in joined if e.event_date[:4] == y]
+        fv = sorted(s_[1] for _, s_ in sub if s_[1] is not None)
+        iv = sorted(s_[2] for _, s_ in sub if s_[2] is not None)
+        if not fv or not iv:
+            continue
+        f20 = fv[max(0, int(0.20 * len(fv)) - 1)]
+        i80 = iv[min(len(iv) - 1, int(0.80 * len(iv)))]
+        by_year_buckets[y] = {
+            "n_events": len(sub),
+            "low_foreign": sum(1 for _, s_ in sub
+                               if s_[1] is not None and s_[1] <= f20),
+            "high_individual": sum(1 for _, s_ in sub
+                                   if s_[2] is not None and s_[2] >= i80),
+        }
+
     payload = {
         "_kind": "t2_join_report",
         "asof": args.asof,
@@ -165,6 +185,23 @@ def main(argv: list[str] | None = None) -> int:
         "usable_events": len(joined),
         "usable_symbols": len({e.symbol for e, _ in joined}),
         "conditioning": buckets,
+        "conditioning_by_year": by_year_buckets,
+        "_join_symbols": sorted({e.symbol for e, _ in joined}),
+        # The EXACT ownership snapshots the join pairs with an event. Size
+        # control only needs shares for these — not for every vintage of every
+        # joined symbol, which is ~6x more documents.
+        "_join_ownership_doc_ids": sorted({s_[3] for _, s_ in joined}),
+        "event_day_clustering": {
+            "distinct_event_days": len({e.event_date for e, _ in joined}),
+            "max_events_on_one_day": (
+                max(collections.Counter(e.event_date for e, _ in joined).values())
+                if joined else 0),
+            "by_year": dict(sorted(collections.Counter(
+                e.event_date[:4] for e, _ in joined).items())),
+            "note": ("nominal event count OVERSTATES information: events cluster "
+                     "hard on earnings dates, so inference must cluster standard "
+                     "errors by event DAY and by firm"),
+        },
         "governance": {
             "task": "P36-03", "rules": ["Rule 3 advice-only"],
             "note": ("counts only — no return, CAR or BHAR is computed, so this "
@@ -186,11 +223,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {n:>6}  {stage}")
     print(f"\nUSABLE EVENTS: {payload['usable_events']} "
           f"across {payload['usable_symbols']} symbols")
-    if buckets:
-        print(f"  foreign p20 {buckets['foreign_p20']:.4f} -> "
-              f"{buckets['low_foreign_events']} events; "
-              f"individual p80 {buckets['individual_p80']:.4f} -> "
-              f"{buckets['high_individual_events']} events")
+    cl = payload["event_day_clustering"]
+    print(f"  clustering: {cl['distinct_event_days']} distinct event days, "
+          f"max {cl['max_events_on_one_day']} on one day; by year {cl['by_year']}")
+    if by_year_buckets:
+        print("  per-fiscal-year buckets (Jinushi sorts WITHIN year):")
+        for y, b in by_year_buckets.items():
+            print(f"    {y}: n={b['n_events']:>4}  low-foreign={b['low_foreign']:>4}"
+                  f"  high-individual={b['high_individual']:>4}")
     print(f"\nwrote {out}")
     return 0
 

@@ -282,10 +282,18 @@ def main(argv: list[str] | None = None) -> int:
                     help="price DB path (injectable for tests)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--t1-only", action="store_true")
+    ap.add_argument("--symbols-file",
+                    help="newline-separated tickers; covers any event universe "
+                         "(e.g. earnings-event symbols), not just buybacks")
     args = ap.parse_args(argv)
 
     base = Path(args.base_dir).resolve()
-    universe = sorted(event_universe(base, t1_only=args.t1_only))
+    if args.symbols_file:
+        universe = sorted({ln.strip() for ln in
+                           Path(args.symbols_file).read_text(encoding="utf-8").splitlines()
+                           if ln.strip()})
+    else:
+        universe = sorted(event_universe(base, t1_only=args.t1_only))
     if not universe:
         print("no event universe found; run tools/extract_buyback_events.py first")
         return 1

@@ -197,3 +197,73 @@ def test_idempotent_append_never_duplicates_or_overwrites(tmp_path):
     assert rows[0] == ("2026-08-01", 111.0), "existing bar must never be overwritten"
     assert rows[-1][0] == "2026-08-08"
     assert len(rows) == 2
+
+
+# --- targeted shares refresh (P36-04) ---------------------------------------
+
+def test_docs_for_join_events_uses_exact_paired_ids(tmp_path):
+    """The join pairs ONE snapshot per event; refreshing every vintage of every
+    joined symbol would be ~6x the work."""
+    import json as _json
+    from backfill_edinet_ownership import docs_for_join_events
+    db = tmp_path / "own.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("create table ownership_snapshots(doc_id text, symbol text, "
+                 "shares_outstanding real)")
+    conn.executemany("insert into ownership_snapshots values (?,?,?)",
+                     [("D1", "A.T", None), ("D2", "A.T", None), ("D3", "B.T", None)])
+    conn.commit()
+    conn.close()
+    report = tmp_path / "join.json"
+    report.write_text(_json.dumps({
+        "_join_symbols": ["A.T", "B.T"],
+        "_join_ownership_doc_ids": ["D2", "D3"],   # only the paired vintages
+    }), encoding="utf-8")
+    assert docs_for_join_events(db, report) == {"D2", "D3"}
+
+
+def test_docs_for_join_events_falls_back_to_symbols_on_old_report(tmp_path):
+    import json as _json
+    from backfill_edinet_ownership import docs_for_join_events
+    db = tmp_path / "own.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("create table ownership_snapshots(doc_id text, symbol text, "
+                 "shares_outstanding real)")
+    conn.executemany("insert into ownership_snapshots values (?,?,?)",
+                     [("D1", "A.T", None), ("D2", "A.T", None)])
+    conn.commit()
+    conn.close()
+    report = tmp_path / "join.json"
+    report.write_text(_json.dumps({"_join_symbols": ["A.T"]}), encoding="utf-8")
+    assert docs_for_join_events(db, report) == {"D1", "D2"}
+
+
+def test_docs_for_join_events_missing_report_is_empty(tmp_path):
+    from backfill_edinet_ownership import docs_for_join_events
+    assert docs_for_join_events(tmp_path / "x.db", tmp_path / "nope.json") == set()
+
+
+def test_docs_missing_shares_only_returns_null_rows(tmp_path):
+    from backfill_edinet_ownership import _docs_missing_shares
+    db = tmp_path / "own.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("create table ownership_snapshots(doc_id text, symbol text, "
+                 "shares_outstanding real)")
+    conn.executemany("insert into ownership_snapshots values (?,?,?)",
+                     [("HAS", "A.T", 1000.0), ("NEEDS", "B.T", None)])
+    conn.commit()
+    conn.close()
+    assert _docs_missing_shares(db) == {"NEEDS"}
+
+
+def test_docs_missing_shares_on_legacy_table_returns_all(tmp_path):
+    """A table predating the column: every doc needs the refresh."""
+    from backfill_edinet_ownership import _docs_missing_shares
+    db = tmp_path / "own.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("create table ownership_snapshots(doc_id text, symbol text)")
+    conn.executemany("insert into ownership_snapshots values (?,?)",
+                     [("D1", "A.T"), ("D2", "B.T")])
+    conn.commit()
+    conn.close()
+    assert _docs_missing_shares(db) == {"D1", "D2"}

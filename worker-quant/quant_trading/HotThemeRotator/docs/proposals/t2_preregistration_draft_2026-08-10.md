@@ -181,6 +181,26 @@ That trade — 12% of the sample against an identification threat that can doubl
 or quintuple the false-positive rate — is taken deliberately and stated here so
 the sample-size line in any result is read correctly.
 
+**Verified both ways at ρ = 0.3**: size 0.152 without day fixed effects,
+**0.033 with them**.
+
+### Power of the ACTUAL primary specification (disjoint window, full model,
+### event-day FE, ρ = 0.3)
+
+| β₁ (drift coefficient) | drift per 1 s.d. reaction | power |
+|---|---|---|
+| 0.10 | 0.6% | 0.10 |
+| 0.20 | 1.2% | 0.23 |
+| 0.30 | 1.8% | **0.40** |
+| 0.50 | 3.0% | 0.77 |
+
+**The remedy costs power, and the number is stated rather than omitted**: at
+β₁ = 0.30 power falls from ~0.55 (no day FE) to **0.40** with them — the price
+of the 12% singleton-day loss plus the degrees of freedom the dummies consume.
+Buying an unbiased estimate with power is the right trade when the alternative
+is a test whose false-positive rate is three times its nominal level, but it is
+a trade, and the eventual result must be read against 0.40, not 0.55.
+
 The specification without day fixed effects is retained as a **registered
 secondary**, and a disagreement between the two is itself reportable.
 

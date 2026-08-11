@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib
 import io
+import json
 import sys
 from pathlib import Path
 
@@ -39,6 +40,13 @@ CLI_MODULES = [
     "tools.rule_usage_audit",
     "tools.three_ledger_scorecard",
     "tools.notifier_gate_cli",
+    # P37-01: both were missing from this list and both crashed on `--help`
+    # under cp932 (U+2014 in the module docstring, plus U+2192 in
+    # daily_routine's). The list itself was the gap — a CLI that is never
+    # enrolled here is never checked, so enrolment is the actual fix and the
+    # ASCII-ification is just what enrolment then demanded.
+    "tools.risk_mandate_snapshot",
+    "tools.daily_routine",
 ]
 
 
@@ -138,3 +146,68 @@ def test_console_safe_replaces_only_unencodable_glyphs():
     assert console_safe("plain ascii", stream=stream) == "plain ascii"
     assert console_safe("日本語", stream=stream) == "日本語"   # cp932 covers this
     assert "—" not in console_safe("em—dash", stream=stream)
+
+
+def test_sleeve_labels_containing_japanese_do_not_kill_the_risk_snapshot(
+        tmp_path, monkeypatch):
+    """P37-01 regression, reproduced from a real crash.
+
+    `python tools/risk_mandate_snapshot.py --asof ... --no-write` died with
+    UnicodeEncodeError on the very first output line (the JPY sign, U+00A5),
+    then would have died again on the Japanese sleeve labels and the Sleeve C
+    thesis. Production never showed it because `daily_routine` forces
+    PYTHONIOENCODING=utf-8 on its children -- so the fault was invisible
+    exactly until the owner ran the tool by hand, which is when a risk panel
+    matters most.
+
+    Neither existing test could catch it: the docstring check only covers
+    tool-authored text, and capsys is utf-8. Only a real cp932 stream carrying
+    real non-ASCII DATA reproduces it.
+    """
+    config = tmp_path / "configs"
+    config.mkdir()
+    (config / "risk_mandate.json").write_text(json.dumps({
+        "declared_date": "2026-07-13",
+        "kill_switch_nav_floor_jpy": 100000,
+        "target_exposure_ratio": 1.4,
+        "exposure_band": [1.2, 1.6],
+        "sleeve_map": {"8035.T": "C"},
+        "betas": {"_default": 1.0, "8035.T": 1.5},
+        "sleeves": {
+            "A": {"label": "杠杆β引擎", "role": "leveraged_beta_engine"},
+            "B": {"label": "value/E-P 実盤実験", "role": "value_ep_live_experiment"},
+            "C": {"label": "高信念押注", "role": "conviction_bets",
+                  "cap_frac_nav": 0.2, "review_drawdown_frac": -0.2},
+        },
+        "c_theses": {"8035.T": {
+            "reunderwrite_price": 71300,
+            "thesis": "清算中仓位（非信念持有）——退出即终结。",
+            "invalidation": "双边收盘括号（Rule 17.4.6）：收盘 ≤ ¥64,000 → 次一交易日了结。",
+            "exit_upper_jpy": 74000, "exit_lower_jpy": 64000,
+        }},
+    }, ensure_ascii=False), encoding="utf-8")
+
+    module = importlib.import_module("tools.risk_mandate_snapshot")
+    monkeypatch.setattr(module, "_positions_dict", lambda: {
+        "available": True, "nav": 388553.0, "cash": 228473.0,
+        "holdings": [{"symbol": "8035.T", "qty": 1.0, "market_price": 56750.0,
+                      "market_value": 56750.0, "unrealized_pnl": -20850.0,
+                      "unrealized_return_pct": -26.87}],
+    })
+
+    buffer, stream = _cp932_stdout(monkeypatch)
+    try:
+        rc = module.main(["--asof", "2026-08-10", "--base-dir", str(tmp_path),
+                          "--no-write"])
+        stream.flush()
+    finally:
+        monkeypatch.undo()
+
+    assert rc == 0
+    out = buffer.getvalue()
+    # The panel printed end to end: the header, the exposure line whose JPY
+    # sign started the original crash, and the Sleeve C bracket that carries
+    # the Japanese thesis -- a glyph may be replaced, nothing dies mid-line.
+    assert b"RISK MANDATE SNAPSHOT" in out
+    assert b"below_band" in out
+    assert b"exit-bracket" in out

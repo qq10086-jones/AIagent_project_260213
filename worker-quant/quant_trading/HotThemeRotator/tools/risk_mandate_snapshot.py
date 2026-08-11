@@ -10,7 +10,7 @@ state and the owner-declared mandate config, then writes:
 Read-only / advice-only (Rule 3): it computes and records, never acts. Wired
 into daily_routine afterclose as a NON-FATAL diagnostic (a diagnostic must
 never block collection). Fail-open: without the mandate config or portfolio
-state it reports "unavailable" and exits 0 — never fabricated state
+state it reports "unavailable" and exits 0 -- never fabricated state
 (Rule 11.9.4).
 """
 from __future__ import annotations
@@ -25,6 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from hot_theme_rotator.common.console import enable_console_fallback  # noqa: E402
 from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
     calendar_covers,
     is_trading_day,
@@ -413,6 +414,12 @@ def _positions_dict() -> dict:
 
 
 def main(argv=None) -> int:
+    # Sleeve labels, theses and band notes are legitimately Japanese; a cp932
+    # console cannot encode them and would kill the run MID-PRINT, leaving a
+    # truncated report that looks finished. Losing a glyph beats losing the
+    # report. (The tool's own text stays ASCII — that is the other half of the
+    # rule, enforced by tests/unit/test_cli_console_encoding.py.)
+    enable_console_fallback()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--asof", default=None, help="ISO date stamp for the artifact (default: today).")
     ap.add_argument("--base-dir", default=str(ROOT))

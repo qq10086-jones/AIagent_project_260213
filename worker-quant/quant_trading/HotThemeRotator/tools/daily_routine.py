@@ -7,24 +7,24 @@ Two modes:
 
 - ``--mode preopen``   : run the daily smoke gate (``pytest -m "not slow"``) and a
                          candidate-freshness check; log readiness.
-- ``--mode afterclose``: refresh candidates (the deterministic sibling screener →
-                         HTR-native snapshot, ``--no_db_write`` per ADR-0005) →
-                         emit forward predictions → sweep outcomes; log.
+- ``--mode afterclose``: refresh candidates (the deterministic sibling screener ->
+                         HTR-native snapshot, ``--no_db_write`` per ADR-0005) ->
+                         emit forward predictions -> sweep outcomes; log.
 
 Governance:
 
 - Never touches broker / order / paper / live execution, and never calls an LLM /
   GPU path (Rule 3, Rule 15.4, user "no background LLM" preference). It shells out
   only to the four deterministic tools hard-listed below.
-- Fail-closed: a failed or empty candidate refresh ABORTS emit — no stale or
+- Fail-closed: a failed or empty candidate refresh ABORTS emit -- no stale or
   fabricated predictions (Rule 8.2 / 12.2).
 - Idempotent: re-running the same trading day is a no-op (emit prediction_id hash,
   sweep outcome_id). Rule 15.4: emits only for a genuine just-closed session, never
   an accelerated historical replay.
 
 Two things this routine deliberately does NOT automate (they cannot be):
-  * recording a fill — only happens when the operator actually trades externally;
-  * LLM narrative briefs — pulled on demand under the no-background-LLM rule.
+  * recording a fill -- only happens when the operator actually trades externally;
+  * LLM narrative briefs -- pulled on demand under the no-background-LLM rule.
 
 Output: one structured JSON line per run appended to
 ``reports/observability/daily_routine_log.jsonl``.
@@ -92,6 +92,12 @@ from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
     calendar_covers,
     is_trading_day,  # noqa: F401  (re-exported for callers/tests)
     latest_trading_day,
+    previous_trading_day,
+)
+from hot_theme_rotator.observability.pipeline_health import (  # noqa: E402
+    HEALTH_DEGRADED,
+    assess_record,
+    exit_code_for,
 )
 
 SMOKE_CMD = [sys.executable, "-m", "pytest", "tests", "-m", "not slow", "-q",
@@ -271,10 +277,24 @@ def run_preopen(today: date, *, runner: Runner = _run) -> dict[str, Any]:
     sm = smoke(runner=runner)
     asof = latest_trading_day(today)
     snap = SNAP_DIR / f"selected_tickers_{asof.isoformat()}.json"
+    # P37-01: `candidate_snapshot_present` asks whether ``asof``'s snapshot is on
+    # disk, and at 08:30 on a trading day ``asof`` IS today — whose snapshot is
+    # not written until that day's afterclose. It was therefore False on 7 of 7
+    # real pre-open runs: a field that is structurally always false at the
+    # moment it is read. Kept unchanged for existing consumers; the question
+    # that actually has an answer at pre-open — is the last COMPLETED session's
+    # snapshot ready for the cockpit — is recorded beside it, and that is what
+    # Rule 15.10 health reads. Promoting the old field to a health signal would
+    # have shipped an alarm that fires every single day, which is the fastest
+    # way to teach an operator to ignore health entirely.
+    prior = previous_trading_day(asof)
+    prior_snap = SNAP_DIR / f"selected_tickers_{prior.isoformat()}.json"
     record = {
         "ts": _now_iso(), "mode": "preopen", "asof": asof.isoformat(),
         "ok": sm["passed"], "smoke": sm,
         "candidate_snapshot_present": snap.exists(),
+        "prior_session_asof": prior.isoformat(),
+        "prior_session_snapshot_present": prior_snap.exists(),
         "notes": ["advice-only research cockpit; no execution; no LLM"],
     }
     return record
@@ -421,9 +441,36 @@ def main(argv: list[str] | None = None) -> int:
     else:
         record = run_afterclose(today, asof=asof, db_path=db_path, dry_run=args.dry_run)
 
+    # P37-01 / Rule 15.10: a SECOND aggregate beside `ok`, never a redefinition
+    # of it. `ok` still means core collection succeeded; `health_status` says
+    # whether the declared non-fatal steps also did. Wrapped defensively — a
+    # health reporter that could crash the run it reports on would be the worst
+    # of both worlds.
+    try:
+        record["health"] = assess_record(record)
+    except Exception as exc:  # noqa: BLE001 - reporting must never break the run
+        record["health"] = {
+            "health_status": HEALTH_DEGRADED,
+            "components": [],
+            "degraded_components": [{
+                "component": "health_reporter", "label": "健康态聚合",
+                "status": "failed", "code": "health_reporter.exception",
+                "perishable": False, "detail": f"{type(exc).__name__}: {exc}"[:200],
+            }],
+            "perishable_degraded": [],
+            "summary": "degraded: health_reporter.exception",
+        }
+
     append_log(record)
     print(json.dumps(record, ensure_ascii=False, indent=2))
-    return 0 if record.get("ok") else 1
+    health = record["health"]
+    # Rule 15.10.7 — the aggregate is never printed without its components.
+    print(f"HEALTH {health['health_status'].upper()}: {health['summary']}")
+    for row in health["degraded_components"]:
+        perishable = " [PERISHABLE — data is lost, not deferred]" if row.get("perishable") else ""
+        detail = f" ({row['detail']})" if row.get("detail") else ""
+        print(f"  - {row['code']}{detail}{perishable}")
+    return exit_code_for(health["health_status"])
 
 
 if __name__ == "__main__":

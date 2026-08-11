@@ -1149,6 +1149,26 @@ Remote Personal Access is the FIRST and ONLY approved widening beyond localhost.
 6. **Backup / freshness / calibration unchanged.** The Rule 15.2 readiness gate, freshness labeling, and the downgraded calibration state apply identically on remote devices; remote rendering MUST NOT strip degradation banners or disclosures.
 7. **Contract tests** assert: guarded runner refuses non-loopback without token; with token configured, un-authenticated API requests 401 and authenticated ones succeed; loopback-no-token behavior unchanged.
 
+### Rule 15.10: Pipeline Health State Contract (added 2026-08-11, P37-01)
+
+`daily_routine`'s `ok` boolean answered one question — did core collection succeed — and was then read as if it answered a different one: is the pipeline healthy. It does not. Research-maintenance steps are non-fatal by deliberate design (Rule 16.6: a diagnostic must never block collection), so their failures were recorded as return codes nobody aggregated and nobody surfaced. Measured on the real log: TDnet polling returned non-zero on **five** afterclose sessions (2026-07-07, 07-17, 07-28, 08-07, 08-10) with `ok: true` every time, and event-universe maintenance reported `event_universe_partial` on 2026-08-10 with `ok: true`. TDnet disclosure documents are served for only ~31 days, so a silent degraded day there is permanent data loss, not a retryable blip.
+
+The fix is a second, separate aggregate — not a redefinition of the first.
+
+1. **`ok` is NOT redefined.** It continues to mean exactly "core collection succeeded" (candidate refresh produced a snapshot, and emit/sweep either wrote new forward samples or was an idempotent re-run of an already-collected session). Existing consumers keep working unchanged. Silently widening a published boolean is how a green signal loses its meaning without anyone noticing.
+2. **`health_status ∈ {healthy, degraded, failed}` is the aggregate.**
+   - `failed` — a CORE gate failed: candidate refresh, emit, sweep, or the zero-new-sample guard.
+   - `degraded` — core collection succeeded, but one or more DECLARED non-fatal steps failed, were partial, or did not run.
+   - `healthy` — core collection succeeded and every declared step succeeded.
+   - **Invariant:** `health_status == "failed"` if and only if `ok is False`. `degraded` therefore never masquerades as a failure and never hides inside `healthy`.
+3. **Every non-fatal step declares a stable component code.** `degraded_components` carries `{component, code, detail}` per degraded step, and `components` carries the full roster with its status. Codes are stable strings, not free text or bare return codes: a degradation that cannot be named cannot be counted, and one that cannot be counted cannot be trended.
+4. **Silence is not health.** A declared component that produced no result — an early return that skipped it, a crashed step, a missing field — is `not_run`, which is `degraded`. It is never absent from the roster and never scored as success. (Rule 11.9.4: absence of data is reported, never imputed in the flattering direction.)
+5. **Perishable components are labelled as such.** A component whose upstream data expires (`tdnet_poll`, `revision_capture` — TDnet ~31 days) declares `perishable: true`, because "we will catch it on the next run" is false for those and true for the rest. Health reporting MUST carry that distinction.
+6. **CLI exit codes:** `0` healthy, `3` degraded, `1` failed. `3` is already this codebase's partial-maintenance code (`refresh_htr_price_db` exits 0/3/1 under P35-02), so degraded is distinguishable from both success and failure by a scheduler without parsing JSON.
+7. **A degraded aggregate is forbidden without its components.** Dashboard, CLI, and log MUST name every degraded component wherever the aggregate is shown. Rendering "degraded" alone recreates the defect one level up. This binds all four UI variants (Rule 11.7 content red-lines) and extends Rule 15.5.1's "confirm no degraded section is hidden".
+8. **Health is not edge.** `healthy` says data collection worked. It is not evidence about any signal, and MUST NOT be reported alongside or in place of a research verdict (Rule 15.6's converse clause).
+9. **Contract tests** MUST cover: a TDnet non-zero exit, an event-universe partial, multiple simultaneous degradations, a core failure, a fully healthy run, a component that did not run at all, and an idempotent re-run.
+
 一个任务只有同时满足以下条件才能标记 done：
 
 - 对应文件已创建或修改。

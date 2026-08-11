@@ -60,6 +60,7 @@ from hot_theme_rotator.data.universe_adapter import (
     freshest_selected_tickers_path,
     load_screener_snapshot,
 )
+from hot_theme_rotator.observability.pipeline_health import assess_record
 from hot_theme_rotator.data.external.realtime_price.health import read_price_health_report
 from hot_theme_rotator.data.external.tdnet_storage import read_disclosures
 from hot_theme_rotator.watchlist_intelligence.silent_queue import read_silent_events
@@ -823,6 +824,56 @@ def _serialize_positions(strategy_id: str = DEFAULT_STRATEGY_ID) -> dict[str, An
     }
 
 
+def _pipeline_health(base_dir: Path) -> dict[str, Any]:
+    """Rule 15.10 health of the most recent afterclose run.
+
+    The dashboard previously surfaced only news/metadata degradation
+    (``_latest_news_catalyst_quality``), so a TDnet poll failure or a partial
+    event-universe refresh could not appear anywhere in the UI at all. This is
+    the global aggregate, and it always carries its components: a "degraded"
+    badge without the list of what degraded just recreates the defect one
+    level up.
+
+    Deliberately NOT filtered to ``trade_date``: the freshest health reading is
+    the useful one, and a missing record for today is itself the answer
+    (``unknown``), not a reason to report nothing.
+    """
+    unknown = {
+        "status": "unknown",
+        "asof": None,
+        "summary": "no afterclose run recorded",
+        "degradedComponents": [],
+        "perishableDegraded": [],
+    }
+    log_path = base_dir / "reports" / "observability" / "daily_routine_log.jsonl"
+    if not log_path.exists():
+        return unknown
+    latest: dict[str, Any] | None = None
+    try:
+        for raw in log_path.read_text(encoding="utf-8").splitlines():
+            if not raw.strip():
+                continue
+            row = json.loads(raw)
+            if row.get("mode") == "afterclose" and not row.get("dry_run"):
+                latest = row
+    except (OSError, json.JSONDecodeError):
+        return {**unknown, "summary": "daily_routine_log_unreadable"}
+    if latest is None:
+        return unknown
+    # Prefer the health block the routine itself wrote; assess on the fly for
+    # records written before P37-01 so history stays readable.
+    health = latest.get("health")
+    if not isinstance(health, dict) or "health_status" not in health:
+        health = assess_record(latest)
+    return {
+        "status": health.get("health_status", "unknown"),
+        "asof": latest.get("asof"),
+        "summary": health.get("summary"),
+        "degradedComponents": health.get("degraded_components") or [],
+        "perishableDegraded": health.get("perishable_degraded") or [],
+    }
+
+
 def _build_meta(
     *,
     trade_date: str,
@@ -867,6 +918,9 @@ def _build_meta(
             "newsCatalyst": _latest_news_catalyst_quality(base_dir, trade_date),
             "coreThemeCoverage": _core_theme_coverage(trade_date),
         },
+        # Rule 15.10 — healthy | degraded | failed | unknown, always with the
+        # components that made it so.
+        "pipelineHealth": _pipeline_health(base_dir),
     }
 
 

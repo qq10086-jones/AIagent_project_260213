@@ -42,15 +42,22 @@ from hot_theme_rotator.data.jpx_calendar import sessions_between
 
 __all__ = [
     "ALLOWED_DECLINE_REASONS",
+    "ALLOWED_DISPOSITION_SIDES",
     "ALLOWED_SEVERITIES",
     "ALLOWED_STATES",
+    "POSITION_BOUND_RULE_PREFIX",
     "TERMINAL_STATES",
     "DecisionQueueError",
+    "Disposition",
     "QueueItem",
     "advice_id",
+    "annotate",
     "default_queue_path",
+    "executed_dispositions",
+    "is_position_bound",
     "load_queue",
     "open_item",
+    "parse_disposition",
     "queue_report",
     "transition",
 ]
@@ -80,7 +87,98 @@ ALLOWED_DECLINE_REASONS = frozenset({
 
 ALLOWED_SEVERITIES = frozenset({"binding", "advisory", "informational"})
 
+# Structured disposition linkage (P37-00). An ``executed`` transition on
+# position-bound advice used to be free text: the 2026-08-04 8035.T execution
+# was recorded as a summary sentence, so no consumer could tell WHICH holding
+# had been disposed of. The risk producer therefore kept reconstructing the
+# position from the journal (which still had only the BUY) and opened a NEW
+# binding re-underwrite item on 2026-08-06 — binding advice about a position
+# the owner had already reported closed. Linkage is the fix, and it is
+# deliberately structured: reconciliation must never parse prose.
+ALLOWED_DISPOSITION_SIDES = frozenset({"BUY", "SELL"})
+
+# Advice whose subject is a POSITION (Rule 17.4.x sleeve-discipline flags) as
+# opposed to the portfolio as a whole (Rule 17.2 band breach). Only the former
+# can carry a disposition, and only the former is missing something when it is
+# executed without one — marking a band breach "executed" names no single
+# symbol, so demanding linkage there would manufacture a permanent false alarm.
+POSITION_BOUND_RULE_PREFIX = "17.4"
+
 _ID_LEN = 16
+
+
+def is_position_bound(source_rule: str | None) -> bool:
+    """True when advice from ``source_rule`` concerns one holding."""
+    return bool(source_rule) and str(source_rule).startswith(POSITION_BOUND_RULE_PREFIX)
+
+
+@dataclass(frozen=True)
+class Disposition:
+    """What was executed, in fields rather than in a sentence.
+
+    ``execution_reported_at`` is the date the OWNER REPORTED the execution, not
+    a verified fill timestamp — the two differ, and conflating them would let a
+    reported disposition masquerade as a settled one. The settled record is the
+    Section 14 journal fill; until that exists the position is
+    ``CLOSED_PENDING_PRICE``, never ``CLOSED_RECONCILED``.
+    """
+
+    symbol: str
+    side: str
+    qty: float
+    execution_reported_at: str
+
+    def as_row(self) -> dict:
+        return {
+            "symbol": self.symbol,
+            "side": self.side,
+            "qty": self.qty,
+            "execution_reported_at": self.execution_reported_at,
+        }
+
+
+def parse_disposition(raw: Any) -> tuple[Disposition | None, str | None]:
+    """Parse a disposition block; return ``(None, reason)`` when unusable.
+
+    Fail-closed by construction: every rejection path returns ``None`` with a
+    named reason, and callers treat ``None`` as UNRECONCILED — never as "no
+    disposition happened". Guessing the symbol from an incomplete block is the
+    one outcome that must be impossible, because the guess would silently
+    remove a holding the owner still owns.
+    """
+    if raw is None:
+        return None, "missing_disposition_linkage"
+    if isinstance(raw, Disposition):
+        raw = raw.as_row()
+    if not isinstance(raw, Mapping):
+        return None, "disposition_not_an_object"
+    symbol = raw.get("symbol")
+    if not isinstance(symbol, str) or not symbol.strip():
+        return None, "disposition_missing_symbol"
+    side = raw.get("side")
+    if not isinstance(side, str) or side.upper() not in ALLOWED_DISPOSITION_SIDES:
+        return None, "disposition_bad_side"
+    try:
+        qty = float(raw.get("qty"))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None, "disposition_bad_qty"
+    if not qty > 0:
+        # A zero/negative quantity is not a small disposition, it is a broken
+        # one; direction lives in ``side`` so the magnitude must be positive.
+        return None, "disposition_bad_qty"
+    reported = raw.get("execution_reported_at")
+    if not isinstance(reported, str):
+        return None, "disposition_missing_execution_reported_at"
+    try:
+        date.fromisoformat(reported)
+    except ValueError:
+        return None, "disposition_bad_execution_reported_at"
+    return Disposition(
+        symbol=symbol.strip(),
+        side=side.upper(),
+        qty=qty,
+        execution_reported_at=reported,
+    ), None
 
 
 def default_queue_path(base_dir: Path | str) -> Path:
@@ -113,6 +211,11 @@ class QueueItem:
     note: str | None = None
     acknowledged_asof: str | None = None
     terminal_asof: str | None = None
+    # Structured linkage for a position disposition (P37-00). ``None`` on an
+    # executed position-bound item means UNRECONCILED, which is a reportable
+    # defect, not an absence of interest.
+    disposition: Disposition | None = None
+    disposition_reason: str | None = None
     history: list[dict] = field(default_factory=list)
 
     def age_sessions(self, asof: date) -> int | None:
@@ -201,6 +304,18 @@ def _fold(rows: Iterable[Mapping[str, Any]]) -> dict[str, QueueItem]:
                 )
         item = items[aid]
         item.history.append(dict(row))
+        # Disposition linkage may arrive on the executed transition itself or,
+        # for executions recorded before P37-00 existed, on a later append-only
+        # annotation. Last valid block wins: a correction supersedes, it never
+        # rewrites. An invalid block keeps its reason so the defect is named
+        # rather than degrading to the same "missing" as no block at all.
+        if "disposition" in row:
+            parsed, reason = parse_disposition(row.get("disposition"))
+            if parsed is not None:
+                item.disposition = parsed
+                item.disposition_reason = None
+            else:
+                item.disposition_reason = reason
         if state and state != "open":
             item.state = state
             if state == "acknowledged" and item.acknowledged_asof is None:
@@ -270,6 +385,7 @@ def transition(
     asof: str,
     reason: str | None = None,
     note: str | None = None,
+    disposition: Any = None,
 ) -> str:
     """Record a state transition. Append-only; terminal states are final."""
     if state not in ALLOWED_STATES or state == "open":
@@ -289,16 +405,103 @@ def transition(
             "declining requires a structured reason from "
             f"{sorted(ALLOWED_DECLINE_REASONS)} (an optional free-text note may "
             "accompany it, but never replace it)")
+    parsed: Disposition | None = None
+    if disposition is not None:
+        if state != "executed":
+            raise DecisionQueueError(
+                f"a disposition describes an execution; state {state!r} cannot "
+                "carry one (use 'executed', or annotate() to add linkage later)")
+        parsed, why = parse_disposition(disposition)
+        if parsed is None:
+            raise DecisionQueueError(f"invalid disposition: {why}")
     if item.state == state:
         return state  # idempotent: re-recording the current state is a no-op
-    _append(path, {
+    row = {
         "advice_id": item_id,
         "state": state,
         "asof": asof,
         "reason": reason,
         "note": note,
-    })
+    }
+    if parsed is not None:
+        row["disposition"] = parsed.as_row()
+    _append(path, row)
     return state
+
+
+def annotate(
+    path: Path | str,
+    item_id: str,
+    *,
+    asof: str,
+    disposition: Any,
+    note: str | None = None,
+) -> Disposition:
+    """Attach structured disposition linkage to an ALREADY-executed item.
+
+    This is the append-only backfill path for executions recorded before the
+    linkage existed. It writes a row that carries no ``state``, so the fold
+    treats it as evidence added to history rather than a transition — the
+    original rows, including the ones that generated the phantom advice, stay
+    exactly as written and remain auditable.
+
+    Refuses anything but an executed item: linkage on an open item would assert
+    a disposition that has not been reported, which is the same class of error
+    (advice detached from position truth) in the opposite direction.
+    """
+    path = Path(path)
+    item = load_queue(path).get(item_id)
+    if item is None:
+        raise DecisionQueueError(f"unknown advice id {item_id!r}")
+    if item.state != "executed":
+        raise DecisionQueueError(
+            f"advice {item_id} is {item.state!r}; disposition linkage may only "
+            "annotate an 'executed' item")
+    parsed, why = parse_disposition(disposition)
+    if parsed is None:
+        raise DecisionQueueError(f"invalid disposition: {why}")
+    if item.disposition == parsed:
+        return parsed  # idempotent: re-annotating identical linkage is a no-op
+    _append(path, {
+        "advice_id": item_id,
+        "kind": "disposition_annotation",
+        "asof": asof,
+        "disposition": parsed.as_row(),
+        "note": note,
+    })
+    return parsed
+
+
+def executed_dispositions(
+    items: Mapping[str, QueueItem],
+) -> tuple[list[tuple[str, Disposition]], list[dict]]:
+    """Split executed POSITION-bound advice into reconciled vs unreconciled.
+
+    Returns ``(linked, unreconciled)``. An executed position-bound item without
+    valid linkage lands in ``unreconciled`` and closes NOTHING — the failure
+    mode being prevented is a queue row silently retiring an arbitrary holding,
+    which is strictly worse than the phantom position it would be fixing.
+
+    Portfolio-scope advice (Rule 17.2) is not a disposition and is skipped: it
+    names no symbol, so its execution is not missing linkage.
+    """
+    linked: list[tuple[str, Disposition]] = []
+    unreconciled: list[dict] = []
+    for aid, item in sorted(items.items()):
+        if item.state != "executed" or not is_position_bound(item.source_rule):
+            continue
+        if item.disposition is None:
+            unreconciled.append({
+                "advice_id": aid,
+                "source_rule": item.source_rule,
+                "subject": item.subject,
+                "summary": item.summary,
+                "terminal_asof": item.terminal_asof,
+                "reason": item.disposition_reason or "missing_disposition_linkage",
+            })
+            continue
+        linked.append((aid, item.disposition))
+    return linked, unreconciled
 
 
 def queue_report(path: Path | str, *, asof: date) -> dict:

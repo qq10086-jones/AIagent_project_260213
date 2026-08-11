@@ -6,7 +6,10 @@ happens at the broker; this is the ledger that makes the delay measurable.
 
     python tools/decision_queue_cli.py list
     python tools/decision_queue_cli.py ack   <id> --asof 2026-08-06
-    python tools/decision_queue_cli.py exec  <id> --asof 2026-08-06 --note "..."
+    python tools/decision_queue_cli.py exec  <id> --asof 2026-08-06 --note "..." \
+        --symbol 8035.T --side SELL --qty 1
+    python tools/decision_queue_cli.py annotate <id> --symbol 8035.T --side SELL \
+        --qty 1 --execution-reported-at 2026-08-04 --asof 2026-08-11
     python tools/decision_queue_cli.py decline <id> --asof 2026-08-06 \
         --reason user_disagrees --note "holding through the verdict date"
     python tools/decision_queue_cli.py open  --rule 17.2 --subject portfolio \
@@ -34,9 +37,11 @@ from hot_theme_rotator.common.console import (  # noqa: E402
 
 from hot_theme_rotator.decision_queue import (  # noqa: E402
     ALLOWED_DECLINE_REASONS,
+    ALLOWED_DISPOSITION_SIDES,
     ALLOWED_SEVERITIES,
     TERMINAL_STATES,
     DecisionQueueError,
+    annotate,
     default_queue_path,
     load_queue,
     open_item,
@@ -102,6 +107,18 @@ def main(argv=None) -> int:
     p_open.add_argument("--severity", default="advisory", choices=sorted(ALLOWED_SEVERITIES))
     p_open.add_argument("--evidence", default=None)
 
+    # P37-00: append-only linkage for an execution recorded before the
+    # disposition fields existed. Backfill, not correction — nothing is edited.
+    p_ann = sub.add_parser("annotate")
+    p_ann.add_argument("advice_id")
+    p_ann.add_argument("--symbol", required=True)
+    p_ann.add_argument("--side", required=True, choices=sorted(ALLOWED_DISPOSITION_SIDES))
+    p_ann.add_argument("--qty", required=True, type=float)
+    p_ann.add_argument("--execution-reported-at", required=True,
+                       help="ISO date the OWNER REPORTED the execution (not a verified fill).")
+    p_ann.add_argument("--asof", default=None)
+    p_ann.add_argument("--note", default=None)
+
     for name in _STATE_BY_COMMAND:
         p = sub.add_parser(name)
         p.add_argument("advice_id")
@@ -109,6 +126,11 @@ def main(argv=None) -> int:
         p.add_argument("--note", default=None)
         if name == "decline":
             p.add_argument("--reason", required=True, choices=sorted(ALLOWED_DECLINE_REASONS))
+        if name == "exec":
+            p.add_argument("--symbol", default=None)
+            p.add_argument("--side", default=None, choices=sorted(ALLOWED_DISPOSITION_SIDES))
+            p.add_argument("--qty", default=None, type=float)
+            p.add_argument("--execution-reported-at", default=None)
 
     args = ap.parse_args(argv)
     asof = args.asof or _dt.date.today().isoformat()
@@ -132,9 +154,36 @@ def main(argv=None) -> int:
             print(f"opened [{item_id}] Rule {args.rule} {args.subject} ({args.severity})")
             return 0
 
+        if args.command == "annotate":
+            disp = annotate(
+                path, args.advice_id, asof=asof, note=args.note,
+                disposition={
+                    "symbol": args.symbol,
+                    "side": args.side,
+                    "qty": args.qty,
+                    "execution_reported_at": args.execution_reported_at,
+                },
+            )
+            print(f"[{args.advice_id}] disposition linked: {disp.side} {disp.qty:g} "
+                  f"{disp.symbol} reported {disp.execution_reported_at} "
+                  "(append-only; state unchanged)")
+            return 0
+
         state = _STATE_BY_COMMAND[args.command]
+        disposition = None
+        if args.command == "exec" and getattr(args, "symbol", None):
+            disposition = {
+                "symbol": args.symbol,
+                "side": args.side,
+                "qty": args.qty,
+                # Default the report date to the transition date: the owner is
+                # recording this now, and inventing an earlier one would fake
+                # precision the ledger does not have.
+                "execution_reported_at": args.execution_reported_at or asof,
+            }
         transition(path, args.advice_id, state, asof=asof,
-                   reason=getattr(args, "reason", None), note=args.note)
+                   reason=getattr(args, "reason", None), note=args.note,
+                   disposition=disposition)
     except DecisionQueueError as exc:
         # Fail-closed on a malformed decision: recording the wrong thing is
         # worse than recording nothing (Rule 11.9).

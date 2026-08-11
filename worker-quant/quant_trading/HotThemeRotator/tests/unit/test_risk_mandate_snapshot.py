@@ -344,3 +344,91 @@ def test_append_trace_row_records_changed_same_asof_as_revision(tmp_path):
     assert rows[0]["asof_revision"] == 1
     assert rows[1]["asof_revision"] == 2
     assert rows[1]["supersedes_revision"] == 1
+
+
+# ── P37-00: orphaned position-bound advice supersession ──────────────────
+
+
+def _orphan_queue(tmp_path):
+    """One position-bound and one portfolio-scope item, both open."""
+    from hot_theme_rotator.decision_queue import open_item
+
+    queue = tmp_path / "queue.jsonl"
+    phantom = open_item(queue, source_rule="17.4.4", subject="sleeve_C",
+                        summary="review drawdown reached; re-underwrite required",
+                        created_asof="2026-08-06", severity="binding")
+    band = open_item(queue, source_rule="17.2", subject="portfolio",
+                     summary="exposure below_band", created_asof="2026-07-13",
+                     severity="binding")
+    return queue, phantom, band
+
+
+def test_supersede_retires_position_bound_advice_whose_position_is_gone(tmp_path):
+    from hot_theme_rotator.decision_queue import load_queue
+
+    queue, phantom, band = _orphan_queue(tmp_path)
+    closed = [{"symbol": "8035.T"}]
+
+    superseded = rms._supersede_orphaned_advice(
+        queue, load_queue(queue), ["sleeve_C"], asof="2026-08-10", closed=closed)
+
+    assert superseded == [phantom]
+    items = load_queue(queue)
+    assert items[phantom].state == "superseded"
+    # The Rule 17.2 band breach survives: a disposition does not resolve it,
+    # it usually worsens it.
+    assert items[band].state == "open"
+
+
+def test_supersede_preserves_the_erroneous_rows_as_audit_evidence(tmp_path):
+    from hot_theme_rotator.decision_queue import load_queue
+
+    queue, phantom, _ = _orphan_queue(tmp_path)
+    before = queue.read_text(encoding="utf-8").splitlines()
+
+    rms._supersede_orphaned_advice(queue, load_queue(queue), ["sleeve_C"],
+                                   asof="2026-08-10", closed=[{"symbol": "8035.T"}])
+
+    after = queue.read_text(encoding="utf-8").splitlines()
+    assert after[:len(before)] == before
+    assert len(after) == len(before) + 1
+    assert load_queue(queue)[phantom].history[0]["summary"].startswith("review drawdown")
+
+
+def test_supersede_is_idempotent_across_reruns(tmp_path):
+    from hot_theme_rotator.decision_queue import load_queue
+
+    queue, _, _ = _orphan_queue(tmp_path)
+    first = rms._supersede_orphaned_advice(
+        queue, load_queue(queue), ["sleeve_C"], asof="2026-08-10",
+        closed=[{"symbol": "8035.T"}])
+    lines = len(queue.read_text(encoding="utf-8").splitlines())
+
+    second = rms._supersede_orphaned_advice(
+        queue, load_queue(queue), ["sleeve_C"], asof="2026-08-11",
+        closed=[{"symbol": "8035.T"}])
+
+    assert first and second == []
+    assert len(queue.read_text(encoding="utf-8").splitlines()) == lines
+
+
+def test_supersede_never_predates_the_item_it_terminalizes(tmp_path):
+    """Regenerating an OLD snapshot must not stamp a negative age."""
+    from hot_theme_rotator.decision_queue import load_queue
+
+    queue, phantom, _ = _orphan_queue(tmp_path)
+    rms._supersede_orphaned_advice(queue, load_queue(queue), ["sleeve_C"],
+                                   asof="2026-06-01", closed=[{"symbol": "8035.T"}])
+
+    item = load_queue(queue)[phantom]
+    assert item.terminal_asof == "2026-08-06"  # clamped to creation, not 06-01
+    assert item.trigger_to_terminal_sessions == 0
+
+
+def test_supersede_does_nothing_without_an_orphaned_subject(tmp_path):
+    from hot_theme_rotator.decision_queue import load_queue
+
+    queue, phantom, _ = _orphan_queue(tmp_path)
+    assert rms._supersede_orphaned_advice(
+        queue, load_queue(queue), [], asof="2026-08-10", closed=[]) == []
+    assert load_queue(queue)[phantom].state == "open"

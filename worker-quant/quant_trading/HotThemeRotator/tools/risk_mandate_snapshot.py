@@ -36,8 +36,20 @@ from hot_theme_rotator.data.position_adapter import (  # noqa: E402
     default_db_path,
     load_portfolio_state,
 )
-from hot_theme_rotator.decision_queue import open_item, queue_report  # noqa: E402
-from hot_theme_rotator.risk.sleeve_engine import build_risk_mandate_panel  # noqa: E402
+from hot_theme_rotator.decision_queue import (  # noqa: E402
+    DecisionQueueError,
+    TERMINAL_STATES,
+    is_position_bound,
+    load_queue,
+    open_item,
+    queue_report,
+    transition,
+)
+from hot_theme_rotator.portfolio.reconciliation import reconcile_positions  # noqa: E402
+from hot_theme_rotator.risk.sleeve_engine import (  # noqa: E402
+    build_risk_mandate_panel,
+    load_mandate,
+)
 
 
 # Rule 17.4 flags that constitute BINDING advice — a declared condition the
@@ -279,6 +291,55 @@ def _queue_sync(
     return opened
 
 
+def _supersede_orphaned_advice(
+    queue_path: Path,
+    queue_items: dict,
+    subjects: list[str],
+    *,
+    asof: str,
+    closed: list[dict],
+) -> list[str]:
+    """Terminalize open position-bound advice whose position is gone (P37-00).
+
+    Append-only supersession, never deletion: the erroneous items stay in the
+    queue as the audit evidence that the system generated binding advice about
+    a reported-closed position. Only Rule 17.4.x items are eligible — a Rule
+    17.2 band breach survives a disposition, and in fact usually worsens.
+
+    NON-FATAL by contract, like everything else this diagnostic does.
+    """
+    if not subjects:
+        return []
+    symbols = ", ".join(sorted({str(r.get("symbol")) for r in closed})) or "n/a"
+    superseded: list[str] = []
+    for aid, item in sorted(queue_items.items()):
+        if item.state in TERMINAL_STATES or item.subject not in subjects:
+            continue
+        if not is_position_bound(item.source_rule):
+            continue
+        # The terminal date follows this producer's convention — the session
+        # being reported on — but may never precede the item's own creation:
+        # regenerating an OLD snapshot would otherwise stamp a supersession
+        # before the item existed and hand the age counter a negative span.
+        terminal_asof = max(asof, item.created_asof or asof)
+        try:
+            transition(
+                queue_path, aid, "superseded", asof=terminal_asof,
+                note=(
+                    f"P37-00: position {symbols} is CLOSED_PENDING_PRICE (owner-reported "
+                    "execution recorded in the queue; §14 journal fill still outstanding). "
+                    "Position-bound advice cannot stand without the position. Superseded "
+                    "append-only — the original rows are retained as audit evidence that "
+                    "this item was generated against a phantom holding."
+                ),
+            )
+        except DecisionQueueError as exc:
+            print(f"  WARNING supersede_failed:{aid}: {exc}")
+            continue
+        superseded.append(aid)
+    return superseded
+
+
 def _semantic_trace_row(row: dict) -> dict:
     """The row's state, stripped of the bookkeeping fields revisions add."""
     return {
@@ -359,11 +420,30 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     asof = args.asof or _dt.date.today().isoformat()
 
-    panel = build_risk_mandate_panel(_positions_dict(), base_dir=args.base_dir)
+    obs = Path(args.base_dir) / "reports" / "observability"
+    queue_path = obs / "decision_queue.jsonl"
+
+    # P37-00: reconcile EXECUTION truth (decision queue) against ACCOUNTING truth
+    # (Section 14 journal) BEFORE the panel is assembled. A disposition the owner
+    # reported but the journal has not priced must not reach the sleeve engine,
+    # because everything downstream of it — exposure, discipline flags, and the
+    # advice those flags open — would then be about a position nobody holds.
+    mandate = load_mandate(args.base_dir)
+    queue_items = load_queue(queue_path)
+    recon = reconcile_positions(
+        _positions_dict(),
+        queue_items,
+        sleeve_map=(mandate or {}).get("sleeve_map"),
+    )
+    for warning in recon.warnings:
+        print(f"  WARNING {warning}")
+
+    panel = build_risk_mandate_panel(recon.positions, base_dir=args.base_dir, mandate=mandate)
     if panel is None:
         # Fail-open: absent mandate/portfolio is a reportable state, not an error.
         print(f"risk mandate panel unavailable (no mandate config or portfolio) asof={asof}")
         return 0
+    panel["reconciliation"] = recon.as_dict()
 
     exp = panel["exposure"]
     ks = panel["killSwitch"]
@@ -376,6 +456,19 @@ def main(argv=None) -> int:
     for sid, fl in flags.items():
         if fl:
             print(f"  [{sid}] flags: {', '.join(fl)}")
+
+    # P37-00: name the provisional part of NAV out loud. An exposure ratio that
+    # silently rests on unpriced proceeds is exactly the kind of number that
+    # gets quoted later as if it were settled.
+    for row in recon.closed_pending_price:
+        print(f"  [reconciled] {row['symbol']} {row['state']} qty {row['qtyClosed']:g} "
+              f"reported {row['executionReportedAt']} (advice {row['adviceId']}) — "
+              f"¥{row['proceedsAtLastMarkJpy']:,.0f} of NAV is PROVISIONAL proceeds at the "
+              f"¥{row['lastMarkJpy']:,.0f} mark; blocked on {', '.join(row['blockedOn'])}")
+    for row in recon.unreconciled_executions:
+        print(f"  ⚠ UNRECONCILED EXECUTION [{row['advice_id']}] Rule {row['source_rule']} "
+              f"{row['subject']}: {row['reason']} — nothing was closed (fail-closed); "
+              "add linkage via tools/decision_queue_cli.py annotate")
 
     # Sleeve C exit brackets (Rule 17.4.6) — surface armed/triggered state.
     for s in panel["sleeves"]:
@@ -394,7 +487,6 @@ def main(argv=None) -> int:
         print(f"  sector look-through: {top}")
 
     # Flag-sunset escalation (Rule 17.4.7) — read history BEFORE writing today's row.
-    obs = Path(args.base_dir) / "reports" / "observability"
     sunset_n = int(panel.get("mandate", {}).get("flagSunsetSessions") or 7)
     ages, age_warnings = _flag_ages(
         obs / "risk_mandate_trace.jsonl",
@@ -424,9 +516,22 @@ def main(argv=None) -> int:
     # Opening items WRITES, so it honours --no-write; reporting is read-only
     # and always runs, because an item aging quietly is exactly what the daily
     # surface must show.
-    queue_path = obs / "decision_queue.jsonl"
     opened: list[str] = []
+    superseded: list[str] = []
     if not args.no_write:
+        # P37-00: retire orphaned position-bound advice BEFORE opening new items,
+        # so a single run cannot report an item as both live and orphaned.
+        superseded = _supersede_orphaned_advice(
+            queue_path, queue_items, recon.supersede_subjects,
+            asof=asof, closed=recon.closed_pending_price,
+        )
+        for aid in superseded:
+            print(f"  [reconciled] advice {aid} superseded — its position is "
+                  "CLOSED_PENDING_PRICE (original rows retained as audit evidence)")
+        # Event, not state: an idempotent rerun retires nothing and correctly
+        # reports []. Which advice STANDS orphaned is `supersedeSubjects`, and
+        # the queue itself remains the SSoT for who was superseded and when.
+        panel["reconciliation"]["supersededThisRun"] = superseded
         opened = _queue_sync(
             queue_path, obs / "risk_mandate_trace.jsonl",
             asof=asof,
@@ -468,6 +573,18 @@ def main(argv=None) -> int:
             "n_flags": n_flags,
             "sunset": escalations,
         }
+        if recon.applied or recon.unreconciled_executions:
+            # A ratio computed on provisional NAV must carry that fact into the
+            # trace too — the trace is what later analyses read, and a bare
+            # 0.42x there would be indistinguishable from a settled one.
+            row["reconciliation"] = {
+                "closed_pending_price": [r["symbol"] for r in recon.closed_pending_price],
+                "provisional_cash_jpy": recon.provisional_cash_jpy,
+                "nav_is_provisional": recon.applied,
+                "unreconciled_executions": [
+                    r["advice_id"] for r in recon.unreconciled_executions
+                ],
+            }
         if age_warnings:
             row["age_warnings"] = list(age_warnings)
         trace_result = _append_trace_row(obs / "risk_mandate_trace.jsonl", row)

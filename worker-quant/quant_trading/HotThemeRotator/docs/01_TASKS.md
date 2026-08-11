@@ -2394,7 +2394,7 @@ Dependency order: P28 → P29 → P30; P31 and P32 are independent lanes; P33 co
 
 | Task | Machinery | Blocking on |
 |---|---|---|
-| P28 | shortfall reporter built | **owner**: 8035.T fill price + fees; band-breach three-way choice |
+| P28 | shortfall reporter built; 08-04 execution confirmed in decision queue | **owner**: exact fill timestamp + price + fees; band-breach three-way choice. **Engineering is NOT blocked** from closing the phantom position/advice loop. |
 | P29 | queue + CLI + auto-open **live** | — |
 | P30 | gate built, **ships disabled** | **owner**: Rule 12.7 double confirmation to enable a channel |
 | P31 | protocol built, runs today | — (verdict is `insufficient`; see below) |
@@ -2409,7 +2409,7 @@ Delivered commits: `366b08b` `4f94632` `ad5e332` `a39fe70` (session-age repair) 
  The tools are built, tested and persisting artifacts; the loops they are meant to close are still open. A prior summary of this work overstated it — it presented the remaining work as owner-only when at least seven engineering items were outstanding. Those were completed on 2026-08-06 (see the remediation entry in `PROJECT_STATUS.md`), but the distinction stands: shipping the instrument is not the same as closing the loop.
 
 **Owner decisions** — none of which the system may make (Rule 3 / Rule 4):
-1. **8035.T fill price + fees** → unblocks P28 reconciliation and turns the shortfall FINAL.
+1. **8035.T exact fill timestamp + price + fees** → turns realized P&L and implementation shortfall FINAL. Execution itself is already confirmed by `decision_queue.jsonl`; do not ask whether the sale happened again.
 2. **Band breach** (queue item age 17 sessions; **17/17 observed sessions below_band**): deploy / Rule 4 amendment / dated exception with expiry.
 3. **Mandate derivation** (P32): one of four alternatives.
 4. **Adopt the 2026-08-26 rename** to *63D Evidence & Protocol Readiness Check* (see P31), and rule on the governance numbering ambiguity (see P33).
@@ -2423,8 +2423,14 @@ Delivered commits: `366b08b` `4f94632` `ad5e332` `a39fe70` (session-age repair) 
 Each is a precondition for `confirm` ever becoming reachable, and none is satisfied by waiting.
 
 ### P28 - Ledger, Retrospective, and Mandate-State Closure
-**Status: tooling done (`tools/implementation_shortfall.py`, 16 tests); BLOCKED on owner data.** The reporter refuses to promote a scenario price to an actual fill: `delay_cost_jpy` stays `None` and status stays `provisional`, naming the missing inputs, until the fill reaches the journal. Real run today confirms `PROVISIONAL / actual fill NOT IN JOURNAL / missing: actual_price, fees_jpy`.
-- Record the actual 8035.T sell fill through Section 14 (`tools/htr_fill_cli.py`) and confirm no stale 8035.T holding remains in the next risk snapshot.
+**Status: execution confirmed; accounting and shortfall FINAL status blocked on three owner-supplied fill fields; phantom-position engineering is active and NOT owner-blocked.** `decision_queue.jsonl` records advice `a9b0dba1b0a91620` as `executed` on 2026-08-04. The Section 14 journal still contains only the 2026-06-23 BUY, so the risk producer reconstructs a false live holding and opened a new binding `sleeve_C` re-underwrite item (`491be0d153de7309`) on 2026-08-06. This is a cross-ledger reconciliation defect, not uncertainty about whether the sale happened.
+- Add an explicit reconciled position-execution state `CLOSED_PENDING_PRICE`: a confirmed executed disposition removes the quantity from advice/risk exposure immediately, while cash, realized P&L, fees, NAV and implementation shortfall remain visibly provisional until the Section 14 SELL is recorded. Accounting truth remains journal-owned; execution truth remains decision-queue-owned; neither ledger silently overwrites the other.
+- Stop all new position-bound or sleeve-bound advice for a `CLOSED_PENDING_PRICE` position; terminalize/supersede the phantom open item `491be0d153de7309` append-only, preserving its erroneous generation as audit evidence.
+- Extend executed queue transitions with structured disposition linkage (`symbol`, `side`, `qty`, `execution_reported_at`) so reconciliation never parses free-text summaries. Backfill the existing 8035.T execution by append-only annotation/correction, never editing historical JSONL rows.
+- Recompute provisional exposure without 8035.T immediately. The accepted current estimate is ~0.415x (display as approximately 0.42x) and ~JPY 301,599 below the 1.2x lower band; this exposure result is not blocked by fill price. Bound and disclose the remaining NAV uncertainty using the difference between unknown 08-04 fill value and the latest mark.
+- Request exactly three remaining fields from the owner — exact fill timestamp, fill price, fees — and state the purpose: measure the cost of the Rule 17.4.6 execution delay, not establish whether execution occurred.
+- Record the discipline measurement explicitly: close 62,660 on 2026-07-24 breached the bracket; 2026-07-27 was the required next-session execution date; owner-reported execution was 2026-08-04, the seventh trading session in the eligible sequence, i.e. six sessions late. `delay_cost_jpy` remains `None` until the actual fill arrives; elapsed/inclusive session counts remain reportable now.
+- Record the actual 8035.T sell fill through Section 14 (`tools/htr_fill_cli.py`) once the three fields arrive and confirm `CLOSED_PENDING_PRICE -> CLOSED_RECONCILED`, final NAV/P&L, and no stale 8035.T holding in the next risk snapshot.
 - Reconcile NAV, realized/unrealized P&L, benchmark return, and active return to a documented tolerance.
 - Report implementation shortfall using decision price, eligible execution reference, actual execution, fees, and `provisional`/`final` status — never a later close treated as the executed price (Perold).
 - Recompute the delay tables with age zero on creation; label `elapsed` and `inclusive` counts separately.
@@ -2513,6 +2519,55 @@ So **17/17 observed sessions out-of-band** and **0/15 band compliance** are both
 - Measure ledger lag and band compliance only on days with valid prices and reconciled positions.
 - Scan runtime references from rules to config, code, tests, and reports.
 - Rules unreferenced for six months enter an owner review list — never automatic deletion; preserve audit history when rules are merged or retired.
+
+## Milestone P37: Operational Truth And Release Gates (2026-08-11)
+
+**Scope and ordering.** P37 fixes machine-owned defects and release gates in parallel with owner decisions. It does not change capital, holdings, mandate parameters, signal weights, notification enablement, the zero-build frontend architecture, or Rule 3. P28 owns portfolio/accounting SSOT work; P37 does not duplicate it. Execution order: **P37-00 -> P37-01 -> P37-02 -> P36 authoritative power -> P37-03**. Owner requests run asynchronously and never block these engineering tasks.
+
+### P37-00 - Phantom Position And Binding-Advice Suppression
+
+**Status: DONE (2026-08-11).** Evidence chain: queue advice `a9b0dba1b0a91620` was marked executed on 2026-08-04; the journal lacks the SELL; the risk producer continued to carry 8035.T and opened binding advice `491be0d153de7309` on 2026-08-06. A reported closed position was therefore generating new binding advice.
+
+- Implement the P28 `CLOSED_PENDING_PRICE` reconciliation contract before any new feature work.
+- Tests must reproduce the exact sequence `BUY in journal -> exit advice executed in queue -> no SELL price yet` and assert: zero advice/risk quantity for the symbol, provisional accounting fields, no new Rule 17.4.4/17.4.6 binding item, and append-only supersession of any already-open phantom item.
+- A queue execution without structured symbol/side/qty linkage must fail closed as `unreconciled_execution`, never silently close an arbitrary holding.
+- Acceptance requires a regenerated risk snapshot near 0.42x, the phantom advice terminalized, the original faulty rows retained, and the daily routine no longer reopening them.
+
+**Delivered.** `src/hot_theme_rotator/portfolio/reconciliation.py` (the `OPEN -> CLOSED_PENDING_PRICE -> CLOSED_RECONCILED` contract), structured disposition linkage + append-only `annotate()` in `decision_queue/__init__.py`, reconciliation wired ahead of panel assembly in `tools/risk_mandate_snapshot.py`, `annotate`/`exec --symbol` in `tools/decision_queue_cli.py`. **+30 tests** (24 `tests/unit/test_position_reconciliation.py`, 6 supersession in `test_risk_mandate_snapshot.py`); full fast smoke **2358 passed, 0 failed, 8 deselected**.
+
+**Measured effect on real data.** Backfilled the 2026-08-04 execution by append-only annotation (`SELL 1 8035.T`, reported 2026-08-04) and regenerated the 2026-08-10 snapshot: exposure **0.641x → 0.422x** (β-adj ¥249,025 → ¥163,900 over an unchanged ¥388,553 NAV); Sleeve C holdings `[]` and flags `[]` (was `exit_triggered`, `review_required`); the Rule 17.4.7 sunset escalation at 12 sessions stopped firing; **sector look-through `semi` 19.2% → 4.6% of NAV** — the concentration reading was phantom-inflated too, which no prior review had caught. Phantom advice `491be0d153de7309` superseded append-only; open queue is now exactly one item, the genuine Rule 17.2 band breach (19 sessions since 2026-07-13). Rerun is idempotent (`trace unchanged`, nothing reopened); trace revision 1 (0.641x) is retained beside revision 2 (0.422x).
+
+**Design decisions worth auditing.** (a) NAV is deliberately UNCHANGED — the disposed value became proceeds this system cannot price, carried as disclosed `provisionalCashJpy` ¥56,750; zeroing it would overstate the ratio, and folding it into `cash` would claim settled money the journal never saw. The residual NAV uncertainty is bounded by the 2026-08-04 mark (¥56,700) vs the 2026-08-10 mark (¥56,750) plus the open-vs-close and fee terms. (b) Only Rule 17.4.x advice is eligible for disposition linkage and supersession — a Rule 17.2 band breach names no symbol and survives a disposition, so demanding linkage there would manufacture a permanent false alarm. (c) A reported BUY missing from the journal is reported as `unjournaled_buy_execution` and NOT synthesized: adding the holding would require inventing a price, so the mirror defect (understated exposure) stays visible. (d) Supersession `asof` follows the producer's session convention but is clamped to be ≥ the item's creation date, so regenerating an old snapshot cannot stamp a negative age.
+
+### P37-01 - System Health State Contract
+
+**Status: governance declaration first, then code.** `daily_routine.ok` intentionally means the core emit/sweep collection succeeded; research diagnostics are non-fatal under Rule 16.6. Do not silently redefine that boolean. Add a separate aggregate `health_status in {healthy, degraded, failed}` and document its semantics before implementation.
+
+- Evidence baseline: TDnet polling returned non-zero on five afterclose sessions (`2026-07-07`, `07-17`, `07-28`, `08-07`, `08-10`) while top-level `ok` stayed true; TDnet documents are perishable at ~31 days. Event-universe maintenance was `event_universe_partial` in two 2026-08-10 log rows while `ok` stayed true.
+- `healthy`: core collection succeeded and every required freshness/perishable-data/maintenance step succeeded.
+- `degraded`: core collection succeeded, but one or more declared non-fatal steps failed or were partial. Emit/sweep continues; dashboard/CLI/log must name every degraded component.
+- `failed`: candidate refresh, required price availability, emit, sweep, or another declared core gate failed.
+- Preserve backward-compatible `ok` as collection success until all consumers migrate. Add `health_status`, `degraded_components`, and stable component result codes; then wire global dashboard status and CLI exit/reporting policy under the new governance declaration.
+- Tests must cover TDnet failure, event-universe partial, multiple simultaneous degradations, core failure, healthy run, and idempotent reruns.
+
+### P37-02 - Candidate Source Honesty In The UI
+
+**Status: P1 low-cost/high-value.** The API already emits `meta.candidatesSource` (`screener_v2 | sample`) and `meta.dataAvailability.candidates`; the frontend consumes neither `candidatesSource` string nor a source-specific label.
+
+- Add one global source pill shared by V1-V4: real screener source + as-of when `screener_v2`; prominent `SAMPLE / 示例候选` state when `sample`.
+- The sample state must not depend only on array emptiness and must survive an otherwise successful `/api/dashboard` response.
+- Add frontend contract tests proving the source field is consumed and the sample label cannot disappear.
+- Keep the intentional zero-build/CDN architecture. Removing Babel/React development CDN is explicitly out of scope for P37.
+
+### P37-03 - Reproducible Dependencies And CI Lane Completion
+
+**Status: P2 hard engineering defect, after P36 power artifact.** `pyproject.toml` declares no runtime dependencies. The slow marker/lane already exists; this task completes and stabilizes it rather than inventing a new split.
+
+- Declare minimal runtime dependencies plus dashboard/research/test optional groups; generate and document a reproducible lock mechanism compatible with the supported Windows/Python environment.
+- Add a clean-environment import/startup test for `api.main:create_app` and the deterministic daily smoke subset.
+- Audit computational Monte Carlo/WCB tests and mark every research-scale case `slow`; keep small known-answer estimator tests in the fast lane.
+- Pin `.runtime` TMP/TEMP, pytest cache and basetemp in the documented PowerShell commands so the known system-Temp ACL defect cannot create false hangs/errors.
+- CI must run two independent jobs: fast operational smoke and slow research regression, with separate verdicts. A slow-lane failure never masquerades as a healthy research verdict, and a fast-lane failure blocks the cockpit readiness gate.
 
 ### P34 - Strategy Research Plan 2026-08-07 (market decision + T1/T2 lanes + opportunity gate)
 **Status: INFRASTRUCTURE BUILT / STRATEGY VALIDATION NOT STARTED** (2026-08-08). Design doc: `docs/proposals/strategy_research_plan_2026-08-07.md` (the corrected version there is canonical). Advice-only (Rule 3); no capital/config/weight change; Sleeve B freeze and screener-weight freeze stay in force. Honest one-line state: **all ten task lines have implementation or diagnostic artifacts; no strategy is validated; the round's chief product is the discovery of data-chain defects, not tradable alpha.** Owner decisions: O-1 open (account facts; cost conclusion provisional), O-2 open but non-blocking (gate is dormant), O-3 open non-blocking (declare vs observed-only), O-4 granted 2026-08-08.
@@ -2621,6 +2676,7 @@ Sub-task status — **DONE** requires code + tests + artifact + docs together:
   3. **"Power of the ACTUAL primary specification = 0.40" WITHDRAWN** - it used CR1 without bootstrap, Holm or the real overlap, so it was a single-bucket marginal number. `simulate_holm_power` can now run day FE + WCB + Holm on the real mapping; the authoritative figure is simulating and will be stored as a reproducible artifact. Until it exists the draft states NO power number for the primary rule.
   - Claim scope tightened: day FE absorbs **the common additive identical-across-firms day shock in this DGP** - NOT heterogeneous exposure, firm-level persistent shocks, or omitted variables correlated with the reaction. One named threat closed, not unbiasedness bought.
   - Focused tests **19 passed / 3 deselected** (3 marked `slow`). **O-3 is NOT the only blocker**; freeze order is collinearity -> real joint simulation -> day-FE+WCB+Holm run -> stored artifact -> then beta1*/registration/sign-off.
+  - **Unambiguous freeze gate:** before the authoritative day-FE + WCB + Holm artifact is stored, economically grounded `beta1*` is written, the trial family is final, and the owner has signed the exact draft, the T2 preregistration **MUST NOT be frozen or registered**. Once all of those conditions are satisfied, freezing and registration are the required next actions; this is not a permanent prohibition.
 
 - **P34-08 — DONE (shadow).** `research/trend_overlay.py` + `tools/tsmom_shadow_report.py`, 32 tests; artifact `reports/research/tsmom_shadow_2026-08-08.json`. Six arms: buy&hold / 12M trend long-cash / 10M SMA / vol-target / trend+vol gate / **trend with re-entry delay** (the sixth arm an earlier draft was missing). Leverage is **simulated** daily-2x + fee drag and flagged `leverage_is_simulated` on every arm, because **1568.T has only 49 bars** (2026-06-01..08-07) — far too few for a trend study.
   - ⚠ **Data defect found and guarded: `daily_prices` stores RAW closes (`auto_adjust=False`, mandated by Rule 11.9.6 at ingestion), so splits appear as returns. 1306.T — the system's BENCHMARK — falls 90.1% on 2026-03-30 on a 10:1 split, and 63 of 2,774 symbols carry a similar artifact (80 events).** The first run produced −400% total return and −189% drawdown (arithmetically impossible). `compare_arms` now **refuses** a series with >45% single-period moves unless `allow_jumps=True`; the tool restricts to the longest clean segment (2023-03-27..2026-03-27, 733 periods) — so the reported comparison ran on split-free data.

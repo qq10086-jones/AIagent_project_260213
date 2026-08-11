@@ -461,10 +461,15 @@ def main(argv=None) -> int:
     # silently rests on unpriced proceeds is exactly the kind of number that
     # gets quoted later as if it were settled.
     for row in recon.closed_pending_price:
+        if row.get("proceedsAtLastMarkJpy") is None:
+            # Quantity left regardless; only the proceeds estimate is missing.
+            value = "proceeds UNKNOWN (no usable mark — not estimated, not zeroed)"
+        else:
+            value = (f"¥{row['proceedsAtLastMarkJpy']:,.0f} of NAV is PROVISIONAL proceeds "
+                     f"at the ¥{row['lastMarkJpy']:,.0f} mark")
         print(f"  [reconciled] {row['symbol']} {row['state']} qty {row['qtyClosed']:g} "
               f"reported {row['executionReportedAt']} (advice {row['adviceId']}) — "
-              f"¥{row['proceedsAtLastMarkJpy']:,.0f} of NAV is PROVISIONAL proceeds at the "
-              f"¥{row['lastMarkJpy']:,.0f} mark; blocked on {', '.join(row['blockedOn'])}")
+              f"{value}; blocked on {', '.join(row['blockedOn'])}")
     for row in recon.unreconciled_executions:
         print(f"  ⚠ UNRECONCILED EXECUTION [{row['advice_id']}] Rule {row['source_rule']} "
               f"{row['subject']}: {row['reason']} — nothing was closed (fail-closed); "

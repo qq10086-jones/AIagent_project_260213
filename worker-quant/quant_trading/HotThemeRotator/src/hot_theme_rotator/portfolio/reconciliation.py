@@ -73,10 +73,23 @@ class ReconciliationResult:
 
     @property
     def provisional_cash_jpy(self) -> float:
-        """Proceeds inside NAV that the journal has not yet priced."""
-        return round(
-            sum(float(r["proceedsAtLastMarkJpy"]) for r in self.closed_pending_price), 2
-        )
+        """Proceeds inside NAV that the journal has not yet priced.
+
+        Sums only the entries that HAVE a mark. An unmarked disposition
+        contributes nothing here and is surfaced by
+        ``unpriced_closures`` instead — silently adding a zero would
+        understate provisional cash while looking like a complete total.
+        """
+        return round(sum(
+            float(r["proceedsAtLastMarkJpy"]) for r in self.closed_pending_price
+            if r.get("proceedsAtLastMarkJpy") is not None
+        ), 2)
+
+    @property
+    def unpriced_closures(self) -> list[str]:
+        """Closed symbols whose proceeds could not be estimated at all."""
+        return [r["symbol"] for r in self.closed_pending_price
+                if r.get("proceedsAtLastMarkJpy") is None]
 
     def as_dict(self) -> dict[str, Any]:
         """Artifact block. Emitted even when empty — a reconciliation that did
@@ -88,6 +101,7 @@ class ReconciliationResult:
             "unreconciledExecutions": self.unreconciled_executions,
             "supersedeSubjects": list(self.supersede_subjects),
             "provisionalCashJpy": self.provisional_cash_jpy,
+            "unpricedClosures": self.unpriced_closures,
             "navIsProvisional": self.applied,
             "warnings": list(self.warnings),
             "note": (
@@ -107,7 +121,14 @@ def _holding_qty(holding: Mapping[str, Any]) -> float:
 
 
 def _mark_price(holding: Mapping[str, Any]) -> float | None:
-    """Last mark per share, preferring the explicit price over a derived one."""
+    """Last mark per share, preferring the explicit price over a derived one.
+
+    ``None`` means NO MARK, and the distinction from zero is load-bearing: a
+    missing ``market_value`` coerced to 0.0 would produce a 0.0 mark, and a
+    0.0 mark produces 0.0 proceeds — a number that looks like a complete
+    answer while silently understating provisional cash. Absent data is
+    reported as absent (Rule 11.9.4), never imputed to the flattering side.
+    """
     price = holding.get("market_price")
     try:
         if price is not None and float(price) > 0:
@@ -115,11 +136,14 @@ def _mark_price(holding: Mapping[str, Any]) -> float | None:
     except (TypeError, ValueError):
         pass
     qty = _holding_qty(holding)
+    value = holding.get("market_value")
+    if value is None or qty <= 0:
+        return None
     try:
-        value = float(holding.get("market_value") or 0.0)
+        mark = float(value) / qty
     except (TypeError, ValueError):
         return None
-    return value / qty if qty > 0 else None
+    return mark if mark > 0 else None
 
 
 def _sleeve_subjects_to_supersede(
@@ -214,21 +238,26 @@ def reconcile_positions(
                 f"reported={disposition.qty}:held={held}"
             )
             continue
+        # An unpriceable holding still gets its quantity removed. Quantity truth
+        # is price-independent by construction — that separation is the entire
+        # contract — so making removal conditional on a usable mark would let a
+        # missing price resurrect the phantom this module exists to delete. What
+        # a missing mark actually costs is the proceeds estimate, and that is
+        # reported as unknown rather than guessed at zero.
         mark = _mark_price(holding)
         if mark is None:
             result.warnings.append(
                 f"disposition_unpriceable_holding:{advice}:{disposition.symbol}"
             )
-            continue
         remaining_qty = held - disposition.qty
-        proceeds = disposition.qty * mark
         result.closed_pending_price.append({
             "symbol": disposition.symbol,
             "state": POSITION_STATE_CLOSED_PENDING_PRICE,
             "qtyClosed": disposition.qty,
             "qtyRemaining": round(remaining_qty, 10) if remaining_qty > _QTY_EPSILON else 0.0,
-            "lastMarkJpy": round(mark, 2),
-            "proceedsAtLastMarkJpy": round(proceeds, 2),
+            "lastMarkJpy": round(mark, 2) if mark is not None else None,
+            "proceedsAtLastMarkJpy": round(disposition.qty * mark, 2) if mark is not None else None,
+            "markUnavailable": mark is None,
             "executionReportedAt": disposition.execution_reported_at,
             "adviceId": advice,
             "accountingStatus": "provisional",

@@ -382,3 +382,59 @@ def test_a_later_annotation_supersedes_an_earlier_one(tmp_path):
     item = load_queue(path)[exit_id]
     assert item.disposition.execution_reported_at == "2026-08-03"
     assert len(item.history) == 3  # open + executed + annotation, none removed
+
+
+# ── quantity truth does not depend on price availability ─────────────────
+
+
+@pytest.mark.parametrize("broken", [
+    # A missing value must not coerce to a 0.0 mark: 0.0 proceeds would look
+    # like a complete answer while understating provisional cash.
+    {"symbol": "8035.T", "qty": 1.0, "market_price": None, "market_value": None},
+    {"symbol": "8035.T", "qty": 1.0, "market_price": 0.0, "market_value": "n/a"},
+    {"symbol": "8035.T", "qty": 1.0, "market_price": -5.0, "market_value": 0.0},
+    {"symbol": "8035.T", "qty": 1.0},  # neither field present at all
+])
+def test_an_unpriceable_holding_still_loses_its_quantity(tmp_path, broken):
+    """A missing mark must not resurrect the phantom.
+
+    The contract's premise is that quantity truth is price-independent. If
+    removal were conditional on a usable mark, a stale or absent price would
+    silently restore the exact defect this module deletes — the position would
+    come back, and with it the discipline flags and the binding advice.
+    """
+    path, _, _ = _phantom_queue(tmp_path)
+    positions = _positions()
+    positions["holdings"] = [
+        h for h in positions["holdings"] if h["symbol"] != "8035.T"] + [broken]
+
+    result = reconcile_positions(positions, load_queue(path), sleeve_map=SLEEVE_MAP)
+
+    assert "8035.T" not in [h["symbol"] for h in result.positions["holdings"]]
+    (closed,) = result.closed_pending_price
+    assert closed["state"] == POSITION_STATE_CLOSED_PENDING_PRICE
+    assert closed["qtyClosed"] == 1.0
+    # The proceeds estimate is what a missing mark actually costs: reported as
+    # unknown, never guessed at zero.
+    assert closed["proceedsAtLastMarkJpy"] is None
+    assert closed["lastMarkJpy"] is None
+    assert closed["markUnavailable"] is True
+    assert result.unpriced_closures == ["8035.T"]
+    assert any(w.startswith("disposition_unpriceable_holding:") for w in result.warnings)
+    # Advice still stops: the sleeve is orphaned whether or not we can price it.
+    assert result.supersede_subjects == ["sleeve_C"]
+
+
+def test_unpriced_closure_does_not_inflate_provisional_cash(tmp_path):
+    path, _, _ = _phantom_queue(tmp_path)
+    positions = _positions()
+    positions["holdings"] = [
+        h for h in positions["holdings"] if h["symbol"] != "8035.T"
+    ] + [{"symbol": "8035.T", "qty": 1.0, "market_price": None, "market_value": None}]
+
+    result = reconcile_positions(positions, load_queue(path), sleeve_map=SLEEVE_MAP)
+
+    # A zero here would look like a complete total while understating it.
+    assert result.provisional_cash_jpy == 0.0
+    assert result.as_dict()["unpricedClosures"] == ["8035.T"]
+    assert result.as_dict()["navIsProvisional"] is True

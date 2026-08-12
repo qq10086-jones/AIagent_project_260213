@@ -91,8 +91,9 @@ def _clopper_pearson_lower(k: int, n: int, conf: float = 0.95) -> float:
     """One-sided lower confidence bound for a binomial proportion.
 
     Used on the SIZE estimate: if even the lower bound sits above alpha, the
-    over-rejection is not simulation noise. Implemented via the Beta quantile
-    identity so no scipy dependency is added to the daily lane.
+    over-rejection is not simulation noise. Solved by bisection on the exact
+    binomial survival function, so the daily lane acquires no scipy dependency
+    for one quantile.
     """
     if k <= 0:
         return 0.0
@@ -115,9 +116,13 @@ def _clopper_pearson_upper(k: int, n: int, conf: float = 0.95) -> float:
     """One-sided upper confidence bound for a binomial proportion.
 
     Reported alongside the lower bound so the screen is not mistaken for a
-    measurement. An observed 50/1000 has a one-sided 95% interval reaching
+    measurement. An observed 50/1000 has a one-sided 95% UPPER bound of
     0.0629: the point estimate landing on alpha says the screen found nothing,
     NOT that the true size is 0.05.
+
+    Reported next to the lower bound, they are two SEPARATE one-sided 95%
+    bounds -- not a 95% interval. Read jointly their coverage is at least 90%,
+    and calling the pair a "95% interval" overstates it.
     """
     if k >= n:
         return 1.0
@@ -182,6 +187,34 @@ GENERATOR_SOURCES = (
 )
 ATTEST_DIR = ROOT / "docs" / "attestations"
 
+# Bump when the size-screen WORDING changes, so `--attest` refreshes a stored
+# artifact's interpretation strings. v1 said "at nominal level" (an overclaim);
+# v2 calls the two bounds what they are -- separate one-sided bounds, not a 95%
+# interval -- and states evidence of under-rejection rather than asserting it.
+_WORDING_VERSION = 2
+
+SCREEN_DEFINITION = (
+    "pre-declared material-over-rejection screen: FAIL iff the one-sided 95% "
+    "Clopper-Pearson LOWER bound on the observed family-wise rejection rate "
+    "exceeds alpha")
+NOT_A_CLAIM = (
+    "the screen does not establish that the true size equals alpha; it "
+    "establishes only that no over-rejection large enough to exceed simulation "
+    "noise was found. The lower and upper figures are two SEPARATE one-sided "
+    "95% bounds, not a 95% interval -- read jointly their coverage is at least "
+    "90%")
+
+
+def _screen_interpretation(observed: float, upper: float, alpha: float) -> str:
+    """The one place the screen's verdict is put into words."""
+    if upper < alpha:
+        return (f"evidence of under-rejection detected: the one-sided 95% upper "
+                f"bound {upper:.4f} lies below alpha={alpha}; the power table "
+                "already pays for that conservatism")
+    return (f"no material over-rejection detected; the observed FWER {observed} "
+            f"is consistent with alpha={alpha} but ALSO with anything up to "
+            f"{upper:.4f}. This is a screen, not a measurement of the true size.")
+
 
 def _sha256_file(path: Path) -> str:
     """Byte hash of a file, exactly as stored."""
@@ -217,7 +250,7 @@ def _upgrade_size_block(artifact: dict) -> bool:
 
     Two things were wrong and neither is a number. The block carried no upper
     confidence bound, and its verdict said "at nominal level" -- an overclaim:
-    an observed 50/1000 has a one-sided 95% interval reaching 0.0629, so the
+    an observed 50/1000 has a one-sided 95% upper bound of 0.0629, so the
     point estimate landing on alpha means the SCREEN found nothing, not that
     the true size is alpha.
 
@@ -226,7 +259,7 @@ def _upgrade_size_block(artifact: dict) -> bool:
     are retained under ``superseded`` rather than overwritten.
     """
     size = artifact.get("size")
-    if not isinstance(size, dict) or "clopper_pearson_upper_95" in size:
+    if not isinstance(size, dict) or size.get("wording_version") == _WORDING_VERSION:
         return False
     observed = size.get("observed_fwer", size.get("family_wise_rejection"))
     n = size.get("n_sims")
@@ -236,31 +269,31 @@ def _upgrade_size_block(artifact: dict) -> bool:
     k = int(round(observed * n))
     lower = _clopper_pearson_lower(k, n)
     upper = _clopper_pearson_upper(k, n)
-    size["superseded"] = {
+    history = size.get("superseded")
+    history = history if isinstance(history, list) else ([history] if history else [])
+    history.append({
         "corrected_at": "2026-08-12",
-        "reason": ("'at nominal level' / 'level verified' overclaimed: a point "
+        "reason": ("'at nominal level' / 'level verified' overclaimed (a point "
                    "estimate equal to alpha is a screen finding nothing, not a "
-                   "measurement of the true size"),
+                   "measurement); and the two one-sided bounds were described "
+                   "as a single '95% interval', which overstates their joint "
+                   "coverage (at least 90%, not 95%)"),
         "previous_verdict": size.pop("verdict", None),
         "previous_gate_field": size.pop("gate", None),
-    }
+        "previous_interpretation": size.get("interpretation"),
+    })
+    size["superseded"] = history
     size["observed_fwer"] = observed
     size.pop("family_wise_rejection", None)
     size["clopper_pearson_lower_95"] = lower
     size["clopper_pearson_upper_95"] = upper
     size["screen"] = "passed" if lower <= alpha else "failed"
-    size["screen_definition"] = (
-        "pre-declared material-over-rejection screen: FAIL iff the one-sided "
-        "95% Clopper-Pearson LOWER bound on the observed family-wise rejection "
-        "rate exceeds alpha")
-    size["interpretation"] = (
-        f"no material over-rejection detected; the observed FWER {observed} is "
-        f"consistent with alpha={alpha} but ALSO with anything up to "
-        f"{upper:.4f}. This is a screen, not a measurement of the true size.")
-    size["not_a_claim"] = (
-        "the screen does not establish that the true size equals alpha; it "
-        "establishes only that no over-rejection large enough to exceed "
-        "simulation noise was found")
+    size["screen_definition"] = SCREEN_DEFINITION
+    size["interpretation"] = _screen_interpretation(observed, upper, alpha)
+    size["not_a_claim"] = NOT_A_CLAIM
+    size["bounds_are"] = ("two separate one-sided 95% Clopper-Pearson bounds, "
+                          "NOT a 95% interval")
+    size["wording_version"] = _WORDING_VERSION
     return True
 
 
@@ -346,25 +379,28 @@ def write_attestation(artifact_path: Path, *, out_dir: Path = ATTEST_DIR) -> Pat
         "",
         f"- observed FWER under the complete null: **{size.get('observed_fwer')}** "
         f"over {size.get('n_sims')} draws",
-        f"- one-sided 95% Clopper-Pearson interval: "
-        f"[{size.get('clopper_pearson_lower_95'):.4f}, "
-        f"{size.get('clopper_pearson_upper_95'):.4f}]"
+        f"- separate one-sided 95% Clopper-Pearson bounds: lower "
+        f"{size.get('clopper_pearson_lower_95'):.4f}, upper "
+        f"{size.get('clopper_pearson_upper_95'):.4f} (two one-sided bounds, "
+        f"NOT a 95% interval: read jointly their coverage is at least 90%)"
         if size.get("clopper_pearson_upper_95") is not None else
         f"- one-sided 95% Clopper-Pearson lower bound: "
         f"{size.get('clopper_pearson_lower_95'):.4f}",
         f"- pre-declared screen: **{size.get('screen', size.get('gate'))}**",
         "",
         "**The point estimate landing on alpha means the screen found nothing.**",
-        "It does NOT establish that the true size equals alpha — the interval",
-        "still reaches the upper bound above. Any wording along the lines of",
+        "It does NOT establish that the true size equals alpha — the upper",
+        "bound above is not excluded. Any wording along the lines of",
         "\"level verified\" or \"at nominal level\" is an overclaim and was",
         "corrected on 2026-08-12 after review.",
     ]
     if "superseded" in size:
+        history = size["superseded"]
+        history = history if isinstance(history, list) else [history]
         lines += [
             "",
             "> **Artifact corrected in place on "
-            f"{size['superseded'].get('corrected_at')}.** The size block gained "
+            f"{history[-1].get('corrected_at')}.** The size block gained "
             "an upper bound and lost the overclaiming verdict string; the",
             "> original wording is retained inside the artifact under",
             "> `size.superseded`. **No simulated number changed** — the bounds "
@@ -459,8 +495,8 @@ def main(argv=None) -> int:
     upper = _clopper_pearson_upper(k, size_sims)
     over_rejects = lower > args.alpha
     print(f"\n  SIZE (beta1=0, {size_sims} draws): observed FWER "
-          f"{size_any:.4f}  [CP one-sided 95%: lower {lower:.4f}, upper "
-          f"{upper:.4f}]  ({time.time() - t0:.0f}s)")
+          f"{size_any:.4f}  [separate one-sided 95% CP bounds: lower "
+          f"{lower:.4f}, upper {upper:.4f}]  ({time.time() - t0:.0f}s)")
     print(f"    H1 marginal {size_res.power_h1_marginal:.4f} | "
           f"H1 Holm {size_res.power_h1_holm:.4f} | H2 Holm {size_res.power_h2_holm:.4f}")
 
@@ -474,20 +510,11 @@ def main(argv=None) -> int:
 
     # Wording matters here and an earlier version got it wrong. A point estimate
     # landing ON alpha means the SCREEN found nothing; it does not establish
-    # that the true size equals alpha. With 50/1000 the one-sided interval still
-    # reaches 0.0629. Only the upper bound clearing alpha licenses the stronger
-    # "under-rejects" claim, and even that is about the bound, not the truth.
-    if upper < args.alpha:
-        interpretation = (
-            f"under-rejects: the entire one-sided interval lies below alpha "
-            f"(upper {upper:.4f} < {args.alpha}); the power table below already "
-            "pays for that conservatism")
-    else:
-        interpretation = (
-            f"no material over-rejection detected; the observed FWER "
-            f"{size_any:.4f} is consistent with alpha={args.alpha} but ALSO with "
-            f"anything up to {upper:.4f}. This is a screen, not a measurement of "
-            "the true size, and it must not be reported as one")
+    # that the true size equals alpha. With 50/1000 the upper bound is still
+    # 0.0629. Only the upper bound clearing alpha licenses the stronger claim,
+    # and even then it is EVIDENCE about a bound, not an assertion about the
+    # true size -- so the wording says "evidence of", not "under-rejects".
+    interpretation = _screen_interpretation(size_any, upper, args.alpha)
     print(f"    size screen PASSED -- {interpretation}")
 
     # ---- STEP 2: POWER, only now ------------------------------------------
@@ -567,15 +594,12 @@ def main(argv=None) -> int:
             "clopper_pearson_upper_95": upper,
             "alpha": args.alpha,
             "screen": "passed",
-            "screen_definition": (
-                "pre-declared material-over-rejection screen: FAIL iff the "
-                "one-sided 95% Clopper-Pearson LOWER bound on the observed "
-                "family-wise rejection rate exceeds alpha"),
+            "screen_definition": SCREEN_DEFINITION,
             "interpretation": interpretation,
-            "not_a_claim": (
-                "the screen does not establish that the true size equals alpha; "
-                "it establishes only that no over-rejection large enough to "
-                "exceed simulation noise was found"),
+            "not_a_claim": NOT_A_CLAIM,
+            "bounds_are": ("two separate one-sided 95% Clopper-Pearson bounds, "
+                           "NOT a 95% interval"),
+            "wording_version": _WORDING_VERSION,
             "detail": size_res.to_dict(),
         },
         "power": rows,

@@ -303,12 +303,18 @@ def test_no_wording_claims_the_level_was_verified():
         assert banned not in printed, f"overclaiming wording back in output: {banned!r}"
     assert "not a measurement of" in source
     assert "no material over-rejection detected" in source
+    # The pair is two separate one-sided bounds. Calling it a "95% interval"
+    # overstates joint coverage, which is at least 90%, not 95%.
+    assert "NOT a 95% interval" in source
+    assert "evidence of under-rejection detected" in source
 
 
 def test_only_an_upper_bound_below_alpha_licenses_the_conservative_claim():
-    source = Path(art.__file__).read_text(encoding="utf-8")
-    assert "if upper < args.alpha:" in source, (
-        "'under-rejects' may only be claimed when the whole interval clears alpha")
+    """And even then it is EVIDENCE about a bound, not an assertion about the
+    true size -- so the wording says "evidence of under-rejection detected"."""
+    assert "evidence of under-rejection" in art._screen_interpretation(0.01, 0.02, 0.05)
+    assert "no material over-rejection" in art._screen_interpretation(0.05, 0.0629, 0.05)
+    assert "under-rejection" not in art._screen_interpretation(0.05, 0.0629, 0.05)
 
 
 # ── P36-12: the durable attestation ──────────────────────────────────────
@@ -391,8 +397,9 @@ def test_upgrading_a_legacy_size_block_keeps_the_number_and_the_old_wording():
     assert size["screen"] == "passed"
     assert "at nominal level" not in size["interpretation"]
     # Append-only in spirit: the corrected wording is recorded, not erased.
-    assert size["superseded"]["previous_verdict"] == "at nominal level"
-    assert "overclaimed" in size["superseded"]["reason"]
+    assert size["superseded"][0]["previous_verdict"] == "at nominal level"
+    assert "overclaimed" in size["superseded"][0]["reason"]
+    assert size["bounds_are"].endswith("NOT a 95% interval")
 
 
 def test_upgrading_is_idempotent():
@@ -413,4 +420,29 @@ def test_the_stored_artifact_no_longer_carries_the_overclaim():
     assert size["screen"] == "passed"
     assert size["clopper_pearson_upper_95"] > size["alpha"], (
         "if the upper bound cleared alpha the wording could be stronger")
-    assert size["superseded"]["previous_verdict"] == "at nominal level"
+    assert size["superseded"][0]["previous_verdict"] == "at nominal level"
+
+
+def test_the_two_bounds_are_never_described_as_one_interval():
+    """Two one-sided 95% bounds have joint coverage of at least 90%, not 95%."""
+    for path in (Path(art.__file__),
+                 PROJECT_ROOT / "docs" / "attestations" / "t2_power_2026-08-12.md",
+                 PROJECT_ROOT / "docs" / "proposals" /
+                 "t2_preregistration_draft_2026-08-10.md"):
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        for banned in ("one-sided 95% Clopper-Pearson interval",
+                       "one-sided 95% Clopper–Pearson interval",
+                       "Clopper–Pearson one-sided 95% interval"):
+            assert banned not in text, f"{path.name} calls two bounds an interval"
+
+
+def test_the_stored_artifact_labels_its_bounds_correctly():
+    path = PROJECT_ROOT / "reports" / "research" / "t2_power" / "2026-08-12.json"
+    if not path.exists():
+        pytest.skip("no stored power artifact in this checkout")
+    size = json.loads(path.read_text(encoding="utf-8"))["size"]
+    assert size["bounds_are"].endswith("NOT a 95% interval")
+    assert size["wording_version"] == art._WORDING_VERSION
+    assert "95% bounds" in size["not_a_claim"]

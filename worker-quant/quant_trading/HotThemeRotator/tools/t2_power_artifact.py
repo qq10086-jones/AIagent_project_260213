@@ -1,0 +1,310 @@
+"""P36-11 -- the authoritative T2 power artifact (size FIRST, then power).
+
+Every earlier power number for T2 has been withdrawn, three times, and each
+withdrawal had the same shape: a figure was reported for a rule that was not
+the rule the preregistration commits to. v3 simulated a cluster shape that does
+not exist. v5's "joint" Holm simulation was two independent experiments, and
+its headline figure was computed with CR1, no bootstrap, no Holm and no real
+overlap. This tool exists so the number that finally gets stored is produced by
+the SAME specification the document registers:
+
+  * the real H1/H2 event mapping from the join report -- never a reconstructed
+    or parameterised overlap, because the 159 shared events are what makes the
+    two tests correlated;
+  * event-day fixed effects, which close the correlated-day-shock bias (a bias,
+    not a standard-error problem: clustering cannot touch it);
+  * the wild cluster bootstrap as primary inference;
+  * Holm across H1 and H2, so power is measured against the decision rule
+    rather than against a marginal 5% test.
+
+SIZE IS A GATE, NOT A FOOTNOTE
+------------------------------
+A power figure from a procedure that over-rejects is not a power figure. This
+tool therefore simulates under the null FIRST and REFUSES to report power at
+all if the size estimate is materially above nominal: specifically, if the
+one-sided 95% Clopper-Pearson LOWER bound on the empirical size exceeds alpha,
+the rejection rate cannot be explained by simulation noise and the run exits
+non-zero with no power table written. Under-rejection is reported, not gated --
+a conservative test costs power, which the power table then shows honestly.
+
+WHAT THIS TOOL WILL NOT DO
+--------------------------
+It does not nominate beta1*. Detectability cannot define economic importance;
+that argument is owed to round-trip cost and the literature's effect sizes, and
+the power at that beta1* is then REPORTED, not used to choose it (draft §5,
+§10). The artifact prints the grid and stops.
+
+Simulated data only. No price, no announcement return, no outcome is read, so
+running this is not an outcome access under the T1/T2 stopping rules.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import platform
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+import numpy as np  # noqa: E402
+
+from hot_theme_rotator.common.console import enable_console_fallback  # noqa: E402
+from hot_theme_rotator.research.full_model_power import (  # noqa: E402
+    simulate_holm_power,
+)
+
+DEFAULT_JOIN = ROOT / "reports" / "research" / "t2_join_report_2026-08-10.json"
+OUT_DIR = ROOT / "reports" / "research" / "t2_power"
+
+# Pre-declared grid, in the PRIMARY specification's parameterisation.
+# Spec P tests H0: beta1 = 0 on disjoint windows; the replication spec R tests
+# H0: beta1 = 1 on overlapping windows, and P's beta1 equals R's minus 1 under
+# the additive identity. The drift per 1 s.d. announcement reaction is
+# beta1 * sigma_a, and that is the quantity that carries across the two.
+BETA1_GRID = (0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30)
+
+CENTRAL = {
+    "sigma_a": 0.06,
+    "sigma_post": 0.20,
+    "icc_a": 0.10,
+    "icc_post": 0.10,
+    "day_shock_corr": 0.0,
+    "control_effect": 0.01,
+}
+
+# Pre-declared sensitivity axes (draft §5). Reported WITH the central scenario,
+# never instead of it.
+SENSITIVITY = {
+    "sigma_a": (0.04, 0.06, 0.08),
+    "sigma_post": (0.15, 0.20, 0.30),
+    "icc_a": (0.05, 0.10, 0.20),
+    "icc_post": (0.05, 0.10, 0.20),
+    "day_shock_corr": (0.0, 0.3),
+}
+
+
+def _clopper_pearson_lower(k: int, n: int, conf: float = 0.95) -> float:
+    """One-sided lower confidence bound for a binomial proportion.
+
+    Used on the SIZE estimate: if even the lower bound sits above alpha, the
+    over-rejection is not simulation noise. Implemented via the Beta quantile
+    identity so no scipy dependency is added to the daily lane.
+    """
+    if k <= 0:
+        return 0.0
+    # Solve P(X >= k | p) = 1 - conf for p by bisection. The survival function is
+    # increasing in p, and the observed proportion k/n brackets the root from
+    # above, so the interval is valid by construction. Dependency-free on
+    # purpose: the daily lane must not acquire scipy for one quantile.
+    lo, hi = 0.0, k / n
+    target = 1.0 - conf
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if _binom_sf(k, n, mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
+def _binom_sf(k: int, n: int, p: float) -> float:
+    """P(X >= k) for X ~ Binomial(n, p), computed in log space."""
+    if p <= 0.0:
+        return 0.0 if k > 0 else 1.0
+    if p >= 1.0:
+        return 1.0
+    from math import lgamma, log, exp
+    total = 0.0
+    logp, log1p_ = log(p), log(1.0 - p)
+    for i in range(k, n + 1):
+        logc = lgamma(n + 1) - lgamma(i + 1) - lgamma(n - i + 1)
+        total += exp(logc + i * logp + (n - i) * log1p_)
+    return min(total, 1.0)
+
+
+def _load_buckets(path: Path) -> tuple[list, list, dict]:
+    report = json.loads(path.read_text(encoding="utf-8"))
+    be = report.get("bucket_events") or {}
+    h1 = [tuple(map(str, e)) for e in be.get("H1_low_foreign") or []]
+    h2 = [tuple(map(str, e)) for e in be.get("H2_high_individual") or []]
+    if not h1 or not h2:
+        raise SystemExit(
+            f"{path.name} carries no bucket_events; the overlap must come from "
+            "the join report, never from a reconstructed ratio (draft §5c.1)")
+    # Hash the INPUT ACTUALLY USED, not the whole file: the artifact has to be
+    # reproducible from the mapping, and unrelated edits elsewhere in the report
+    # must not invalidate a stored run.
+    payload = json.dumps({"h1": h1, "h2": h2}, sort_keys=True).encode("utf-8")
+    provenance = {
+        "join_report": path.name,
+        "join_report_asof": report.get("asof"),
+        "bucket_events_sha256": hashlib.sha256(payload).hexdigest(),
+        "n_h1": len(h1),
+        "n_h2": len(h2),
+        "n_shared": len({e[0] for e in h1} & {e[0] for e in h2}),
+    }
+    return h1, h2, provenance
+
+
+def _run_cell(h1, h2, *, beta1, scenario, n_sims, n_boot, alpha, seed):
+    r = simulate_holm_power(
+        h1, h2, beta1=beta1, n_sims=n_sims, n_boot=n_boot, alpha=alpha,
+        seed=seed, event_day_fe=True, inference="wild_cluster_bootstrap",
+        **scenario)
+    return r
+
+
+def main(argv=None) -> int:
+    enable_console_fallback()
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--join-report", default=str(DEFAULT_JOIN))
+    ap.add_argument("--asof", default=None, help="ISO stamp for the artifact name.")
+    ap.add_argument("--n-sims", type=int, default=500)
+    ap.add_argument("--n-boot", type=int, default=199)
+    ap.add_argument("--size-sims", type=int, default=None,
+                    help="Draws for the size check (default: 2x --n-sims).")
+    ap.add_argument("--alpha", type=float, default=0.05)
+    ap.add_argument("--seed", type=int, default=20260812)
+    ap.add_argument("--sensitivity", action="store_true",
+                    help="Also run the pre-declared one-at-a-time sensitivity axes.")
+    ap.add_argument("--no-write", action="store_true")
+    args = ap.parse_args(argv)
+
+    asof = args.asof or time.strftime("%Y-%m-%d")
+    h1, h2, provenance = _load_buckets(Path(args.join_report))
+    size_sims = args.size_sims or 2 * args.n_sims
+
+    print("=== T2 AUTHORITATIVE POWER ARTIFACT (P36-11) ===")
+    print(f"  mapping: H1 {provenance['n_h1']} / H2 {provenance['n_h2']} events, "
+          f"{provenance['n_shared']} shared "
+          f"({provenance['n_shared'] / provenance['n_h1']:.3f} of H1)")
+    print(f"  spec: day FE + wild cluster bootstrap + Holm, alpha={args.alpha}")
+    print(f"  central scenario: {CENTRAL}")
+
+    # ---- STEP 1: SIZE, before any power number exists ----------------------
+    t0 = time.time()
+    size_res = _run_cell(h1, h2, beta1=0.0, scenario=CENTRAL,
+                         n_sims=size_sims, n_boot=args.n_boot,
+                         alpha=args.alpha, seed=args.seed)
+    size_any = size_res.power_any_holm
+    k = int(round(size_any * size_sims))
+    lower = _clopper_pearson_lower(k, size_sims)
+    over_rejects = lower > args.alpha
+    print(f"\n  SIZE (beta1=0, {size_sims} draws): family-wise "
+          f"{size_any:.4f}  [CP one-sided 95% lower {lower:.4f}]  "
+          f"({time.time() - t0:.0f}s)")
+    print(f"    H1 marginal {size_res.power_h1_marginal:.4f} | "
+          f"H1 Holm {size_res.power_h1_holm:.4f} | H2 Holm {size_res.power_h2_holm:.4f}")
+
+    if over_rejects:
+        print(f"\n  SIZE GATE FAILED: the lower confidence bound {lower:.4f} exceeds "
+              f"alpha={args.alpha}. The procedure over-rejects under the null, so a "
+              "power table computed from it would describe a test that does not "
+              "hold its level. No power is reported. (Draft §5: size first.)")
+        return 2
+    verdict = ("conservative (under-rejects; the power table below already pays "
+               "for that)" if size_any < args.alpha * 0.8 else "at nominal level")
+    print(f"    size gate PASSED -- {verdict}")
+
+    # ---- STEP 2: POWER, only now ------------------------------------------
+    print(f"\n  POWER ({args.n_sims} draws/cell, n_boot={args.n_boot})")
+    print(f"  {'beta1_P':>8} {'drift/1sd':>10} {'H1 Holm':>8} {'H2 Holm':>8} "
+          f"{'any':>7} {'both':>7}")
+    rows = []
+    for i, b in enumerate(BETA1_GRID):
+        r = _run_cell(h1, h2, beta1=b, scenario=CENTRAL, n_sims=args.n_sims,
+                      n_boot=args.n_boot, alpha=args.alpha, seed=args.seed + 1 + i)
+        drift = b * CENTRAL["sigma_a"]
+        rows.append({"beta1_primary": b, "beta1_replication": b + 1.0,
+                     "drift_per_1sd": drift, **r.to_dict()})
+        print(f"  {b:8.2f} {drift:9.2%} {r.power_h1_holm:8.3f} "
+              f"{r.power_h2_holm:8.3f} {r.power_any_holm:7.3f} "
+              f"{r.power_both_holm:7.3f}")
+
+    # ---- STEP 3: pre-declared sensitivity, reported WITH the central --------
+    sens = []
+    if args.sensitivity:
+        print("\n  SENSITIVITY (one axis at a time, beta1 held at 0.20)")
+        for axis, values in SENSITIVITY.items():
+            for v in values:
+                if v == CENTRAL[axis]:
+                    continue
+                scen = {**CENTRAL, axis: v}
+                r = _run_cell(h1, h2, beta1=0.20, scenario=scen,
+                              n_sims=args.n_sims, n_boot=args.n_boot,
+                              alpha=args.alpha, seed=args.seed + 900)
+                sens.append({"axis": axis, "value": v, **r.to_dict()})
+                print(f"    {axis:>16} = {v:<6} -> any {r.power_any_holm:.3f} "
+                      f"both {r.power_both_holm:.3f}")
+
+    artifact = {
+        "_kind": "t2_authoritative_power",
+        "asof": asof,
+        "generated_by": "tools/t2_power_artifact.py",
+        "governance": {
+            "task": "P36-11",
+            "status": "DRAFT INPUT — the preregistration remains NOT FROZEN",
+            "outcome_read": False,
+            "note": ("simulated data only; no price, announcement return, CAR, "
+                     "BHAR or test statistic on real outcomes is computed here, "
+                     "so this is not an outcome access"),
+            "beta1_star": None,
+            "beta1_star_note": (
+                "NOT proposed here. Detectability cannot define economic "
+                "importance; beta1* must be argued from round-trip cost and the "
+                "literature's effect sizes, and the power at it then reported "
+                "(draft §5, §10)."),
+        },
+        "specification": {
+            "primary": "AR[+2,+60] = b0 + b1*AR[-1,+1] + controls + day FE",
+            "null": "b1 = 0",
+            "event_day_fe": True,
+            "inference": "wild_cluster_bootstrap",
+            "multiplicity": "holm across H1 and H2",
+            "alpha": args.alpha,
+            "one_sided": True,
+        },
+        "provenance": provenance,
+        "reproducibility": {
+            "seed": args.seed,
+            "n_sims": args.n_sims,
+            "size_sims": size_sims,
+            "n_boot": args.n_boot,
+            "numpy": np.__version__,
+            "python": platform.python_version(),
+            "central_scenario": CENTRAL,
+            "beta1_grid": list(BETA1_GRID),
+        },
+        "size": {
+            "beta1": 0.0,
+            "n_sims": size_sims,
+            "family_wise_rejection": size_any,
+            "clopper_pearson_lower_95": lower,
+            "alpha": args.alpha,
+            "gate": "passed",
+            "verdict": verdict,
+            "detail": size_res.to_dict(),
+        },
+        "power": rows,
+        "sensitivity": sens,
+        "elapsed_seconds": round(time.time() - t0, 1),
+    }
+
+    if not args.no_write:
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        out = OUT_DIR / f"{asof}.json"
+        out.write_text(json.dumps(artifact, ensure_ascii=False, indent=2),
+                       encoding="utf-8")
+        print(f"\nwrote {out}")
+    print("\n  beta1* is NOT set by this artifact. Next: argue it from execution "
+          "cost and the literature, then READ the power at it here.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

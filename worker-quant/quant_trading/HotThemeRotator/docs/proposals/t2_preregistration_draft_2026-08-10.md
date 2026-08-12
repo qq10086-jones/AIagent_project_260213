@@ -230,6 +230,83 @@ Three, each verified by reproduction before being accepted.
    rank before inverting and refuses.
 3. The headline power figure was not the decision rule's. Withdrawn above.
 
+## 5d. The authoritative power run (2026-08-12) — the replacement §5c promised
+
+Artifact: `reports/research/t2_power/2026-08-12.json`, produced by
+`tools/t2_power_artifact.py`. Simulated data only; no price, announcement
+return, CAR, BHAR or test statistic on real outcomes is computed, so producing
+it is not an outcome access.
+
+Specification simulated **and** inferred: `AR[+2,+60] = β₀ + β₁·AR[-1,+1] +
+controls + event-day FE`, H₀: β₁ = 0, wild cluster bootstrap clustered on event
+day, Holm across H1 and H2, α = 0.05 one-sided, on the **real** mapping
+(419 / 419 events, **159 shared**, sha256 `ec9066df…f64f` over the mapping
+actually used). Seed 20260812, numpy 2.3.5, 199 bootstrap replications.
+
+### Size first — and this time it was verified before power existed
+
+| | value |
+|---|---|
+| family-wise rejection under the complete null (1 000 draws) | **0.0500** |
+| Clopper–Pearson one-sided 95% lower bound | 0.0392 |
+| verdict | **at nominal level** |
+| H1 Holm / H2 Holm marginals under the null | 0.0320 / 0.0260 |
+
+The runner refuses to print a power table at all if that lower bound exceeds α.
+This is the first T2 power figure that rests on a level verified for the rule
+that produced it, which is precisely what the three withdrawn versions lacked.
+
+### Power, central scenario (σ_a 0.06, σ_post 0.20, ICC 0.10/0.10, ρ 0), 500 draws/cell
+
+| β₁ (spec P) | β₁ (spec R) | drift per 1 s.d. | H1 Holm | H2 Holm | **any** | **both** |
+|---|---|---|---|---|---|---|
+| 0.00 | 1.00 | 0.00% | 0.028 | 0.022 | 0.044 | 0.006 |
+| 0.05 | 1.05 | 0.30% | 0.052 | 0.028 | 0.078 | 0.002 |
+| 0.10 | 1.10 | 0.60% | 0.058 | 0.076 | 0.112 | 0.022 |
+| 0.15 | 1.15 | 0.90% | 0.124 | 0.100 | 0.202 | 0.022 |
+| 0.20 | 1.20 | 1.20% | 0.158 | 0.184 | 0.268 | 0.074 |
+| 0.25 | 1.25 | 1.50% | 0.262 | 0.262 | 0.388 | 0.136 |
+| 0.30 | 1.30 | 1.80% | 0.330 | 0.354 | **0.468** | **0.216** |
+
+**§5c's prediction is confirmed and it is not comfortable.** v3 reported 0.55 at
+drift 1.8% under a specification with no day fixed effects, no bootstrap and no
+Holm. Under the rule this document actually registers the same effect gives
+**0.468** to reject *either* hypothesis and **0.216** to reject *both*. The
+study is underpowered across the whole plausible range: nowhere on this grid
+does "any" reach 0.5, and "both" never reaches 0.25.
+
+**The gap between the `any` and `both` columns is a decision-rule question, not
+a statistical one, and it is unresolved (§10).** If confirming T2 requires both
+H1 and H2, the study's power is the `both` column and the design as it stands
+cannot support that reading. If either suffices, it is the `any` column. This
+must be settled BEFORE freezing, because choosing afterwards on the basis of
+which column looks better is exactly the degree of freedom preregistration
+exists to remove.
+
+### Pre-declared sensitivity (one axis at a time, β₁ = 0.20, 500 draws/cell)
+
+| axis | value | any | both |
+|---|---|---|---|
+| central | — | 0.268 | 0.074 |
+| σ_a | 0.04 / 0.08 | 0.182 / 0.378 | 0.034 / 0.152 |
+| σ_post | 0.15 / 0.30 | 0.378 / 0.182 | 0.152 / 0.034 |
+| ICC_announce | 0.05 / 0.20 | 0.272 / 0.256 | 0.072 / 0.066 |
+| ICC_post | 0.05 / 0.20 | 0.260 / 0.278 | 0.068 / 0.080 |
+| ρ(day shocks) | 0.3 | 0.264 | 0.072 |
+
+Power is driven almost entirely by the signal-to-noise ratio σ_a/σ_post and is
+close to flat in both intraclass correlations. **ρ = 0.3 moves power by 0.004**
+(0.264 vs 0.268) — the day fixed effects that §5b introduced to remove the
+correlated-day-shock BIAS are also, in this DGP, nearly free in power terms
+once their singleton-day cost is already paid. §5b's claim-scope warning still
+stands: one named threat is closed, not "an unbiased estimate bought".
+
+### β₁* is still not proposed
+
+Deliberately. The artifact records `beta1_star: null`. Deriving it from this
+table would be the fourth repetition of the rejected reasoning. See §10 and the
+blockers listed there.
+
 ## 6. Analysis plan
 
 - **Primary family `P36_T2_v1`: 2 trials** — H1 and H2 under specification P.
@@ -284,14 +361,40 @@ modulates statistical support. Two verdicts, reported separately.
 
 1. **β₁\* from economics, not detectability** — drift per 1 s.d. reaction versus
    round-trip cost and literature effect sizes. Then report the implied power.
-2. **Sensitivity grid executed** on each bucket's real cluster array (§5).
-3. **WCB extended to the full model** (controls + fiscal-year fixed effects) and
-   the simulation re-run on that same model.
-4. **Holm-adjusted power** for the 2-trial family.
+   **STILL OPEN, and three of its inputs are not mine to supply:**
+   - *round-trip cost* — the declared JP-lot figure is 10–25 bp, but P34-01b is
+     PARTIAL: no fill has ever accrued, so there is a declared cost and no
+     observed one. O-3 (declare vs observed-only) is unanswered.
+   - *σ_a* — the 0.06 used throughout §5d is a SIMULATION ASSUMPTION, not a
+     measurement. Reading it off the real `AR[-1,+1]` would touch the regressor,
+     not the dependent variable, so it is probably not an outcome access — but
+     "probably" is not a protocol, and this document is the protocol. Owner
+     decision required before anyone measures it.
+   - *the traded fraction of the cross-section* and whether the position is
+     long-only or long-short, which set how much of the fitted drift is
+     actually capturable.
+   Producing a β₁\* number without these would be the fourth repetition of the
+   reasoning §5 rejected.
+2. ~~**Sensitivity grid executed**~~ — DONE 2026-08-12, §5d, on the real mapping.
+3. ~~**WCB extended to the full model**~~ — DONE; simulation and inference now
+   run the same specification (`full_model_power.py`).
+4. ~~**Holm-adjusted power** for the 2-trial family~~ — DONE 2026-08-12, §5d,
+   with size verified at nominal (0.0500) before any power number was printed.
 5. Family registration — **deliberately not done yet**, since the specification
    is still moving.
 6. O-3 cost figures, for the separate tradability verdict.
 7. Owner sign-off on: disjoint-window primary, the sensitivity grid, and β₁*.
+8. **NEW, raised by §5d — is the confirmation rule `any` or `both`?** Power is
+   0.468 vs 0.216 at the top of the grid, so this single choice roughly halves
+   or doubles what the study can conclude. It must be fixed BEFORE the freeze;
+   choosing afterwards, on the basis of which column reads better, is exactly
+   the degree of freedom preregistration exists to remove.
+9. **NEW — the study is underpowered across the whole plausible range.** Nowhere
+   on the pre-declared grid does `any` reach 0.5, and `both` never reaches 0.25.
+   That is a finding about the design, not a reason to widen the grid until a
+   comfortable number appears. The honest options are: accept a low-powered
+   study and say so in the registration, wait for more events, or abandon T2.
+   Owner decision.
 
 ## 11. Provenance
 

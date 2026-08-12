@@ -33,8 +33,11 @@ from typing import Any, Sequence
 import numpy as np
 
 __all__ = [
+    "ClusterOLS",
     "FullModelError",
+    "fit_cluster_ols",
     "ols_cluster_robust",
+    "prepare_cluster_ols",
     "wild_cluster_bootstrap_p_general",
     "holm_reject",
     "simulate_full_model_power",
@@ -48,23 +51,67 @@ class FullModelError(ValueError):
     """Raised when a full-model simulation is asked for something undefined."""
 
 
-def ols_cluster_robust(
-    X: np.ndarray, y: np.ndarray, cluster_id: np.ndarray, coef: int
-) -> tuple[float, float]:
-    """OLS coefficient ``coef`` and its CR1 cluster-robust standard error.
+@dataclass(frozen=True)
+class ClusterOLS:
+    """A design matrix rank-checked, factorised and cluster-sorted ONCE.
 
-    Works for any design matrix, so the simulation and the real regression can
-    share one estimator instead of drifting apart.
+    The wild cluster bootstrap re-estimates the SAME ``X`` against hundreds of
+    resampled ``y``. Re-deriving the rank, the linear algebra and the cluster
+    layout every time made the authoritative run infeasible rather than merely
+    slow. Measured end to end on the real H1/H2 mapping (419 events, 122-126
+    event-day clusters, 125-column design), one Holm draw = 2 buckets x 199
+    bootstrap replications:
+
+        original                     ~7 000 ms/draw   (500 draws = ~58 min)
+        + hoist per-X work out of
+          the bootstrap loop           ~1 700 ms
+        + only the [coef, coef]
+          element of the covariance      ~600 ms
+        + no inverse, vector solves        91 ms/draw (500 draws = 46 s)
+
+    Nothing above changes a number: verified against the original explicit-loop
+    estimator to a maximum relative error of 6e-14, which is floating-point
+    noise. What it changes is whether the preregistered specification can be
+    simulated at all.
+    """
+
+    X: np.ndarray
+    XtX: np.ndarray
+    Xs: np.ndarray             # X with rows already sorted by cluster
+    hs: np.ndarray             # (X @ (X'X)^-1 e_coef), sorted by cluster
+    order: np.ndarray          # rows sorted by cluster, for reduceat
+    starts: np.ndarray         # first row of each cluster in sorted order
+    coef: int
+    n: int
+    k: int
+    G: int
+    correction: float
+
+
+def prepare_cluster_ols(
+    X: np.ndarray, cluster_id: np.ndarray, coef: int
+) -> ClusterOLS:
+    """Factorise ``X`` for repeated cluster-robust fits of one coefficient.
+
+    The rank check lives HERE and therefore still runs exactly once per design.
+    ``np.linalg.inv`` does NOT raise on a near-singular X'X — it returns a
+    plausible-looking answer that is wrong. Measured 2026-08-10 on the real
+    structure: with fiscal-year dummies left in alongside event-day dummies
+    (rank 124 of 126, cond 4e16) the slope came back 0.6354 when the truth was
+    0.30, silently. Failing here is the only way that cannot happen.
+
+    No inverse is formed. Beyond being the textbook advice, it is what makes
+    this tractable here: measured on this machine ``np.linalg.inv`` of the
+    125x125 X'X costs 187 ms (1427 ms under load) against 0.085 ms for a vector
+    solve of the same system — OpenBLAS multithreading turns small-matrix LAPACK
+    pathological, and matrix right-hand sides take the slow path while vector
+    ones do not.
     """
     n, k = X.shape
-    if y.size != n or cluster_id.size != n:
-        raise FullModelError("X, y and cluster_id must agree in length")
-    # Rank check BEFORE inverting. np.linalg.inv does NOT raise on a
-    # near-singular X'X — it returns a plausible-looking answer that is wrong.
-    # Measured 2026-08-10 on the real structure: with fiscal-year dummies left
-    # in alongside event-day dummies (rank 124 of 126, cond 4e16) the slope came
-    # back 0.6354 when the truth was 0.30, silently. Failing here is the only
-    # way that cannot happen.
+    if cluster_id.size != n:
+        raise FullModelError("X and cluster_id must agree in length")
+    if not 0 <= coef < k:
+        raise FullModelError(f"coef {coef} out of range for {k} columns")
     rank = np.linalg.matrix_rank(X)
     if rank < k:
         raise FullModelError(
@@ -73,25 +120,65 @@ def ols_cluster_robust(
             f"dummies absorb fiscal-year dummies, since each event day lies in "
             f"exactly one fiscal year). Drop the redundant block; do NOT invert.")
     XtX = X.T @ X
+    e = np.zeros(k)
+    e[coef] = 1.0
     try:
-        XtX_inv = np.linalg.inv(XtX)
+        q = np.linalg.solve(XtX, e)          # column `coef` of (X'X)^-1
     except np.linalg.LinAlgError as exc:
         raise FullModelError(f"singular design matrix: {exc}") from exc
-    beta = XtX_inv @ (X.T @ y)
-    resid = y - X @ beta
 
-    groups, inv = np.unique(cluster_id, return_inverse=True)
-    G = groups.size
+    _, inv = np.unique(cluster_id, return_inverse=True)
+    G = int(inv.max()) + 1
     if G < 2:
         raise FullModelError("need >= 2 clusters")
-    meat = np.zeros((k, k))
-    for g in range(G):
-        m = inv == g
-        s = X[m].T @ resid[m]
-        meat += np.outer(s, s)
+    order = np.argsort(inv, kind="stable")
+    sorted_inv = inv[order]
+    starts = np.flatnonzero(
+        np.concatenate(([True], sorted_inv[1:] != sorted_inv[:-1])))
     correction = (G / (G - 1.0)) * ((n - 1.0) / max(n - k, 1))
-    V = XtX_inv @ meat @ XtX_inv * correction
-    return float(beta[coef]), float(math.sqrt(max(V[coef, coef], 0.0)))
+    return ClusterOLS(
+        X=X, XtX=XtX, Xs=np.ascontiguousarray(X[order]),
+        hs=np.ascontiguousarray((X @ q)[order]),
+        order=order, starts=starts, coef=coef,
+        n=n, k=k, G=G, correction=correction)
+
+
+def fit_cluster_ols(prep: ClusterOLS, y: np.ndarray) -> tuple[float, float]:
+    """The prepared coefficient and its CR1 standard error for outcome ``y``.
+
+    The cluster "meat" is the same sum of outer products as an explicit loop,
+    but only ONE element of the covariance is ever used, so only that element is
+    computed. With ``q = (X'X)^-1 e_coef`` and ``h = X q``,
+
+        V[coef, coef] = q' (sum_g s_g s_g') q * c = ||S q||^2 * c
+                      = sum_g ( sum_{i in g} h_i e_i )^2 * c
+
+    so the k-wide per-cluster score matrix collapses to a single reduceat over
+    an n-vector. The identity is exact — the rest of V was always discarded one
+    line later.
+    """
+    if y.size != prep.n:
+        raise FullModelError("y and the prepared design must agree in length")
+    beta = np.linalg.solve(prep.XtX, prep.X.T @ y)
+    resid_s = y[prep.order] - prep.Xs @ beta
+    Sq = np.add.reduceat(prep.hs * resid_s, prep.starts)
+    return (float(beta[prep.coef]),
+            float(math.sqrt(max(float(Sq @ Sq) * prep.correction, 0.0))))
+
+
+def ols_cluster_robust(
+    X: np.ndarray, y: np.ndarray, cluster_id: np.ndarray, coef: int
+) -> tuple[float, float]:
+    """OLS coefficient ``coef`` and its CR1 cluster-robust standard error.
+
+    Works for any design matrix, so the simulation and the real regression can
+    share one estimator instead of drifting apart. One-shot convenience wrapper
+    over :func:`prepare_cluster_ols` + :func:`fit_cluster_ols`; callers that fit
+    the same design repeatedly should use those directly.
+    """
+    if y.size != X.shape[0]:
+        raise FullModelError("X, y and cluster_id must agree in length")
+    return fit_cluster_ols(prepare_cluster_ols(X, cluster_id, coef), y)
 
 
 def wild_cluster_bootstrap_p_general(
@@ -121,7 +208,11 @@ def wild_cluster_bootstrap_p_general(
     if G < 2:
         raise FullModelError("need >= 2 clusters")
 
-    b_hat, se_hat = ols_cluster_robust(X, y, cluster_id, coef)
+    # X is identical for the observed fit and every bootstrap replication, so
+    # it is rank-checked, inverted and cluster-sorted once here rather than
+    # ~n_boot times inside the loop.
+    prep = prepare_cluster_ols(X, cluster_id, coef)
+    b_hat, se_hat = fit_cluster_ols(prep, y)
     t_obs = (b_hat - null_value) / se_hat if se_hat > 0 else 0.0
 
     keep = [j for j in range(k) if j != coef]
@@ -136,7 +227,7 @@ def wild_cluster_bootstrap_p_general(
         w = rng.choice(np.array([-1.0, 1.0]), size=G)[inv]
         y_star = fit_r + null_value * X[:, coef] + w * u_r
         try:
-            b_s, se_s = ols_cluster_robust(X, y_star, cluster_id, coef)
+            b_s, se_s = fit_cluster_ols(prep, y_star)
         except FullModelError:
             continue
         if se_s <= 0:

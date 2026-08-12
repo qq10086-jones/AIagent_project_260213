@@ -282,10 +282,10 @@ Phase 1 W1-W7 主体已完成。当前重心从"建系统"转到"cutover 执行 
 > **2026-08-11 当前执行顺序(P37 / P28 / P36; owner 输入异步,不得阻塞工程)**
 > 1. ~~**[P0 / today] P37-00 + P28 phantom closure**~~ — **DONE 2026-08-11**。以 08-04 queue `executed` 为执行事实建立 `CLOSED_PENDING_PRICE`;08-06 幻影 binding advice 已 append-only superseded;敞口实测修至 **0.422x**(会计与 shortfall 仍 provisional)。详见 Change Log 与 `docs/01_TASKS.md` P37-00。
 > 2. **[owner async] 只追三个成交字段**:exact timestamp / price / fees,理由是测量 07-24 触发、07-27 应执行、08-04 实际执行的 **6-session delay cost**;同时重推自 07-13 开放的带外三选一(部署 / Rule 4 改带 / 有到期日例外)。发出后不等待。
-> 3. **[P0] P37-01 health contract**:先写治理声明,保留 `ok=collection success`,新增 `healthy/degraded/failed` + degraded components。证据:TDnet 5 个 afterclose session 非零仍 `ok:true`;event maintenance 2 行 partial 仍 `ok:true`。
-> 4. **[P28] SSOT/current-state closure**:状态瘦身归 P28,不另造 P37-02 duplicate;execution ledger 与 accounting ledger 显式 reconciliation。
-> 5. **[P1] P37-02 candidate source honesty**:把 API 已有 `meta.candidatesSource` 接进全局 UI;sample 必显著标示。保留 intentional zero-build/CDN,不引入构建链。
-> 6. **[research] P36 authoritative power**:real mapping + day-FE + WCB + Holm -> stored artifact -> economically grounded beta1* -> final family -> owner sign-off。**上述条件全部完成且 owner 签署前不得 freeze/register;完成后 freeze/register 是必做下一步。**
+> 3. ~~**[P0] P37-01 health contract**~~ — **DONE 2026-08-12**。Rule 15.10 治理声明先行,`ok` 保持 collection-success 不变,另加 `healthy/degraded/failed` + 稳定 component code;双向不变式 `failed ⟺ ok is False` 两侧均已实现并有全量日志遍历钉住。前端一半随 P37-02 落地后关单。
+> 4. **[P28] SSOT/current-state closure**:状态瘦身归 P28,不另造 P37-02 duplicate;execution ledger 与 accounting ledger 显式 reconciliation。**(仍待办)**
+> 5. ~~**[P1] P37-02 candidate source honesty**~~ — **DONE 2026-08-12**。`DataProvenanceStrip` 单一实现、shell 单一挂载,四变体由构造覆盖;source fail-closed、健康组件全量不可折叠、perishable 独立标记、`unknown` 非绿;degraded/failed 而组件不可用时合成 `pipeline_health.component_details_missing`(Rule 15.10.7 fail-closed)。zero-build/CDN 按声明保留。
+> 6. **[research → 下一项] P36 authoritative power**:real mapping + day-FE + WCB + Holm -> stored artifact -> economically grounded beta1* -> final family -> owner sign-off。**上述条件全部完成且 owner 签署前不得 freeze/register;完成后 freeze/register 是必做下一步。**
 > 7. **[P2] P37-03 reproducibility**:补 dependencies/lock/clean-install CI;既有 slow lane 只补齐标记与独立 job,不重新发明 lane。
 > 8. **[time-driven only]** T1 4/100 继续自然成熟;price reversal DSR 0.7268 / n_eff 9 继续 shadow;08-26 仅作 63D evidence & protocol readiness check。不开新策略 lane,不调权重,不启用自动执行。
 

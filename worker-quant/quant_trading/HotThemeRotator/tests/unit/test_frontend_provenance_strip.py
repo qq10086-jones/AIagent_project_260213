@@ -239,12 +239,66 @@ def test_every_degraded_component_survives_the_resolver():
     assert out["asof"] == "2026-08-10"
 
 
-def test_a_malformed_component_list_degrades_to_empty_not_a_crash():
+@pytest.mark.parametrize("status", ["degraded", "failed"])
+@pytest.mark.parametrize("components,why", [
+    ("'oops'", "wrong type"),
+    ("undefined", "field absent"),
+    ("null", "explicit null"),
+    ("[]", "well-formed but empty"),
+])
+def test_an_aggregate_with_no_components_synthesizes_a_contract_error(status, components, why):
+    """Rule 15.10.7 is unconditional, and an empty list is how it gets broken.
+
+    A `degraded`/`failed` badge with nothing under it satisfies the letter of
+    "we rendered the list" while destroying exactly what the rule protects: the
+    operator sees that something is wrong and cannot see WHAT. An earlier
+    version returned `components: []` here, and a test of mine pinned that as
+    correct behaviour -- the test was wrong, not just the code.
+
+    The missing detail becomes its own named component. Downgrading the whole
+    badge to `unknown` would also satisfy the rule, but it would throw away the
+    one thing the backend did manage to tell us.
+    """
     out = _run_js(
+        "console.log(JSON.stringify(resolvePipelineHealth({pipelineHealth: "
+        f"{{status: '{status}', degradedComponents: {components}}}}})))")
+    assert out["status"] == status, why
+    assert [c["code"] for c in out["components"]] == [
+        "pipeline_health.component_details_missing"], why
+    assert out["components"][0]["perishable"] is False
+    assert out["components"][0]["detail"]
+
+
+def test_the_synthetic_row_distinguishes_a_broken_field_from_an_empty_one():
+    """Different causes, different fixes: one is a backend bug, the other is a
+    producer that reported a state without its reasons."""
+    broken = _run_js(
         "console.log(JSON.stringify(resolvePipelineHealth("
         "{pipelineHealth: {status: 'degraded', degradedComponents: 'oops'}})))")
+    empty = _run_js(
+        "console.log(JSON.stringify(resolvePipelineHealth("
+        "{pipelineHealth: {status: 'degraded', degradedComponents: []}})))")
+    assert broken["components"][0]["detail"] != empty["components"][0]["detail"]
+    assert "类型错误" in broken["components"][0]["detail"]
+
+
+@pytest.mark.parametrize("status", ["healthy", "unknown"])
+def test_a_non_degraded_aggregate_needs_no_components(status):
+    """`healthy` has nothing to list, and `unknown` has nothing to list it FROM.
+    Synthesizing an error row there would invent a problem."""
+    out = _run_js(
+        "console.log(JSON.stringify(resolvePipelineHealth({pipelineHealth: "
+        f"{{status: '{status}'}}}})))")
     assert out["components"] == []
-    assert out["status"] == "degraded"
+
+
+def test_the_strip_always_has_something_under_a_bad_aggregate():
+    """The render guard and the resolver must agree: the component list is
+    rendered when non-empty, so the resolver may never hand it an empty list
+    for a degraded/failed badge."""
+    strip = STRIP.read_text(encoding="utf-8")
+    assert "health.components.length > 0 &&" in strip
+    assert "pipeline_health.component_details_missing" in strip
 
 
 @pytest.mark.parametrize("degraded,expected", [

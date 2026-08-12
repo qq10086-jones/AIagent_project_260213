@@ -45,11 +45,36 @@ function resolvePipelineHealth(meta) {
   const raw = (meta && meta.pipelineHealth) || null;
   const status = (raw && raw.status) || "unknown";
   const known = status === "healthy" || status === "degraded" || status === "failed";
+  const resolved = known ? status : "unknown";
+  const listed = raw && raw.degradedComponents;
+  const wellFormed = Array.isArray(listed);
+  let components = wellFormed ? listed : [];
+
+  // Rule 15.10.7 is unconditional: the aggregate may never be shown without its
+  // components. A `degraded`/`failed` badge with an empty list satisfies the
+  // letter of "we rendered the list" while breaking exactly what the rule
+  // protects — the operator sees that something is wrong and cannot see what.
+  // So the missing detail becomes its own named component rather than silence.
+  // Downgrading the whole badge to `unknown` would also satisfy the rule, but
+  // it would discard the one thing the backend did tell us.
+  if ((resolved === "degraded" || resolved === "failed") && components.length === 0) {
+    components = [{
+      component: "pipeline_health",
+      label: "健康组件明细",
+      status: "failed",
+      code: "pipeline_health.component_details_missing",
+      perishable: false,
+      detail: wellFormed
+        ? `后端报告 ${resolved} 但未给出任何组件明细`
+        : "后端 degradedComponents 字段缺失或类型错误",
+    }];
+  }
+
   return {
-    status: known ? status : "unknown",
+    status: resolved,
     asof: (raw && raw.asof) || null,
     summary: (raw && raw.summary) || null,
-    components: (raw && Array.isArray(raw.degradedComponents)) ? raw.degradedComponents : [],
+    components,
   };
 }
 

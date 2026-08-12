@@ -115,6 +115,7 @@
 <script type="text/babel" src="src/tweaks-panel.jsx"></script>
 <script type="text/babel" src="src/htr-shared.jsx"></script>
 <script type="text/babel" src="src/htr-shared2.jsx"></script>
+<script type="text/babel" src="src/htr-provenance.jsx"></script>
 <script type="text/babel" src="src/htr-v3-modals.jsx"></script>
 <script type="text/babel" src="src/htr-v1.jsx"></script>
 <script type="text/babel" src="src/htr-v2.jsx"></script>
@@ -205,6 +206,13 @@ function App() {
         <NotifierChip />
         <GatesChip gates={gates} />
       </nav>
+      {/* P37-02 / Rule 15.10.7 + Rule 11.7 — ONE shared provenance strip for all
+          four variants, mounted in the shell ABOVE <main> rather than called
+          from each variant. Four call sites can drift; one mount cannot. It
+          answers source honesty (meta.candidatesSource), pipeline health
+          (meta.pipelineHealth + every degraded component), and section-level
+          mock fallback — the last of which used to exist only inside V3. */}
+      <DataProvenanceStrip />
       <main className="app-main htr">
         {active.Component({ layout: t.layout })}
       </main>

@@ -39,18 +39,11 @@ function V3MarketDashboard({ layout = "tabs" }) {
   return (
     <div className="htr v3-root" style={{ width: "100%", minHeight: "100%", background: "var(--htr-bg)", padding: "14px 18px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
       <V3TopBar onSelect={setSelected} gates={data.gates} meta={data.meta} />
-      {/* Rule 11.9.4 — flag any section that fell back to mock / is unavailable. */}
-      {(() => {
-        const deg = data.__degraded || {};
-        const SEC = { offline: "全部区块（后端不可达）", markets: "市场温度", themes: "主题热力", newsTimeline: "新闻", decisionLog: "决策日志", candidates: "候选清单", gates: "门槛", positions: "持仓", dailyCockpit: "Daily Cockpit" };
-        const bad = deg.offline ? ["offline"] : Object.keys(SEC).filter((k) => k !== "offline" && deg[k]);
-        if (!bad.length) return null;
-        return (
-          <div style={{ padding: "7px 14px", background: "var(--htr-warn-bg)", border: "1px solid var(--htr-warn)", borderRadius: 6, fontSize: 11.5, color: "var(--htr-warn)", lineHeight: 1.5 }}>
-            ⚠ 示例数据：<b>{bad.map((k) => SEC[k]).join("、")}</b> 暂未就绪，下方对应区块为占位/示例数据，非真实行情 (Rule 11.9.4)。
-          </div>
-        );
-      })()}
+      {/* P37-02 — the Rule 11.9.4 section-fallback banner used to be inlined
+          HERE, which is why V1/V2/V4 rendered sample markets and news with no
+          warning at all. It now lives in the one shared DataProvenanceStrip
+          mounted above <main>, alongside source honesty and pipeline health.
+          Do not re-add a variant-local copy: four copies drift, one does not. */}
       <V3TemperatureHero markets={data.markets} />
 
       {/* HERO BENTO (P24-07) — the command area. The deep-dive column (leader +

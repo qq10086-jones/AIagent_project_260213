@@ -270,5 +270,147 @@ def test_end_to_end_run_reports_size_before_power(tmp_path, capsys):
     out = capsys.readouterr().out
     assert out.index("SIZE (beta1=0") < out.index("POWER ("), (
         "size must be reported before power")
-    assert "size gate PASSED" in out
+    assert "size screen PASSED" in out
+    # Both bounds, always: the lower one is the screen, the upper one is what
+    # stops the screen being read as a measurement.
+    assert "lower" in out and "upper" in out
     assert "beta1* is NOT set by this artifact" in out
+
+
+# ── P36-12: the size screen is a screen, not a measurement ───────────────
+
+
+def test_the_upper_bound_shows_what_the_screen_does_not_rule_out():
+    """50/1000 landing exactly on alpha is the case that invited the overclaim."""
+    assert art._clopper_pearson_upper(50, 1000) == pytest.approx(0.0629, abs=5e-4)
+    assert art._clopper_pearson_lower(50, 1000) == pytest.approx(0.0392, abs=5e-4)
+
+
+def test_the_interval_brackets_the_point_estimate():
+    for k, n in [(50, 1000), (5, 100), (0, 500), (300, 1000)]:
+        lo = art._clopper_pearson_lower(k, n)
+        hi = art._clopper_pearson_upper(k, n)
+        assert lo <= k / n <= hi
+
+
+def test_no_wording_claims_the_level_was_verified():
+    """An observed rate equal to alpha means the screen found nothing. It does
+    NOT establish that the true size is alpha, and an earlier version of this
+    tool said 'at nominal level', which reads as if it did."""
+    source = Path(art.__file__).read_text(encoding="utf-8")
+    printed = source[source.index("def main("):]
+    for banned in ("at nominal level", "level verified", "size gate PASSED"):
+        assert banned not in printed, f"overclaiming wording back in output: {banned!r}"
+    assert "not a measurement of" in source
+    assert "no material over-rejection detected" in source
+
+
+def test_only_an_upper_bound_below_alpha_licenses_the_conservative_claim():
+    source = Path(art.__file__).read_text(encoding="utf-8")
+    assert "if upper < args.alpha:" in source, (
+        "'under-rejects' may only be claimed when the whole interval clears alpha")
+
+
+# ── P36-12: the durable attestation ──────────────────────────────────────
+
+
+def _artifact_fixture(tmp_path):
+    src = PROJECT_ROOT / "reports" / "research" / "t2_power" / "2026-08-12.json"
+    if not src.exists():
+        pytest.skip("no stored power artifact in this checkout")
+    dst = tmp_path / "2026-08-12.json"
+    dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    return dst
+
+
+def test_source_hashes_are_line_ending_independent(tmp_path):
+    """A raw byte hash of a checked-out source is a property of someone's
+    autocrlf setting, not of the code. The attestation must survive a clone."""
+    lf = tmp_path / "lf.py"
+    crlf = tmp_path / "crlf.py"
+    lf.write_bytes(b"a = 1\nb = 2\n")
+    crlf.write_bytes(b"a = 1\r\nb = 2\r\n")
+    assert art._sha256_file(lf) != art._sha256_file(crlf)
+    assert art._sha256_source(lf) == art._sha256_source(crlf)
+
+
+def test_the_attestation_names_the_artifact_the_mapping_and_the_generator(tmp_path):
+    artifact = _artifact_fixture(tmp_path)
+    out = art.write_attestation(artifact, out_dir=tmp_path / "att")
+    text = out.read_text(encoding="utf-8")
+
+    stored = json.loads(artifact.read_text(encoding="utf-8"))
+    assert art._sha256_file(artifact) in text, "artifact hash missing"
+    assert stored["provenance"]["bucket_events_sha256"] in text, "mapping hash missing"
+    for src in art.GENERATOR_SOURCES:
+        assert art._sha256_source(PROJECT_ROOT / src) in text, f"{src} hash missing"
+        assert src.as_posix() in text
+    for field in ("seed", "n_sims", "size_sims", "n_boot", "numpy", "python"):
+        assert str(stored["reproducibility"][field]) in text, f"{field} missing"
+
+
+def test_the_attestation_states_what_the_size_screen_does_not_say(tmp_path):
+    out = art.write_attestation(_artifact_fixture(tmp_path), out_dir=tmp_path / "att")
+    text = out.read_text(encoding="utf-8")
+    assert "does NOT establish that the true size equals alpha" in text
+    assert "overclaim" in text
+    assert "NOT FROZEN" in text and "NOT REGISTERED" in text
+    assert "beta1*" in text
+
+
+def test_the_attestation_flags_that_the_runner_changed_after_the_run(tmp_path):
+    """The simulator is unchanged; the runner is not. Saying so is the whole
+    value of hashing them separately."""
+    out = art.write_attestation(_artifact_fixture(tmp_path), out_dir=tmp_path / "att")
+    text = out.read_text(encoding="utf-8")
+    assert "Edited AFTER the run" in text
+    assert "determines every number" in text
+
+
+def test_attesting_never_re_runs_the_simulation(tmp_path):
+    """It must be safe to attest an artifact without the numbers moving."""
+    artifact = _artifact_fixture(tmp_path)
+    before = json.loads(artifact.read_text(encoding="utf-8"))
+    art.write_attestation(artifact, out_dir=tmp_path / "att")
+    after = json.loads(artifact.read_text(encoding="utf-8"))
+    assert after["power"] == before["power"]
+    assert after["sensitivity"] == before["sensitivity"]
+    assert after["size"]["detail"] == before["size"]["detail"]
+
+
+def test_upgrading_a_legacy_size_block_keeps_the_number_and_the_old_wording():
+    legacy = {"size": {"beta1": 0.0, "n_sims": 1000, "alpha": 0.05,
+                       "family_wise_rejection": 0.05, "gate": "passed",
+                       "clopper_pearson_lower_95": 0.0392,
+                       "verdict": "at nominal level", "detail": {"x": 1}}}
+    assert art._upgrade_size_block(legacy) is True
+    size = legacy["size"]
+    assert size["observed_fwer"] == 0.05           # the measurement is untouched
+    assert size["detail"] == {"x": 1}
+    assert size["clopper_pearson_upper_95"] == pytest.approx(0.0629, abs=5e-4)
+    assert size["screen"] == "passed"
+    assert "at nominal level" not in size["interpretation"]
+    # Append-only in spirit: the corrected wording is recorded, not erased.
+    assert size["superseded"]["previous_verdict"] == "at nominal level"
+    assert "overclaimed" in size["superseded"]["reason"]
+
+
+def test_upgrading_is_idempotent():
+    legacy = {"size": {"beta1": 0.0, "n_sims": 1000, "alpha": 0.05,
+                       "family_wise_rejection": 0.05, "verdict": "at nominal level"}}
+    assert art._upgrade_size_block(legacy) is True
+    snapshot = json.dumps(legacy, sort_keys=True)
+    assert art._upgrade_size_block(legacy) is False
+    assert json.dumps(legacy, sort_keys=True) == snapshot
+
+
+def test_the_stored_artifact_no_longer_carries_the_overclaim():
+    path = PROJECT_ROOT / "reports" / "research" / "t2_power" / "2026-08-12.json"
+    if not path.exists():
+        pytest.skip("no stored power artifact in this checkout")
+    size = json.loads(path.read_text(encoding="utf-8"))["size"]
+    assert "verdict" not in size
+    assert size["screen"] == "passed"
+    assert size["clopper_pearson_upper_95"] > size["alpha"], (
+        "if the upper bound cleared alpha the wording could be stronger")
+    assert size["superseded"]["previous_verdict"] == "at nominal level"

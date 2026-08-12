@@ -247,14 +247,20 @@ actually used). Seed 20260812, numpy 2.3.5, 199 bootstrap replications.
 
 | | value |
 |---|---|
-| family-wise rejection under the complete null (1 000 draws) | **0.0500** |
-| Clopper–Pearson one-sided 95% lower bound | 0.0392 |
-| verdict | **at nominal level** |
+| observed FWER under the complete null (1 000 draws) | **0.0500** |
+| Clopper–Pearson one-sided 95% interval | **[0.0392, 0.0629]** |
+| pre-declared material-over-rejection screen | **passed** |
 | H1 Holm / H2 Holm marginals under the null | 0.0320 / 0.0260 |
 
-The runner refuses to print a power table at all if that lower bound exceeds α.
-This is the first T2 power figure that rests on a level verified for the rule
-that produced it, which is precisely what the three withdrawn versions lacked.
+The runner refuses to print a power table at all if the LOWER bound exceeds α.
+
+**Read this precisely, because an earlier draft of this section did not.** The
+observed rate landing exactly on α means the screen found nothing; it does
+**not** establish that the true size equals α — the interval still reaches
+0.0629. The claim available here is "no material over-rejection detected", and
+nothing stronger. What is new relative to the three withdrawn versions is that
+the level was *screened for the rule that produced the power numbers*, not that
+it was verified.
 
 ### Power, central scenario (σ_a 0.06, σ_post 0.20, ICC 0.10/0.10, ρ 0), 500 draws/cell
 

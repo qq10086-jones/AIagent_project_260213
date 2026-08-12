@@ -49,7 +49,19 @@
 > 正是此前藏在 `ok: true` 底下的那两条。
 > ⚠ **运维提示:degraded 的 afterclose 现在退出码为 3(非 0)**,`HTR_Daily_AfterClose`
 > 计划任务会开始显示 last-result 3;这是刻意的可见性,且 3 与 1 可区分。
-> 下一项:P37-02 candidate source honesty。
+> **状态口径更正 (2026-08-12,评审后):P37-01 = BACKEND COMPLETE / FINAL ACCEPTANCE
+> BLOCKED ON P37-02**,不是无条件 DONE——同一任务下方已承认前端未满足 Rule 15.10.7,
+> 标 DONE 与之自相矛盾。
+> **另修评审指出的两处不变式缺口:** Rule 15.10.2 声明 `failed ⟺ ok is False`,但代码只实现
+> 了正向一半(`ok=True` + core 组件字段缺失仍返回 `failed`,即聚合与它承诺一致的那个布尔值
+> 自相矛盾)。规则是对的、代码是错的:`ok` 是 core verdict 的权威,分歧改为**上报而非推翻**——
+> `ok=True` + core 异常 ⇒ `degraded` + `core.contract_mismatch`;完全无 `ok` ⇒ `degraded` +
+> `core.ok_missing`;`ok=False` 无具名原因 ⇒ `failed` + `core.unspecified`(不变)。
+> `daily_routine.health_block()` 的异常 fallback 同样固定返回 degraded,会在 ok=False 时低报
+> 核心失败,一并修。测试覆盖此前也是单向的,现加七种记录形状的双向参数化扫描 +
+> **全量生产日志遍历(109 条非 dry-run,0 违反)**。既有 artifact 未受影响:日志从未到达矛盾形状,
+> 属可达契约缺陷而非生产事故。
+> 下一项:P37-02 candidate source honesty(含 P37-01 转入的共享状态条)。
 
 - Date: 2026-07-15
 - **运营记录:美伊冲突升级 → 纪律持仓,恐慌未兑现(2026-07-14 夜 ~ 07-15 晨)**: owner 深夜报"美伊开战"→ 按惯例先核实(WebSearch):**属实但已连打三晚**(美军第三夜打击伊朗军事目标、伊朗击中霍尔木兹两艘阿联酋油轮、布伦特 +2% 至 $85)——市场早已在定价(周一 TOPIX −1.7% 即含此因素),非新信息。**系统处置 = 三不:不恐慌卖、不抄底加仓、不盯盘**(对地缘零 edge;Rule 17.2 触发器是 NAV/敞口带,不是头条;当前敞口仅 0.666x,ADR-0012 压测 −30%+C 归零仍距地板近一倍,战争级尾部本就在 −75% 预算内)。**次晨验证:恐慌未兑现反而反弹**——隔夜 S&P +0.38%/纳指 +0.9%/SMH +2.5%(6 月 CPI 低于预期,Trump 放弃霍尔木兹 20% 过路费、油价回落 $84);东京 07-15 开盘 1568.T **+1.60% @998.1,持仓 +2.1%(+¥1,254)**。纪律课记录:昨夜恐慌卖=卖在恐慌底;今晨追涨 120口=同一错误反向。**头条不是信号,双向都不是。** preopen 07-15 绿(smoke 1666)。待办不变:8035.T thesis / A 剩 120口 / B 篮子。

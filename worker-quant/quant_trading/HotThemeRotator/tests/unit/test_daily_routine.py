@@ -250,3 +250,32 @@ def test_monthly_cohort_guard_emits_once_per_month(tmp_path, monkeypatch):
     assert out2["emit_rc"] == "skipped_month_exists"
     verbs2 = [c[2] for c in calls if "fundamental_cohort.py" in str(c[1])]
     assert verbs2 == ["sweep"]  # emit skipped, sweep still runs
+
+
+def test_health_block_fallback_still_obeys_the_biconditional():
+    """A crashed health reporter may not contradict `ok` either.
+
+    Reporting `degraded` on an ok=False run would understate a real core
+    failure at exactly the moment the diagnostic meant to explain it is the
+    thing that broke.
+    """
+    import tools.daily_routine as dr
+
+    def _boom(_record):
+        raise RuntimeError("assessor exploded")
+
+    original = dr.assess_record
+    dr.assess_record = _boom
+    try:
+        failed = dr.health_block({"mode": "afterclose", "ok": False})
+        degraded = dr.health_block({"mode": "afterclose", "ok": True})
+    finally:
+        dr.assess_record = original
+
+    assert failed["health_status"] == "failed"
+    assert degraded["health_status"] == "degraded"
+    for block in (failed, degraded):
+        # Rule 15.10.7 — never an aggregate without its components.
+        assert [r["code"] for r in block["degraded_components"]] == [
+            "health_reporter.exception"]
+        assert "assessor exploded" in block["degraded_components"][0]["detail"]

@@ -96,6 +96,7 @@ from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
 )
 from hot_theme_rotator.observability.pipeline_health import (  # noqa: E402
     HEALTH_DEGRADED,
+    HEALTH_FAILED,
     assess_record,
     exit_code_for,
 )
@@ -422,6 +423,36 @@ def run_afterclose(today: date, *, asof: date | None = None, db_path: Path | Non
     return record
 
 
+def health_block(record: dict[str, Any]) -> dict[str, Any]:
+    """Rule 15.10 health for ``record``, with a fail-safe fallback.
+
+    A SECOND aggregate beside ``ok``, never a redefinition of it: ``ok`` still
+    means core collection succeeded, ``health_status`` says whether the declared
+    non-fatal steps also did.
+
+    The fallback obeys the Rule 15.10.2 biconditional as strictly as the
+    assessor does. A reporter that crashed still may not contradict ``ok``:
+    reporting ``degraded`` on an ``ok=False`` run would understate a real core
+    failure at exactly the moment the diagnostic meant to explain it is the
+    thing that broke.
+    """
+    try:
+        return assess_record(record)
+    except Exception as exc:  # noqa: BLE001 - reporting must never break the run
+        status = HEALTH_FAILED if record.get("ok") is False else HEALTH_DEGRADED
+        return {
+            "health_status": status,
+            "components": [],
+            "degraded_components": [{
+                "component": "health_reporter", "label": "健康态聚合",
+                "status": "failed", "code": "health_reporter.exception",
+                "perishable": False, "detail": f"{type(exc).__name__}: {exc}"[:200],
+            }],
+            "perishable_degraded": [],
+            "summary": f"{status}: health_reporter.exception",
+        }
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -446,20 +477,7 @@ def main(argv: list[str] | None = None) -> int:
     # whether the declared non-fatal steps also did. Wrapped defensively — a
     # health reporter that could crash the run it reports on would be the worst
     # of both worlds.
-    try:
-        record["health"] = assess_record(record)
-    except Exception as exc:  # noqa: BLE001 - reporting must never break the run
-        record["health"] = {
-            "health_status": HEALTH_DEGRADED,
-            "components": [],
-            "degraded_components": [{
-                "component": "health_reporter", "label": "健康态聚合",
-                "status": "failed", "code": "health_reporter.exception",
-                "perishable": False, "detail": f"{type(exc).__name__}: {exc}"[:200],
-            }],
-            "perishable_degraded": [],
-            "summary": "degraded: health_reporter.exception",
-        }
+    record["health"] = health_block(record)
 
     append_log(record)
     print(json.dumps(record, ensure_ascii=False, indent=2))

@@ -485,3 +485,101 @@ def test_a_genuine_0830_preopen_is_healthy_not_perpetually_degraded():
 
     assert health["health_status"] == HEALTH_HEALTHY
     assert health["degraded_components"] == []
+
+
+# ── the Rule 15.10.2 biconditional, in BOTH directions ───────────────────
+
+
+def test_ok_true_with_a_missing_core_component_is_degraded_not_failed():
+    """The half of the invariant the first implementation did not have.
+
+    `failed` iff `ok is False`. An earlier version computed
+    `failed = ok is False OR any core component looks bad`, so a record with
+    `ok: True` and a missing `collection` block returned `failed` — the
+    aggregate contradicting the very boolean it promised to agree with.
+
+    `ok` is the authority on the core verdict, so the disagreement is REPORTED,
+    not resolved by overruling it: degraded, with an explicit code. Claiming
+    `failed` would break the invariant; claiming `healthy` would hide the
+    contradiction.
+    """
+    record = _healthy_record()
+    del record["collection"]
+
+    health = assess_record(record)
+
+    assert record["ok"] is True
+    assert health["health_status"] == HEALTH_DEGRADED
+    assert {"forward_collection.not_run", "core.contract_mismatch"} <= _codes(health)
+    row = next(r for r in health["degraded_components"]
+               if r["code"] == "core.contract_mismatch")
+    assert "forward_collection" in row["detail"]
+
+
+def test_ok_true_with_a_failed_candidate_refresh_is_also_a_contract_mismatch():
+    record = _healthy_record()
+    record["candidates"] = {"ok": False, "reason": "screener exit 2"}
+
+    health = assess_record(record)
+
+    assert health["health_status"] == HEALTH_DEGRADED
+    assert {"candidate_refresh.failed", "core.contract_mismatch"} <= _codes(health)
+
+
+def test_a_record_with_no_core_verdict_cannot_claim_healthy():
+    record = _healthy_record()
+    del record["ok"]
+
+    health = assess_record(record)
+
+    assert health["health_status"] == HEALTH_DEGRADED
+    assert "core.ok_missing" in _codes(health)
+
+
+@pytest.mark.parametrize("mutate,label", [
+    (lambda r: r.pop("collection"), "collection missing"),
+    (lambda r: r.pop("candidates"), "candidates missing"),
+    (lambda r: r.update(collection={}), "collection empty"),
+    (lambda r: r.update(candidates={"ok": False}), "candidate refresh failed"),
+    (lambda r: r.update(collection={"emit_rc": 9, "sweep_rc": 0}), "emit nonzero"),
+    (lambda r: r["candidates"].update(tdnet_poll_rc=1), "tdnet failed"),
+    (lambda r: None, "untouched"),
+])
+def test_failed_is_reachable_only_when_ok_is_false(mutate, label):
+    """Sweep the reachable record shapes and assert the biconditional holds.
+
+    Both directions, over every mutation: no shape may produce `failed` while
+    `ok` is True, and none may produce anything but `failed` while `ok` is
+    False. This is the check that would have caught the original one-sided
+    implementation.
+    """
+    for ok_value in (True, False):
+        record = _healthy_record(ok=ok_value)
+        mutate(record)
+        health = assess_record(record)
+        if ok_value is False:
+            assert health["health_status"] == HEALTH_FAILED, label
+        else:
+            assert health["health_status"] != HEALTH_FAILED, label
+
+
+def test_every_real_logged_record_satisfies_the_biconditional():
+    """The invariant must hold on the production log, not just on fixtures."""
+    log = PROJECT_ROOT / "reports" / "observability" / "daily_routine_log.jsonl"
+    if not log.exists():
+        pytest.skip("no production log in this checkout")
+    import json as _json
+    checked = 0
+    for line in log.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = _json.loads(line)
+        if record.get("dry_run"):
+            continue
+        health = assess_record(record)
+        failed = health["health_status"] == HEALTH_FAILED
+        assert failed == (record.get("ok") is False), (
+            f"{record.get('asof')} {record.get('mode')}: "
+            f"ok={record.get('ok')!r} but health={health['health_status']}")
+        checked += 1
+    assert checked > 0

@@ -329,33 +329,59 @@ def assess_record(record: Mapping[str, Any]) -> dict[str, Any]:
         results.append(aware(spec, value, record) if aware
                        else _ASSESSORS[spec.kind](spec, value))
 
-    core_failed = [r for r in results if r.core and r.status in (STATUS_FAILED, STATUS_NOT_RUN)]
+    core_bad = [r for r in results if r.core and r.status in (STATUS_FAILED, STATUS_NOT_RUN)]
     degraded = [r for r in results if not r.core and r.degrading]
 
-    # `ok` is the authority on the core verdict, and the Rule 15.10.2 invariant
-    # binds in both directions: ok=false is always `failed`, even when every
-    # named core component looks fine (that means the roster is incomplete, and
-    # it is reported as `core.unspecified` rather than softened to degraded).
-    if record.get("ok") is False or core_failed:
+    # Rule 15.10.2 is a BICONDITIONAL: `failed` iff `ok is False`. `ok` is the
+    # authority on the core verdict, so it decides `failed` in BOTH directions —
+    # an earlier version only implemented the forward half and would return
+    # `failed` on `ok=True` with a missing core field, which is precisely the
+    # aggregate contradicting the boolean it promised to agree with.
+    #
+    # The two disagreement cases are therefore reported, never resolved by
+    # overruling `ok`:
+    #   ok=False, no core component names a cause -> core.unspecified (roster
+    #     is incomplete: a core gate exists that has no component).
+    #   ok=True, a core component looks bad       -> core.contract_mismatch
+    #     (the record contradicts itself). Degraded, because claiming `failed`
+    #     here would break the invariant and claiming `healthy` would hide it.
+    ok = record.get("ok")
+    contract_rows: list[dict[str, Any]] = []
+    if ok is False:
         health = HEALTH_FAILED
-    elif degraded:
-        health = HEALTH_DEGRADED
+        if not core_bad:
+            contract_rows.append({
+                "component": "core", "label": "核心采集", "status": STATUS_FAILED,
+                "code": "core.unspecified", "perishable": False, "core": True,
+                "detail": "ok=false with no named core component failure",
+            })
     else:
-        health = HEALTH_HEALTHY
+        if core_bad:
+            contract_rows.append({
+                "component": "core", "label": "核心采集", "status": STATUS_FAILED,
+                "code": "core.contract_mismatch", "perishable": False, "core": True,
+                "detail": (
+                    f"ok={ok!r} but core component(s) "
+                    f"{', '.join(r.name for r in core_bad)} did not report success"),
+            })
+        if ok is not True:
+            # No core verdict at all. `healthy` is a claim this record cannot
+            # support, so it is not made.
+            contract_rows.append({
+                "component": "core", "label": "核心采集", "status": STATUS_NOT_RUN,
+                "code": "core.ok_missing", "perishable": False, "core": True,
+                "detail": f"record carries no boolean core verdict (ok={ok!r})",
+            })
+        health = HEALTH_DEGRADED if (degraded or contract_rows) else HEALTH_HEALTHY
 
     degraded_rows = [r.as_dict() for r in degraded]
-    core_rows = [r.as_dict() for r in core_failed]
-    if health == HEALTH_FAILED and not core_rows:
-        core_rows = [{
-            "component": "core", "label": "核心采集", "status": STATUS_FAILED,
-            "code": "core.unspecified", "perishable": False, "core": True,
-            "detail": "ok=false with no named core component failure",
-        }]
+    core_rows = [r.as_dict() for r in core_bad] + contract_rows
 
     if health == HEALTH_FAILED:
         summary = "failed: " + ", ".join(r["code"] for r in core_rows)
     elif health == HEALTH_DEGRADED:
-        summary = "degraded: " + ", ".join(r["code"] for r in degraded_rows)
+        summary = "degraded: " + ", ".join(
+            r["code"] for r in degraded_rows + core_rows)
     else:
         summary = "healthy: all declared components ok"
 
@@ -363,7 +389,7 @@ def assess_record(record: Mapping[str, Any]) -> dict[str, Any]:
         "health_status": health,
         "components": [r.as_dict() for r in results],
         # Rule 15.10.7 — the aggregate is never publishable without these.
-        "degraded_components": degraded_rows + (core_rows if health == HEALTH_FAILED else []),
+        "degraded_components": degraded_rows + core_rows,
         "perishable_degraded": [r["component"] for r in degraded_rows if r["perishable"]],
         "summary": summary,
     }

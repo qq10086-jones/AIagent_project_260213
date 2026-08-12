@@ -48,33 +48,62 @@ function resolvePipelineHealth(meta) {
   const resolved = known ? status : "unknown";
   const listed = raw && raw.degradedComponents;
   const wellFormed = Array.isArray(listed);
-  let components = wellFormed ? listed : [];
 
+  // Per-ITEM validation, not just per-list. A well-formed non-empty array can
+  // still be unusable row by row: `[null]` crashed the render outright (and
+  // under zero-build Babel a render crash is a blank page, not a broken
+  // widget), while `[{}]` and `["oops"]` drew a row with no stable code — a
+  // visible entry that names no cause, which is the same Rule 15.10.7 failure
+  // wearing a component's clothes. A usable row is an object carrying a
+  // non-empty `code`, because the code IS the identity the rule is about.
+  const valid = [];
+  let invalid = 0;
+  if (wellFormed) {
+    for (const c of listed) {
+      const usable = c && typeof c === "object" && !Array.isArray(c)
+        && typeof c.code === "string" && c.code.trim().length > 0;
+      if (usable) valid.push(c); else invalid += 1;
+    }
+  }
+
+  // Contract errors lead: they say the DISPLAY is broken, which outranks any
+  // individual degradation listed under it. Valid rows are always kept — one
+  // bad entry must not discard the real causes standing beside it.
+  const contract = [];
+  if (invalid > 0) {
+    contract.push({
+      component: "pipeline_health",
+      label: "健康组件明细",
+      status: "failed",
+      code: "pipeline_health.component_details_invalid",
+      perishable: false,
+      detail: `${invalid} 条组件项不是对象或缺少稳定 code,已丢弃`,
+    });
+  }
   // Rule 15.10.7 is unconditional: the aggregate may never be shown without its
-  // components. A `degraded`/`failed` badge with an empty list satisfies the
-  // letter of "we rendered the list" while breaking exactly what the rule
-  // protects — the operator sees that something is wrong and cannot see what.
-  // So the missing detail becomes its own named component rather than silence.
-  // Downgrading the whole badge to `unknown` would also satisfy the rule, but
-  // it would discard the one thing the backend did tell us.
-  if ((resolved === "degraded" || resolved === "failed") && components.length === 0) {
-    components = [{
+  // components. A `degraded`/`failed` badge with nothing usable under it
+  // satisfies the letter of "we rendered the list" while breaking exactly what
+  // the rule protects — the operator sees that something is wrong and cannot
+  // see what. Downgrading the whole badge to `unknown` would also satisfy the
+  // rule, but it would discard the one thing the backend did tell us.
+  if ((resolved === "degraded" || resolved === "failed") && valid.length === 0) {
+    contract.push({
       component: "pipeline_health",
       label: "健康组件明细",
       status: "failed",
       code: "pipeline_health.component_details_missing",
       perishable: false,
       detail: wellFormed
-        ? `后端报告 ${resolved} 但未给出任何组件明细`
+        ? `后端报告 ${resolved} 但没有任何可用组件明细`
         : "后端 degradedComponents 字段缺失或类型错误",
-    }];
+    });
   }
 
   return {
     status: resolved,
     asof: (raw && raw.asof) || null,
     summary: (raw && raw.summary) || null,
-    components,
+    components: contract.concat(valid),
   };
 }
 

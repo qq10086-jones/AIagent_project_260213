@@ -292,6 +292,84 @@ def test_a_non_degraded_aggregate_needs_no_components(status):
     assert out["components"] == []
 
 
+_VALID = "{component:'a', label:'A', code:'a.x', perishable:false}"
+
+
+@pytest.mark.parametrize("status", ["degraded", "failed"])
+@pytest.mark.parametrize("items,why", [
+    ("[null]", "null entry"),
+    ("[undefined]", "undefined entry"),
+    ("[{}]", "object with no code"),
+    ("[{code: ''}]", "object with an empty code"),
+    ("[{code: '   '}]", "object with a whitespace code"),
+    ("[{code: 42}]", "object with a non-string code"),
+    ("['oops']", "a bare string"),
+    ("[[]]", "a nested array"),
+])
+def test_an_unusable_entry_inside_a_non_empty_list_is_caught(status, items, why):
+    """Per-ITEM validation, not just per-list.
+
+    A well-formed non-empty array can still be unusable row by row. `[null]`
+    crashed the render outright -- and under zero-build Babel a render crash is
+    a BLANK PAGE, not a broken widget -- while `[{}]` and `['oops']` drew a row
+    with no stable code: a visible entry that names no cause, which is the same
+    Rule 15.10.7 failure wearing a component's clothes.
+    """
+    out = _run_js(
+        "console.log(JSON.stringify(resolvePipelineHealth({pipelineHealth: "
+        f"{{status: '{status}', degradedComponents: {items}}}}})))")
+    codes = [c["code"] for c in out["components"]]
+    assert "pipeline_health.component_details_invalid" in codes, why
+    # Nothing usable survived, so the missing-cause row applies as well: one
+    # row says the payload had junk, the other says nothing was left.
+    assert "pipeline_health.component_details_missing" in codes, why
+    # Every surviving row is renderable -- this is the crash, pinned.
+    for c in out["components"]:
+        assert isinstance(c, dict) and isinstance(c.get("code"), str) and c["code"].strip()
+
+
+@pytest.mark.parametrize("status", ["degraded", "failed"])
+def test_a_mixed_list_keeps_the_valid_rows_and_adds_the_contract_error(status):
+    """One bad entry must not discard the real causes standing beside it."""
+    payload = ("{status: '" + status + "', degradedComponents: ["
+               + _VALID + ", null, {component:'b', code:'b.y'}]}")
+    out = _run_js("console.log(JSON.stringify(resolvePipelineHealth("
+                  "{pipelineHealth: " + payload + "})))")
+    codes = [c["code"] for c in out["components"]]
+    assert "a.x" in codes and "b.y" in codes
+    assert "pipeline_health.component_details_invalid" in codes
+    # Nothing was lost beyond the unusable entry, so no missing-cause row.
+    assert "pipeline_health.component_details_missing" not in codes
+    # The contract error leads: it says the DISPLAY is broken, which outranks
+    # any individual degradation listed under it.
+    assert codes[0] == "pipeline_health.component_details_invalid"
+    assert "1 条" in out["components"][0]["detail"]
+
+
+def test_a_fully_valid_list_is_passed_through_untouched():
+    payload = ("{status: 'degraded', degradedComponents: [" + _VALID
+               + ", {component:'b', code:'b.y', perishable:true}]}")
+    out = _run_js("console.log(JSON.stringify(resolvePipelineHealth("
+                  "{pipelineHealth: " + payload + "})))")
+    assert [c["code"] for c in out["components"]] == ["a.x", "b.y"]
+    assert out["components"][1]["perishable"] is True
+
+
+def test_junk_components_surface_even_under_a_healthy_badge():
+    """A malformed payload is malformed regardless of what it claims.
+
+    `healthy` synthesizes nothing when the list is simply absent, but a list
+    containing junk is evidence the producer is broken, and hiding that because
+    the badge says healthy would be the friendliest possible lie.
+    """
+    out = _run_js(
+        "console.log(JSON.stringify(resolvePipelineHealth({pipelineHealth: "
+        "{status: 'healthy', degradedComponents: [null]}})))")
+    assert out["status"] == "healthy"
+    assert [c["code"] for c in out["components"]] == [
+        "pipeline_health.component_details_invalid"]
+
+
 def test_the_strip_always_has_something_under_a_bad_aggregate():
     """The render guard and the resolver must agree: the component list is
     rendered when non-empty, so the resolver may never hand it an empty list

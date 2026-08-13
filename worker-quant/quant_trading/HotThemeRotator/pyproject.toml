@@ -1,18 +1,126 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "hot-theme-rotator"
 version = "0.1.0"
 # L4 fix — codebase uses PEP 604 / PEP 585 generic syntax (e.g. tuple[float, float],
 # str | Path), requiring Python 3.10+. CI / deployment must enforce this.
+#
+# P37-03 note: ">=3.10" is what the SYNTAX evidence supports — a scan for 3.11+
+# stdlib features (tomllib, datetime.UTC, StrEnum, ExceptionGroup, Self,
+# TaskGroup, file_digest) found none. It is NOT yet a verified claim: the only
+# interpreter this repo has ever run on is CPython 3.13.0 on Windows. Step 3 of
+# P37-03 (clean-environment install + startup) owns that verification and must
+# either confirm 3.10 or narrow this floor.
 requires-python = ">=3.10"
 description = "Japan equity advice-only research dashboard (HotThemeRotator)"
 readme = "README.md"
+
+# ---------------------------------------------------------------------------
+# Dependencies — DERIVED, not authored (P37-03 step 1)
+# ---------------------------------------------------------------------------
+# Every entry below is the output of `python tools/audit_import_surface.py`,
+# which scans src/ tools/ api/ tests/ scripts/ for import statements and maps
+# each importing file to a tier. Do not hand-edit this list: add the import,
+# re-run the audit, and let it tell you which group the dependency belongs to.
+# The audit fails (exit 2) when code and declaration disagree in either
+# direction, and `tests/unit/test_import_surface.py` pins that against the repo.
+#
+# Version bounds: the lower bound is the version this repo is verified against
+# (the working environment as of 2026-08-13). It is NOT a claim that older
+# releases fail — nothing older has been tried. Exact, reproducible pinning is
+# P37-03 step 2's lock file; these bounds only keep a fresh resolve from walking
+# backwards into an untested release.
+#
+# Layering rule: a dependency belongs to the group whose TIER imports it.
+#   core       src/hot_theme_rotator/** (except research/ and backtesting/),
+#              plus the tools/ scripts the daily operational lane runs
+#   dashboard  api/** and its uvicorn entrypoint
+#   research   src/hot_theme_rotator/{research,backtesting}/**, research tools
+#   streamlit  the standalone alternative UI, deliberately not in `dashboard`
+#   test       tests/** and scripts/**
+dependencies = [
+    # HTTP for every external data adapter (J-Quants, TDnet RSS, scrapers).
+    "requests>=2.32",
+    # HTML parsing for the Kabutan / Yahoo Japan scrapers and the TDnet parser.
+    "beautifulsoup4>=4.12",
+    # Price and ticker metadata. Core despite every src import site being
+    # guarded: those guards return None, so an install without yfinance
+    # reports "no prices" while looking healthy — the exact silent degradation
+    # Rule 15.10 forbids. Four tools import it unguarded, three of which are
+    # daily_routine steps.
+    "yfinance>=0.2.40",
+    # TDnet revision PDFs (tools/capture_tdnet_revisions.py, a daily_routine step).
+    "pdfplumber>=0.11",
+]
+
+[project.optional-dependencies]
+# The FastAPI service backing the four dashboard variants.
+# pydantic and starlette are declared explicitly even though FastAPI depends on
+# both: api/ imports them directly, and a direct import must not rely on another
+# package's transitive graph staying the same.
+dashboard = [
+    "fastapi>=0.115",
+    "pydantic>=2.7",
+    "starlette>=0.40",
+    "uvicorn>=0.30",
+]
+
+# Research lane (Rule 15.6 slow lane) — power estimators and vectorbt backtests.
+# numba is NOT listed: no module imports it. It arrives transitively through
+# vectorbt, which is the only importer of the JIT machinery.
+research = [
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "vectorbt>=0.26",
+]
+
+# Standalone streamlit app (tools/streamlit_opportunity_app.py). Kept out of
+# `dashboard` on purpose: the shipped UI is the zero-build React frontend, and
+# folding streamlit in would make installing the shipped UI heavier than the UI.
+streamlit = [
+    "pandas>=2.0",
+    "streamlit>=1.40",
+]
+
+# Running the suite. Self-sufficient by design — `pip install .[test]` alone
+# must be able to run every test, so the fastapi/numpy/pandas entries are
+# repeated here rather than assumed from another extra.
+test = [
+    "pytest>=8.0",
+    # fastapi.testclient.TestClient is built on httpx and raises at import time
+    # without it. No file imports httpx by name, so this requirement is invisible
+    # to a static scan; the audit carries it with a re-measured witness
+    # (13 test files reference TestClient).
+    "httpx>=0.27",
+    "fastapi>=0.115",
+    "numpy>=1.26",
+    "pandas>=2.0",
+    # TOML parser for the import-surface audit on Python 3.10, where tomllib is
+    # not stdlib. Its absence raises a named error, never a wrong verdict.
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+dev = [
+    "hot-theme-rotator[dashboard,research,streamlit,test]",
+]
+
+# `api/` and `tools/` are intentionally NOT packaged: this project is run from a
+# checkout (pytest uses `pythonpath = ["src"]`; tools add `src` and `tools` to
+# sys.path at runtime; the API is served as `api.main:create_app` with the repo
+# root as CWD). Declaring the src package explicitly keeps setuptools from
+# guessing at the flat directories (configs/, data/, reports/, frontend/, ...).
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 # Local Beta v0 test-lane split (Rule 15.6). Daily smoke lane (pre-open) runs
 # `pytest -m "not slow"`; the research regression lane runs `pytest -m slow`
-# (vectorbt/numba backtests — important, but not a daily readiness signal).
+# (vectorbt backtests — important, but not a daily readiness signal).
 markers = [
     "slow: research-regression lane — vectorbt/numba backtests with JIT cold-start. Excluded from the Local Beta v0 daily smoke lane (Rule 15.6).",
 ]

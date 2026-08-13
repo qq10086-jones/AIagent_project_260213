@@ -42,6 +42,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from ..common.source_scan import iter_python_files as _iter_python_files
+
 __all__ = [
     "GateSite",
     "ReachabilityReport",
@@ -96,24 +98,6 @@ def _module_name(path: Path, repo_root: Path) -> str:
     if parts and parts[-1] == "__init__":
         parts = parts[:-1]
     return ".".join(parts)
-
-
-def _iter_python_files(repo_root: Path, roots: tuple[str, ...]) -> list[Path]:
-    out: list[Path] = []
-    for root in roots:
-        base = repo_root / root
-        if not base.is_dir():
-            continue
-        for p in base.rglob("*.py"):
-            # Exclusions are relative to repo_root on purpose: an ANCESTOR of the
-            # repo may itself be named `.runtime` (pytest's basetemp is), and
-            # matching on absolute parts would then skip every file we were
-            # asked to scan.
-            rel_parts = p.relative_to(repo_root).parts
-            if "__pycache__" in rel_parts or ".runtime" in rel_parts:
-                continue
-            out.append(p)
-    return sorted(out)
 
 
 def _imports_of(path: Path) -> set[str]:

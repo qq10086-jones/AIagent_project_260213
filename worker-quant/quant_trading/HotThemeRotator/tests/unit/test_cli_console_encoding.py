@@ -47,6 +47,8 @@ CLI_MODULES = [
     # ASCII-ification is just what enrolment then demanded.
     "tools.risk_mandate_snapshot",
     "tools.daily_routine",
+    # P37-03: enrolled with the tool, not after someone hits the crash.
+    "tools.audit_import_surface",
 ]
 
 

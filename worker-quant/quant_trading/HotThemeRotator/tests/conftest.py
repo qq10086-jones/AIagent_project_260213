@@ -10,16 +10,24 @@ Two verification lanes:
   NOT proof of model edge and the slow lane is NOT a daily readiness signal.
 
 The slow lane is exactly the backtesting test modules — the only tests that
-exercise the numba/vectorbt source (``src/hot_theme_rotator/backtesting/*``).
+exercise the vectorbt source (``src/hot_theme_rotator/backtesting/*``).
 Marking is centralized here by filename so individual test files stay untouched.
+
+P37-03 correction: this docstring used to justify the split by saying "the only
+src modules importing numba/vectorbt live under backtesting/". The measured
+import surface says **no module in this repo imports numba at all** — the JIT
+cold-start that makes the lane slow arrives transitively through vectorbt, whose
+single importer is ``backtesting/vectorbt_spike.py`` (function-level, line 56).
+The lane split is unchanged and still correct; only its stated reason was wrong.
 """
 from __future__ import annotations
 
 import pytest
 
-# Test modules exercising numba/vectorbt backtesting (cold-start JIT compile).
-# Source of truth: the only src modules importing numba/vectorbt live under
-# src/hot_theme_rotator/backtesting/.
+# Test modules exercising vectorbt backtesting (cold-start JIT compile, via
+# vectorbt's own numba dependency). Source of truth for the file list: vectorbt
+# is imported by exactly one src module, under src/hot_theme_rotator/backtesting/
+# — re-derivable with `python tools/audit_import_surface.py`.
 _SLOW_TEST_FILES = {
     "test_vectorbt_backtest_spike.py",
     "test_signal_backtest_report.py",

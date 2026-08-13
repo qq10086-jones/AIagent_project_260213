@@ -80,6 +80,54 @@
 > **明确不做(维持声明):** 保留 zero-build/CDN,不为单人 localhost 座舱引入构建链。
 > full fast smoke **2475 passed / 0 failed**(+65)。
 
+> **P37-03 步骤 1(依赖分层)已落地 (2026-08-13)。** `pyproject.toml` 此前 **零依赖声明**,
+> 而代码实际 import `requests`/`yfinance`/`fastapi`/`numpy`/`pandas` 等——可复现安装此前
+> **不可能**,唯一的规格说明就是这台机器上的那个环境。
+> **做法不是猜一份清单,而是从树里量出来并锁住:** `observability/import_surface.py` +
+> `tools/audit_import_surface.py` + 37 测试。审计扫 `src/ tools/ api/ tests/ scripts/`,
+> 给每个 import 站点标 tier,**双向不一致即 exit 2**;
+> `test_repo_import_surface_is_clean` 每次 smoke 重跑,所以它不会再悄悄烂回去。
+> **实测面:14 个第三方模块 / 195 个 import 站点** → core `requests` `beautifulsoup4`
+> `yfinance` `pdfplumber` / dashboard `fastapi` `pydantic` `starlette` `uvicorn` /
+> research `numpy` `pandas` `vectorbt` / streamlit / test `pytest` `httpx` `tomli`。
+> **四个实测发现(都不是设计时想到的):**
+> ① **`httpx` 是必需依赖,而全仓库没有一个文件 import 它**——13 个测试文件用
+> `fastapi.testclient.TestClient`,它建在 httpx 上,缺了就在 import 期炸。静态扫描永远看不见,
+> 故 `HIDDEN_REQUIREMENTS` **带一个审计每次重新测量的 witness**:证据消失就报 stale,
+> 而不是被永久继承。
+> ② **`numba` 根本不是本仓库的依赖。** `tests/conftest.py` 一直用「唯一 import numba/vectorbt
+> 的 src 模块在 backtesting/ 下」来论证 slow lane 的划分——**没有任何模块 import numba**,
+> 它是经 vectorbt 传递进来的,而 vectorbt 的唯一 importer 是 `vectorbt_spike.py:56`(函数级)。
+> **划分本身是对的,它给出的理由是错的**,已改。
+> ③ **`yfinance` 判为 core,尽管 src 侧三个 import 站点全部 guarded**——那些 guard
+> `except ImportError: return None`,即没装 yfinance 的安装会一边「无价格」一边看起来健康,
+> 正是 Rule 15.10 要禁的静默降级(P37-01)。另有四个 tool 无 guard 直接 import,其中三个是
+> daily_routine 步骤。**故 guarded 只记为「代码的事实」,绝不等于「依赖可选」**:
+> `ALWAYS_REQUIRED` / `OPTIONAL_GUARDED` 两张表把每一次这样的判断变成具名且带理由的条目,
+> 且「声明可选」的模块只要有一个未 guarded 的站点就是缺陷。
+> ④ **写测试时撞出一个盲区,现已成为独立检查。** 一条把第三方 import 放进 `experiments/`
+> 的用例本想触发「无 tier 规则」,结果拿到 **CLEAN**——因为该目录压根不在 `SCANNED_ROOTS`,
+> 从没产生过可以标 tier 的站点。「clean」当时的含义是**「在我被告知的那些目录里 clean」**,
+> 与 P37-01 那个 cp932 名单缺口是同一个形状。现加 `unscanned_source_roots`。
+> **分层由 tier 决定而非口味:** `research/` 与 `backtesting/` 属研究层,所以 vectorbt/numpy/pandas
+> 不进基础安装;**`tools/` 故意没有前缀规则**(该目录混装日常运营链、研究回测、独立 UI),
+> 每个 import 第三方的工具按证据逐个定层(其中 7 个是 daily_routine 步骤),
+> 新工具未定层则审计失败,而不是默默落进 core。
+> **另:`common/source_scan.py` 现为仓库遍历的唯一实现**(gate_reachability 与 import_surface 共用),
+> 采纳前已实测对 gate_reachability 的 423 文件清单**逐一致、零差异**;
+> 而新写的 `find_unscanned_source_roots` **当场又犯了同一个 `.runtime` 绝对路径 bug**
+> (pytest basetemp 就叫 `pytest_tmp`,于是临时仓库里每个文件都「被排除」,未扫描根报成 clean),
+> 被刚写好的那条测试逮住。
+> **不声称:** 本步没有任何版本约束是验证过的。下界=本仓库跑过的版本,不是「最低可用版本」;
+> `requires-python = ">=3.10"` 有语法证据支持(全仓库无 3.11+ stdlib 特性)但**唯一跑过的解释器是
+> Windows 上的 CPython 3.13.0**——由步骤 3 负责验证或收窄。
+> **已量未修(明确留给 P37-01 后续):45 个带 `main()` 的 tool 未进 cp932 名单,其中 22 个
+> `--help` 首行 cp932 编不出**;新工具已随手入册。
+> full fast smoke **2552 passed / 1 skipped / 0 failed**(2514 + 38)。
+> ⚠ 那条 skip 与本改动无关:`test_frontend_provenance_strip.py:422` 依赖真实日志里存在
+> 易逝降级组件,今日日志里没有(08-12 有 `tdnet_poll.nonzero_exit`)。这是「用真实 payload
+> 而非 fixture」的代价——**今天该条契约断言没有执行过**,如实记录,不算通过。
+
 - Date: 2026-07-15
 - **运营记录:美伊冲突升级 → 纪律持仓,恐慌未兑现(2026-07-14 夜 ~ 07-15 晨)**: owner 深夜报"美伊开战"→ 按惯例先核实(WebSearch):**属实但已连打三晚**(美军第三夜打击伊朗军事目标、伊朗击中霍尔木兹两艘阿联酋油轮、布伦特 +2% 至 $85)——市场早已在定价(周一 TOPIX −1.7% 即含此因素),非新信息。**系统处置 = 三不:不恐慌卖、不抄底加仓、不盯盘**(对地缘零 edge;Rule 17.2 触发器是 NAV/敞口带,不是头条;当前敞口仅 0.666x,ADR-0012 压测 −30%+C 归零仍距地板近一倍,战争级尾部本就在 −75% 预算内)。**次晨验证:恐慌未兑现反而反弹**——隔夜 S&P +0.38%/纳指 +0.9%/SMH +2.5%(6 月 CPI 低于预期,Trump 放弃霍尔木兹 20% 过路费、油价回落 $84);东京 07-15 开盘 1568.T **+1.60% @998.1,持仓 +2.1%(+¥1,254)**。纪律课记录:昨夜恐慌卖=卖在恐慌底;今晨追涨 120口=同一错误反向。**头条不是信号,双向都不是。** preopen 07-15 绿(smoke 1666)。待办不变:8035.T thesis / A 剩 120口 / B 篮子。
 - **运营记录:Sleeve A 首批部署 + P25 全链路首日实跑 + P24-11 可及性修复(2026-07-14)**: ① **owner 实盘买入 1568.T(TOPIX ブル2倍)60口 @¥977.2 ≈¥58,632**(SBI 限价单,盘中 13:45;ETF 选型经 live 现价核验从 1570 改 1568——1570 一挡 ¥72,730=18% NAV 无法执行 Rule 17.2 再平衡,1568 一挡 ¥9,671 可执行且与 1306 同指数);journal COMMITTED(preview 现金核对 287,105→228,473 一致)。② **踩坑即修:新符号无 K 线行 → 持仓面板 fail-closed 整体不可用**(诚实行为);定向回填 1568.T 已完结日线 6/1–7/13(yfinance 07-13 收盘 967.1 与 Yahoo live 核验一致),**未碰其他符号、未写盘中半日价**;当晚 19:30 官方刷新起 journal-holding 自动跟踪接管(task#8 机制,验证生效:07-14 收盘 982.4 已入库)。③ **P25 组件生产环境首日全绿**:preopen smoke 1666;afterclose risk_mandate **rc 0 首行自动 trace**(NAV ¥400,677 / 敞口 0.372→**0.666x** below_band / 缓冲 75% / C thesis_missing 仍亮);forward_eval rc 0(超时修复持续有效);value_livelog rc 0。④ **P24-11 红字可及性两遍修复(owner 散光,已确认改善)**:暗色 bear #E86D64→#FFA69E(9.5:1)+ `.htr-bear-num` 亮字红底手法+全局跌幅 600 字重,详见 Change Log。**待办不变:8035.T thesis(面板亮红等 owner)/ A 剩余 120口 额度 / B 篮子(owner 观察后自定)。** 未 commit。

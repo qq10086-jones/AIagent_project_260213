@@ -421,7 +421,7 @@ def run_lane_tests(lane: str, marker: str) -> StepResult:
     started = time.time()
     result = run(
         [
-            str(python), "-m", "pytest", "tests", "-m", marker, "-q",
+            str(python), "-m", "pytest", "tests", "-m", marker, "-q", "-rs",
             "-o", f"cache_dir={cache}", "--basetemp", str(basetemp),
         ],
         lane,
@@ -434,16 +434,22 @@ def run_lane_tests(lane: str, marker: str) -> StepResult:
         if "passed" in line or "failed" in line or "error" in line:
             summary = line.strip()
             break
+    # A skip is not a pass. Every one is named in the artifact so the evidence
+    # can never be read as "the whole lane ran".
+    skips = [line.strip() for line in result.stdout.splitlines() if line.startswith("SKIPPED")]
     if result.returncode != 0:
         raise VerificationError(
             f"{lane} lane pytest -m '{marker}' failed ({result.returncode}): {summary}\n"
             f"{result.stdout[-4000:]}"
         )
+    detail = f"{summary}  [{elapsed:.0f}s]"
+    if skips:
+        detail += f"  | {len(skips)} skipped (named in the artifact, NOT counted as passes)"
     return StepResult(
         f"{lane}: pytest -m '{marker}'",
         True,
-        f"{summary}  [{elapsed:.0f}s]",
-        {"summary": summary, "seconds": round(elapsed, 1)},
+        detail,
+        {"summary": summary, "seconds": round(elapsed, 1), "skipped": skips},
     )
 
 

@@ -1,0 +1,110 @@
+# P37-03 step 6 - fast operational smoke.
+#
+# This is the readiness lane (Rule 15.2). It must fail the job on its own, and
+# it must never be able to pass because some other lane passed: fast and slow
+# are two workflows with two verdicts, deliberately not two steps in one shell
+# command where the last exit code wins.
+#
+# Everything installed here comes from a hash-pinned lock. The project itself is
+# built with --no-build-isolation after the locked bootstrap toolchain, because
+# a fresh CPython 3.13 venv has pip and NO setuptools: plain `pip install .`
+# would reach past every hash to fetch a build backend from PyPI.
+name: fast operational smoke
+
+on:
+  push:
+    paths:
+      - 'worker-quant/quant_trading/HotThemeRotator/**'
+      - '.github/workflows/fast-smoke.yml'
+  pull_request:
+    paths:
+      - 'worker-quant/quant_trading/HotThemeRotator/**'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: worker-quant/quant_trading/HotThemeRotator
+
+permissions:
+  contents: read
+
+jobs:
+  fast:
+    name: fast lane (pytest -m "not slow")
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      # The locks are hash-pinned to CPython 3.13 x86_64 Windows wheels. A
+      # different interpreter would resolve nothing and prove nothing.
+      PYTHONNOUSERSITE: '1'
+      PYTHONIOENCODING: 'utf-8'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: 'x64'
+
+      - name: Record the environment
+        shell: pwsh
+        run: |
+          python -c "import platform, struct, sys; print('impl', platform.python_implementation()); print('ver', platform.python_version()); print('bits', struct.calcsize('P')*8); print('exe', sys.executable)"
+          python -m pip --version
+          python -c "import platform; print('os', platform.platform())"
+
+      - name: Refuse anything but CPython 3.13 x64
+        shell: pwsh
+        run: |
+          python -c "import platform, struct, sys; assert platform.python_implementation()=='CPython', platform.python_implementation(); assert sys.version_info[:2]==(3,13), sys.version_info; assert struct.calcsize('P')*8==64; print('interpreter OK')"
+
+      - name: Pin TMP/TEMP and pytest scratch into the workspace
+        shell: pwsh
+        run: |
+          $lanes = Join-Path $PWD '.runtime/lanes/ci-fast'
+          New-Item -ItemType Directory -Force -Path "$lanes/tmp","$lanes/cache","$lanes/basetemp" | Out-Null
+          if (-not (Test-Path "$lanes/basetemp")) { throw "could not create the lane scratch directories" }
+          "TMP=$lanes/tmp"       | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TEMP=$lanes/tmp"      | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMPDIR=$lanes/tmp"    | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "HTR_LANE_DIR=$lanes"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install the locked build toolchain
+        shell: pwsh
+        run: python -m pip install --require-hashes -r requirements/bootstrap.txt
+
+      - name: Install the fast lane from its lock
+        shell: pwsh
+        run: python -m pip install --require-hashes -r requirements/fast.txt
+
+      - name: Install the project without resolving or building in isolation
+        shell: pwsh
+        run: python -m pip install --no-deps --no-build-isolation --no-index .
+
+      - name: Prove the research stack is absent
+        shell: pwsh
+        run: |
+          python -c "import importlib.util as u; bad=[m for m in ('vectorbt','numba','llvmlite') if u.find_spec(m)]; assert not bad, bad; print('research stack absent, as the fast lock intends')"
+
+      - name: Import surface audit
+        shell: pwsh
+        run: python tools/audit_import_surface.py --quiet
+
+      - name: Lock consistency (offline)
+        shell: pwsh
+        run: python -m pytest tests/unit/test_dependency_locks.py tests/unit/test_import_surface.py -q -o "cache_dir=$env:HTR_LANE_DIR/cache" --basetemp "$env:HTR_LANE_DIR/basetemp"
+
+      - name: Test classification audit (static)
+        shell: pwsh
+        run: python tools/audit_test_classification.py
+
+      - name: Fast lane
+        shell: pwsh
+        run: python -m pytest tests -m "not slow" -q -o "cache_dir=$env:HTR_LANE_DIR/cache" --basetemp "$env:HTR_LANE_DIR/basetemp"
+
+      - name: Working tree must be unchanged
+        shell: pwsh
+        run: |
+          $changed = git status --porcelain -- .
+          if ($changed) { Write-Host $changed; throw "the lane modified tracked files" }

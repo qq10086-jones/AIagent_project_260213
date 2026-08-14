@@ -1,0 +1,103 @@
+# P37-03 step 6 - slow research regression.
+#
+# A SEPARATE workflow from the fast lane, on purpose. Rule 15.6: a green daily
+# smoke lane is not proof of model edge, and a slow-lane failure must never be
+# absorbed by a fast-lane success. Two workflows means two verdicts on the
+# commit, and neither can hide behind the other's exit code.
+#
+# `continue-on-error` appears nowhere here: a research regression that fails
+# quietly is worse than one that fails loudly, because the artifacts it guards
+# are the ones decisions get made from.
+name: slow research regression
+
+on:
+  push:
+    paths:
+      - 'worker-quant/quant_trading/HotThemeRotator/**'
+      - '.github/workflows/slow-research.yml'
+  pull_request:
+    paths:
+      - 'worker-quant/quant_trading/HotThemeRotator/**'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: worker-quant/quant_trading/HotThemeRotator
+
+permissions:
+  contents: read
+
+jobs:
+  slow:
+    name: slow lane (pytest -m slow)
+    runs-on: windows-latest
+    # Monte Carlo power simulations and vectorbt/numba JIT cold start. Generous
+    # because a timeout here would read as a research failure rather than as
+    # the infrastructure event it is.
+    timeout-minutes: 60
+    env:
+      PYTHONNOUSERSITE: '1'
+      PYTHONIOENCODING: 'utf-8'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: 'x64'
+
+      - name: Record the environment
+        shell: pwsh
+        run: |
+          python -c "import platform, struct, sys; print('impl', platform.python_implementation()); print('ver', platform.python_version()); print('bits', struct.calcsize('P')*8); print('exe', sys.executable)"
+          python -m pip --version
+          python -c "import platform; print('os', platform.platform())"
+
+      - name: Refuse anything but CPython 3.13 x64
+        shell: pwsh
+        run: |
+          python -c "import platform, struct, sys; assert platform.python_implementation()=='CPython', platform.python_implementation(); assert sys.version_info[:2]==(3,13), sys.version_info; assert struct.calcsize('P')*8==64; print('interpreter OK')"
+
+      - name: Pin TMP/TEMP and pytest scratch into the workspace
+        shell: pwsh
+        run: |
+          $lanes = Join-Path $PWD '.runtime/lanes/ci-slow'
+          New-Item -ItemType Directory -Force -Path "$lanes/tmp","$lanes/cache","$lanes/basetemp" | Out-Null
+          if (-not (Test-Path "$lanes/basetemp")) { throw "could not create the lane scratch directories" }
+          "TMP=$lanes/tmp"      | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TEMP=$lanes/tmp"     | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMPDIR=$lanes/tmp"   | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "HTR_LANE_DIR=$lanes" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install the locked build toolchain
+        shell: pwsh
+        run: python -m pip install --require-hashes -r requirements/bootstrap.txt
+
+      - name: Install the slow lane from its lock
+        shell: pwsh
+        run: python -m pip install --require-hashes -r requirements/slow.txt
+
+      - name: Install the project without resolving or building in isolation
+        shell: pwsh
+        run: python -m pip install --no-deps --no-build-isolation --no-index .
+
+      - name: Prove the research stack IS present
+        shell: pwsh
+        run: |
+          python -c "import importlib.util as u; missing=[m for m in ('vectorbt','numba','llvmlite') if not u.find_spec(m)]; assert not missing, missing; print('research stack present, as the slow lock intends')"
+
+      - name: The deferred vectorbt import must actually execute
+        shell: pwsh
+        run: |
+          python -c "import sys; sys.path.insert(0,'src'); import pandas as pd; from hot_theme_rotator.backtesting.vectorbt_spike import BacktestCostConfig, BacktestInput, run_take_profit_stop_loss_grid; assert 'vectorbt' not in sys.modules; idx=pd.date_range('2026-01-01', periods=40, freq='D'); close=pd.Series([100+i*0.5 for i in range(40)], index=idx); entries=pd.Series([i==0 for i in range(40)], index=idx); r=run_take_profit_stop_loss_grid(BacktestInput(close=close, entries=entries, stop_loss_pct=0.05, take_profit_pcts=(0.05,), costs=BacktestCostConfig(fee_bps=10.0, slippage_bps=5.0))); assert 'vectorbt' in sys.modules; print('deferred import executed, engine=', r.engine)"
+
+      - name: Slow lane
+        shell: pwsh
+        run: python -m pytest tests -m slow -q -o "cache_dir=$env:HTR_LANE_DIR/cache" --basetemp "$env:HTR_LANE_DIR/basetemp" --durations=20
+
+      - name: Working tree must be unchanged
+        shell: pwsh
+        run: |
+          $changed = git status --porcelain -- .
+          if ($changed) { Write-Host $changed; throw "the lane modified tracked files" }

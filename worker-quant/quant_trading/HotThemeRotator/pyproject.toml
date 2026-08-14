@@ -5,16 +5,24 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hot-theme-rotator"
 version = "0.1.0"
-# L4 fix — codebase uses PEP 604 / PEP 585 generic syntax (e.g. tuple[float, float],
-# str | Path), requiring Python 3.10+. CI / deployment must enforce this.
+# NARROWED FROM ">=3.10" (P37-03 step 3, 2026-08-14) — decided on evidence.
 #
-# P37-03 note: ">=3.10" is what the SYNTAX evidence supports — a scan for 3.11+
-# stdlib features (tomllib, datetime.UTC, StrEnum, ExceptionGroup, Self,
-# TaskGroup, file_digest) found none. It is NOT yet a verified claim: the only
-# interpreter this repo has ever run on is CPython 3.13.0 on Windows. Step 3 of
-# P37-03 (clean-environment install + startup) owns that verification and must
-# either confirm 3.10 or narrow this floor.
-requires-python = ">=3.10"
+# The old floor came from a SYNTAX scan: the codebase uses PEP 604 / PEP 585
+# generics, and nothing uses a 3.11+ stdlib feature (tomllib, datetime.UTC,
+# StrEnum, ExceptionGroup, Self, TaskGroup, file_digest). That reasoning was
+# sound and the conclusion was still a claim nobody had tested.
+#
+# What is actually verified: CPython 3.13.0 on x86_64 Windows, and nothing else
+# has ever run this code. The locks are hash-pinned to cp313 wheels, both CI
+# lanes pin 3.13 and assert it, and the clean-environment verification refuses
+# any other interpreter. Step 3's choice was to build and verify a 3.10 lock and
+# matrix, or to narrow the floor to what is real. Nobody needs 3.10 today, so
+# narrowing is the honest option and the cheap one.
+#
+# `>=3.10` was worse than no declaration at all, because a resolver reads it as
+# a support claim and would happily install onto an interpreter this project has
+# never seen. Widen it again only behind a verified matrix, not behind a scan.
+requires-python = ">=3.13"
 description = "Japan equity advice-only research dashboard (HotThemeRotator)"
 readme = "README.md"
 
@@ -135,11 +143,14 @@ test = [
     # on a workflow that has never run are all this repo can honestly claim
     # (nothing is pushed), so they are worth having and they need a parser.
     "pyyaml>=6.0.3",
-    # TOML parser for the import-surface audit on Python 3.10, where tomllib is
-    # not stdlib. Its absence raises a named error, never a wrong verdict.
-    # No verified version exists for this one: the fallback never runs on 3.13,
-    # so 2.0 is the API floor (tomli 2.0 introduced `load`/`loads` as used here)
-    # and not a tested value. Step 3, which is what will first run 3.10, owns it.
+    # TOML parser fallback for the import-surface audit. With requires-python
+    # narrowed to >=3.13 (step 3) this marker can no longer be selected, so it
+    # never installs and never appears in a lock. It is kept because the code
+    # path it names is a fail-closed refusal, not a silent wrong answer: if the
+    # module is ever imported under an older interpreter in some other checkout,
+    # the audit says "no TOML parser, install tomli" instead of guessing at
+    # pyproject contents. Declared, unselectable, and stated rather than
+    # discovered.
     "tomli>=2.0; python_version < '3.11'",
 ]
 

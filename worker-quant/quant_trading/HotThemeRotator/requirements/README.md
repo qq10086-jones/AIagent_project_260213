@@ -58,8 +58,10 @@ if any pin differs from it.
 
 **They are for CPython 3.13 on x86_64 Windows.** That is stated in each file's
 resolution and is not incidental: hashes pin specific wheels, and wheels are
-per-platform. `pyproject.toml` declares `requires-python = ">=3.10"`, and that
-floor is **not locked and not tested** — see step 3.
+per-platform. `pyproject.toml` used to declare `requires-python = ">=3.10"` on
+the strength of a syntax scan; that floor was **not locked and not tested**, so
+step 3 narrowed it to `>=3.13`, which is the only interpreter this code has ever
+run on. Widen it again behind a verified matrix, never behind a scan.
 
 **Installed and exercised from empty environments (P37-03 step 3).**
 `python tools/verify_clean_environments.py` builds a fresh venv per lane,

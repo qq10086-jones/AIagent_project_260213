@@ -158,9 +158,10 @@ def test_every_declared_direct_dependency_is_pinned_in_dev(locks):
             continue
         for dist in dists:
             if dist == "tomli":
-                # Environment-marked for python_version < 3.11; the locks target
-                # 3.13, so it is correctly absent. Asserting its absence keeps
-                # that reasoning visible instead of looking like an oversight.
+                # Environment-marked for python_version < 3.11, which
+                # requires-python = ">=3.13" now makes unselectable. Correctly
+                # absent from every lock; asserted so the absence reads as a
+                # consequence rather than an oversight.
                 assert _normalize(dist) not in locks["dev"]
                 continue
             assert _normalize(dist) in locks["dev"], f"{dist} ({group}) is not in dev.txt"
@@ -215,7 +216,11 @@ def test_readme_states_what_is_not_verified():
     fact that api/ and tools/ are not packaged and run from the checkout.
     """
     text = (REQUIREMENTS / "README.md").read_text(encoding="utf-8")
-    assert "not locked and not tested" in text, "the >=3.10 floor is still untested"
     assert "still NOT claimed" in text
     assert "not packaged" in text
     assert "CPython 3.13" in text
+    # The old >=3.10 floor was narrowed in step 3 rather than left as an
+    # untested claim; the README must keep saying so, and must keep saying what
+    # would be required to widen it again.
+    assert "narrowed it to `>=3.13`" in text
+    assert "verified matrix" in text

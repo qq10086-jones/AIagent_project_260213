@@ -27,8 +27,9 @@ Two traps this tool exists to prevent
    an explicit `--python-version` and `--python-platform`, and the environment
    snapshot is taken with `python -m pip freeze` from the running interpreter.
 2. **A lock is per-platform and per-Python.** These are resolved for CPython
-   3.13 on x86_64 Windows. `requires-python = ">=3.10"` is NOT locked - see
-   `requirements/README.md`. Step 3 owns whether 3.10 is real at all.
+   3.13 on x86_64 Windows, which is also what `requires-python` now declares:
+   step 3 narrowed the floor from `>=3.10` (a syntax-scan claim nobody had
+   tested) to the one interpreter this code has ever run on.
 
 Read-only with respect to governance: this tool installs nothing, and changes
 no config beyond the generated lock files.

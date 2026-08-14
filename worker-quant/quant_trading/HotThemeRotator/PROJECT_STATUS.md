@@ -229,7 +229,9 @@
 > `--no-deps --no-build-isolation --no-index` 装本体;**断言实际拿到的解释器**而非信任 setup-python;
 > 固定 TMP/TEMP/scratch 到 workspace 且创建失败即抛;`PYTHONNOUSERSITE=1`;无 secret;只读权限;
 > 结束时断言未改动工作树。且**各自证明对方证不了的那一半**:fast 断言 vectorbt/numba/llvmlite **不存在**,
-> slow 断言它们存在**且 deferred import 确实被执行**。30 条结构测试。
+> slow 断言它们存在**且 deferred import 确实被执行**。**结构测试 36 条**
+> (最初写成时是 30 条,而那 30 条全部通过于 GitHub 根本找不到的文件——见下方部署位置错误;
+> 下面那个 30 是历史数字,故意保留)。
 > ⚠ **部署位置错误(复审发现,2026-08-14 已修):两份 workflow 放在 GitHub Actions 永远不看的地方。**
 > 二者都提交在 `worker-quant/quant_trading/HotThemeRotator/.github/workflows/`,
 > 而本项目只是仓库的一个**子目录**(`git rev-parse --show-toplevel` → `E:/AIagent_project_260213`),

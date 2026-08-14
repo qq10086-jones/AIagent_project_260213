@@ -103,14 +103,38 @@ def test_read_for_symbol_respects_asof_window(tmp_path):
 # ─── API integration ─────────────────────────────────────────────────────
 
 
-def test_profile_includes_recent_disclosures_field(monkeypatch):
-    """/profile must surface recent_disclosures (Rule 11.4 structural data)."""
+def test_profile_includes_recent_disclosures_field(monkeypatch, tmp_path):
+    """/profile must surface recent_disclosures (Rule 11.4 structural data).
+
+    P37-05: this used to read whatever price database happened to be on the
+    developer's disk, so in a clean checkout the endpoint could not answer at
+    all and the case failed on the transport instead of the field it names. It
+    now builds its own one-row database, which is what makes it a test of the
+    CONTRACT rather than of the machine.
+    """
+    import sqlite3
+
+    import api.symbol as symbol_api
+
+    db = tmp_path / "prices.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE daily_prices (symbol TEXT, date TEXT, open REAL, high REAL, "
+        "low REAL, close REAL, volume REAL)"
+    )
+    conn.execute(
+        "INSERT INTO daily_prices VALUES ('1306.T','2026-08-14',430,440,428,437.8,1000)"
+    )
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(symbol_api, "default_db_path", lambda: db)
+
     from fastapi.testclient import TestClient
     from api.main import create_app
     app = create_app()
     client = TestClient(app)
     resp = client.get("/api/symbol/1306.T/profile")
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     payload = resp.json()
     assert "recent_disclosures" in payload
     assert isinstance(payload["recent_disclosures"], list)

@@ -152,12 +152,23 @@ ARTIFACT = PROJECT_ROOT / "reports" / "observability" / "risk_mandate" / "2026-0
 
 
 @pytest.mark.skipif(not ARTIFACT.is_file(), reason="the 2026-08-14 artifact is gitignored runtime state")
-def test_the_known_unreconciled_artifact_is_labelled_on_disk():
-    """The specimen itself must not sit in history looking settled."""
+def test_the_published_artifact_carries_its_reconciliation_status():
+    """A published NAV must never be silent about whether it was checked.
+
+    History of this test: it was written while the 2026-08-14 artifact was the
+    known-bad specimen - NAV 394,724 against a broker account of 393,998 - and
+    asserted `official is False`. The two SBI statements then closed the case
+    (see the P37-04 notes), the ledger was corrected on evidence, and the same
+    artifact is now genuinely reconciled. So the assertion moved to the property
+    that holds either way: the status must be present, and `official` must agree
+    with the state rather than being assumed.
+    """
     payload = json.loads(ARTIFACT.read_text(encoding="utf-8"))
     status = payload.get(NAV_STATUS_KEY)
     assert status is not None, (
-        "the 2026-08-14 risk-mandate artifact carries a NAV that disagrees with "
-        "the broker and must be labelled unreconciled"
+        "a published NAV must carry its reconciliation status; an unlabelled one "
+        "is indistinguishable from a checked one"
     )
-    assert status["official"] is False
+    assert status["official"] is (status["state"] == RECONCILED)
+    if status["state"] != RECONCILED:
+        assert status["metrics_allowed"] is False

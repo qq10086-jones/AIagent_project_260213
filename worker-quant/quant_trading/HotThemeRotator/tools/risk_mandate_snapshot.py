@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from hot_theme_rotator.common.console import enable_console_fallback  # noqa: E402
+from hot_theme_rotator.portfolio.nav_publication import annotate_nav_record  # noqa: E402
 from hot_theme_rotator.data.jpx_calendar import (  # noqa: E402
     calendar_covers,
     is_trading_day,
@@ -413,6 +414,38 @@ def _positions_dict() -> dict:
     }
 
 
+
+def _reconcile_for_snapshot(root, asof, panel):
+    """Reconcile the panel against a broker snapshot file, if one exists.
+
+    The snapshot lives at reports/observability/broker_snapshot/{asof}.json and
+    is written by hand from the broker's own pages. There is no automated feed,
+    which is precisely why the default must be `missing_broker_snapshot` rather
+    than silence.
+    """
+    from hot_theme_rotator.portfolio.broker_reconciliation import (
+        BrokerPosition, BrokerSnapshot, JournalView, reconcile_against_broker)
+    from datetime import date as _date
+
+    path = root / "reports" / "observability" / "broker_snapshot" / f"{asof}.json"
+    if not path.is_file():
+        return reconcile_against_broker(
+            JournalView(asof=_date.fromisoformat(asof), cash=panel["cashJpy"],
+                        quantities={}, mark_time=None), None)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    snap = BrokerSnapshot(
+        asof=_date.fromisoformat(raw["asof"]), cash=float(raw["cash"]),
+        positions={s: BrokerPosition(s, float(p["qty"]), float(p["mark"]), float(p["value"]))
+                   for s, p in raw["positions"].items()},
+        total_assets=float(raw["total_assets"]), source=raw["source"],
+        mark_time=raw.get("mark_time"))
+    holdings = {h["symbol"]: float(h.get("qty") or 0) for h in (panel.get("holdings") or [])}
+    return reconcile_against_broker(
+        JournalView(asof=_date.fromisoformat(asof), cash=panel["cashJpy"],
+                    quantities=holdings or snap.quantities,
+                    mark_time=raw.get("mark_time")), snap)
+
+
 def main(argv=None) -> int:
     # Sleeve labels, theses and band notes are legitimately Japanese; a cp932
     # console cannot encode them and would kill the run MID-PRINT, leaving a
@@ -572,8 +605,17 @@ def main(argv=None) -> int:
 
     if not args.no_write:
         (obs / "risk_mandate").mkdir(parents=True, exist_ok=True)
+        # P37-05: every published NAV carries the reconciliation state it was
+        # born in. Without a broker snapshot on disk that state is
+        # `missing_broker_snapshot` and `official` is False - the honest
+        # default, because a NAV nobody checked against the account is a
+        # computation, not a measurement. An unlabelled NAV in this trace is
+        # indistinguishable from a settled one, which is how JPY 394,724 once
+        # sat here next to a JPY 393,998 account.
+        record = annotate_nav_record({"asof": asof, **panel},
+                                     _reconcile_for_snapshot(ROOT, asof, panel))
         (obs / "risk_mandate" / f"{asof}.json").write_text(
-            json.dumps({"asof": asof, **panel}, ensure_ascii=False, indent=2), encoding="utf-8")
+            json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
         row = {
             "asof": asof,
             "nav_jpy": panel["navJpy"],

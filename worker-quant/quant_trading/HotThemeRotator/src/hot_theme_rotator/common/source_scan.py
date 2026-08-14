@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-__all__ = ["EXCLUDED_DIR_NAMES", "iter_python_files"]
+__all__ = ["EXCLUDED_DIR_NAMES", "iter_python_files", "module_name"]
 
 # Directory names that never contain reviewable first-party source.
 # ``.runtime`` is the repo's scratch/artifact area (Rule 15.x); ``__pycache__``
@@ -63,3 +63,17 @@ def iter_python_files(repo_root: Path, roots: tuple[str, ...]) -> list[Path]:
                 continue
             out.append(p)
     return sorted(out)
+
+
+def module_name(path: Path, repo_root: Path) -> str:
+    """Map a file path to the dotted module name used in import statements.
+
+    ``src`` is a source root, so ``src/hot_theme_rotator/a/b.py`` becomes
+    ``hot_theme_rotator.a.b``; a package ``__init__.py`` becomes the package.
+    """
+    parts = list(path.relative_to(repo_root).with_suffix("").parts)
+    if parts and parts[0] == "src":
+        parts = parts[1:]
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts)

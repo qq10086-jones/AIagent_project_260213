@@ -24,11 +24,13 @@ import pytest  # noqa: E402
 from hot_theme_rotator.common.source_scan import iter_python_files  # noqa: E402
 from hot_theme_rotator.observability.import_surface import (  # noqa: E402
     HIDDEN_REQUIREMENTS,
+    LANE_INSTALL_CONTRACT,
     MODULE_DISTRIBUTIONS,
     OPTIONAL_GUARDED,
     ImportSurfaceError,
     _requirement_name,
     audit_import_surface,
+    find_witness_files,
     read_declared_dependencies,
     scan_import_sites,
     write_report,
@@ -76,8 +78,8 @@ def test_every_hidden_requirement_still_has_a_witness():
     for hidden in report.hidden:
         assert not hidden["stale"], (
             f"{hidden['distribution']} is declared as a hidden requirement because "
-            f"'{hidden['witness_substring']}' appears in the tree, but nothing "
-            "matches it any more. Remove the entry or state a new reason."
+            f"`{hidden['witness_import']}` appears in the tree, but no file "
+            "executes that import any more. Remove the entry or state a new reason."
         )
 
 
@@ -322,7 +324,7 @@ def test_optional_guarded_module_is_carried_by_its_declared_group(tmp_path):
 
 
 def test_hidden_requirement_without_a_witness_is_stale(tmp_path):
-    """No TestClient anywhere -> httpx must not be claimed as required."""
+    """No TestClient import anywhere -> httpx must not be claimed as required."""
     repo = _make_repo(tmp_path, {"tests/test_x.py": "import pytest\n"})
     report = audit_import_surface(repo)
     assert report.stale_hidden_requirements == ["httpx"]
@@ -338,6 +340,45 @@ def test_hidden_requirement_with_a_witness_is_required(tmp_path):
     report = audit_import_surface(repo)
     assert report.stale_hidden_requirements == []
     assert "httpx" in report.required_by_group["test"]
+
+
+def test_witness_requires_a_real_import_not_the_words(tmp_path):
+    """A file that merely MENTIONS the witness must not vouch for it.
+
+    The regression this pins: the first witness was a substring search for
+    "TestClient", and this very module contains that word inside the synthetic
+    fixture two tests above. The witness therefore counted 14 files where 13
+    import it, and the audit's own test file would have kept httpx alive after
+    every real use was deleted. A self-certifying witness is not evidence.
+    """
+    repo = _make_repo(
+        tmp_path,
+        {
+            "tests/test_mentions.py": (
+                "import pytest\n"
+                "# we used to use TestClient here\n"
+                'SNIPPET = "from fastapi.testclient import TestClient"\n'
+                'def test_doc(): assert "TestClient" in SNIPPET\n'
+            )
+        },
+    )
+    report = audit_import_surface(repo)
+    assert report.stale_hidden_requirements == ["httpx"]
+    hidden = next(h for h in report.hidden if h["distribution"] == "httpx")
+    assert hidden["witness_count"] == 0
+    assert hidden["witness_import"] == "from fastapi.testclient import TestClient"
+
+
+def test_witness_count_matches_real_importers_in_this_repo():
+    """And the same, measured against the real tree rather than a fixture."""
+    req = next(r for r in HIDDEN_REQUIREMENTS if r.distribution == "httpx")
+    witnesses = find_witness_files(PROJECT_ROOT, req)
+    assert Path(__file__).relative_to(PROJECT_ROOT).as_posix() not in witnesses, (
+        "the audit's own test file is vouching for the requirement it tests"
+    )
+    for rel in witnesses:
+        text = (PROJECT_ROOT / rel).read_text(encoding="utf-8")
+        assert "from fastapi.testclient import TestClient" in text
 
 
 # ---------------------------------------------------------------------------
@@ -389,10 +430,12 @@ def test_optional_guarded_modules_have_a_distribution_and_a_known_group():
         assert reason.strip(), f"{module} is declared optional with no stated reason"
 
 
-def test_hidden_requirements_state_a_reason_and_a_witness():
+def test_hidden_requirements_state_a_reason_and_an_importable_witness():
     for req in HIDDEN_REQUIREMENTS:
         assert req.reason.strip(), f"{req.distribution} has no stated reason"
-        assert req.witness_substring.strip(), f"{req.distribution} has no witness"
+        assert req.witness_module.strip(), f"{req.distribution} has no witness module"
+        # The witness must name a real import, not a word to grep for.
+        assert req.describe().startswith(("import ", "from ")), req.describe()
 
 
 def test_report_round_trips_to_json(tmp_path):
@@ -404,6 +447,134 @@ def test_report_round_trips_to_json(tmp_path):
     assert payload["_kind"] == "import_surface_audit"
     assert payload["verdict"] == "defects"
     assert payload["limits"], "the artifact must carry its own stated limits"
+
+
+# ---------------------------------------------------------------------------
+# The CLI's exit code is the contract CI will consume
+# ---------------------------------------------------------------------------
+# Every defect category, with a repo that exhibits exactly it. The parametrize
+# list is checked for completeness against report.defects below, so a category
+# added to the report without a case here fails loudly.
+_DEFECT_CASES = {
+    "UNDECLARED": {"src/hot_theme_rotator/a.py": "import requests\n"},
+    "UNKNOWN MODULE (no distribution mapping)": {
+        "src/hot_theme_rotator/a.py": "import scipy\n"
+    },
+    "NO TIER RULE (add one in _TIER_RULES/_TOOL_TIERS)": {
+        "tools/new_thing.py": "import requests\n"
+    },
+    "OPTIONAL BUT UNGUARDED": {"src/hot_theme_rotator/a.py": "import tomli\n"},
+    "UNSCANNED SOURCE ROOT (holds .py, neither scanned nor declared an artifact dir)": {
+        "experiments/probe.py": "import requests\n"
+    },
+    "STALE HIDDEN REQUIREMENT (witness gone; remove or re-justify)": {
+        "tests/test_x.py": "import pytest\n"
+    },
+}
+
+
+def _cli(argv):
+    import tools.audit_import_surface as cli
+
+    return cli.main(argv)
+
+
+@pytest.mark.parametrize("category", sorted(_DEFECT_CASES))
+def test_cli_exits_2_for_every_defect_category(category, tmp_path, capsys):
+    """A verdict of DEFECTS must never be paired with a success exit code.
+
+    The regression: `unscanned_source_roots` reached the report's verdict but
+    not the CLI's hand-written defect counter, so the tool printed
+    "verdict: DEFECTS" and exited 0 — a CI job consuming the exit code would
+    have gone green on the very blind spot that had just been closed. Both the
+    verdict and the CLI now read one `report.defects` map, and this parametrize
+    covers each key of it.
+    """
+    repo = _make_repo(tmp_path, _DEFECT_CASES[category])
+    code = _cli(["--base-dir", str(repo)])
+    out = capsys.readouterr().out
+    assert code == 2, f"{category} produced exit {code}\n{out}"
+    assert "DEFECTS" in out
+    assert category in out, f"{category} was not named in the CLI output"
+
+
+def test_defect_cases_cover_every_category(tmp_path):
+    """The list above must not drift behind the report's own defect map."""
+    repo = _make_repo(tmp_path, {"src/hot_theme_rotator/a.py": "import requests\n"})
+    assert set(audit_import_surface(repo).defects) == set(_DEFECT_CASES) | {
+        "DECLARED BUT NOT IMPORTED",
+        "LANE INSTALL CONTRACT GAP (lane cannot even collect)",
+    }
+
+
+def test_cli_exits_0_on_this_repo(capsys):
+    assert _cli(["--quiet"]) == 0
+    assert "CLEAN" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# Lane install contracts
+# ---------------------------------------------------------------------------
+def test_every_lane_module_level_requirement_is_covered_by_its_contract():
+    """`pytest -m <lane>` must be runnable from the declared install command."""
+    report = audit_import_surface(PROJECT_ROOT)
+    assert report.lane_contract_gaps == [], (
+        "a lane cannot even collect from its declared install contract: "
+        f"{report.lane_contract_gaps}"
+    )
+    for lane, info in report.lanes.items():
+        assert info["install_contract"] == list(LANE_INSTALL_CONTRACT[lane])
+        assert info["module_level"], f"{lane} lane reached nothing - the walk is broken"
+
+
+def test_fast_lane_needs_dashboard_extra_not_only_test():
+    """The concrete claim that replaced 'the test extra runs every test'.
+
+    The suite reaches api/, which imports pydantic and starlette at module
+    level, so `pip install .[test]` cannot collect the fast lane.
+    """
+    report = audit_import_surface(PROJECT_ROOT)
+    fast = report.lanes["fast"]["module_level"]
+    assert "pydantic" in fast and "starlette" in fast
+    assert "dashboard" in LANE_INSTALL_CONTRACT["fast"]
+
+
+def test_vectorbt_is_reachable_from_the_fast_lane_but_only_deferred():
+    """Why the fast lane does not need the research extra, stated as a test.
+
+    tests/unit/test_no_trade_diagnostics.py reaches backtesting/vectorbt_spike,
+    where `import pandas` is module level and `import vectorbt` is inside a
+    function. If someone hoists that import, this flips to a hard requirement
+    and the lane-contract check fails instead of the fast lane breaking on a
+    fresh machine.
+    """
+    report = audit_import_surface(PROJECT_ROOT)
+    fast = report.lanes["fast"]
+    assert "vectorbt" not in fast["module_level"]
+    assert "vectorbt" in fast["deferred_only"]
+    assert fast["deferred_uncovered"] == ["vectorbt"]
+
+
+def test_lane_contract_gap_is_detected(tmp_path, monkeypatch):
+    """Prove the check bites: drop `dashboard` and the fast lane must fail."""
+    import hot_theme_rotator.observability.import_surface as mod
+
+    monkeypatch.setitem(mod.LANE_INSTALL_CONTRACT, "fast", ("dependencies", "test"))
+    report = audit_import_surface(PROJECT_ROOT)
+    missing = {g["distribution"] for g in report.lane_contract_gaps if g["lane"] == "fast"}
+    assert {"pydantic", "starlette"} <= missing
+    assert report.verdict == "defects"
+
+
+def test_slow_lane_file_list_comes_from_conftest(tmp_path):
+    """The lane split is read from conftest, never duplicated here."""
+    from hot_theme_rotator.observability.import_surface import _slow_test_files
+
+    files = _slow_test_files(PROJECT_ROOT)
+    assert "test_vectorbt_backtest_spike.py" in files
+    conftest = (PROJECT_ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
+    for name in files:
+        assert name in conftest
 
 
 # ---------------------------------------------------------------------------

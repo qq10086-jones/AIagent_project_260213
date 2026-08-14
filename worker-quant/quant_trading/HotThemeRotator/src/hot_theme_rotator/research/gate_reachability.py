@@ -43,6 +43,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from ..common.source_scan import iter_python_files as _iter_python_files
+from ..common.source_scan import module_name as _module_name
 
 __all__ = [
     "GateSite",
@@ -86,18 +87,6 @@ class ReachabilityReport:
         d = asdict(self)
         d["_kind"] = "gate_reachability_audit"
         return d
-
-
-def _module_name(path: Path, repo_root: Path) -> str:
-    """Map a file path to the dotted module name used in import statements."""
-    rel = path.relative_to(repo_root)
-    parts = list(rel.with_suffix("").parts)
-    # src/hot_theme_rotator/a/b.py -> hot_theme_rotator.a.b (src is a source root)
-    if parts and parts[0] == "src":
-        parts = parts[1:]
-    if parts and parts[-1] == "__init__":
-        parts = parts[:-1]
-    return ".".join(parts)
 
 
 def _imports_of(path: Path) -> set[str]:

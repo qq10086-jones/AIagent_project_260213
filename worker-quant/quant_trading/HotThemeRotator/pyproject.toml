@@ -28,11 +28,21 @@ readme = "README.md"
 # The audit fails (exit 2) when code and declaration disagree in either
 # direction, and `tests/unit/test_import_surface.py` pins that against the repo.
 #
-# Version bounds: the lower bound is the version this repo is verified against
-# (the working environment as of 2026-08-13). It is NOT a claim that older
-# releases fail — nothing older has been tried. Exact, reproducible pinning is
-# P37-03 step 2's lock file; these bounds only keep a fresh resolve from walking
-# backwards into an untested release.
+# Version bounds: each lower bound is EXACTLY the version installed in the only
+# environment this repo has ever run in (2026-08-14). It is not a minimum-working
+# version — nothing older has been tried, and a resolver reads `>=X` as "X and
+# everything after it are supported", which would be a claim nobody has tested.
+# Pinning the bound at the verified version keeps the declaration to what is
+# known, in the conservative direction.
+#
+# A first pass wrote plausible-looking older floors (yfinance>=0.2.40 while 1.1.0
+# is installed, vectorbt>=0.26 against 1.0.0, pytest>=8.0 against 9.0.2) with a
+# comment claiming they were verified versions. They were not: that is invented
+# compatibility, and it is worse than no bound because it is machine-readable.
+#
+# Upper bounds are deliberately absent: an untested future release is no more
+# tested than an untested old one, and a fabricated ceiling would be the same
+# error mirrored. Exact reproducible pinning is P37-03 step 2's lock file.
 #
 # Layering rule: a dependency belongs to the group whose TIER imports it.
 #   core       src/hot_theme_rotator/** (except research/ and backtesting/),
@@ -43,17 +53,17 @@ readme = "README.md"
 #   test       tests/** and scripts/**
 dependencies = [
     # HTTP for every external data adapter (J-Quants, TDnet RSS, scrapers).
-    "requests>=2.32",
+    "requests>=2.34.2",
     # HTML parsing for the Kabutan / Yahoo Japan scrapers and the TDnet parser.
-    "beautifulsoup4>=4.12",
+    "beautifulsoup4>=4.14.3",
     # Price and ticker metadata. Core despite every src import site being
     # guarded: those guards return None, so an install without yfinance
     # reports "no prices" while looking healthy — the exact silent degradation
     # Rule 15.10 forbids. Four tools import it unguarded, three of which are
     # daily_routine steps.
-    "yfinance>=0.2.40",
+    "yfinance>=1.1.0",
     # TDnet revision PDFs (tools/capture_tdnet_revisions.py, a daily_routine step).
-    "pdfplumber>=0.11",
+    "pdfplumber>=0.11.9",
 ]
 
 [project.optional-dependencies]
@@ -62,44 +72,62 @@ dependencies = [
 # both: api/ imports them directly, and a direct import must not rely on another
 # package's transitive graph staying the same.
 dashboard = [
-    "fastapi>=0.115",
-    "pydantic>=2.7",
-    "starlette>=0.40",
-    "uvicorn>=0.30",
+    "fastapi>=0.117.1",
+    "pydantic>=2.11.9",
+    "starlette>=0.48.0",
+    "uvicorn>=0.36.0",
 ]
 
 # Research lane (Rule 15.6 slow lane) — power estimators and vectorbt backtests.
 # numba is NOT listed: no module imports it. It arrives transitively through
 # vectorbt, which is the only importer of the JIT machinery.
 research = [
-    "numpy>=1.26",
-    "pandas>=2.0",
-    "vectorbt>=0.26",
+    "numpy>=2.3.5",
+    "pandas>=2.3.2",
+    "vectorbt>=1.0.0",
 ]
 
 # Standalone streamlit app (tools/streamlit_opportunity_app.py). Kept out of
 # `dashboard` on purpose: the shipped UI is the zero-build React frontend, and
 # folding streamlit in would make installing the shipped UI heavier than the UI.
 streamlit = [
-    "pandas>=2.0",
-    "streamlit>=1.40",
+    "pandas>=2.3.2",
+    "streamlit>=1.53.1",
 ]
 
-# Running the suite. Self-sufficient by design — `pip install .[test]` alone
-# must be able to run every test, so the fastapi/numpy/pandas entries are
-# repeated here rather than assumed from another extra.
+# What the test tier imports DIRECTLY. This is not the same thing as what a
+# pytest lane needs installed, and an earlier comment here conflated the two by
+# claiming `pip install .[test]` alone could run every test. It cannot, in both
+# directions, and the audit now derives the real contract from the import
+# closure rather than asserting it:
+#
+#   fast lane   pytest -m "not slow"   ->  pip install .[test,dashboard]
+#   slow lane   pytest -m slow         ->  pip install .[test,research]
+#   everything                         ->  pip install .[dev]
+#
+# `dashboard` is required by the FAST lane because the suite reaches api/, which
+# imports pydantic and starlette at module level - so `.[test]` alone cannot even
+# collect it. `research` is required by the SLOW lane because vectorbt is
+# imported inside a function that only those tests call (the fast lane reaches
+# the same module and must never call that function). `import_surface.py` checks
+# both contracts and fails if a lane's module-level closure is not covered.
 test = [
-    "pytest>=8.0",
+    "pytest>=9.0.2",
     # fastapi.testclient.TestClient is built on httpx and raises at import time
     # without it. No file imports httpx by name, so this requirement is invisible
-    # to a static scan; the audit carries it with a re-measured witness
-    # (13 test files reference TestClient).
-    "httpx>=0.27",
-    "fastapi>=0.115",
-    "numpy>=1.26",
-    "pandas>=2.0",
+    # to a static scan; the audit carries it with a witness matched in the AST -
+    # 13 test files really execute `from fastapi.testclient import TestClient`.
+    # (Matching the plain string instead let the audit's own test file vouch for
+    # the requirement, which would have kept httpx alive forever. It counted 14.)
+    "httpx>=0.28.1",
+    "fastapi>=0.117.1",
+    "numpy>=2.3.5",
+    "pandas>=2.3.2",
     # TOML parser for the import-surface audit on Python 3.10, where tomllib is
     # not stdlib. Its absence raises a named error, never a wrong verdict.
+    # No verified version exists for this one: the fallback never runs on 3.13,
+    # so 2.0 is the API floor (tomli 2.0 introduced `load`/`loads` as used here)
+    # and not a tested value. Step 3, which is what will first run 3.10, owns it.
     "tomli>=2.0; python_version < '3.11'",
 ]
 
@@ -122,5 +150,5 @@ pythonpath = ["src"]
 # `pytest -m "not slow"`; the research regression lane runs `pytest -m slow`
 # (vectorbt backtests — important, but not a daily readiness signal).
 markers = [
-    "slow: research-regression lane — vectorbt/numba backtests with JIT cold-start. Excluded from the Local Beta v0 daily smoke lane (Rule 15.6).",
+    "slow: research-regression lane — vectorbt backtests with JIT cold-start (numba arrives through vectorbt; nothing here imports it directly). Excluded from the Local Beta v0 daily smoke lane (Rule 15.6). Needs pip install .[test,research].",
 ]

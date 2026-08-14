@@ -75,6 +75,23 @@ def main(argv: list[str] | None = None) -> int:
                 f"sites={len(mod.sites)}{note}"
             )
 
+        if report.lanes:
+            print("\npytest lane install contracts (derived from the import closure):")
+            for lane, info in report.lanes.items():
+                extras = "+".join(info["install_contract"])
+                print(
+                    f"  {lane:5s} {info['test_modules']:4d} test modules, "
+                    f"{info['reachable_modules']:4d} reachable -> install {extras}"
+                )
+                print(f"        module-level: {', '.join(info['module_level'])}")
+                if info["deferred_only"]:
+                    print(f"        deferred    : {', '.join(info['deferred_only'])}")
+                if info["deferred_uncovered"]:
+                    print(
+                        "        deferred and NOT in this lane's contract "
+                        f"(must not be exercised here): {', '.join(info['deferred_uncovered'])}"
+                    )
+
         if report.hidden:
             print("\nhidden requirements (invisible to a static scan):")
             for h in report.hidden:
@@ -86,34 +103,20 @@ def main(argv: list[str] | None = None) -> int:
             for entry in report.first_party_path_imports:
                 print(f"  {entry['module']:34s} imported by {len(entry['importers'])} file(s)")
 
-    defects = 0
-    for label, rows in (
-        ("UNDECLARED", report.undeclared),
-        ("DECLARED BUT NOT IMPORTED", report.declared_unused),
-        ("UNKNOWN MODULE (no distribution mapping)", report.unknown_modules),
-        ("OPTIONAL BUT UNGUARDED", report.optional_but_unguarded),
-    ):
-        if rows:
-            defects += len(rows)
-            print(f"\n{label}:")
-            for row in rows:
-                print(f"  {row}")
-    if report.unassigned_tier_files:
-        defects += len(report.unassigned_tier_files)
-        print("\nNO TIER RULE (add one in import_surface._TIER_RULES/_TOOL_TIERS):")
-        for path in report.unassigned_tier_files:
-            print(f"  {path}")
-    if report.stale_hidden_requirements:
-        defects += len(report.stale_hidden_requirements)
-        print("\nSTALE HIDDEN REQUIREMENT (witness gone; remove or re-justify):")
-        for dist in report.stale_hidden_requirements:
-            print(f"  {dist}")
+    # Iterate the report's own defect map rather than a list maintained here:
+    # a category added to the report cannot be missed by this exit path.
+    for label, rows in report.defects.items():
+        if not rows:
+            continue
+        print(f"\n{label}:")
+        for row in rows:
+            print(f"  {row}")
 
     if args.json_path:
         out = write_report(report, Path(args.json_path))
         print(f"\nwrote {out}")
 
-    return 0 if defects == 0 else 2
+    return 0 if report.defect_count == 0 else 2
 
 
 if __name__ == "__main__":

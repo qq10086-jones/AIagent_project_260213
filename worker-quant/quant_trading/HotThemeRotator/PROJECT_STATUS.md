@@ -128,6 +128,36 @@
 > 易逝降级组件,今日日志里没有(08-12 有 `tdnet_poll.nonzero_exit`)。这是「用真实 payload
 > 而非 fixture」的代价——**今天该条契约断言没有执行过**,如实记录,不算通过。
 
+> **P37-03 步骤 1 复审整改 (2026-08-14) —— 四个缺陷全在 fail-closed 契约本身,已全修。**
+> ① **`httpx` 的 witness 会自我续命。** 原实现全文搜字符串 `"TestClient"`,而
+> `test_import_surface.py` 自己的合成 fixture 里就有这个词 → **审计数出 14 个 witness,
+> 实际 import 的只有 13 个**;真实用法哪天删光,那条断言 httpx 必需的测试仍会用自己的文本
+> 让它永不 stale。**自我背书不是证据。** 改为 **AST 级匹配**(必须真有
+> `from fastapi.testclient import TestClient` 语句),现数 13,测试文件自动排除。
+> ② **CLI 可以打印 `verdict: DEFECTS` 然后 exit 0。** `unscanned_source_roots`(同一轮刚加的)
+> 进了 report 的 verdict,却没进 CLI 那份手写的缺陷计数——**消费退出码的 CI 会在刚补上的
+> 那个盲区上判绿**。**结构性修复而非补一行**:report 暴露唯一的 `defects` 映射,verdict 与 CLI
+> 都读它,新增类别不可能只进一边;并加参数化测试,**逐个类别**驱动 CLI 必须 exit 2,
+> 外加一条类别完整性测试。
+> ③ **「`pip install .[test]` 能跑全部测试」两个方向都是错的**,且那是一句断言安装事实的注释。
+> 改为 **算出来**:`lane_requirements()` 把每条 lane 的测试模块沿一方 import 图展开,区分
+> **模块级**(collect 就需要)与 **deferred**(函数内,可能永不执行)。结论:**fast lane 需要
+> `.[test,dashboard]`**——测试面传递到 `api/`,后者模块级 import pydantic/starlette,
+> 故 `.[test]` **连 collect 都做不到**;**slow lane 需要 `.[test,research]`**。反方向的细节同样被
+> 粗结论漏掉:一个 **fast** lane 测试(`test_no_trade_diagnostics`)也传递到
+> `backtesting/vectorbt_spike`,但那里 `import vectorbt` 在函数内、`import pandas` 在模块级,
+> 所以 fast lane **不需要** research extra。`LANE_INSTALL_CONTRACT` 现受检查:模块级需求未覆盖
+> 即缺陷——哪天有人把那个 vectorbt import 提到模块级,是**审计失败**,而不是 fast lane 在
+> 别人机器上装完跑不起来。
+> ④ **版本下界是编的。** `yfinance>=0.2.40`(实装 1.1.0)/`vectorbt>=0.26`(实装 1.0.0)/
+> `pytest>=8.0`(实装 9.0.2),而注释写着「下界=已验证版本」。**不是**,且 resolver 会把 `>=X`
+> 读成「X 及之后都支持」。现全部改为实装版本;不加上界(未测的新版本并不比未测的旧版本更可信)。
+> 唯一无验证版本的 `tomli>=2.0` 已注明:3.13 上那条 fallback 从不执行,2.0 是 API 下界不是实测值,
+> 步骤 3 才会第一次真正跑到它。
+> **仍不声称:本步没有执行过任何一次安装。** lane 契约是从 import 图**推导**的,不是装出来的;
+> 真正的 clean-environment 安装与启动验证归步骤 3。
+> full fast smoke **2567 passed / 1 skipped / 0 failed**(2552 + 15);同一条数据依赖 skip 不变。
+
 - Date: 2026-07-15
 - **运营记录:美伊冲突升级 → 纪律持仓,恐慌未兑现(2026-07-14 夜 ~ 07-15 晨)**: owner 深夜报"美伊开战"→ 按惯例先核实(WebSearch):**属实但已连打三晚**(美军第三夜打击伊朗军事目标、伊朗击中霍尔木兹两艘阿联酋油轮、布伦特 +2% 至 $85)——市场早已在定价(周一 TOPIX −1.7% 即含此因素),非新信息。**系统处置 = 三不:不恐慌卖、不抄底加仓、不盯盘**(对地缘零 edge;Rule 17.2 触发器是 NAV/敞口带,不是头条;当前敞口仅 0.666x,ADR-0012 压测 −30%+C 归零仍距地板近一倍,战争级尾部本就在 −75% 预算内)。**次晨验证:恐慌未兑现反而反弹**——隔夜 S&P +0.38%/纳指 +0.9%/SMH +2.5%(6 月 CPI 低于预期,Trump 放弃霍尔木兹 20% 过路费、油价回落 $84);东京 07-15 开盘 1568.T **+1.60% @998.1,持仓 +2.1%(+¥1,254)**。纪律课记录:昨夜恐慌卖=卖在恐慌底;今晨追涨 120口=同一错误反向。**头条不是信号,双向都不是。** preopen 07-15 绿(smoke 1666)。待办不变:8035.T thesis / A 剩 120口 / B 篮子。
 - **运营记录:Sleeve A 首批部署 + P25 全链路首日实跑 + P24-11 可及性修复(2026-07-14)**: ① **owner 实盘买入 1568.T(TOPIX ブル2倍)60口 @¥977.2 ≈¥58,632**(SBI 限价单,盘中 13:45;ETF 选型经 live 现价核验从 1570 改 1568——1570 一挡 ¥72,730=18% NAV 无法执行 Rule 17.2 再平衡,1568 一挡 ¥9,671 可执行且与 1306 同指数);journal COMMITTED(preview 现金核对 287,105→228,473 一致)。② **踩坑即修:新符号无 K 线行 → 持仓面板 fail-closed 整体不可用**(诚实行为);定向回填 1568.T 已完结日线 6/1–7/13(yfinance 07-13 收盘 967.1 与 Yahoo live 核验一致),**未碰其他符号、未写盘中半日价**;当晚 19:30 官方刷新起 journal-holding 自动跟踪接管(task#8 机制,验证生效:07-14 收盘 982.4 已入库)。③ **P25 组件生产环境首日全绿**:preopen smoke 1666;afterclose risk_mandate **rc 0 首行自动 trace**(NAV ¥400,677 / 敞口 0.372→**0.666x** below_band / 缓冲 75% / C thesis_missing 仍亮);forward_eval rc 0(超时修复持续有效);value_livelog rc 0。④ **P24-11 红字可及性两遍修复(owner 散光,已确认改善)**:暗色 bear #E86D64→#FFA69E(9.5:1)+ `.htr-bear-num` 亮字红底手法+全局跌幅 600 字重,详见 Change Log。**待办不变:8035.T thesis(面板亮红等 owner)/ A 剩余 120口 额度 / B 篮子(owner 观察后自定)。** 未 commit。

@@ -51,7 +51,7 @@ import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from ..common.source_scan import iter_python_files
+from ..common.source_scan import iter_python_files, module_name
 
 __all__ = [
     "ImportSite",
@@ -64,6 +64,9 @@ __all__ = [
     "ALWAYS_REQUIRED",
     "OPTIONAL_GUARDED",
     "TIER_GROUPS",
+    "LANE_INSTALL_CONTRACT",
+    "lane_requirements",
+    "find_witness_files",
     "scan_import_sites",
     "audit_import_surface",
     "read_declared_dependencies",
@@ -175,6 +178,23 @@ TIER_GROUPS: dict[str, str] = {
     "test": "test",
 }
 
+# What must be installed to RUN each pytest lane. Distinct from TIER_GROUPS,
+# which answers a different question: a group says who imports a dependency
+# directly, a lane contract says what a lane needs present.
+#
+# `dashboard` is in the fast lane's contract because the test suite reaches
+# `api/` and therefore imports pydantic and starlette at module level - so
+# `pip install .[test]` cannot even COLLECT the fast lane, which is what an
+# earlier comment here claimed it could do. `research` is in the slow lane's
+# because vectorbt is imported inside a function that the slow tests call.
+#
+# The audit checks this: every module-level requirement of a lane's import
+# closure must be covered, or it is a defect.
+LANE_INSTALL_CONTRACT: dict[str, tuple[str, ...]] = {
+    "fast": ("dependencies", "test", "dashboard"),
+    "slow": ("dependencies", "test", "research"),
+}
+
 
 # ---------------------------------------------------------------------------
 # Module -> distribution
@@ -201,13 +221,28 @@ MODULE_DISTRIBUTIONS: dict[str, str] = {
 
 @dataclass(frozen=True)
 class HiddenRequirement:
-    """A dependency the AST cannot see, declared with re-measurable evidence."""
+    """A dependency the AST cannot see, declared with re-measurable evidence.
+
+    The witness is an IMPORT, matched in the AST — not a substring. A substring
+    search looked equivalent and was not: the first version searched for
+    ``"TestClient"``, and the very test file asserting that httpx is required
+    contains that word inside a synthetic-repo fixture. The witness therefore
+    counted 14 files where 13 import it, and the audit test would have kept the
+    requirement alive by its own text after every real use had been deleted. A
+    self-certifying witness is not evidence.
+    """
 
     distribution: str
     tier: str
     reason: str
-    witness_substring: str
+    witness_module: str
+    witness_name: str | None = None
     witness_roots: tuple[str, ...] = SCANNED_ROOTS
+
+    def describe(self) -> str:
+        if self.witness_name:
+            return f"from {self.witness_module} import {self.witness_name}"
+        return f"import {self.witness_module}"
 
 
 # Distributions that no file imports by name, required anyway through another
@@ -223,7 +258,8 @@ HIDDEN_REQUIREMENTS: tuple[HiddenRequirement, ...] = (
             "without httpx installed raises at import time. No file imports httpx "
             "by name, so the static scan cannot see this requirement."
         ),
-        witness_substring="TestClient",
+        witness_module="fastapi.testclient",
+        witness_name="TestClient",
         witness_roots=("tests",),
     ),
 )
@@ -340,19 +376,41 @@ class ImportSurfaceReport:
     optional_but_unguarded: list[dict] = field(default_factory=list)
     stale_hidden_requirements: list[str] = field(default_factory=list)
     unscanned_source_roots: list[str] = field(default_factory=list)
+    lanes: dict = field(default_factory=dict)
+    lane_contract_gaps: list[dict] = field(default_factory=list)
+
+    @property
+    def defects(self) -> dict[str, list]:
+        """Every defect category, keyed by a human label.
+
+        Both ``verdict`` and the CLI read THIS, so a category can no longer be
+        added to the report and forgotten by one of them. The first version kept
+        the two lists separately and they immediately diverged:
+        ``unscanned_source_roots`` reached the verdict but not the CLI's counter,
+        so the tool could print "VERDICT: DEFECTS" and still exit 0.
+        """
+        return {
+            "UNDECLARED": self.undeclared,
+            "DECLARED BUT NOT IMPORTED": self.declared_unused,
+            "UNKNOWN MODULE (no distribution mapping)": self.unknown_modules,
+            "OPTIONAL BUT UNGUARDED": self.optional_but_unguarded,
+            "NO TIER RULE (add one in _TIER_RULES/_TOOL_TIERS)": self.unassigned_tier_files,
+            "STALE HIDDEN REQUIREMENT (witness gone; remove or re-justify)": (
+                self.stale_hidden_requirements
+            ),
+            "UNSCANNED SOURCE ROOT (holds .py, neither scanned nor declared an artifact dir)": (
+                self.unscanned_source_roots
+            ),
+            "LANE INSTALL CONTRACT GAP (lane cannot even collect)": self.lane_contract_gaps,
+        }
+
+    @property
+    def defect_count(self) -> int:
+        return sum(len(rows) for rows in self.defects.values())
 
     @property
     def verdict(self) -> str:
-        defects = (
-            self.undeclared
-            or self.declared_unused
-            or self.unknown_modules
-            or self.unassigned_tier_files
-            or self.optional_but_unguarded
-            or self.stale_hidden_requirements
-            or self.unscanned_source_roots
-        )
-        return "defects" if defects else "clean"
+        return "defects" if self.defect_count else "clean"
 
     def to_dict(self) -> dict:
         return {
@@ -372,6 +430,8 @@ class ImportSurfaceReport:
             "optional_but_unguarded": self.optional_but_unguarded,
             "stale_hidden_requirements": self.stale_hidden_requirements,
             "unscanned_source_roots": self.unscanned_source_roots,
+            "lanes": self.lanes,
+            "lane_contract_gaps": self.lane_contract_gaps,
             "first_party_path_imports": self.first_party_path_imports,
             "limits": [
                 "static import scan — blind to importlib/__import__ and plugin entry points",
@@ -384,6 +444,43 @@ class ImportSurfaceReport:
 # ---------------------------------------------------------------------------
 # Scanning
 # ---------------------------------------------------------------------------
+def _parse(path: Path, repo_root: Path) -> ast.Module:
+    rel = path.relative_to(repo_root).as_posix()
+    try:
+        return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (SyntaxError, UnicodeDecodeError, OSError) as exc:
+        raise ImportSurfaceError(f"cannot parse {rel}: {exc}") from exc
+
+
+def find_witness_files(repo_root: Path, req: HiddenRequirement) -> list[str]:
+    """Files that really execute the witness import, matched in the AST.
+
+    A file merely CONTAINING the words does not count. That distinction is the
+    whole point: string matching let the audit's own test file vouch for the
+    requirement it was testing.
+    """
+    out: list[str] = []
+    for path in iter_python_files(repo_root, req.witness_roots):
+        tree = _parse(path, repo_root)
+        hit = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                if node.level or node.module != req.witness_module:
+                    continue
+                if req.witness_name is None or any(
+                    alias.name == req.witness_name for alias in node.names
+                ):
+                    hit = True
+            elif isinstance(node, ast.Import):
+                if any(alias.name == req.witness_module for alias in node.names):
+                    hit = True
+            if hit:
+                break
+        if hit:
+            out.append(path.relative_to(repo_root).as_posix())
+    return out
+
+
 def find_unscanned_source_roots(repo_root: Path) -> list[str]:
     """Top-level directories holding ``.py`` files that nobody scans or excuses.
 
@@ -509,10 +606,7 @@ def scan_import_sites(
 
     for path in files:
         rel = path.relative_to(repo_root).as_posix()
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except (SyntaxError, UnicodeDecodeError, OSError) as exc:
-            raise ImportSurfaceError(f"cannot parse {rel}: {exc}") from exc
+        tree = _parse(path, repo_root)
 
         for node, guarded, deferred in _walk_sites(tree):
             for name in _top_level_names(node):
@@ -625,11 +719,7 @@ def audit_import_surface(repo_root: Path, pyproject: Path | None = None) -> Impo
 
     hidden_report: list[dict] = []
     for req in HIDDEN_REQUIREMENTS:
-        witnesses = [
-            p.relative_to(repo_root).as_posix()
-            for p in iter_python_files(repo_root, req.witness_roots)
-            if req.witness_substring in p.read_text(encoding="utf-8", errors="ignore")
-        ]
+        witnesses = find_witness_files(repo_root, req)
         group = TIER_GROUPS.get(req.tier)
         if witnesses and group:
             required[group].add(req.distribution)
@@ -638,7 +728,7 @@ def audit_import_surface(repo_root: Path, pyproject: Path | None = None) -> Impo
                 "distribution": req.distribution,
                 "tier": req.tier,
                 "reason": req.reason,
-                "witness_substring": req.witness_substring,
+                "witness_import": req.describe(),
                 "witness_count": len(witnesses),
                 "witness_files": witnesses[:5],
                 "stale": not witnesses,
@@ -653,6 +743,30 @@ def audit_import_surface(repo_root: Path, pyproject: Path | None = None) -> Impo
             required[group] = required[group] - core
 
     declared = read_declared_dependencies(pyproject)
+
+    lanes = lane_requirements(repo_root, sites)
+    lane_contract_gaps: list[dict] = []
+    for lane, needs in lanes.items():
+        groups = LANE_INSTALL_CONTRACT.get(lane, ())
+        covered = {d for g in groups for d in declared.get(g, [])}
+        needs["install_contract"] = list(groups)
+        # Module-level imports run at collection time: uncovered is a defect.
+        missing = sorted(set(needs["module_level"]) - covered)
+        needs["module_level_uncovered"] = missing
+        # Deferred imports may never execute, so a static scan cannot call an
+        # uncovered one a defect. vectorbt is the expected case: reachable from
+        # the fast lane but only from inside a function the fast lane must not
+        # call. Reported so the expectation stays visible instead of assumed.
+        needs["deferred_uncovered"] = sorted(set(needs["deferred_only"]) - covered)
+        for dist in missing:
+            lane_contract_gaps.append(
+                {
+                    "lane": lane,
+                    "distribution": dist,
+                    "install_contract": list(groups),
+                    "why": "imported at module level by the lane's closure, not covered",
+                }
+            )
 
     undeclared: list[dict] = []
     declared_unused: list[dict] = []
@@ -701,7 +815,98 @@ def audit_import_surface(repo_root: Path, pyproject: Path | None = None) -> Impo
         optional_but_unguarded=optional_but_unguarded,
         stale_hidden_requirements=[h["distribution"] for h in hidden_report if h["stale"]],
         unscanned_source_roots=find_unscanned_source_roots(repo_root),
+        lanes=lanes,
+        lane_contract_gaps=lane_contract_gaps,
     )
+
+
+def _slow_test_files(repo_root: Path) -> set[str]:
+    """The slow-lane filenames, read from tests/conftest.py's own constant.
+
+    Parsed rather than duplicated: conftest is the marker's source of truth, and
+    a second copy here would silently disagree the day someone edits one.
+    """
+    conftest = repo_root / "tests" / "conftest.py"
+    if not conftest.is_file():
+        return set()
+    for node in ast.walk(_parse(conftest, repo_root)):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "_SLOW_TEST_FILES" for t in node.targets
+        ):
+            try:
+                value = ast.literal_eval(node.value)
+            except ValueError as exc:
+                raise ImportSurfaceError(
+                    f"tests/conftest.py:_SLOW_TEST_FILES is not a literal: {exc}"
+                ) from exc
+            return set(value)
+    raise ImportSurfaceError("tests/conftest.py defines no _SLOW_TEST_FILES")
+
+
+def lane_requirements(repo_root: Path, sites: list[ImportSite]) -> dict[str, dict]:
+    """What each pytest lane needs INSTALLED merely to import its closure.
+
+    Answers a question the pyproject comment previously just asserted: which
+    extras must be installed to run `pytest -m "not slow"` versus `-m slow`.
+
+    Derived by walking each lane's test modules through the first-party import
+    graph, then collecting the third-party imports of everything reachable. The
+    split that matters is module-level versus deferred:
+
+    - ``module_level`` imports run at import time, so the lane cannot even
+      collect without them. This is a hard install requirement.
+    - ``deferred`` imports live inside a function and run only if that function
+      is called, which a static scan cannot decide. They are reported
+      separately and never silently promoted into the hard set.
+
+    A worked case: the fast lane reaches ``backtesting/vectorbt_spike`` (via
+    ``test_no_trade_diagnostics``), but ``import vectorbt`` there is inside a
+    function while ``import pandas`` is at module level. So the fast lane hard-
+    needs pandas and not vectorbt - a distinction that "the test extra runs
+    every test" got wrong in both directions.
+    """
+    from ..research.gate_reachability import build_import_graph
+
+    graph = build_import_graph(repo_root, ("src", "tools", "api", "tests"))
+    slow_files = _slow_test_files(repo_root)
+
+    sites_by_module: dict[str, list[ImportSite]] = {}
+    for site in sites:
+        sites_by_module.setdefault(
+            module_name(repo_root / site.file, repo_root), []
+        ).append(site)
+
+    lanes: dict[str, dict] = {}
+    for lane, wanted_slow in (("fast", False), ("slow", True)):
+        seeds = [
+            module_name(p, repo_root)
+            for p in iter_python_files(repo_root, ("tests",))
+            if (p.name in slow_files) == wanted_slow
+        ]
+        seen: set[str] = set()
+        stack = list(seeds)
+        while stack:
+            mod = stack.pop()
+            if mod in seen:
+                continue
+            seen.add(mod)
+            stack.extend(graph.get(mod, ()))
+
+        module_level: set[str] = set()
+        deferred: set[str] = set()
+        for mod in seen:
+            for site in sites_by_module.get(mod, []):
+                dist = MODULE_DISTRIBUTIONS.get(site.module)
+                if dist is None:
+                    continue
+                (deferred if site.deferred else module_level).add(dist)
+        lanes[lane] = {
+            "test_modules": len(seeds),
+            "reachable_modules": len(seen),
+            "module_level": sorted(module_level),
+            "deferred_only": sorted(deferred - module_level),
+        }
+    return lanes
 
 
 def write_report(report: ImportSurfaceReport, out_path: Path | str) -> Path:

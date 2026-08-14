@@ -18,6 +18,10 @@ on:
   pull_request:
     paths:
       - 'worker-quant/quant_trading/HotThemeRotator/**'
+      # The workflow's own path, on BOTH triggers. Without it a pull request
+      # that only edits this file would never run it, so the first feedback on
+      # a CI change would arrive after merge.
+      - '.github/workflows/slow-research.yml'
   workflow_dispatch:
 
 defaults:

@@ -1,19 +1,29 @@
-"""P37-03 step 6 — the two CI lanes must stay two lanes.
+"""P37-03 step 6 — the two CI lanes must stay two lanes, and must be findable.
 
 These are STRUCTURAL tests. They parse the workflow YAML and assert the
 properties that make the split meaningful; they do not run the workflows and
 cannot claim the workflows pass on a runner. Nothing in this repo has been
-pushed, so no remote run exists. See the P37-03 notes for that distinction,
-which is the whole reason these assertions are written down: a workflow that
-looks right and has never executed is a plan, not a verdict.
+pushed, so no remote run exists. A workflow that looks right and has never
+executed is a plan, not a verdict.
+
+The location assertions exist because the first version of this file got them
+wrong in the most instructive way. It resolved the workflow directory from
+``PROJECT_ROOT/.github/workflows`` — the HotThemeRotator directory — and 30
+structural tests passed against two files that **GitHub Actions would never
+have discovered**. This project is a subdirectory of the repository; Actions
+only reads ``.github/workflows/`` at the REPOSITORY ROOT. A test that derives
+its location from the thing under test can only ever confirm that thing, so
+location is now derived from ``git rev-parse --show-toplevel`` and checked
+against the path git actually records.
 
 `actionlint` is not installed on this machine, so full schema linting has not
 run. What is checked here is narrower and specific to why this split exists:
-one verdict per lane, hash-pinned installs, a pinned interpreter, workspace
-scratch, and no way for a failure to be swallowed.
+one verdict per lane, discoverable location, hash-pinned installs, a pinned
+interpreter, workspace scratch, and no way for a failure to be swallowed.
 """
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -29,8 +39,24 @@ import yaml  # noqa: E402
 
 from compile_locks import PYTHON_VERSION  # noqa: E402
 
-WORKFLOWS = PROJECT_ROOT / ".github" / "workflows"
+
+def _git_root() -> Path:
+    """The repository root — the only place GitHub Actions looks for workflows."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return Path(result.stdout.strip())
+
+
+GIT_ROOT = _git_root()
+WORKFLOWS = GIT_ROOT / ".github" / "workflows"
 LANES = {"fast": "fast-smoke.yml", "slow": "slow-research.yml"}
+# This project lives here inside the repository; the workflows do NOT.
+PROJECT_PREFIX = PROJECT_ROOT.relative_to(GIT_ROOT).as_posix()
 
 
 @pytest.fixture(scope="module")
@@ -54,12 +80,80 @@ def _run_text(workflow: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Discoverable: the check the first version of this file could not make
+# ---------------------------------------------------------------------------
+def _tracked_paths() -> list[str]:
+    result = subprocess.run(
+        ["git", "ls-files", "--full-name", "--", "*.github/workflows/*"],
+        cwd=GIT_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+@pytest.mark.parametrize("lane", sorted(LANES))
+def test_workflow_is_tracked_at_the_repository_root(lane):
+    """GitHub Actions reads only <repo root>/.github/workflows/.
+
+    The regression: both files were committed under
+    `worker-quant/quant_trading/HotThemeRotator/.github/workflows/`, a
+    subdirectory. Every structural test passed and GitHub would never have run
+    either workflow. Asserting the path git RECORDS is the check that would
+    have caught it; asserting a path built from PROJECT_ROOT is the mistake
+    that hid it.
+    """
+    tracked = _tracked_paths()
+    expected = f".github/workflows/{LANES[lane]}"
+    assert expected in tracked, (
+        f"{LANES[lane]} is not tracked at {expected}. Tracked workflow paths: "
+        f"{tracked}. GitHub Actions only discovers workflows at the repository "
+        "root, so a nested copy never runs."
+    )
+
+
+def test_no_workflow_hides_inside_this_project_directory():
+    """A stale nested copy would be dead weight that still parses cleanly."""
+    stray = [p for p in _tracked_paths() if p.startswith(f"{PROJECT_PREFIX}/")]
+    assert stray == [], (
+        f"workflows tracked inside {PROJECT_PREFIX}/ are never discovered by "
+        f"GitHub Actions: {stray}"
+    )
+
+
+def test_the_repository_root_workflow_directory_is_shared_not_owned():
+    """validate-registry.yml was there first and must survive untouched."""
+    assert (WORKFLOWS / "validate-registry.yml").is_file(), (
+        "the pre-existing root workflow is missing - this task must add to that "
+        "directory, never replace it"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Two lanes, two verdicts
 # ---------------------------------------------------------------------------
 def test_the_lanes_are_separate_workflow_files(workflows):
     """Two files means two commit statuses; one file with two steps means one."""
     assert set(workflows) == {"fast", "slow"}
     assert LANES["fast"] != LANES["slow"]
+
+
+@pytest.mark.parametrize("lane", sorted(LANES))
+def test_a_change_to_the_workflow_itself_triggers_it(lane, workflows):
+    """Both triggers must watch the workflow file, not just `push`.
+
+    A pull request that only edits a workflow would otherwise never run it,
+    so the first feedback on a CI change would come after merge.
+    """
+    triggers = workflows[lane][True] if True in workflows[lane] else workflows[lane]["on"]
+    own_path = f".github/workflows/{LANES[lane]}"
+    for event in ("push", "pull_request"):
+        paths = triggers[event]["paths"]
+        assert own_path in paths, f"{lane} {event} does not watch {own_path}"
+        assert any(p.startswith(PROJECT_PREFIX) for p in paths), (
+            f"{lane} {event} does not watch the project directory"
+        )
 
 
 def test_each_workflow_runs_exactly_its_own_marker(workflows):

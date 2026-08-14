@@ -396,6 +396,15 @@ def probe_fast_app(lane: str = "fast") -> list[StepResult]:
             StepResult("fast: real uvicorn process answered /api/health", True, f"port {port}: {body[:100]}")
         )
     finally:
+        # NOT a graceful shutdown, and the claim is kept at what is shown.
+        # Graceful stop was attempted on this machine and does not work from a
+        # separate process on Windows: with CREATE_NEW_PROCESS_GROUP,
+        # CTRL_BREAK_EVENT exits 3 (STATUS_CONTROL_C_EXIT, i.e. killed, not
+        # handled) and CTRL_C_EVENT does not stop the server within 20s at all.
+        # So this probe demonstrates "terminated, no survivor" - the process is
+        # gone and nothing is left holding the port - and deliberately does not
+        # describe itself as a clean or graceful shutdown, nor assert an exit
+        # code that would only encode how it was killed.
         if proc.poll() is None:
             proc.terminate()
             try:
@@ -406,7 +415,29 @@ def probe_fast_app(lane: str = "fast") -> list[StepResult]:
         proc.stdout.close()
     if proc.poll() is None:  # pragma: no cover
         raise VerificationError("uvicorn process survived termination")
-    steps.append(StepResult("fast: uvicorn terminated, no survivor", True, f"exit {proc.returncode}"))
+    # Nothing must still be LISTENING on the port. Checked by failing to
+    # connect, not by rebinding: a closed connection sits in TIME_WAIT, so a
+    # bind attempt fails on Windows even when the server is long gone. The
+    # first version of this check did exactly that and reported a phantom
+    # survivor - it was testing the wrong property.
+    listener_gone = False
+    for _ in range(10):
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=2):
+                time.sleep(0.3)
+        except OSError:
+            listener_gone = True
+            break
+    if not listener_gone:  # pragma: no cover - failure path
+        raise VerificationError(f"something is still listening on port {port}")
+    steps.append(
+        StepResult(
+            "fast: uvicorn terminated, no survivor, port released",
+            True,
+            f"exit {proc.returncode} (terminated, not a graceful shutdown - see the "
+            "comment in probe_fast_app)",
+        )
+    )
     return steps
 
 

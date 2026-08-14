@@ -195,7 +195,7 @@
 > 而非 `src/`,日常链 5 个模块可导入,yfinance 1.1.0,健康自检 `degraded`,
 > pytest/fastapi/vectorbt/numba/streamlit/httpx **全部不在**;**fast** 50 包,`create_app()` 33 路由,
 > TestClient `/api/health` **200 `{"status":"ok"}`,真实 uvicorn 子进程**在 loopback 空闲端口同样 200
-> 并干净退出无残留,`pytest -m "not slow"` **2663 passed / 2 skipped / 18 deselected / 77.41s**,
+> 随后**终止、无残留、端口已释放**,`pytest -m "not slow"` **2666 passed / 1 skipped / 19 deselected / 81.13s**,
 > 且 **vectorbt/numba/llvmlite 可证不存在**而 lane 仍通过。
 > **`requires-python` 由 `>=3.10` 收窄为 `>=3.13`,按证据。** 旧下界来自语法扫描(用了 PEP 604/585,
 > 全仓库无 3.11+ stdlib 特性)——推理成立,但仍是没人测过的断言。真正验证过的只有
@@ -230,14 +230,32 @@
 > 固定 TMP/TEMP/scratch 到 workspace 且创建失败即抛;`PYTHONNOUSERSITE=1`;无 secret;只读权限;
 > 结束时断言未改动工作树。且**各自证明对方证不了的那一半**:fast 断言 vectorbt/numba/llvmlite **不存在**,
 > slow 断言它们存在**且 deferred import 确实被执行**。30 条结构测试。
+> ⚠ **部署位置错误(复审发现,2026-08-14 已修):两份 workflow 放在 GitHub Actions 永远不看的地方。**
+> 二者都提交在 `worker-quant/quant_trading/HotThemeRotator/.github/workflows/`,
+> 而本项目只是仓库的一个**子目录**(`git rev-parse --show-toplevel` → `E:/AIagent_project_260213`),
+> Actions 只读**仓库根**的 `.github/workflows/`。照原样 push,**两条 workflow 都不会被发现、更不会运行**
+> ——CI 只作为文本存在,不作为检查存在。
+> **30 条结构测试却全过**,因为 `test_ci_workflows.py` 把目录解析成 `PROJECT_ROOT/.github/workflows`:
+> **测试从被测对象自己推导位置,就只能自证。** 与 `httpx` 那个自我背书的 witness 是同一种失效形状。
+> **已修:** `git mv` 到仓库根(**并入**既有 `validate-registry.yml`,未覆盖),删掉嵌套 `.github/`;
+> 位置改由 `git rev-parse --show-toplevel` 推导,并对 **git 实际记录的路径**
+> (`git ls-files --full-name`)断言;另加「项目目录内不得藏 workflow」与「既有根 workflow 必须存活」两条。
+> 顺带修掉:`pull_request` 原本只监听项目目录,**只改 workflow 的 PR 不会触发它自己**,
+> 现两个触发器都监听 workflow 自身路径。结构测试 36 条。
 > ⚠ **明确不声称:这两条 workflow 从未运行过。** 未 push 故无远端结论;
 > 本机也没有 actionlint,完整 schema 检查未跑。**只是结构已验证,不是已判绿。**
+> ⚠ **「干净退出」措辞已撤回。** 在 Windows 上从另一个进程做优雅停止实测不成立:
+> 配 `CREATE_NEW_PROCESS_GROUP` 时 `CTRL_BREAK_EVENT` 退出码 **3**(`STATUS_CONTROL_C_EXIT`,
+> 即被杀而非被处理),`CTRL_C_EVENT` 20 秒内根本不停。探针因此只断言
+> **已终止 / 无残留 / 端口已释放**,并**刻意不断言退出码**——那个码只编码了它是怎么被杀的。
 > **步骤 7 验收(全部为末次代码改动之后的新鲜运行):**
-> import 审计 CLEAN/exit 0(436 文件)· 分类审计(静态)CLEAN · P37-03 focused **151 passed** ·
-> **干净环境 fast 2666 passed / 1 skipped / 19 deselected / 81.13s**(create_app + TestClient 200 +
-> 真实 uvicorn 200 + 干净退出)· **干净环境 slow 19 passed / 2667 deselected / 124.18s**
+> import 审计 CLEAN/exit 0(436 文件)· 分类审计(静态)CLEAN(54 scale sites / **14** 标 slow)· P37-03 focused **157 passed** ·
+> **干净环境 fast 2672 passed / 1 skipped / 19 deselected / 81.70s**(create_app + TestClient 200 +
+> 真实 uvicorn 200 + 终止无残留)· **干净环境 slow 19 passed / 2667 deselected / 124.18s**
 > (deferred vectorbt 被证明执行)· **工作环境 fast 2666 / 1 skipped / 75.52s** ·
-> **工作环境 slow 19 / 121.99s** · `git diff --check` 干净。
+> **工作环境 slow 19 / 2673 deselected / 123.85s** · `git diff --check` 干净。
+> ⚠ **「工作树干净」只对 P37-03 / HotThemeRotator 范围 + 根目录两份 workflow 成立**;
+> 整个 git 仓库仍有大量相邻项目的既有改动,本轮未触碰、未暂存、未提交。
 > **干净环境与工作环境计数完全一致**——这正是本轮的目的:锁复现的是这台机器,不是近似它。
 > **唯一那条 skip 记作「未执行」,绝不算通过**(provenance-strip 需真实日志里有易逝降级组件,今日没有);
 > clean-env 工具现在会把每条 skip 具名写进 artifact。

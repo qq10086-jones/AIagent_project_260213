@@ -76,7 +76,10 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if report.lanes:
-            print("\npytest lane install contracts (derived from the import closure):")
+            print(
+                "\npytest lane install contracts"
+                " (module-level floor checked statically; runtime needs are declared):"
+            )
             for lane, info in report.lanes.items():
                 extras = "+".join(info["install_contract"])
                 print(
@@ -86,6 +89,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"        module-level: {', '.join(info['module_level'])}")
                 if info["deferred_only"]:
                     print(f"        deferred    : {', '.join(info['deferred_only'])}")
+                if info.get("declared_runtime_requirements"):
+                    print(
+                        "        declared runtime: "
+                        f"{', '.join(info['declared_runtime_requirements'])}"
+                    )
                 if info["deferred_uncovered"]:
                     print(
                         "        deferred and NOT in this lane's contract "

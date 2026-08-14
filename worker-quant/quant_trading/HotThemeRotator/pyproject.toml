@@ -109,8 +109,16 @@ streamlit = [
 # imports pydantic and starlette at module level - so `.[test]` alone cannot even
 # collect it. `research` is required by the SLOW lane because vectorbt is
 # imported inside a function that only those tests call (the fast lane reaches
-# the same module and must never call that function). `import_surface.py` checks
-# both contracts and fails if a lane's module-level closure is not covered.
+# the same module and must never call that function).
+#
+# What is actually checked, stated precisely because the two halves differ in
+# strength: the module-level COLLECTION FLOOR is verified statically (a lane
+# cannot even collect without it), while the slow lane's vectorbt need is a
+# DECLARED runtime requirement carrying its module+function as a witness -
+# static analysis cannot decide whether a deferred import ever executes. Step 3
+# (clean-environment install and run) is what turns the second half into a
+# verified fact; until then it is a declaration the audit protects, not a
+# conclusion it establishes.
 test = [
     "pytest>=9.0.2",
     # fastapi.testclient.TestClient is built on httpx and raises at import time

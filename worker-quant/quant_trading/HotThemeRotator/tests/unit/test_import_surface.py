@@ -555,6 +555,49 @@ def test_vectorbt_is_reachable_from_the_fast_lane_but_only_deferred():
     assert fast["deferred_uncovered"] == ["vectorbt"]
 
 
+def test_slow_lane_research_requirement_is_actually_enforced(monkeypatch):
+    """The collection floor alone could not see vectorbt, so it protected nothing.
+
+    vectorbt is the whole reason the slow lane exists, but its import is inside
+    a function, so it never appeared in any lane's module-level set. Dropping
+    `research` from the slow contract left the audit reporting CLEAN - the
+    requirement was written correctly by hand and guarded by nothing. It is now
+    a declared runtime requirement, and removing its cover is a defect.
+    """
+    import hot_theme_rotator.observability.import_surface as mod
+
+    monkeypatch.setitem(mod.LANE_INSTALL_CONTRACT, "slow", ("dependencies", "test"))
+    report = audit_import_surface(PROJECT_ROOT)
+    gaps = [g for g in report.lane_contract_gaps if g["distribution"] == "vectorbt"]
+    assert gaps, "dropping research from the slow contract must be a defect"
+    assert "runtime requirement" in gaps[0]["why"]
+    assert report.verdict == "defects"
+
+
+def test_declared_runtime_requirement_goes_stale_with_its_witness(monkeypatch):
+    """A declaration that outlived the code it describes must be reported."""
+    import hot_theme_rotator.observability.import_surface as mod
+
+    bogus = mod.DeferredRuntimeRequirement(
+        lane="slow",
+        distribution="vectorbt",
+        module="hot_theme_rotator.backtesting.vectorbt_spike",
+        function="a_function_that_does_not_exist",
+        reason="fixture",
+    )
+    monkeypatch.setattr(mod, "DEFERRED_RUNTIME_REQUIREMENTS", (bogus,))
+    report = audit_import_surface(PROJECT_ROOT)
+    assert any("stale" in g["why"] for g in report.lane_contract_gaps)
+    assert report.verdict == "defects"
+
+
+def test_declared_runtime_requirements_are_real_right_now():
+    """And on the real tree, every declaration still matches the code."""
+    report = audit_import_surface(PROJECT_ROOT)
+    assert report.lane_contract_gaps == []
+    assert report.lanes["slow"]["declared_runtime_requirements"] == ["vectorbt"]
+
+
 def test_lane_contract_gap_is_detected(tmp_path, monkeypatch):
     """Prove the check bites: drop `dashboard` and the fast lane must fail."""
     import hot_theme_rotator.observability.import_surface as mod

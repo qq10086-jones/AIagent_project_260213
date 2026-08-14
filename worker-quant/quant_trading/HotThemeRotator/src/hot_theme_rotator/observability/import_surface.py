@@ -188,12 +188,56 @@ TIER_GROUPS: dict[str, str] = {
 # earlier comment here claimed it could do. `research` is in the slow lane's
 # because vectorbt is imported inside a function that the slow tests call.
 #
-# The audit checks this: every module-level requirement of a lane's import
-# closure must be covered, or it is a defect.
+# The audit checks this in two halves, and they are not equally strong:
+#
+#   COLLECTION FLOOR (statically checked). Every module-level requirement of a
+#   lane's import closure must be covered by its contract, or it is a defect.
+#
+#   RUNTIME REQUIREMENT (declared, witnessed, not proven). A deferred import
+#   runs only if something calls the function holding it, which no static scan
+#   can decide. Those are named in DEFERRED_RUNTIME_REQUIREMENTS below rather
+#   than inferred, and the audit checks that each is covered by its lane's
+#   contract and that its witness still exists.
+#
+# Only a clean-environment install and run - P37-03 step 3 - turns the second
+# half into a verified fact. Until then "the slow lane needs research" is a
+# declaration this audit protects, not a claim it establishes.
 LANE_INSTALL_CONTRACT: dict[str, tuple[str, ...]] = {
     "fast": ("dependencies", "test", "dashboard"),
     "slow": ("dependencies", "test", "research"),
 }
+
+
+@dataclass(frozen=True)
+class DeferredRuntimeRequirement:
+    """A dependency a lane needs to RUN, imported inside a function.
+
+    The gap this closes: vectorbt is the whole reason the slow lane exists, yet
+    the collection-floor check could not see it - the import is deferred, so
+    removing `research` from the slow contract left the audit reporting CLEAN.
+    The requirement was written correctly by hand and protected by nothing.
+    """
+
+    lane: str
+    distribution: str
+    module: str
+    function: str
+    reason: str
+
+
+DEFERRED_RUNTIME_REQUIREMENTS: tuple[DeferredRuntimeRequirement, ...] = (
+    DeferredRuntimeRequirement(
+        lane="slow",
+        distribution="vectorbt",
+        module="hot_theme_rotator.backtesting.vectorbt_spike",
+        function="run_take_profit_stop_loss_grid",
+        reason=(
+            "The slow lane exists to exercise this grid; the function imports "
+            "vectorbt on entry. The fast lane reaches the same module and must "
+            "never call it, which is why vectorbt stays out of the fast contract."
+        ),
+    ),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -479,6 +523,62 @@ def find_witness_files(repo_root: Path, req: HiddenRequirement) -> list[str]:
         if hit:
             out.append(path.relative_to(repo_root).as_posix())
     return out
+
+
+def check_deferred_runtime_requirements(
+    repo_root: Path, declared: dict[str, list[str]]
+) -> list[dict]:
+    """Each declared runtime requirement must be covered AND still real."""
+    gaps: list[dict] = []
+    for req in DEFERRED_RUNTIME_REQUIREMENTS:
+        groups = LANE_INSTALL_CONTRACT.get(req.lane, ())
+        covered = {d for g in groups for d in declared.get(g, [])}
+        if req.distribution not in covered:
+            gaps.append(
+                {
+                    "lane": req.lane,
+                    "distribution": req.distribution,
+                    "install_contract": list(groups),
+                    "why": (
+                        f"declared runtime requirement of the {req.lane} lane "
+                        f"({req.module}.{req.function} imports it) is not in that "
+                        "lane's install contract"
+                    ),
+                }
+            )
+        # And the witness: the named function must still defer-import it.
+        path = repo_root / "src" / Path(*req.module.split(".")) .with_suffix(".py")
+        if not path.is_file():
+            gaps.append(
+                {
+                    "lane": req.lane,
+                    "distribution": req.distribution,
+                    "why": f"witness module {req.module} no longer exists",
+                }
+            )
+            continue
+        found = False
+        for node in ast.walk(_parse(path, repo_root)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name != req.function:
+                continue
+            for sub in ast.walk(node):
+                names = _top_level_names(sub) if isinstance(sub, (ast.Import, ast.ImportFrom)) else []
+                if any(MODULE_DISTRIBUTIONS.get(n) == req.distribution for n in names):
+                    found = True
+        if not found:
+            gaps.append(
+                {
+                    "lane": req.lane,
+                    "distribution": req.distribution,
+                    "why": (
+                        f"{req.module}.{req.function} no longer imports "
+                        f"{req.distribution}; the declaration is stale"
+                    ),
+                }
+            )
+    return gaps
 
 
 def find_unscanned_source_roots(repo_root: Path) -> list[str]:
@@ -767,6 +867,11 @@ def audit_import_surface(repo_root: Path, pyproject: Path | None = None) -> Impo
                     "why": "imported at module level by the lane's closure, not covered",
                 }
             )
+    lane_contract_gaps.extend(check_deferred_runtime_requirements(repo_root, declared))
+    for lane, needs in lanes.items():
+        needs["declared_runtime_requirements"] = sorted(
+            r.distribution for r in DEFERRED_RUNTIME_REQUIREMENTS if r.lane == lane
+        )
 
     undeclared: list[dict] = []
     declared_unused: list[dict] = []

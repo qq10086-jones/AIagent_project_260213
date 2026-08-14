@@ -27,6 +27,12 @@ Limits, stated so the artifact is not over-read:
   dynamic imports, entry points declared in packaging metadata, or a human
   running ``python -c 'from ... import ...'``. A ``verdict`` of ``dormant``
   therefore means "no static path from an entrypoint", not "provably dead".
+- Parent-package execution is NOT modelled: importing ``a.b.c`` really does run
+  ``a/__init__.py``, but only the module named in the statement becomes an edge
+  (the one exception is the ``from . import x`` form, where the package is
+  named by the statement itself). So the graph under-counts edges into package
+  ``__init__`` modules, in the direction that makes ``dormant`` harder to
+  disprove rather than easier.
 - Import reachability is necessary, not sufficient, for the gate to fire: a
   module can be imported without the gated branch ever executing. So
   ``shipping`` here is an UPPER bound on liveness, and ``dormant`` is a
@@ -89,25 +95,56 @@ class ReachabilityReport:
         return d
 
 
-def _imports_of(path: Path) -> set[str]:
-    """Dotted module names imported by one file (static, best-effort)."""
+def _resolve_relative(module: str | None, level: int, importer: str, is_package: bool) -> str | None:
+    """Absolute module name for a ``from . import x`` written inside ``importer``.
+
+    A package's ``__init__.py`` IS its package, so ``from .x import y`` there
+    resolves against the package itself; in a plain module it resolves against
+    the parent. Returns None when the level walks above the top-level package.
+    """
+    base = importer.split(".") if is_package else importer.split(".")[:-1]
+    if level > 1:
+        base = base[: -(level - 1)] if level - 1 <= len(base) else []
+    if not base:
+        return None
+    return ".".join(base + module.split(".")) if module else ".".join(base)
+
+
+def _imports_of(path: Path, repo_root: Path | None = None) -> set[str]:
+    """Dotted module names imported by one file (static, best-effort).
+
+    Relative imports are RESOLVED to absolute names. An earlier version skipped
+    them outright, which silently dropped 14 real edges from the graph — every
+    one of them a package ``__init__`` re-exporting its submodules, exactly the
+    edges a reachability question depends on. They happened not to change any
+    verdict, which is the least reassuring way for a graph to be wrong.
+    """
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except (SyntaxError, UnicodeDecodeError, OSError):
         return set()
+    importer = _module_name(path, repo_root) if repo_root is not None else ""
+    is_package = path.name == "__init__.py"
     found: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 found.add(alias.name)
         elif isinstance(node, ast.ImportFrom):
-            if node.level:  # relative import — not resolved; recorded as-is below
-                continue
-            if node.module:
-                found.add(node.module)
+            module = node.module
+            if node.level:
+                if not importer:
+                    # No repo_root given: the importer's package is unknown, so
+                    # the target cannot be named. Skipped rather than guessed.
+                    continue
+                module = _resolve_relative(module, node.level, importer, is_package)
+                if module is None:
+                    continue
+            if module:
+                found.add(module)
                 # `from pkg.mod import name` may also name a submodule
                 for alias in node.names:
-                    found.add(f"{node.module}.{alias.name}")
+                    found.add(f"{module}.{alias.name}")
     return found
 
 
@@ -120,7 +157,7 @@ def build_import_graph(
     known = {_module_name(p, repo_root): p for p in files}
     graph: dict[str, set[str]] = {}
     for mod, path in known.items():
-        raw = _imports_of(path)
+        raw = _imports_of(path, repo_root)
         graph[mod] = {m for m in raw if m in known}
     return graph
 

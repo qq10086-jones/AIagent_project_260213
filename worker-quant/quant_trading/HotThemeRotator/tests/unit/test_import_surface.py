@@ -40,14 +40,32 @@ from hot_theme_rotator.observability.import_surface import (  # noqa: E402
 # ---------------------------------------------------------------------------
 # The pin: this repo, right now
 # ---------------------------------------------------------------------------
-def test_repo_import_surface_is_clean():
+
+@pytest.fixture(scope="module")
+def repo_report():
+    """One audit of the real tree, shared by every test that does not mutate it.
+
+    Measured cost: a full audit is ~2.2s (434 files plus the first-party import
+    graph), and eleven tests were each paying it - about 29s added to the daily
+    readiness gate by the very work that is supposed to protect it. These are
+    contract tests that belong in the fast lane, so the fix is to compute the
+    report once, not to exile them to the slow lane.
+
+    Tests that monkeypatch module state deliberately do NOT use this fixture:
+    a cached report would answer for the unmodified tree and the assertion
+    would pass without testing anything.
+    """
+    return audit_import_surface(PROJECT_ROOT)
+
+
+def test_repo_import_surface_is_clean(repo_report):
     """Every third-party import is declared, and every declaration is imported.
 
     This is the test that would have caught the P37-03 defect itself:
     pyproject.toml declared NO dependencies while the code imported requests,
     yfinance, fastapi, numpy, pandas and more.
     """
-    report = audit_import_surface(PROJECT_ROOT)
+    report = repo_report
     assert report.verdict == "clean", (
         "dependency declaration and import surface disagree.\n"
         f"  undeclared              : {report.undeclared}\n"
@@ -61,9 +79,9 @@ def test_repo_import_surface_is_clean():
     )
 
 
-def test_core_dependencies_are_not_repeated_in_extras():
+def test_core_dependencies_are_not_repeated_in_extras(repo_report):
     """Installing an extra installs the base list; repeating it hides the layering."""
-    report = audit_import_surface(PROJECT_ROOT)
+    report = repo_report
     core = set(report.required_by_group["dependencies"])
     assert core, "core dependency set is empty - the audit is not measuring anything"
     for group, dists in report.required_by_group.items():
@@ -72,9 +90,9 @@ def test_core_dependencies_are_not_repeated_in_extras():
         assert not (set(dists) & core), f"{group} repeats core dependencies {set(dists) & core}"
 
 
-def test_every_hidden_requirement_still_has_a_witness():
+def test_every_hidden_requirement_still_has_a_witness(repo_report):
     """A hidden requirement whose evidence disappeared must be re-justified."""
-    report = audit_import_surface(PROJECT_ROOT)
+    report = repo_report
     for hidden in report.hidden:
         assert not hidden["stale"], (
             f"{hidden['distribution']} is declared as a hidden requirement because "
@@ -83,9 +101,9 @@ def test_every_hidden_requirement_still_has_a_witness():
         )
 
 
-def test_httpx_is_carried_although_no_file_imports_it():
+def test_httpx_is_carried_although_no_file_imports_it(repo_report):
     """The static scan cannot see it; the declaration must carry it anyway."""
-    report = audit_import_surface(PROJECT_ROOT)
+    report = repo_report
     assert "httpx" not in {m.module for m in report.modules}
     assert "httpx" in report.required_by_group["test"]
 
@@ -515,9 +533,9 @@ def test_cli_exits_0_on_this_repo(capsys):
 # ---------------------------------------------------------------------------
 # Lane install contracts
 # ---------------------------------------------------------------------------
-def test_every_lane_module_level_requirement_is_covered_by_its_contract():
+def test_every_lane_module_level_requirement_is_covered_by_its_contract(repo_report):
     """`pytest -m <lane>` must be runnable from the declared install command."""
-    report = audit_import_surface(PROJECT_ROOT)
+    report = repo_report
     assert report.lane_contract_gaps == [], (
         "a lane cannot even collect from its declared install contract: "
         f"{report.lane_contract_gaps}"
@@ -527,19 +545,19 @@ def test_every_lane_module_level_requirement_is_covered_by_its_contract():
         assert info["module_level"], f"{lane} lane reached nothing - the walk is broken"
 
 
-def test_fast_lane_needs_dashboard_extra_not_only_test():
+def test_fast_lane_needs_dashboard_extra_not_only_test(repo_report):
     """The concrete claim that replaced 'the test extra runs every test'.
 
     The suite reaches api/, which imports pydantic and starlette at module
     level, so `pip install .[test]` cannot collect the fast lane.
     """
-    report = audit_import_surface(PROJECT_ROOT)
+    report = repo_report
     fast = report.lanes["fast"]["module_level"]
     assert "pydantic" in fast and "starlette" in fast
     assert "dashboard" in LANE_INSTALL_CONTRACT["fast"]
 
 
-def test_vectorbt_is_reachable_from_the_fast_lane_but_only_deferred():
+def test_vectorbt_is_reachable_from_the_fast_lane_but_only_deferred(repo_report):
     """Why the fast lane does not need the research extra, stated as a test.
 
     tests/unit/test_no_trade_diagnostics.py reaches backtesting/vectorbt_spike,
@@ -548,7 +566,7 @@ def test_vectorbt_is_reachable_from_the_fast_lane_but_only_deferred():
     and the lane-contract check fails instead of the fast lane breaking on a
     fresh machine.
     """
-    report = audit_import_surface(PROJECT_ROOT)
+    report = repo_report
     fast = report.lanes["fast"]
     assert "vectorbt" not in fast["module_level"]
     assert "vectorbt" in fast["deferred_only"]
@@ -591,9 +609,9 @@ def test_declared_runtime_requirement_goes_stale_with_its_witness(monkeypatch):
     assert report.verdict == "defects"
 
 
-def test_declared_runtime_requirements_are_real_right_now():
+def test_declared_runtime_requirements_are_real_right_now(repo_report):
     """And on the real tree, every declaration still matches the code."""
-    report = audit_import_surface(PROJECT_ROOT)
+    report = repo_report
     assert report.lane_contract_gaps == []
     assert report.lanes["slow"]["declared_runtime_requirements"] == ["vectorbt"]
 

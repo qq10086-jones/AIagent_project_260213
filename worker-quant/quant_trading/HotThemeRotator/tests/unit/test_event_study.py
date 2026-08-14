@@ -155,6 +155,7 @@ def test_cluster_bootstrap_counts_dates_not_events():
     assert boot["ci_low"] is None  # one cluster cannot be bootstrapped
 
 
+@pytest.mark.slow  # P37-03 step 4: 2x n_bootstrap=800 cluster bootstrap
 def test_cluster_bootstrap_ci_is_wider_when_events_share_dates():
     """Same 12 events, same values — only the clustering differs.
 

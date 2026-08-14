@@ -70,6 +70,7 @@ def test_single_cluster_is_refused():
 
 # --- size before power ------------------------------------------------------
 
+@pytest.mark.slow  # P37-03 step 4: n_sims=1500 Monte Carlo
 def test_empirical_size_is_near_alpha_under_the_null():
     """Before trusting any power number, the same machinery must reject at
     roughly alpha when the null is true."""
@@ -81,6 +82,7 @@ def test_empirical_size_is_near_alpha_under_the_null():
     assert r.mean_beta_hat == pytest.approx(1.0, abs=0.02)
 
 
+@pytest.mark.slow  # P37-03 step 4: 2x n_sims=800 Monte Carlo
 def test_power_rises_with_the_true_slope():
     sizes = [20] * 60
     weak = simulate_slope_power(sizes, beta1_true=1.05, sigma_announce=0.06,
@@ -90,6 +92,7 @@ def test_power_rises_with_the_true_slope():
     assert strong.rejection_rate > weak.rejection_rate
 
 
+@pytest.mark.slow  # P37-03 step 4: 2x n_sims=600 Monte Carlo
 def test_power_falls_as_intraday_correlation_rises():
     sizes = [40] * 30
     loose = simulate_slope_power(sizes, beta1_true=1.15, sigma_announce=0.06,
@@ -128,6 +131,7 @@ def test_real_bucket_max_day_is_not_the_full_sample_max():
     assert len(sizes) > 100
 
 
+@pytest.mark.slow  # P37-03 step 4: n_sims=2000 Monte Carlo
 def test_cr1_has_correct_size_on_the_REAL_bucket_shape():
     """WITHDRAWN CLAIM: an earlier test asserted CR1 over-rejects 2x here. That
     came from the fabricated 178/42 shape. On the real 420/121/max-36 shape CR1
@@ -138,6 +142,10 @@ def test_cr1_has_correct_size_on_the_REAL_bucket_shape():
     assert 0.03 < size < 0.075, f"CR1 should be ~nominal on the real shape, got {size}"
 
 
+@pytest.mark.slow  # P37-03 step 4: n_sims=300 x n_boot=199 nested WCB; measured
+# at 92.9s, half the entire fast lane's wall time. Neither argument is above the
+# threshold alone - the cost is their product, which is why the scanner now
+# multiplies and why the duration audit exists alongside it.
 def test_wild_cluster_bootstrap_size_is_not_liberal_on_the_real_shape():
     """WCB is kept as a robust design choice for unbalanced clusters — NOT
     because CR1 was shown to fail. It must not be liberal."""
@@ -149,6 +157,7 @@ def test_wild_cluster_bootstrap_size_is_not_liberal_on_the_real_shape():
     assert size <= 0.08, f"WCB should be at or below nominal, got {size}"
 
 
+@pytest.mark.slow  # P37-03 step 4: n_sims=1200 Monte Carlo
 def test_severely_unbalanced_shape_does_degrade_cr1():
     """The mechanism is real even though our sample does not suffer from it —
     kept as a synthetic, clearly-labelled illustration, not as our sample."""
@@ -188,6 +197,7 @@ def test_wild_bootstrap_needs_two_clusters():
         wild_cluster_bootstrap_p(np.arange(5.0), np.arange(5.0), np.zeros(5))
 
 
+@pytest.mark.slow  # P37-03 step 4: 2x n_sims=600 Monte Carlo
 def test_more_post_noise_reduces_power():
     sizes = [20] * 60
     quiet = simulate_slope_power(sizes, beta1_true=1.15, sigma_announce=0.06,

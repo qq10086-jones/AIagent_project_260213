@@ -132,6 +132,7 @@ def test_holm_ranks_by_p_value_not_by_position():
 
 # --- full-model simulation ---------------------------------------------------
 
+@pytest.mark.slow  # P37-03 step 4: n_sims=800 full-model Monte Carlo
 def test_full_model_size_is_near_nominal_on_the_real_shape():
     """Size before power, on the SAME specification the analysis will run."""
     size = simulate_full_model_power(real_sizes(), beta1=0.0, n_sims=800, seed=31)

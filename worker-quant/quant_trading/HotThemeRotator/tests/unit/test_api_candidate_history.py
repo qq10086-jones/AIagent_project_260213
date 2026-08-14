@@ -3,6 +3,14 @@
 These run against the real on-disk decision log (reports/predictions +
 reports/outcomes), mirroring the dashboard tests' fail-soft style: shape and
 honesty invariants are asserted, not data-dependent numerics.
+
+P37-05 amendment: three cases here DID assert data-dependent facts - that
+2026-03-23 and 2026-05-27 are present in the log - which is exactly what the
+docstring said they would not do. Both directories are gitignored runtime
+state, so those cases passed only on a machine that had already run the
+pipeline, and failed in a clean git worktree and would have failed in CI. The
+structural assertions still run everywhere; the on-disk-truth ones now skip by
+name when the log is absent, rather than failing or being quietly deleted.
 """
 import sys
 import json
@@ -27,7 +35,24 @@ def client():
     return TestClient(create_app())
 
 
+_LOG_DATES = ("2026-03-23", "2026-05-27")
+
+
+def _require_decision_log(client):
+    """Skip, by name, when the gitignored decision log is not in this checkout."""
+    payload = client.get("/api/candidates/history/dates").json()
+    present = set(payload.get("live") or []) | set(payload.get("backdated") or [])
+    missing = [d for d in _LOG_DATES if d not in present]
+    if missing:
+        pytest.skip(
+            "the on-disk decision log (reports/predictions + reports/outcomes) is "
+            f"gitignored runtime state and this checkout lacks {missing}; the "
+            "structural assertions in this module still run"
+        )
+
+
 def test_dates_endpoint_buckets_live_and_backdated(client):
+    _require_decision_log(client)
     payload = client.get("/api/candidates/history/dates").json()
     assert "live" in payload and "backdated" in payload
     assert isinstance(payload["live"], list)
@@ -68,6 +93,7 @@ def test_default_date_is_latest_live(client):
 
 
 def test_backdated_date_default_excluded_shows_empty_roster(client):
+    _require_decision_log(client)
     """Rule 11.11.5 — a bootstrap date renders no live roster by default."""
     payload = client.get("/api/candidates/history?date=2026-03-23").json()
     assert payload["candidateCount"] == 0
@@ -76,6 +102,7 @@ def test_backdated_date_default_excluded_shows_empty_roster(client):
 
 
 def test_backdated_date_surfaces_when_explicitly_included(client):
+    _require_decision_log(client)
     payload = client.get(
         "/api/candidates/history?date=2026-03-23&include_backdated=true"
     ).json()

@@ -63,12 +63,50 @@ def _reference_cluster_ols(X, y, cluster_id, coef):
     return float(beta[coef]), float(np.sqrt(max(V[coef, coef], 0.0)))
 
 
+# The recorded shape of the H1 bucket, from the P36-03 join report: heavily
+# unbalanced, a few very large event days and a long tail of small ones. Used
+# when the real report is absent, which is every checkout that has not run the
+# research pipeline - including CI.
+_RECORDED_CLUSTER_SHAPE = [178, 96, 71, 54, 43, 37, 31, 26, 22, 19] + [
+    max(1, 14 - (i // 12)) for i in range(236)
+]
+
+
+def _synthetic_event_days():
+    """An event/day list with the recorded cluster shape, no research data."""
+    events = []
+    for day, size in enumerate(_RECORDED_CLUSTER_SHAPE):
+        for k in range(size):
+            events.append((f"S{day:04d}{k:04d}.T", f"D{day:04d}"))
+    return events
+
+
 def _real_design(seed=0, bucket="H1_low_foreign"):
-    """A design with the REAL event-day cluster structure and day fixed effects."""
-    report = json.loads(
-        (PROJECT_ROOT / "reports" / "research" /
-         "t2_join_report_2026-08-10.json").read_text(encoding="utf-8"))
-    events = report["bucket_events"][bucket]
+    """A design with the event-day cluster structure and day fixed effects.
+
+    Uses the REAL join report when it is present. When it is not - a clean
+    checkout, or CI - it falls back to a synthetic list with the recorded
+    cluster shape.
+
+    That substitution is sound for THIS test and would not be for every test.
+    What these cases assert is an algebraic identity: the fast estimator equals
+    the reference loop. An identity holds for any design, so the design only has
+    to be realistically unbalanced, not real. The two cases that genuinely
+    assert something about the research evidence - that the bucket mapping comes
+    from the report and that the provenance hash covers it - still require the
+    real file and skip with a named reason without it.
+
+    Found by running the fast lane in a real clean worktree: these eleven cases
+    were reading a gitignored research artifact, so they passed only on a
+    machine that had already run the pipeline (P37-05).
+    """
+    report_path = (PROJECT_ROOT / "reports" / "research" /
+                   "t2_join_report_2026-08-10.json")
+    if report_path.exists():
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        events = report["bucket_events"][bucket]
+    else:
+        events = _synthetic_event_days()
     days = sorted({e[1] for e in events})
     index = {d: i for i, d in enumerate(days)}
     cid = np.array([index[e[1]] for e in events])
@@ -199,7 +237,24 @@ def test_binomial_survival_matches_a_direct_sum():
 # ── the runner's contract ────────────────────────────────────────────────
 
 
+def _require_join_report():
+    """The two cases below assert facts about the RESEARCH EVIDENCE itself.
+
+    Unlike the estimator identities, these cannot use a synthetic stand-in: the
+    claim is that the bucket mapping came from the report and that the
+    provenance hash covers it. Without the report there is nothing to check, so
+    they skip - loudly, by name, never silently rewritten into something that
+    passes.
+    """
+    if not art.DEFAULT_JOIN.exists():
+        pytest.skip(
+            "t2_join_report_2026-08-10.json is not in this checkout (gitignored "
+            "research artifact); the T2 evidence-chain assertions cannot run"
+        )
+
+
 def test_the_mapping_comes_from_the_join_report_never_reconstructed():
+    _require_join_report()
     h1, h2, prov = art._load_buckets(art.DEFAULT_JOIN)
     assert prov["n_h1"] == len(h1) and prov["n_h2"] == len(h2)
     # The 159 shared events are what make the two tests correlated; a
@@ -218,6 +273,7 @@ def test_a_report_without_bucket_events_is_refused(tmp_path):
 
 
 def test_the_provenance_hash_covers_the_mapping_actually_used(tmp_path):
+    _require_join_report()
     """Reproducibility must key on the INPUT USED, so an unrelated edit
     elsewhere in the join report does not invalidate a stored run — and a
     changed mapping does."""

@@ -70,6 +70,30 @@ router = APIRouter()
 MAX_SESSIONS = 1000
 
 
+
+def _data_unavailable(exc: Exception) -> dict[str, str]:
+    """Body for a price-data dependency that is absent or unreadable.
+
+    503, not 500: the request was valid and the service is not broken - a
+    dependency it needs is missing. An operator can act on that, and a monitor
+    can tell it apart from a crash, which is the whole point of the
+    distinction. Found in a clean git worktree, where every symbol endpoint
+    answered 500 with an absolute host path in the body (P37-05).
+
+    The exception text is deliberately NOT forwarded: it carries the absolute
+    filesystem path of the database on the server, which an error body has no
+    business publishing. The class name is enough to distinguish causes.
+    """
+    return {
+        "reason": "price_data_unavailable",
+        "detail": (
+            "the price database this endpoint reads is absent or unreadable; "
+            "this is a missing dependency, not a server fault"
+        ),
+        "error_type": type(exc).__name__,
+    }
+
+
 @router.get("/symbol/{ticker}/kline")
 def get_symbol_kline(
     ticker: str,
@@ -87,7 +111,7 @@ def get_symbol_kline(
     try:
         bars = fetch_kline(default_db_path(), symbol=ticker, sessions=int(sessions))
     except KlineAdapterError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=503, detail=_data_unavailable(exc))
     if not bars:
         raise HTTPException(
             status_code=404,
@@ -124,7 +148,7 @@ def get_symbol_profile(ticker: str) -> dict[str, Any]:
     try:
         latest = fetch_latest_close(default_db_path(), symbol=ticker)
     except KlineAdapterError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=503, detail=_data_unavailable(exc))
     if latest is None:
         raise HTTPException(
             status_code=404,
@@ -264,7 +288,7 @@ def get_symbol_ladder(
     try:
         latest = fetch_latest_close(default_db_path(), symbol=ticker)
     except KlineAdapterError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=503, detail=_data_unavailable(exc))
     if latest is None:
         raise HTTPException(
             status_code=404,
@@ -436,7 +460,7 @@ def get_symbol_strategy(ticker: str) -> dict[str, Any]:
     try:
         latest = fetch_latest_close(default_db_path(), symbol=ticker)
     except KlineAdapterError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=503, detail=_data_unavailable(exc))
     if latest is None:
         raise HTTPException(
             status_code=404,
@@ -592,7 +616,7 @@ def get_symbol_llm_brief(
     try:
         latest = fetch_latest_close(default_db_path(), symbol=ticker)
     except KlineAdapterError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=503, detail=_data_unavailable(exc))
     if latest is None:
         raise HTTPException(
             status_code=404,
@@ -670,7 +694,7 @@ def get_symbol_debate_brief(
     try:
         latest = fetch_latest_close(default_db_path(), symbol=ticker)
     except KlineAdapterError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=503, detail=_data_unavailable(exc))
     if latest is None:
         raise HTTPException(
             status_code=404,

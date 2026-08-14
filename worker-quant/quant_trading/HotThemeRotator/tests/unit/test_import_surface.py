@@ -345,7 +345,10 @@ def test_hidden_requirement_without_a_witness_is_stale(tmp_path):
     """No TestClient import anywhere -> httpx must not be claimed as required."""
     repo = _make_repo(tmp_path, {"tests/test_x.py": "import pytest\n"})
     report = audit_import_surface(repo)
-    assert report.stale_hidden_requirements == ["httpx"]
+    # Membership, not equality: there is more than one hidden requirement now,
+    # and pinning the whole list breaks whenever one is added while saying
+    # nothing about the behaviour under test.
+    assert "httpx" in report.stale_hidden_requirements
     assert "httpx" not in report.required_by_group["test"]
     assert report.verdict == "defects"
 
@@ -356,7 +359,7 @@ def test_hidden_requirement_with_a_witness_is_required(tmp_path):
         {"tests/test_x.py": "import pytest\nfrom fastapi.testclient import TestClient\n"},
     )
     report = audit_import_surface(repo)
-    assert report.stale_hidden_requirements == []
+    assert "httpx" not in report.stale_hidden_requirements
     assert "httpx" in report.required_by_group["test"]
 
 
@@ -381,7 +384,7 @@ def test_witness_requires_a_real_import_not_the_words(tmp_path):
         },
     )
     report = audit_import_surface(repo)
-    assert report.stale_hidden_requirements == ["httpx"]
+    assert "httpx" in report.stale_hidden_requirements
     hidden = next(h for h in report.hidden if h["distribution"] == "httpx")
     assert hidden["witness_count"] == 0
     assert hidden["witness_import"] == "from fastapi.testclient import TestClient"
@@ -452,8 +455,48 @@ def test_hidden_requirements_state_a_reason_and_an_importable_witness():
     for req in HIDDEN_REQUIREMENTS:
         assert req.reason.strip(), f"{req.distribution} has no stated reason"
         assert req.witness_module.strip(), f"{req.distribution} has no witness module"
-        # The witness must name a real import, not a word to grep for.
-        assert req.describe().startswith(("import ", "from ")), req.describe()
+        # The witness must name something executable, not a word to grep for.
+        assert req.describe().startswith(("import ", "from ", "pytest.importorskip(")), (
+            req.describe()
+        )
+
+
+def test_importorskip_is_a_recognised_witness(tmp_path):
+    """A skipped test is a silent absence, so importorskip must be visible.
+
+    pytest.importorskip is a CALL, invisible to an import scan, and unlike a
+    missing import it fails by SKIPPING. That is how the sklearn cross-check
+    ran on the developer machine and nowhere else: the clean fast environment
+    skipped it and said nothing.
+    """
+    repo = _make_repo(
+        tmp_path,
+        {
+            "tests/test_x.py": (
+                "import pytest\n"
+                "def test_cross_check():\n"
+                '    iso = pytest.importorskip("sklearn.isotonic")\n'
+            )
+        },
+    )
+    report = audit_import_surface(repo)
+    assert "scikit-learn" not in report.stale_hidden_requirements
+    assert "scikit-learn" in report.required_by_group["research"]
+
+
+def test_importorskip_of_a_different_module_is_not_a_witness(tmp_path):
+    repo = _make_repo(
+        tmp_path,
+        {"tests/test_x.py": 'import pytest\npytest.importorskip("something.else")\n'},
+    )
+    report = audit_import_surface(repo)
+    assert "scikit-learn" in report.stale_hidden_requirements
+
+
+def test_real_tree_sklearn_witness_is_the_isotonic_cross_check():
+    req = next(r for r in HIDDEN_REQUIREMENTS if r.distribution == "scikit-learn")
+    witnesses = find_witness_files(PROJECT_ROOT, req)
+    assert witnesses == ["tests/unit/test_isotonic_recalibrator.py"]
 
 
 def test_report_round_trips_to_json(tmp_path):

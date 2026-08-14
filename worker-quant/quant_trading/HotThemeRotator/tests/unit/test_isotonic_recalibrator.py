@@ -181,6 +181,10 @@ def test_model_version_is_stamped():
 # ─── cross-validation against sklearn ──────────────────────────────────────
 
 
+@pytest.mark.slow  # P37-03 step 3: reaches sklearn via importorskip, so it ran
+# only where sklearn happened to be installed - the developer machine - and
+# skipped silently in the clean fast environment. scikit-learn is declared in
+# the research extra, so this now runs in the research lane instead of nowhere.
 def test_matches_sklearn_isotonic_on_synthetic_data():
     """Sanity: our PAV must agree with sklearn.isotonic.IsotonicRegression
     on the same fit (within float epsilon)."""

@@ -93,6 +93,14 @@ research = [
     "numpy>=2.3.5",
     "pandas>=2.3.2",
     "vectorbt>=1.0.0",
+    # Reference implementation for the isotonic cross-check. No module imports
+    # it by name: the test reaches it through pytest.importorskip, which SKIPS
+    # instead of failing when it is absent. Undeclared, that meant the check ran
+    # on the developer machine and nowhere else - the clean fast environment
+    # skipped it silently (P37-03 step 3). Here rather than in `test` because
+    # the cost is scipy and friends, which the pre-open readiness gate should
+    # not carry; the test is marked slow to match.
+    "scikit-learn>=1.8.0",
 ]
 
 # Standalone streamlit app (tools/streamlit_opportunity_app.py). Kept out of

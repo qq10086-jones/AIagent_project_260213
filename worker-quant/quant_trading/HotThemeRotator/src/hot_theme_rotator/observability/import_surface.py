@@ -292,8 +292,17 @@ class HiddenRequirement:
     witness_module: str
     witness_name: str | None = None
     witness_roots: tuple[str, ...] = SCANNED_ROOTS
+    # ``pytest.importorskip("pkg.mod")`` is a CALL, not an import statement, so
+    # the scan cannot see it either - and unlike a missing import it fails
+    # SILENTLY, by skipping. That is worse than an error: a clean-room lane ends
+    # up with less coverage than the developer machine and nothing says so.
+    # Found exactly that way, in a clean fast environment, where the sklearn
+    # cross-check skipped while it had always run locally.
+    witness_importorskip: bool = False
 
     def describe(self) -> str:
+        if self.witness_importorskip:
+            return f'pytest.importorskip("{self.witness_module}")'
         if self.witness_name:
             return f"from {self.witness_module} import {self.witness_name}"
         return f"import {self.witness_module}"
@@ -314,6 +323,25 @@ HIDDEN_REQUIREMENTS: tuple[HiddenRequirement, ...] = (
         ),
         witness_module="fastapi.testclient",
         witness_name="TestClient",
+        witness_roots=("tests",),
+    ),
+    HiddenRequirement(
+        distribution="scikit-learn",
+        tier="research",
+        reason=(
+            "test_isotonic_recalibrator cross-validates this project's own PAV "
+            "against sklearn.isotonic.IsotonicRegression - a reference check, "
+            "not a reimplementation. It reaches sklearn through "
+            "pytest.importorskip, so a machine without it SKIPS rather than "
+            "fails. Undeclared, that meant the check ran on the developer "
+            "machine and nowhere else: the clean fast environment skipped it "
+            "and said nothing. Carried by `research` because the cost is a "
+            "large scientific stack (scipy et al) that the pre-open readiness "
+            "gate should not pay for; the test is marked slow so it runs in the "
+            "research lane, where that stack already lives."
+        ),
+        witness_module="sklearn.isotonic",
+        witness_importorskip=True,
         witness_roots=("tests",),
     ),
 )
@@ -498,6 +526,11 @@ class ImportSurfaceReport:
 # ---------------------------------------------------------------------------
 # Scanning
 # ---------------------------------------------------------------------------
+def _literal_str(node: ast.AST) -> str | None:
+    value = node.value if isinstance(node, ast.Constant) else None
+    return value if isinstance(value, str) else None
+
+
 def _parse(path: Path, repo_root: Path) -> ast.Module:
     rel = path.relative_to(repo_root).as_posix()
     try:
@@ -518,6 +551,18 @@ def find_witness_files(repo_root: Path, req: HiddenRequirement) -> list[str]:
         tree = _parse(path, repo_root)
         hit = False
         for node in ast.walk(tree):
+            if req.witness_importorskip:
+                # pytest.importorskip("pkg.mod") / importorskip("pkg.mod")
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+                    if name == "importorskip" and node.args:
+                        arg = _literal_str(node.args[0])
+                        if arg == req.witness_module:
+                            hit = True
+                if hit:
+                    break
+                continue
             if isinstance(node, ast.ImportFrom):
                 if node.level or node.module != req.witness_module:
                     continue

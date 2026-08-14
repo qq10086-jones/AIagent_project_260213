@@ -1664,6 +1664,7 @@ scikit-learn==1.8.0 \
     --hash=sha256:fe1c011a640a9f0791146011dfd3c7d9669785f9fed2b2a5f9e207536cf5c2fd
     # via
     #   -c requirements/verified-environment.txt
+    #   hot-theme-rotator (pyproject.toml)
     #   vectorbt
 scipy==1.17.0 \
     --hash=sha256:00fb5f8ec8398ad90215008d8b6009c9db9fa924fd4c7d6be307c6f945f9cd73 \

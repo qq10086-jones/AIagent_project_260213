@@ -216,11 +216,49 @@ def test_smoke_pass_has_no_error_tail():
 
 def test_smoke_command_uses_workspace_basetemp():
     """Windows scheduled runs must not depend on the user Temp pytest root, which
-    can be locked or permission-denied. Keep temp files inside the HTR workspace."""
+    can be locked or permission-denied. Keep temp files inside the HTR workspace.
+
+    P37-03 step 5 moved the location: it used to be `.pytest_tmp/daily-smoke`,
+    one of four scratch roots that had accumulated at the repo top level because
+    every caller invented its own. It now comes from
+    `common.runtime_paths.lane_paths`, so there is one owner and one layout.
+    """
+    from hot_theme_rotator.common.runtime_paths import lane_paths
+
     cmd = [str(part) for part in dr.SMOKE_CMD]
     joined = " ".join(cmd)
     assert "--basetemp" in cmd
-    assert ".pytest_tmp" in joined
+    expected = lane_paths(dr.SMOKE_LANE, create=False)
+    assert str(expected.basetemp) in joined
+    assert str(expected.cache) in joined
+    # Still inside the repo, still nowhere near the user Temp.
+    assert ".runtime" in joined
+    assert "AppData" not in joined
+
+
+def test_smoke_subprocess_gets_a_pinned_temp_directory(monkeypatch):
+    """Pinning --basetemp alone was never enough.
+
+    pytest's own scratch moved into the workspace, but any library reaching for
+    `tempfile` still landed in the system temp — the directory whose ACL defect
+    produces the false hangs and mass collection ERRORs this lane exists to
+    avoid. The environment is the half that was missing, so it is asserted here
+    rather than left to a comment.
+    """
+    from hot_theme_rotator.common.runtime_paths import lane_paths
+
+    captured: dict[str, object] = {}
+
+    def fake_runner(cmd, *, cwd=None, env_extra=None, timeout=None):
+        captured["env_extra"] = env_extra or {}
+        return 0, "1 passed in 0.1s", ""
+
+    dr.smoke(runner=fake_runner)
+    env_extra = captured["env_extra"]
+    expected_tmp = str(lane_paths(dr.SMOKE_LANE, create=False).tmp)
+    for key in ("TMP", "TEMP", "TMPDIR"):
+        assert env_extra.get(key) == expected_tmp, f"{key} not pinned into the workspace"
+    assert env_extra.get("PYTHONNOUSERSITE") == "1"
 
 
 def test_monthly_cohort_guard_emits_once_per_month(tmp_path, monkeypatch):

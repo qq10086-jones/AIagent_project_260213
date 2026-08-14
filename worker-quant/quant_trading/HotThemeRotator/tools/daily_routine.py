@@ -100,9 +100,21 @@ from hot_theme_rotator.observability.pipeline_health import (  # noqa: E402
     assess_record,
     exit_code_for,
 )
+from hot_theme_rotator.common.runtime_paths import (  # noqa: E402
+    lane_paths,
+    pytest_cli_args,
+    pytest_env,
+)
 
-SMOKE_CMD = [sys.executable, "-m", "pytest", "tests", "-m", "not slow", "-q",
-             "-p", "no:cacheprovider", "--basetemp", str(ROOT / ".pytest_tmp" / "daily-smoke")]
+# P37-03 step 5: temp/cache/basetemp come from one owner instead of being
+# invented here. The previous form pinned `--basetemp` into `.pytest_tmp/` but
+# left TMP/TEMP alone, so any library reaching for `tempfile` still landed in
+# the system temp whose ACL defect produces false hangs and mass ERRORs.
+SMOKE_LANE = "daily-smoke"
+SMOKE_CMD = [
+    sys.executable, "-m", "pytest", "tests", "-m", "not slow", "-q",
+    *pytest_cli_args(SMOKE_LANE, create=False),
+]
 
 # Runner signature: (cmd, cwd, env_extra, timeout) -> (returncode, stdout, stderr).
 Runner = Callable[..., "tuple[int, str, str]"]
@@ -250,8 +262,24 @@ def collect(snapshot_path: str, *, runner: Runner = _run) -> dict[str, Any]:
 
 
 def smoke(*, runner: Runner = _run) -> dict[str, Any]:
-    """Run the daily smoke lane (fast, no slow/numba). Pass == returncode 0."""
-    rc, out, err = runner(SMOKE_CMD, cwd=str(ROOT), timeout=600)
+    """Run the daily smoke lane (fast, no slow/numba). Pass == returncode 0.
+
+    ``env_extra`` carries TMP/TEMP/TMPDIR and PYTHONNOUSERSITE (P37-03 step 5):
+    pinning ``--basetemp`` alone moved pytest's scratch but left every
+    ``tempfile`` call in the system temp, which is the directory whose ACL
+    defect produces the false hangs this lane must never suffer.
+    """
+    # Create before running, explicitly. SMOKE_CMD is built at import time with
+    # create=False so importing this module touches no filesystem; that makes
+    # creation this function's job. pytest does NOT create missing parents for
+    # --basetemp - it errors every tmp_path test instead, which looks exactly
+    # like the system-Temp ACL failure this lane exists to avoid.
+    lane_paths(SMOKE_LANE)
+    lane_env = pytest_env(SMOKE_LANE)
+    env_extra = {
+        key: lane_env[key] for key in ("TMP", "TEMP", "TMPDIR", "PYTHONNOUSERSITE")
+    }
+    rc, out, err = runner(SMOKE_CMD, cwd=str(ROOT), env_extra=env_extra, timeout=600)
     summary = ""
     for line in reversed((out or "").splitlines()):
         if any(tok in line for tok in ("passed", "failed", "error")):

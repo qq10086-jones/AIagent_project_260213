@@ -34,16 +34,51 @@ Loopback without a token = Local Beta v0, unchanged. The token gates every reque
 ### Daily smoke gate (pre-open — Rule 15.2 / 15.6)
 
 ```powershell
-python -m pytest tests\ -m "not slow" -q
+$lane = ".runtime\lanes\fast"
+New-Item -ItemType Directory -Force -Path "$lane\tmp","$lane\cache","$lane\basetemp" | Out-Null
+$env:TMP = "$lane\tmp"; $env:TEMP = "$lane\tmp"; $env:TMPDIR = "$lane\tmp"
+$env:PYTHONNOUSERSITE = "1"
+python -m pytest tests\ -m "not slow" -q -o "cache_dir=$lane\cache" --basetemp "$lane\basetemp"
 ```
 
-Fast and deterministic; excludes the vectorbt / numba research lane. A green smoke lane is **not** proof of model edge.
+Fast and deterministic; excludes the vectorbt research lane (numba arrives through vectorbt — nothing here imports it directly). A green smoke lane is **not** proof of model edge.
+
+**Why the four lines before pytest (P37-03 step 5).** Setting `--basetemp` alone
+moves pytest's own scratch but leaves every `tempfile` call in the system temp,
+whose ACL defect on this machine produces mass collection ERRORs and false
+hangs. And pytest does **not** create missing parents for `--basetemp`: pointing
+it at an uncreated path errors every `tmp_path` test, which looks identical to
+the ACL failure. Create first, then pin all three variables.
+`tools/daily_routine.py` does exactly this via
+`hot_theme_rotator.common.runtime_paths`, which is the single owner of these
+paths — prefer it over retyping the block.
 
 ### Research regression lane (not a daily readiness signal)
 
 ```powershell
-python -m pytest tests\ -m slow -q
+$lane = ".runtime\lanes\slow"
+New-Item -ItemType Directory -Force -Path "$lane\tmp","$lane\cache","$lane\basetemp" | Out-Null
+$env:TMP = "$lane\tmp"; $env:TEMP = "$lane\tmp"; $env:TMPDIR = "$lane\tmp"
+$env:PYTHONNOUSERSITE = "1"
+python -m pytest tests\ -m slow -q -o "cache_dir=$lane\cache" --basetemp "$lane\basetemp"
 ```
+
+Separate lane, separate verdict, separate scratch directory — the two can run at
+once without fighting over a basetemp.
+
+### Installing from the locks
+
+```powershell
+python -m pip install --require-hashes -r requirements\bootstrap.txt   # build toolchain
+python -m pip install --require-hashes -r requirements\fast.txt        # or slow.txt / runtime.txt
+python -m pip install --no-deps --no-build-isolation --no-index .
+```
+
+The bootstrap step is not optional: a fresh CPython 3.13 venv has pip and **no
+setuptools**, so a plain `pip install .` would fetch an unlocked build backend
+from PyPI, straight past every hash. See `requirements/README.md`, and
+`python tools/verify_clean_environments.py` to rebuild and re-verify all three
+environments from scratch.
 
 ### After close — forward sample collection (Rule 15.5 step 4)
 

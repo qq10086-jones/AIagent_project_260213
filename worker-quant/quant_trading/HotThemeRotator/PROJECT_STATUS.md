@@ -177,6 +177,31 @@
 > 后半截要变成已验证事实,只能靠步骤 3 的 clean-environment 安装与实跑。
 > full fast smoke **2577 passed / 1 skipped / 0 failed**(2567 + 10)。
 
+> **P37-03 步骤 2(可复现锁文件)已落地 (2026-08-14)。** `tools/compile_locks.py` +
+> `requirements/{runtime,fast,slow,dev}.txt` + `verified-environment.txt` + README + 23 测试。
+> 用 `uv pip compile --generate-hashes`,每条 pin 都带 sha256,`pip install --require-hashes` 才有意义。
+> **锁复现的是「测试通过的那个环境」,不是「满足 pyproject 的最新集合」**——这是两个答案:
+> 今天自由解析会选 **yfinance 1.6.0 / beautifulsoup4 4.15.0,两个都从没在这里跑过**,
+> 锁进去就是步骤 1 刚从版本下界里清掉的那种伪兼容,只是多了几位小数。
+> 所以每次解析都以 `verified-environment.txt` 为 constraint,**任何 pin 与之不符,工具 exit 2**。
+> 当前:runtime 29 / fast 48 / slow 88 / dev 110 条 pin,**零漂移**。
+> ⚠ **差点生成了一份错的锁,原因值得留档:`uv` 默认对着它自己托管的解释器解析**——
+> 本机是 `AppData` 下的 **CPython 3.12.11**(装着 huggingface/transformers),
+> 它报 `requests==2.32.5`,而跑 pytest 的解释器是 **2.34.2**。
+> 第一次带约束的编译以「requests==2.32.5 unsatisfiable」失败才暴露出来;
+> **若照字面理解,修法看起来会是放宽下界,然后锁进一台没人跑的机器。**
+> 现在快照一律用**运行中解释器**的 `python -m pip freeze`(绝不用 `uv pip freeze`),
+> 每次编译显式传 `--python-version 3.13 --python-platform x86_64-pc-windows-msvc`,并有测试盯住这两点。
+> **一个安装契约一份锁,且 lane 名与 `LANE_INSTALL_CONTRACT` 对齐**(测试强制),
+> 步骤 1 推导的契约与步骤 2 的产物不会各走各的。
+> **两条步骤 1 的结论被 resolver 独立复核**(不是同一次静态扫描自证):
+> `numba` **只**出现在 `slow.txt`(0.65.1,由 vectorbt 带入,无人声明);
+> `pydantic`/`starlette` 确实在 `fast.txt` 里。而 `vectorbt`/`numba`/`llvmlite` **不在 `fast.txt`**——
+> 这正是 `vectorbt_spike.py` 那个函数内 import 属于承重结构而非风格问题,已由测试钉住。
+> **仍不声称:没有从任何一份锁执行过安装。** 解析通过、pin 等于已验证环境、覆盖了推导出的契约,
+> 这叫**已验证的解析**,不叫**已验证的安装**;且锁只适用 **CPython 3.13 / x86_64 Windows**
+> (hash 钉的是 wheel,wheel 分平台),`requires-python = ">=3.10"` 仍未锁未测。两者都归步骤 3。
+
 - Date: 2026-07-15
 - **运营记录:美伊冲突升级 → 纪律持仓,恐慌未兑现(2026-07-14 夜 ~ 07-15 晨)**: owner 深夜报"美伊开战"→ 按惯例先核实(WebSearch):**属实但已连打三晚**(美军第三夜打击伊朗军事目标、伊朗击中霍尔木兹两艘阿联酋油轮、布伦特 +2% 至 $85)——市场早已在定价(周一 TOPIX −1.7% 即含此因素),非新信息。**系统处置 = 三不:不恐慌卖、不抄底加仓、不盯盘**(对地缘零 edge;Rule 17.2 触发器是 NAV/敞口带,不是头条;当前敞口仅 0.666x,ADR-0012 压测 −30%+C 归零仍距地板近一倍,战争级尾部本就在 −75% 预算内)。**次晨验证:恐慌未兑现反而反弹**——隔夜 S&P +0.38%/纳指 +0.9%/SMH +2.5%(6 月 CPI 低于预期,Trump 放弃霍尔木兹 20% 过路费、油价回落 $84);东京 07-15 开盘 1568.T **+1.60% @998.1,持仓 +2.1%(+¥1,254)**。纪律课记录:昨夜恐慌卖=卖在恐慌底;今晨追涨 120口=同一错误反向。**头条不是信号,双向都不是。** preopen 07-15 绿(smoke 1666)。待办不变:8035.T thesis / A 剩 120口 / B 篮子。
 - **运营记录:Sleeve A 首批部署 + P25 全链路首日实跑 + P24-11 可及性修复(2026-07-14)**: ① **owner 实盘买入 1568.T(TOPIX ブル2倍)60口 @¥977.2 ≈¥58,632**(SBI 限价单,盘中 13:45;ETF 选型经 live 现价核验从 1570 改 1568——1570 一挡 ¥72,730=18% NAV 无法执行 Rule 17.2 再平衡,1568 一挡 ¥9,671 可执行且与 1306 同指数);journal COMMITTED(preview 现金核对 287,105→228,473 一致)。② **踩坑即修:新符号无 K 线行 → 持仓面板 fail-closed 整体不可用**(诚实行为);定向回填 1568.T 已完结日线 6/1–7/13(yfinance 07-13 收盘 967.1 与 Yahoo live 核验一致),**未碰其他符号、未写盘中半日价**;当晚 19:30 官方刷新起 journal-holding 自动跟踪接管(task#8 机制,验证生效:07-14 收盘 982.4 已入库)。③ **P25 组件生产环境首日全绿**:preopen smoke 1666;afterclose risk_mandate **rc 0 首行自动 trace**(NAV ¥400,677 / 敞口 0.372→**0.666x** below_band / 缓冲 75% / C thesis_missing 仍亮);forward_eval rc 0(超时修复持续有效);value_livelog rc 0。④ **P24-11 红字可及性两遍修复(owner 散光,已确认改善)**:暗色 bear #E86D64→#FFA69E(9.5:1)+ `.htr-bear-num` 亮字红底手法+全局跌幅 600 字重,详见 Change Log。**待办不变:8035.T thesis(面板亮红等 owner)/ A 剩余 120口 额度 / B 篮子(owner 观察后自定)。** 未 commit。

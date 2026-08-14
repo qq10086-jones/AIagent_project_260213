@@ -49,6 +49,7 @@ CLI_MODULES = [
     "tools.daily_routine",
     # P37-03: enrolled with the tool, not after someone hits the crash.
     "tools.audit_import_surface",
+    "tools.compile_locks",
 ]
 
 

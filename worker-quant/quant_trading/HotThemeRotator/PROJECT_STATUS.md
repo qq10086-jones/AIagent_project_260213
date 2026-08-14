@@ -177,6 +177,62 @@
 > 后半截要变成已验证事实,只能靠步骤 3 的 clean-environment 安装与实跑。
 > full fast smoke **2577 passed / 1 skipped / 0 failed**(2567 + 10)。
 
+> **P37-03 步骤 3–6 已落地 (2026-08-14)。先修编号:**原任务体只有五条 bullet,后文却写
+> 「steps 3-7」,与实际剩余四项不符;仓库无其他权威编号,故就地定为
+> **3 干净环境安装/启动/实跑 · 4 fast/slow 分类审计 · 5 Windows 临时目录统一 · 6 双 CI job ·
+> 7 端到端验收**。
+> **步骤 3 —— 锁只说了装什么,没说谁来 build,这个洞是真的。** 实测:全新 CPython 3.13 venv
+> **只有 `pip 24.2`,没有 setuptools**(3.12 起 ensurepip 不再带)。于是 `pip install .` 的
+> build isolation 会**联网抓一个未锁定的 setuptools**,绕过所有 hash;
+> `--no-build-isolation` 则直接 ModuleNotFoundError。现 `requirements/bootstrap.in → bootstrap.txt`
+> 把 build 工具链一并锁死(带 hash),先装它,再 `--no-deps --no-build-isolation --no-index`
+> 装本体,**没有任何东西在锁之外被取回**。顺带挖出一条:`pip freeze` **默认不列 pip/setuptools/wheel**,
+> 导致首版 bootstrap 锁把 pip 解析成 **26.2.1**(本机跑的是 **25.3**)——
+> 一次全 hash 安装里,唯一没被钉住的恰好是 build 工具链。快照已改用 `pip freeze --all`。
+> **三个 lane 全部从空环境装起并实跑**(`tools/verify_clean_environments.py`,拒绝非
+> CPython 3.13 x64 Windows,固定 TMP/TEMP/TMPDIR + `PYTHONNOUSERSITE=1`,只允许删除自己
+> `envs/` 下的路径):**runtime** 30 包,`import hot_theme_rotator` 解析到 site-packages
+> 而非 `src/`,日常链 5 个模块可导入,yfinance 1.1.0,健康自检 `degraded`,
+> pytest/fastapi/vectorbt/numba/streamlit/httpx **全部不在**;**fast** 50 包,`create_app()` 33 路由,
+> TestClient `/api/health` **200 `{"status":"ok"}`,真实 uvicorn 子进程**在 loopback 空闲端口同样 200
+> 并干净退出无残留,`pytest -m "not slow"` **2663 passed / 2 skipped / 18 deselected / 77.41s**,
+> 且 **vectorbt/numba/llvmlite 可证不存在**而 lane 仍通过。
+> **`requires-python` 由 `>=3.10` 收窄为 `>=3.13`,按证据。** 旧下界来自语法扫描(用了 PEP 604/585,
+> 全仓库无 3.11+ stdlib 特性)——推理成立,但仍是没人测过的断言。真正验证过的只有
+> Windows 上的 CPython 3.13.0;锁钉的是 cp313 wheel,两条 CI 都断言 3.13。
+> **`>=3.10` 比不声明更糟**:resolver 会把它读成支持承诺,装到一个本项目从没见过的解释器上——
+> 和复审第二轮里那些编造的版本下界是同一个错误,只是高了一层。要放宽,须先有验证过的矩阵。
+> ⚠ **验证过程污染了被验证的树,而审计当场抓住:** 就地 build 会留下 `build/lib/**`
+> ——**172 份 `src/*.py` 的生成副本**——审计立刻报「未扫描源根」,判断正确。现已声明为产物目录并 gitignore。
+> **步骤 4 —— 实测角度抓到了参数角度看不见的东西。**
+> `test_wild_cluster_bootstrap_size_is_not_liberal_on_the_real_shape` 在 fast lane 里
+> **占 92.92 秒,是全程 184 秒的一半**。它的参数是 `n_sims=300` 与 `n_boot=199`,
+> **各自都在阈值以下**,嵌套起来约 6 万次回归。**逐个参数读,是一次扫描可以既全面又漏掉全套最贵测试的方式。**
+> 扫描器改为取调用内 scale 参数的**乘积**。实测同样指控了本里程碑自己的产出:
+> 11 条测试各跑一次全量 import 审计(~2.2s),**给日常闸门加了约 29 秒**;
+> 它们属于 fast lane,故改为共享一次 module 级报告(会 monkeypatch 的那几条**故意不共享**,
+> 否则断言会对着未修改的树通过而什么都没测)。
+> **结果:fast lane 184.27s → 本地 74.94s / 干净环境 77.41s**,13 条 research-scale 测试移入 slow,
+> 每条在 marker 处写明实测或声明依据。
+> **步骤 5 —— 又撞出一个和 ACL 故障同签名的缺陷。** 仓库顶层此前有四个 scratch 根,
+> 且**没有一个设置 TMP/TEMP**:`--basetemp` 只搬走了 pytest 自己的临时目录,
+> 任何调用 `tempfile` 的库仍落在那个 ACL 有问题的系统 Temp 里。
+> ⚠ **更要命的是:pytest 不会为 `--basetemp` 创建缺失的父目录**——指向未创建的路径会让
+> **每一条用 `tmp_path` 的测试 ERROR**(复现里 22 条中 18 条),**症状与 ACL 故障一模一样**。
+> 也就是说,只钉路径不创建的「修复」会精确复现它本要消除的那个症状。
+> 现由 `common/runtime_paths.py` 统一(`.runtime/lanes/<lane>/`,每 lane 独立,创建失败即抛、
+> 绝不回退系统 Temp),测试用**真实子进程**验证 `tempfile.gettempdir()` 确实落在workspace。
+> **步骤 6 —— 双 CI job,仓库此前没有 `.github/`,是首次建立。**
+> `fast-smoke.yml` / `slow-research.yml`,**两个文件而非一个 job 两步**
+> (串在一条 shell 里由最后一个退出码说了算,研究回归会被 fast 的成功带过去)。
+> 各自:先装锁定 bootstrap → 装本 lane 的锁(全部 `--require-hashes`)→
+> `--no-deps --no-build-isolation --no-index` 装本体;**断言实际拿到的解释器**而非信任 setup-python;
+> 固定 TMP/TEMP/scratch 到 workspace 且创建失败即抛;`PYTHONNOUSERSITE=1`;无 secret;只读权限;
+> 结束时断言未改动工作树。且**各自证明对方证不了的那一半**:fast 断言 vectorbt/numba/llvmlite **不存在**,
+> slow 断言它们存在**且 deferred import 确实被执行**。30 条结构测试。
+> ⚠ **明确不声称:这两条 workflow 从未运行过。** 未 push 故无远端结论;
+> 本机也没有 actionlint,完整 schema 检查未跑。**只是结构已验证,不是已判绿。**
+
 > **P37-03 步骤 2(可复现锁文件)已落地 (2026-08-14)。** `tools/compile_locks.py` +
 > `requirements/{runtime,fast,slow,dev}.txt` + `verified-environment.txt` + README + 23 测试。
 > 用 `uv pip compile --generate-hashes`,每条 pin 都带 sha256,`pip install --require-hashes` 才有意义。

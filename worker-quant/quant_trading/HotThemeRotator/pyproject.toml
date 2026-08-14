@@ -131,6 +131,10 @@ test = [
     "fastapi>=0.117.1",
     "numpy>=2.3.5",
     "pandas>=2.3.2",
+    # The CI workflow structure tests parse the workflow YAML. Structural checks
+    # on a workflow that has never run are all this repo can honestly claim
+    # (nothing is pushed), so they are worth having and they need a parser.
+    "pyyaml>=6.0.3",
     # TOML parser for the import-surface audit on Python 3.10, where tomllib is
     # not stdlib. Its absence raises a named error, never a wrong verdict.
     # No verified version exists for this one: the fallback never runs on 3.13,

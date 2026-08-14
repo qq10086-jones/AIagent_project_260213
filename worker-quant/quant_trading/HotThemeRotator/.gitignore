@@ -44,3 +44,12 @@ reports/*/
 # Local backup archives + backend backup snapshots.
 _htr_backups/
 frontend_zerobuild_backup_*/
+
+# P37-03 step 3: setuptools build artifacts. A clean-environment install runs
+# `pip install --no-build-isolation .`, which builds IN PLACE and leaves
+# build/ plus src/*.egg-info behind. They are generated copies of src/, never
+# source, and the import-surface audit reports build/ as an unscanned source
+# root if it is not declared an artifact directory.
+build/
+dist/
+*.egg-info/

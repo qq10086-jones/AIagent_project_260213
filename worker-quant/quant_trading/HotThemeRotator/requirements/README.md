@@ -9,6 +9,7 @@ python tools/compile_locks.py --refresh-environment # re-snapshot this machine f
 
 | file | install contract | what it is for |
 |---|---|---|
+| `bootstrap.txt` | pip + setuptools | the BUILD toolchain, installed first (see below) |
 | `runtime.txt` | base `dependencies` | the daily operational lane (`tools/daily_routine.py`) |
 | `fast.txt` | `.[test,dashboard]` | `pytest -m "not slow"` — the Rule 15.2 readiness gate |
 | `slow.txt` | `.[test,research]` | `pytest -m slow` — the research regression lane |
@@ -17,8 +18,33 @@ python tools/compile_locks.py --refresh-environment # re-snapshot this machine f
 Install one with:
 
 ```powershell
+python -m pip install --require-hashes -r requirements/bootstrap.txt
 python -m pip install --require-hashes -r requirements/fast.txt
+python -m pip install --no-deps --no-build-isolation --no-index .
 ```
+
+## bootstrap.txt is not optional (P37-03 step 3)
+
+A fresh CPython 3.13 venv contains **`pip 24.2` and nothing else** - ensurepip
+stopped shipping setuptools in 3.12. Measured, not assumed. So on a clean
+machine:
+
+```
+pip install .                       -> build isolation downloads an UNLOCKED
+                                       setuptools from PyPI, past every hash here
+pip install --no-build-isolation .  -> ModuleNotFoundError: setuptools
+```
+
+Neither is acceptable, and "the venv usually has setuptools" is false. The build
+toolchain is therefore locked like everything else and installed first, and the
+project is then built with `--no-build-isolation --no-index` so nothing is
+fetched outside the lock.
+
+One wrinkle worth recording: plain `pip freeze` **omits** pip, setuptools and
+wheel, so the first bootstrap lock resolved pip unconstrained and picked
+`26.2.1` where this machine runs `25.3`. The environment snapshot now uses
+`pip freeze --all`, and the build toolchain is pinned to versions that have
+actually run here.
 
 ## What these locks mean, and what they do not
 
@@ -35,11 +61,13 @@ resolution and is not incidental: hashes pin specific wheels, and wheels are
 per-platform. `pyproject.toml` declares `requires-python = ">=3.10"`, and that
 floor is **not locked and not tested** — see step 3.
 
-**No install has been performed from them yet.** They resolve, their pins equal
-the verified environment, and the lane contracts they cover are the ones
-`import_surface.py` derives. Whether `pip install --require-hashes -r ...` into
-an empty environment actually succeeds is step 3's question, and until it is
-answered these are a *verified resolution*, not a *verified install*.
+**Installed and exercised from empty environments (P37-03 step 3).**
+`python tools/verify_clean_environments.py` builds a fresh venv per lane,
+installs from these locks with `--require-hashes`, and then runs the lane.
+See the P37-03 entry in `docs/01_TASKS.md` for the recorded evidence. What is
+still NOT claimed: any platform or interpreter other than CPython 3.13 on
+x86_64 Windows, and any install of `api/` or `tools/` - those are deliberately
+not packaged and run from the checkout.
 
 ## verified-environment.txt
 

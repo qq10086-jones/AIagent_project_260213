@@ -102,6 +102,15 @@ _ARTIFACT_ROOTS = frozenset(
         "notebooks",
         "frontend",
         "tmp",
+        # setuptools build output. A clean-environment install (P37-03 step 3)
+        # runs `pip install --no-build-isolation .`, which builds IN PLACE and
+        # leaves build/lib/** - 172 generated COPIES of src/*.py. The audit
+        # found them on the first such install and reported an unscanned source
+        # root, correctly: they were neither scanned nor excused. They are
+        # generated artifacts, so they are excused here rather than scanned,
+        # and .gitignore keeps them out of the tree.
+        "build",
+        "dist",
     }
 )
 # Deliberately NOT listed: the dated frontend backup directory. It holds no .py
@@ -254,6 +263,7 @@ MODULE_DISTRIBUTIONS: dict[str, str] = {
     "pdfplumber": "pdfplumber",
     "pydantic": "pydantic",
     "pytest": "pytest",
+    "yaml": "pyyaml",
     "requests": "requests",
     "starlette": "starlette",
     "streamlit": "streamlit",

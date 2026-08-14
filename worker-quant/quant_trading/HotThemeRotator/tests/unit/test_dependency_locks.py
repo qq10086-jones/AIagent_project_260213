@@ -53,6 +53,12 @@ def environment() -> dict[str, str]:
     return read_pins(ENVIRONMENT_FILE)
 
 
+@pytest.fixture(scope="module")
+def repo_report():
+    """One import-surface audit shared across the lane checks (~2.2s each)."""
+    return audit_import_surface(PROJECT_ROOT)
+
+
 # ---------------------------------------------------------------------------
 # The locks exist and are generated artifacts
 # ---------------------------------------------------------------------------
@@ -134,9 +140,9 @@ def test_lock_extras_match_the_lane_install_contract():
 
 
 @pytest.mark.parametrize("lane", sorted(LANE_INSTALL_CONTRACT))
-def test_lane_requirements_are_present_in_its_lock(lane, locks):
+def test_lane_requirements_are_present_in_its_lock(lane, locks, repo_report):
     """Everything a lane needs — collection floor and declared runtime — is pinned."""
-    report = audit_import_surface(PROJECT_ROOT)
+    report = repo_report
     needed = set(report.lanes[lane]["module_level"]) | set(
         report.lanes[lane]["declared_runtime_requirements"]
     )
@@ -201,6 +207,15 @@ def test_locks_target_is_pinned_in_the_tool():
 
 
 def test_readme_states_what_is_not_verified():
+    """The limits move as the work lands; they must never quietly disappear.
+
+    At step 2 the honest line was "no install has been performed". Step 3 made
+    that false, so the assertion now pins what is STILL unverified rather than
+    a sentence that has been superseded: the untested Python floor, and the
+    fact that api/ and tools/ are not packaged and run from the checkout.
+    """
     text = (REQUIREMENTS / "README.md").read_text(encoding="utf-8")
-    assert "No install has been performed" in text
-    assert "not locked and not tested" in text
+    assert "not locked and not tested" in text, "the >=3.10 floor is still untested"
+    assert "still NOT claimed" in text
+    assert "not packaged" in text
+    assert "CPython 3.13" in text

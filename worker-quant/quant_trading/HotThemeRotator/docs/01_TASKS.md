@@ -2591,7 +2591,19 @@ So **17/17 observed sessions out-of-band** and **0/15 band compliance** are both
 
 ### P37-03 - Reproducible Dependencies And CI Lane Completion
 
-**Status: STEPS 1-2 DONE (2026-08-13/14); steps 3-7 NOT STARTED.** `pyproject.toml` declared no runtime dependencies. The slow marker/lane already exists; this task completes and stabilizes it rather than inventing a new split.
+**Status: STEPS 1-2 DONE (2026-08-13/14); STEPS 3-7 IN PROGRESS (2026-08-14).** `pyproject.toml` declared no runtime dependencies. The slow marker/lane already exists; this task completes and stabilizes it rather than inventing a new split.
+
+**Step numbering, fixed 2026-08-14.** The original task body listed five bullets and later prose said "steps 3-7", which did not correspond to anything: after step 2 only four implementation items remained. There is no other authoritative numbering in the repo (nothing outside this section numbers P37-03 sub-steps), so the numbering below is the authority from here on, and the count now matches the work. Step 7 is named explicitly as end-to-end acceptance rather than being left implicit inside step 6.
+
+| step | scope |
+|---|---|
+| 1 | dependency layering (DONE) |
+| 2 | reproducible lock mechanism (DONE) |
+| 3 | clean-environment install + import/startup/run |
+| 4 | fast/slow classification audit of computational tests |
+| 5 | Windows TMP/TEMP/cache/basetemp pinning and one documented command per lane |
+| 6 | two independent CI jobs (fast operational smoke, slow research regression) |
+| 7 | end-to-end acceptance and status closure |
 
 - **Step 1 - dependency layering. DONE 2026-08-13.** `src/hot_theme_rotator/observability/import_surface.py` + `tools/audit_import_surface.py` + 37 tests. The declaration is **derived from the tree, not authored**: the audit scans `src/ tools/ api/ tests/ scripts/`, tiers each importing file, and fails (exit 2) when code and declaration disagree in either direction. `tests/unit/test_import_surface.py::test_repo_import_surface_is_clean` re-runs it on every smoke run, so this cannot silently rot back.
   - **Measured surface: 14 third-party modules over 195 import sites.** core `requests` `beautifulsoup4` `yfinance` `pdfplumber` / dashboard `fastapi` `pydantic` `starlette` `uvicorn` / research `numpy` `pandas` `vectorbt` / streamlit `streamlit` `pandas` / test `pytest` `httpx` `tomli`.

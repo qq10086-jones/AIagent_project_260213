@@ -65,6 +65,14 @@ LOCKS: dict[str, tuple[str, ...]] = {
     "dev": ("test", "dashboard", "research", "streamlit"),  # everything
 }
 
+# The build toolchain, compiled from an explicit input rather than from a
+# pyproject extra: it is not a dependency of the project, it is what BUILDS the
+# project. A fresh CPython 3.13 venv has pip and no setuptools, so without this
+# `pip install .` reaches past every hash to fetch a build backend. See
+# requirements/bootstrap.in.
+BOOTSTRAP_INPUT = REQUIREMENTS_DIR / "bootstrap.in"
+BOOTSTRAP_LOCK = REQUIREMENTS_DIR / "bootstrap.txt"
+
 _PIN = re.compile(r"^([A-Za-z0-9._-]+)==([^\s;\\]+)")
 
 
@@ -87,8 +95,13 @@ def read_pins(path: Path) -> dict[str, str]:
 
 def refresh_environment() -> Path:
     """Snapshot the RUNNING interpreter, not whatever uv would pick."""
+    # `--all` on purpose: plain `pip freeze` OMITS pip/setuptools/wheel, and the
+    # omission is not cosmetic. Without them the bootstrap lock resolves pip
+    # unconstrained - it picked 26.2.1 where this machine runs 25.3 - so the
+    # build toolchain would have been the one part of the install that was not
+    # pinned to anything verified.
     frozen = subprocess.run(
-        [sys.executable, "-m", "pip", "freeze"],
+        [sys.executable, "-m", "pip", "freeze", "--all"],
         capture_output=True,
         text=True,
         check=True,
@@ -110,13 +123,13 @@ def refresh_environment() -> Path:
     return ENVIRONMENT_FILE
 
 
-def compile_lock(name: str, extras: tuple[str, ...]) -> Path:
+def compile_lock(name: str, extras: tuple[str, ...], source: str = "pyproject.toml") -> Path:
     out = REQUIREMENTS_DIR / f"{name}.txt"
     cmd = [
         "uv",
         "pip",
         "compile",
-        "pyproject.toml",
+        source,
         "--python-version",
         PYTHON_VERSION,
         "--python-platform",
@@ -143,7 +156,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="re-snapshot the running interpreter before compiling",
     )
-    ap.add_argument("--only", choices=sorted(LOCKS), help="compile a single lock")
+    ap.add_argument(
+        "--only", choices=sorted([*LOCKS, "bootstrap"]), help="compile a single lock"
+    )
     args = ap.parse_args(argv)
 
     if args.refresh_environment:
@@ -158,8 +173,20 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     environment = read_pins(ENVIRONMENT_FILE)
-    targets = {args.only: LOCKS[args.only]} if args.only else LOCKS
+    targets = {args.only: LOCKS[args.only]} if args.only in LOCKS else (
+        {} if args.only == "bootstrap" else LOCKS
+    )
     drift: list[str] = []
+
+    if args.only in (None, "bootstrap"):
+        out = compile_lock("bootstrap", (), source=BOOTSTRAP_INPUT.relative_to(PROJECT_ROOT).as_posix())
+        pins = read_pins(out)
+        for dist, version in sorted(pins.items()):
+            have = environment.get(dist)
+            if have != version:
+                drift.append(f"bootstrap: {dist}=={version} (environment: {have or 'ABSENT'})")
+        print(f"{out.relative_to(PROJECT_ROOT).as_posix():34s} {len(pins):3d} pinned")
+
     for name, extras in targets.items():
         out = compile_lock(name, extras)
         pins = read_pins(out)

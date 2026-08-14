@@ -156,7 +156,7 @@ def test_account_card_is_unavailable_while_the_ledger_is_unreconciled(tmp_path):
 def test_account_metrics_compute_once_the_ledger_shows_no_contradiction(tmp_path):
     report = tls.build_scorecards(_clean_base(tmp_path), asof=ASOF)
     card = report["account_outcome"]
-    assert card["reconciliation"]["state"] == "reconciled_no_contradicting_evidence"
+    assert card["reconciliation"]["state"] == "no_contradicting_journal_evidence"
     nav = _metric(report, "account_outcome", "nav_return_pct")
     assert nav["state"] == "ok"
     assert nav["value"] == -1.0  # 400000 -> 396000

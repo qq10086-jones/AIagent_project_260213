@@ -286,11 +286,16 @@ def _reconciliation(base: Path, asof: str, trace: list[tuple[str, dict]], queue:
     not measured.
     """
     definition = (
-        "reconciled_no_contradicting_evidence = a journal exists and no executed "
+        "no_contradicting_journal_evidence = a journal exists and no executed "
         "or overdue exit advice lacks a matching journal entry. undetermined = an "
         "exit advice has been open since a date the journal does not reach, so an "
-        "executed-but-unrecorded fill cannot be excluded. Absence of contradiction "
-        "is not positive confirmation."
+        "executed-but-unrecorded fill cannot be excluded. THIS IS NOT "
+        "RECONCILIATION: it is computed entirely from the journal and its own "
+        "advice trace, so it cannot detect a journal that disagrees with the "
+        "broker. External reconciliation lives in "
+        "hot_theme_rotator.portfolio.broker_reconciliation and requires an "
+        "independent broker account snapshot. Renamed 2026-08-14 after this "
+        "state read as `reconciled` on a day the broker disagreed by JPY 726."
     )
     journal_dates = _journal_dates(base)
     if not journal_dates:
@@ -335,7 +340,7 @@ def _reconciliation(base: Path, asof: str, trace: list[tuple[str, dict]], queue:
                 "unrecorded_executed_advice": unrecorded,
             }
         return {
-            "state": "reconciled_no_contradicting_evidence",
+            "state": "no_contradicting_journal_evidence",
             "reason": None,
             "definition": definition,
             "journal_last_event_date": last_event,
@@ -361,7 +366,7 @@ def _reconciliation(base: Path, asof: str, trace: list[tuple[str, dict]], queue:
             "unrecorded_executed_advice": [],
         }
     return {
-        "state": "reconciled_no_contradicting_evidence",
+        "state": "no_contradicting_journal_evidence",
         "reason": None,
         "definition": definition,
         "journal_last_event_date": last_event,
@@ -440,7 +445,7 @@ def _account_card(base: Path, asof: str, trace: list[tuple[str, dict]], recon: d
     window = {"start": nav_series[0][0] if nav_series else None,
               "end": nav_series[-1][0] if nav_series else None}
 
-    gated = recon["state"] not in ("reconciled_no_contradicting_evidence",)
+    gated = recon["state"] not in ("no_contradicting_journal_evidence",)
     if recon["state"] == "unavailable":
         gate_reason = f"ledger_reconciliation_unavailable:{recon['reason']}"
     else:

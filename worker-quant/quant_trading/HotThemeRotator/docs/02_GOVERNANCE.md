@@ -930,11 +930,60 @@ The constraints in Rule 13.19 apply only to proposals where ``generator`` starts
 
 These rules become binding on cutover day T defined in ADR-0008, on which HotThemeRotator assumes ownership of portfolio state from Project_optimized. Before T, ADR-0005 read-only consumption remains in force. After T, all rules in this section are mandatory.
 
-### Rule 14.0: Single Source of Truth
+### Rule 14.0: Single Source of Truth — INTERNAL, and only internal
+
+**Amended 2026-08-14 (P37-04).** The original wording said the journal was "the
+sole source of truth for live positions, cash, and realized P&L", unqualified.
+That folded two different claims into one sentence, and the difference between
+them cost real money to discover:
+
+- **Internal accounting authority (TRUE, unchanged).** The journal decides what
+  the books say. Positions and cash are derived views over it, and re-deriving
+  is deterministic.
+- **External correctness (NEVER established by the journal).** That the books
+  match the actual account at the broker. Determinism says nothing about this:
+  re-deriving from the same journal returns the same answer no matter how wrong
+  the inputs were.
+
+On 2026-08-14 a cash event read off a broker table that had lost its structure
+(`譲渡益税還付金 991`) entered canonical cash. Derived cash became ¥287,794
+against the broker's ¥287,068; the system published an official NAV of ¥394,724
+and its own scorecard state was called `reconciled_no_contradicting_evidence`.
+Every component did what it was designed to do. Nothing in the design ever
+required outside evidence.
+
+**Therefore:**
+
+- The journal is the **internal SSoT** for accounting.
+- An independent **broker account snapshot is the external reconciliation
+  authority** for cash, share counts and total assets. Only it can make the
+  ledger `reconciled`, and `reconciled` may never be derived from the journal
+  or from any artifact computed off the journal.
+- The broker snapshot must satisfy its own identity — `cash + Σ position_value
+  = total_assets` — **before** any comparison. A page that does not add up is
+  not evidence, and comparing against it would launder a bad read into a
+  verdict.
+- Reconciliation state is one of `missing_broker_snapshot`, `stale`,
+  `incomparable_mark_time`, `mismatch`, `reconciled`. Only `reconciled` unlocks
+  official NAV history and account-level return metrics.
+- On `mismatch` the system MAY emit a diagnostic and MUST NOT write official
+  NAV history, compute account return metrics, call itself reconciled, or
+  generate a balancing adjustment. **A difference is a question for the broker
+  record, never an instruction to adjust the journal.** A system that invents
+  the missing entry to make the books balance has stopped keeping books.
+- A cash event whose provenance is a screenshot, an OCR pass or reconstructed
+  table text is **provisional** until an account-level balance check passes.
+  Provisional money is reported, never spent, and never enters canonical cash.
+
+Implementation: `hot_theme_rotator.portfolio.broker_reconciliation` and
+`nav_publication`; contracts pinned in `tests/unit/test_broker_reconciliation.py`
+and `tests/unit/test_nav_publication_gate.py`. Broker fixtures in those tests
+are constructed independently and MUST NOT be generated from the journal under
+test — evidence produced by the subject cannot test the subject.
 
 After cutover day T:
 
-- HotThemeRotator's portfolio journal is the sole source of truth for live positions, cash, and realized P&L.
+- HotThemeRotator's portfolio journal is the sole **internal** source of truth for live positions, cash, and realized P&L; agreement with the broker is a separate claim requiring the external authority above.
 - `Project_optimized/japan_market.db` is frozen as historical archive — no further writes, no consumption by HotThemeRotator runtime code.
 - `src/hot_theme_rotator/data/position_adapter.py` is removed from runtime use after migration completes; it survives only as a one-shot reference for the migration script and may be deleted in W3.
 - ADR-0005 is superseded by ADR-0008.

@@ -2591,7 +2591,7 @@ So **17/17 observed sessions out-of-band** and **0/15 band compliance** are both
 
 ### P37-03 - Reproducible Dependencies And CI Lane Completion
 
-**Status: STEPS 1-2 DONE (2026-08-13/14); STEPS 3-7 IN PROGRESS (2026-08-14).** `pyproject.toml` declared no runtime dependencies. The slow marker/lane already exists; this task completes and stabilizes it rather than inventing a new split.
+**Status: ALL SEVEN STEPS DONE (2026-08-13/14).** Acceptance evidence is in step 7 below; the limits that survive are listed there too and are not small. `pyproject.toml` declared no runtime dependencies. The slow marker/lane already exists; this task completes and stabilizes it rather than inventing a new split.
 
 **Step numbering, fixed 2026-08-14.** The original task body listed five bullets and later prose said "steps 3-7", which did not correspond to anything: after step 2 only four implementation items remained. There is no other authoritative numbering in the repo (nothing outside this section numbers P37-03 sub-steps), so the numbering below is the authority from here on, and the count now matches the work. Step 7 is named explicitly as end-to-end acceptance rather than being left implicit inside step 6.
 
@@ -2647,6 +2647,24 @@ So **17/17 observed sessions out-of-band** and **0/15 band compliance** are both
   - Everything lives under `.runtime/lanes/<lane>/{tmp,cache,basetemp}`, gitignored, one subtree per lane so two lanes can run at once. Tests assert a **real subprocess** sees the pinned `TMP`/`TEMP`/`TMPDIR` and that `tempfile.gettempdir()` actually lands there — the check that would have caught the original gap, which asserting on the command line never would have.
 - **Step 6 — two independent CI jobs. DONE 2026-08-14 (structurally verified, never executed).** The repo had no `.github/` at all, so this is a first CI rather than a reconfiguration: `.github/workflows/fast-smoke.yml` and `slow-research.yml`, both `windows-latest` + CPython 3.13 x64. **Two files, not two steps in one job** — chained in one shell the last exit code decides, and a research regression would ride out on a fast-lane success (Rule 15.6). Each installs the locked bootstrap toolchain, then its own lock, every install `--require-hashes`, then the project `--no-deps --no-build-isolation --no-index`; asserts the interpreter it actually got rather than trusting `setup-python`; pins TMP/TEMP/TMPDIR and pytest scratch into the workspace `.runtime`, failing closed if the directories cannot be created; sets `PYTHONNOUSERSITE=1`; uses no secrets; takes read-only permissions; and ends by asserting it left the tree unmodified. Each proves what the other cannot — fast asserts `vectorbt`/`numba`/`llvmlite` are **absent**, slow asserts they are present **and that calling the grid really executes the deferred import**. `tests/unit/test_ci_workflows.py` holds 30 structural assertions over the parsed YAML.
   - ⚠ **NOT claimed: these workflows have never run.** Nothing is pushed, so no remote verdict exists, and `actionlint` is not installed on this machine so full schema linting has not run either. They are structurally verified, not green.
+- **Step 7 — end-to-end acceptance. DONE 2026-08-14.** Every claim below is from a run made after the last code change, on this machine.
+
+  | check | result |
+  |---|---|
+  | import surface audit | **CLEAN**, exit 0, 436 files |
+  | test classification audit (static) | **CLEAN**, 54 scale sites, 13 marked slow |
+  | lock offline consistency + P37-03 focused tests | **151 passed** |
+  | clean env, runtime lock | installed from empty; installed-package import, 5 daily-lane modules, yfinance 1.1.0; forbidden set absent |
+  | clean env, fast lock | **2666 passed / 1 skipped / 19 deselected / 81.13s**; `create_app()`, TestClient 200, real uvicorn 200, clean shutdown |
+  | clean env, slow lock | **19 passed / 2667 deselected / 124.18s**; deferred vectorbt import proven to execute |
+  | working env, full fast | **2666 passed / 1 skipped / 19 deselected / 75.52s** |
+  | working env, full slow | **19 passed / 2667 deselected / 121.99s** |
+  | `git diff --check` | clean |
+
+  - **Clean and working environments agree exactly on counts**, which is the point of the exercise: the lock reproduces the machine rather than approximating it.
+  - **The one skip is reported as not run, never as passed.** `test_frontend_provenance_strip.py:422` needs a perishable degraded component in the *real* log and today's has none. The clean-environment tool now names every skip in its artifact for exactly this reason.
+  - ⚠ **The basetemp defect was reproduced a THIRD time — in this milestone's own final verification command.** Running `pytest --basetemp=./.runtime/lanes/fast/basetemp` directly, without the create step the README block prescribes, produced **706 errors**. Found while writing step 5, documented in step 5, reproduced by its own author in step 7. That is the strongest argument for `runtime_paths` being the only entry point: a documented four-line block is still something a human skips, whereas `lane_paths()` cannot be called without creating what it names.
+  - **Still open, stated rather than closed by assertion:** the two CI workflows have never executed anywhere; `actionlint` was unavailable so no schema lint ran; nothing verifies any interpreter or platform beyond CPython 3.13.0 / x86_64 Windows; `api/` and `tools/` remain unpackaged and run from the checkout; and the 45 unenrolled cp932 CLIs from step 1 are still a P37-01 follow-up.
 
 ### P34 - Strategy Research Plan 2026-08-07 (market decision + T1/T2 lanes + opportunity gate)
 **Status: INFRASTRUCTURE BUILT / STRATEGY VALIDATION NOT STARTED** (2026-08-08). Design doc: `docs/proposals/strategy_research_plan_2026-08-07.md` (the corrected version there is canonical). Advice-only (Rule 3); no capital/config/weight change; Sleeve B freeze and screener-weight freeze stay in force. Honest one-line state: **all ten task lines have implementation or diagnostic artifacts; no strategy is validated; the round's chief product is the discovery of data-chain defects, not tradable alpha.** Owner decisions: O-1 open (account facts; cost conclusion provisional), O-2 open but non-blocking (gate is dormant), O-3 open non-blocking (declare vs observed-only), O-4 granted 2026-08-08.

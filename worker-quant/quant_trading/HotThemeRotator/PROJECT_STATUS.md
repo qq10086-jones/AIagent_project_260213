@@ -232,6 +232,23 @@
 > slow 断言它们存在**且 deferred import 确实被执行**。30 条结构测试。
 > ⚠ **明确不声称:这两条 workflow 从未运行过。** 未 push 故无远端结论;
 > 本机也没有 actionlint,完整 schema 检查未跑。**只是结构已验证,不是已判绿。**
+> **步骤 7 验收(全部为末次代码改动之后的新鲜运行):**
+> import 审计 CLEAN/exit 0(436 文件)· 分类审计(静态)CLEAN · P37-03 focused **151 passed** ·
+> **干净环境 fast 2666 passed / 1 skipped / 19 deselected / 81.13s**(create_app + TestClient 200 +
+> 真实 uvicorn 200 + 干净退出)· **干净环境 slow 19 passed / 2667 deselected / 124.18s**
+> (deferred vectorbt 被证明执行)· **工作环境 fast 2666 / 1 skipped / 75.52s** ·
+> **工作环境 slow 19 / 121.99s** · `git diff --check` 干净。
+> **干净环境与工作环境计数完全一致**——这正是本轮的目的:锁复现的是这台机器,不是近似它。
+> **唯一那条 skip 记作「未执行」,绝不算通过**(provenance-strip 需真实日志里有易逝降级组件,今日没有);
+> clean-env 工具现在会把每条 skip 具名写进 artifact。
+> ⚠ **basetemp 那个缺陷在本里程碑自己的最终验证命令里被第三次复现**:
+> 直接敲 `pytest --basetemp=...` 而没走 README 里的创建步骤,得到 **706 个 error**。
+> 步骤 5 发现它、记录它,步骤 7 由同一个作者再犯一次。
+> **这就是 `runtime_paths` 必须是唯一入口的最强论据**:四行文档块人是会跳过的,
+> 而 `lane_paths()` 不创建它命名的目录就没法被调用。
+> **仍然敞开、如实列出:** 两条 workflow 从未在任何地方执行过;actionlint 不可用故未做 schema 检查;
+> 除 CPython 3.13.0 / x86_64 Windows 外没有任何解释器或平台被验证;
+> `api/` 与 `tools/` 仍未打包、从 checkout 运行;步骤 1 那 45 个未入册 cp932 CLI 仍属 P37-01 后续。
 
 > **P37-03 步骤 2(可复现锁文件)已落地 (2026-08-14)。** `tools/compile_locks.py` +
 > `requirements/{runtime,fast,slow,dev}.txt` + `verified-environment.txt` + README + 23 测试。
